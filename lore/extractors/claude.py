@@ -90,6 +90,7 @@ class ClaudeCodeExtractor(BaseExtractor):
         # Try to reconstruct the path by testing which combinations exist
         result_parts = []
         current = ""
+        matched_any = False
 
         for i, part in enumerate(parts):
             if current:
@@ -105,15 +106,32 @@ class ClaudeCodeExtractor(BaseExtractor):
             if os.path.exists(full_test):
                 result_parts.append(test_path)
                 current = ""
+                matched_any = True
             else:
                 current = test_path
 
         if current:
             result_parts.append(current)
 
+        if not matched_any:
+            # Nothing on disk validated any split — the result is a pure
+            # heuristic guess that may silently mis-decode (#124).
+            logger.debug(
+                "Project path reconstruction found no on-disk prefix match "
+                "for %r; result %r is heuristic",
+                encoded,
+                "/" + "/".join(result_parts),
+            )
+
         if result_parts:
             return "/" + "/".join(result_parts)
 
+        # Degenerate input (nothing left after the leading dash) — the
+        # naive replace cannot be validated against disk at all (#124).
+        logger.debug(
+            "Project path reconstruction had no parts for %r; using naive dash-split",
+            encoded,
+        )
         return "/" + encoded[1:].replace("-", "/")
 
     def find_session_by_id(self, session_id: str) -> Optional[UnifiedSession]:

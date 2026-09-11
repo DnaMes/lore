@@ -9,6 +9,7 @@ from ..core.models import Role, Tool, UnifiedMessage, UnifiedSession
 from ..utils.datetime import parse_timestamp
 from ..utils.home_discovery import discover_home_marker_paths
 from ..utils.paths import make_thread_id, safe_copy_db
+from ..utils.text_processing import decode_hex_or_str
 from .base import BaseExtractor
 
 logger = logging.getLogger(__name__)
@@ -38,21 +39,12 @@ class CursorExtractor(BaseExtractor):
         return len(self.db_paths) > 0
 
     def _decode_blob(self, value: Any) -> str:
-        """Try to decode a blob that might be hex or just string."""
-        if not isinstance(value, str):
-            return ""
+        """Try to decode a blob that might be hex or just string.
 
-        # Check if hex string (heuristics: no spaces, hex chars, even length)
-        if (
-            len(value) > 10
-            and " " not in value[:50]
-            and all(c in "0123456789abcdefABCDEF" for c in value[:100])
-        ):
-            try:
-                return bytes.fromhex(value).decode("utf-8", errors="ignore")
-            except Exception:
-                pass
-        return value
+        The heuristic lives in :func:`lore.utils.text_processing.decode_hex_or_str`
+        so other SQLite-backed extractors can reuse it (#120).
+        """
+        return decode_hex_or_str(value)
 
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         if not self.is_available():

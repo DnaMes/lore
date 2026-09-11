@@ -194,6 +194,45 @@ def test_build_index_invalid_ignored_json(tmp_path):
     assert len(data["sessions"]) == 1
 
 
+def test_corrupt_ignored_json_warns_instead_of_silent_reset(tmp_path, caplog):
+    """A corrupt ignore list must log a warning (#116).
+
+    Silently returning an empty set made previously pruned sessions
+    reappear in the next rebuild with zero diagnostic trail.
+    """
+    import logging
+
+    (tmp_path / "ignored.json").write_text("not valid json {{{")
+    builder = IndexBuilder(tmp_path)
+
+    with caplog.at_level(logging.WARNING, logger="lore.exporters.index"):
+        ignored = builder._load_ignored()
+
+    assert ignored == set()
+    assert any("ignored.json" in record.message for record in caplog.records)
+    assert any(record.levelno == logging.WARNING for record in caplog.records)
+
+
+def test_unreadable_ignored_json_warns(tmp_path, caplog):
+    """Unreadable (not just malformed) ignore lists take the same path."""
+    import logging
+    import os
+
+    ignore_path = tmp_path / "ignored.json"
+    ignore_path.write_text(json.dumps({"session_ids": ["x"]}))
+    os.chmod(ignore_path, 0o000)
+    builder = IndexBuilder(tmp_path)
+
+    try:
+        with caplog.at_level(logging.WARNING, logger="lore.exporters.index"):
+            ignored = builder._load_ignored()
+    finally:
+        os.chmod(ignore_path, 0o644)
+
+    assert ignored == set()
+    assert any("ignored.json" in record.message for record in caplog.records)
+
+
 def test_build_index_with_export_path(tmp_path):
     builder = IndexBuilder(tmp_path)
     session = _make_session("exp-session")

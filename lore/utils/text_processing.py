@@ -2,6 +2,7 @@ import difflib
 import html
 import json
 import re
+from typing import Any
 
 
 def _diff_rows(old: str, new: str, context: int = 3) -> tuple[list[dict], int, int]:
@@ -402,3 +403,29 @@ def format_tool_display(tool_name: str, args: str) -> str:
         </div>
     </details>
     """
+
+
+def decode_hex_or_str(value: Any) -> str:
+    """Decode a SQLite blob that might be hex-encoded text or a plain string.
+
+    Heuristic (matches the original CursorExtractor._decode_blob): values
+    longer than 10 chars with no spaces in the first 50 chars and only hex
+    digits in the first 100 are treated as hex and decoded as UTF-8.
+    Anything else is returned unchanged; non-strings become "".
+
+    Shared primitive (#120) — future SQLite-backed extractors should use
+    this instead of re-deriving blob decoding per tool.
+    """
+    if not isinstance(value, str):
+        return ""
+
+    if (
+        len(value) > 10
+        and " " not in value[:50]
+        and all(c in "0123456789abcdefABCDEF" for c in value[:100])
+    ):
+        try:
+            return bytes.fromhex(value).decode("utf-8", errors="ignore")
+        except ValueError:
+            pass
+    return value

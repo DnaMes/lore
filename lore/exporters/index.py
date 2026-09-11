@@ -370,7 +370,14 @@ class IndexBuilder:
             else:
                 values = data
             return set(values or [])
-        except Exception:
+        except (OSError, json.JSONDecodeError, TypeError) as exc:
+            # A corrupt/unreadable ignore list must not silently un-prune
+            # sessions (#116) — warn so the operator can fix the file.
+            logger.warning(
+                "Could not load ignored.json (%s); previously pruned "
+                "sessions may reappear in the next rebuild",
+                exc,
+            )
             return set()
 
 

@@ -711,3 +711,36 @@ def test_sanitize_summary_command_message_marker():
 def test_sanitize_summary_command_args_marker():
     extractor = ClaudeCodeExtractor.__new__(ClaudeCodeExtractor)
     assert extractor._sanitize_summary("Args: <command-args>") is None
+
+
+# ---------------------------------------------------------------------------
+# _decode_project_name reconstruction (#124)
+# ---------------------------------------------------------------------------
+
+
+def test_decode_project_name_reconstructs_real_path(tmp_path):
+    """Every dash-split prefix that exists on disk is honoured."""
+    real = tmp_path / "home" / "user" / "proj"
+    real.mkdir(parents=True)
+    # /home/user/proj → -home-user-proj (leading slash becomes the leading dash)
+    encoded = "-" + str(real)[1:].replace("/", "-")
+
+    extractor = ClaudeCodeExtractor.__new__(ClaudeCodeExtractor)
+    decoded = extractor._decode_project_name(encoded)
+
+    assert decoded == str(real)
+
+
+def test_decode_project_name_no_disk_match_logs_heuristic(tmp_path, caplog):
+    """No on-disk prefix matched → the result is an unvalidated guess that
+    must leave a debug trace (#124)."""
+    import logging
+
+    extractor = ClaudeCodeExtractor.__new__(ClaudeCodeExtractor)
+    encoded = "-no-such-root-xyz"
+
+    with caplog.at_level(logging.DEBUG, logger="lore.extractors.claude"):
+        decoded = extractor._decode_project_name(encoded)
+
+    assert decoded == "/no-such-root-xyz"
+    assert any("no on-disk prefix match" in record.message for record in caplog.records)
