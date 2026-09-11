@@ -1,270 +1,167 @@
-> **STALE** — last updated 2026-07-03, but the repo has commits up to 2026-08-25 (53 days newer).
-> Read this as history, not as the current state. Flagged 2026-08-25 by the
-> repo-compliance audit; content deliberately left untouched.
+# HANDOFF — Lore — 2026-09-11 (issue-backlog sweep: 26 issues closed, 13 commits pushed)
 
-# HANDOFF — Lore — 2026-07-02 (hybrid search shipped end-to-end, #56 closed)
+> Repo: `~/projects/ai-stack/lore` · GitHub `DnaMes/lore` · default branch **main** · remote named **`github`** (not `origin`).
+> `main` == `github/main` @ `2ac30bd`, working tree clean. All work is PUSHED.
 
-> Default branch is **main** (renamed from master 2026-07-01). Remote is `github`, not `origin`.
-> Update this before session ends.
+## Goal
 
-## ▶ #96 + #103 DONE — PR #102 OPEN, CI GREEN, ready to merge
+The maintainer asked (in-session) to work through the open GitHub issue backlog "in a loop":
+triage-fix-verify each actionable issue, commit per batch with issue references, push, and
+clean up. 32 issues were open at session start; **26 are now closed** (each with an
+AI-disclaimer comment + commit reference on GitHub), **6 remain open on purpose** (below).
 
-**Status (final for this session):** all 3 commits pushed to
-`fix/96-indexbuilder-streaming`, **PR #102 CI green** (lint/bandit/pip-audit +
-tests 3.11/3.12). PR body updated (closes #96, closes #103). 1123 tests pass.
-The open-question below was RESOLVED: cold build has **0** `messages_synced=0`
-rows → the earlier JSON/message-count deltas were live-archive drift, not a bug.
-**Only remaining action: merge PR #102** (and #104 opencode stays a separate PR).
+## Current Progress
 
-Historical detail from mid-session (kept for reference):
+- **13 commits on main, pushed** (`6b08635..2ac30bd`), spanning these batches:
+  | Commit                | Batch                                                                       | Issues                   |
+  | --------------------- | --------------------------------------------------------------------------- | ------------------------ |
+  | `6b08635`             | A11y templates + snapshot regen                                             | #135 #136 #137           |
+  | `6205544`             | Python perf: memoized index lookups + direct single-session reads           | #125 #126 #127 #128      |
+  | `4f58d71`             | Tailwind precompiled CSS replaces ~400 KB JIT runtime; hljs defer           | #129                     |
+  | `1b0342c`             | A11y base.html (skip-link, aria-labels, view-menu Space key)                | #130–#134                |
+  | `d5740a5`             | Swallowed-exception cleanup (LLM/titles/digest/probe)                       | #114 #115 #121 #122 #123 |
+  | `3f49c8b`             | CLI: `_load_existing_index_state` + `COMMANDS` dispatch table               | #117 #118                |
+  | `c35d927`             | Hex-decode utility, ignored.json warning, decode tracing                    | #116 #120 #124           |
+  | `0c69a90`             | `web_audit.py` extraction (partial #119)                                    | #119                     |
+  | `0c5513d`             | Muted-text contrast AA/AAA both themes                                      | #146 #147                |
+  | `04b5179` + `d88bee0` | opencode two-pass extraction (425 MB peak → bounded)                        | #104                     |
+  | `52177c2`             | CSP-safe delegated event wiring, all inline `on*=` gone                     | #106                     |
+  | `2ac30bd`             | .githooks path-pattern update (maintainer's own edit, committed on request) | —                        |
+- **Test suite: 1164 passed, 10 skipped** (baseline at session start: 1118 passed). +46 tests.
+- **ruff clean**, **mypy exactly at pre-session baseline** (24 pre-existing errors; the two-pass
+  rewrite briefly added 12, fixed in `d88bee0`).
+- GitHub state: 26 issues closed with comments; stale merged remote branches
+  `hermes/issue-148-*` / `hermes/issue-101-*` deleted + pruned. No open PRs.
 
-## ▶ (resolved) — #96 + #103 on branch `fix/96-indexbuilder-streaming`
+## What Worked
 
-### Goal
-Bound reload/reindex peak RSS (#96) so it doesn't grow with archive size and
-isn't an OOM risk on small hosts / containers.
+- **Test convention for this host:** the host's real `$HOME` has an unreadable
+  `~/.local/state/network-restore-20260907/` dir that made 94 tests fail with PermissionError.
+  Running with an **isolated HOME** gives a fully green suite:
+  `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests/ -p no:cacheprovider -q -o addopts=""`
+  (baseline was 1118 passed / 10 skipped). Reuse this exact command.
+- **Baseline-diffing instead of fixing:** mypy/lint noise was never "chased" — instead diffed
+  against the pre-session baseline so only genuine regressions were addressed.
+- **Patch-target preservation when moving code:** `web_jobs` resolves helpers via late
+  `from .web import ...` and 30+ tests patch `web.load_index` / `web._audit_*`. Moving the
+  audit cluster to `web_audit.py` kept every patch target alive by re-exporting with PEP 484
+  redundant aliases (`from .web_audit import X as X`) and doing call-time late imports for
+  `load_index`. The full suite confirmed it.
+- **A `.venv` now exists in the repo** (438 MB, gitignored, editable install + `[dev]` extras,
+  lore 2.4.0 on Python 3.12) — the project's ready-to-use test environment.
 
-### Current progress
-- **PR #102 OPEN** (unmerged) on branch `fix/96-indexbuilder-streaming`. Two
-  commits pushed (#96 fix + handoff). CI was green on those.
-- **#103 work committed locally? NO — STAGED, NOT committed** as of this
-  handoff. `git status`: `lore/exporters/index.py`,
-  `lore/services/extraction.py`, `tests/test_index_builder_streaming.py`, and
-  the design doc are **staged**. Commit them next.
+## What Didn't Work
 
-### Measured results (peak VmHWM, real ~990-session archive, isolated processes)
-| Path | Before | After |
-|---|---|---|
-| cold full rebuild (#96 OOM case) | 2084 MB | **1404 MB** |
-| web-reload non-incremental | 2040 MB | **1421 MB** |
-| **warm incremental (#103)** | 2077 MB | **1429 MB** |
+- **Subagent delegation died mid-loop:** the Batch A subagent (implementer lane,
+  `zai-coding-plan/glm-5.3`) hit a 5-hour usage quota AFTER completing #125/#126 but BEFORE
+  #127/#128 — it returned a failure with work silently left in the working tree. Lesson:
+  always `git status` + review the diff after a subagent failure before re-delegating; treat
+  partial work as review input, not garbage. The rest of the loop ran in-session instead.
+- **Stash-based mypy baseline diffing only works pre-commit:** after commits exist, `git stash`
+  only holds leftover working-tree changes, so "baseline" and "current" mypy runs measure the
+  same tree. For a true baseline after committing, diff against the pre-loop commit (e.g. via
+  a worktree at `5cc8308`) or track the earlier measured numbers.
+- **`git rm`'d files can't be re-`git add`ed by path** (fatal: pathspec did not match) — the
+  deletion is already staged; just add the rest and commit.
 
-### What was done
-1. **#96 build_index list retention** — `_MultiWriter` single-pass fan-out in
-   `lore/exporters/index.py`; callers pass generators; `StreamingV2Writer` in
-   `lore/storage/writer.py`. Light data (JSON dicts, legacy tuples) buffers;
-   heavy message rows stream into v2 and drop.
-2. **#96 139 MB VSCode file `json.load` spike** — 25 MB cap
-   (`MAX_SESSION_FILE_BYTES`) in `lore/extractors/vscode.py`, logged skip.
-3. **#103 warm incremental** — steelman REJECTED the mtime-diff v2 write
-   (correctness downgrade). Instead: caller yields reused sessions through the
-   **same generator** tagged via a `reused_ids` set; `build_index` routes tagged
-   ids to a **v2-only** write (JSON/legacy entry from `reused_entries`).
-   DELETE-and-rebuild consistency preserved; no second list held.
+## Decisions Made (each + why)
 
-### What didn't work / caught bugs
-- **`reused_ids or set()` in build_index** dropped the caller's live (empty-at-
-  call-time) set → mis-routed every reused session to a full write, duplicating
-  it in JSON. FIXED with `if reused_ids is None`. (See index.py build_index.)
-- Diff-based v2 write (mtime as sole re-index trigger) — rejected by steelman:
-  a same-mtime content edit would serve stale search forever.
+1. **#112 skipped entirely.** The maintainer's own comment re-scoped it: a real fix requires
+   replacing `StreamingV2Writer`'s full-replace `begin()` (DELETE + cascade) with in-place
+   upsert — a storage-layer redesign with regression risk for search/MCP memory/web (#35 was
+   broken by exactly this before). Needs a dedicated scoped session. Issue stays OPEN.
+2. **Roadmap issues #29/#33/#48/#92 skipped.** Feature/epic scope requiring design decisions,
+   not loop-fixable. Stay OPEN.
+3. **#119 done partially, stays OPEN** (comment posted on the issue). The framework-free
+   audit cluster moved to `web_audit.py` (2246 → 2131 lines). Shrinking below the ~800-line
+   target requires a Flask Blueprint refactor that invalidates most patch targets — a design
+   decision, deliberately not forced in a sweep loop.
+4. **#131 closed as "already implemented"** with evidence: `openSidebar`/`closeSidebar` in
+   base.html already sync `aria-expanded` on every state change. Did not force a change.
+5. **#144/#145 closed as informational** per their own "no urgent fix" text, with notes
+   (legacy SearchEngine removal would degrade air-gapped installs — lazy-load instead).
+6. **#106 payload context change:** continue-command moved from JS context (`|tojson` inside
+   onclick) to an HTML attribute (autoescape). The escape-contract test was updated to pin the
+   new rendering (`&#34;` for quotes) — same XSS safety, different context, test renamed.
+7. **Tailwind theme colors kept byte-identical** in `tailwind.config.js` even though the four
+   custom colors appear unused — exact-parity rebuild beats opportunistic cleanup here.
+8. **`autosync/e14` branch left untouched** (local + remote): automated WIP snapshot from the
+   maintainer's `repo-autosync.sh` infra with one unmerged commit — not session debris.
+9. **Commit-then-push only on explicit user request** ("commite, push and merge") — the loop
+   initially committed locally per batch and pushed at the end.
 
-### ⚠️ OPEN QUESTION before merge (verify next)
-Parity check (full rebuild vs cold+incremental) over the **live** archive showed
-JSON ids 992 vs 991 and message counts differing by ~12–18. **v2 session ids
-matched True; search_index matched True.** Strongly looks like **live-data drift**
-(these read active AI session dirs that change between builds, seconds apart) —
-NOT a bug. BUT the same-OUT run also showed `messages_synced sum = 985 < 991`
-(6 sessions messages_synced=0). A background job (`ba6nl49t3`) was checking
-whether messages_synced=0 appears on a **COLD** build too (→ pre-existing, not
-#103's fault) and whether those sessions still have message rows. **READ THAT
-RESULT FIRST.** If cold build also has messages_synced=0 with message rows
-present → benign/pre-existing, safe to commit+push #103. If #103 introduced it →
-investigate `add_reused_session` / seeding order.
+## Files Changed (by area; full detail in the commits above)
 
-### Next steps (ordered)
-1. Read `ba6nl49t3` output (messages_synced=0 on cold build?). Decide benign vs bug.
-2. If benign: `git commit` the staged #103 changes; push branch; update PR #102
-   body to note #103 folded in (warm incremental now 1429 MB).
-3. Run full suite once more (was **1123 passed, 1 skipped** before commit).
-4. Confirm CI green on the pushed branch.
-5. Close #103 when PR #102 merges. #104 (opencode dedup dict ~425 MB) still open.
+- `lore/services/index.py`, `lore/services/extraction.py`, `lore/services/__init__.py` —
+  memoized finalized-index payload (stat + tombstone keyed), `session_by_id_map`,
+  `find_live_session` service helper.
+- `lore/extractors/base.py`, `lore/extractors/claude.py` — `find_session_by_id` hook +
+  claude override (direct `<session_id>.jsonl` parse); decode tracing in `_decode_project_name`.
+- `lore/extractors/opencode.py` — two-pass `extract_sessions` (light winner map → streamed
+  parse), `_PendingSession`, shared `_SQLITE_SESSION_SELECT`; `_extract_sessions_from_sqlite`
+  kept for direct callers.
+- `lore/interfaces/web.py` (+ new `web_audit.py`) — O(1) session-meta lookup, audit/build-info
+  cluster extracted with re-exports; CSP comment updated.
+- `lore/interfaces/web_services.py` — `_group_threads_by_id` + memoized `thread_overview_by_id`.
+- `lore/interfaces/mcp.py`, `lore/interfaces/mcp_tools/deps.py`, `lore/interfaces/mcp_tools/sessions.py` —
+  shared memos for session/thread lookups, `find_live_session` wiring.
+- `lore/storage/schema.py` (`open_v2_connection`), `lore/storage/tags.py`, `lore/storage/memory.py` —
+  migration fast path.
+- `lore/llm/gemini.py`, `lore/llm/ollama.py`, `lore/titles/generator.py`, `lore/digest.py`,
+  `lore/interfaces/live_probe.py` — specific exceptions + debug logging.
+- `lore_cli.py` — `_load_existing_index_state`, `COMMANDS` table, `build_parser()`.
+- `lore/exporters/index.py` — ignored.json corruption warning.
+- `lore/utils/text_processing.py`, `lore/extractors/cursor.py` — shared `decode_hex_or_str`.
+- `lore/templates/*.html` (base, session, sessions, projects, session_rows, memory, dashboard,
+  thread_detail, noise_rules) — a11y fixes, data-action delegation, data-confirm /
+  data-auto-submit forms; `tailwind.config.js` + `tailwind.input.css` + `scripts/build_tailwind.sh`
+  - `lore/interfaces/static/tailwind-compiled.min.css` (new), JIT runtime deleted.
+- `scripts/vendor_assets.py` — tailwind JIT removed from the manifest.
+- Tests: `tests/test_session_meta_lookup.py`, `tests/test_find_session_by_id.py`,
+  `tests/test_decode_hex_or_str.py`, `tests/test_cli_dispatch.py` (new);
+  `tests/test_vendored_assets.py`, `tests/test_storage_schema.py`, `tests/test_index_builder.py`,
+  `tests/test_claude_extractor.py`, `tests/test_opencode_extractor_extended.py`,
+  `tests/test_web_titles.py` extended; 10 template snapshots regenerated
+  (`UPDATE_TEMPLATE_SNAPSHOTS=1`).
 
-Design doc + both steelman passes:
-`docs/superpowers/specs/2026-07-02-indexbuilder-streaming-design.md`.
+## Next Steps (ordered)
 
----
+1. **#106 manual browser pass** (30 min): click through theme menu, sync menu, view toggles,
+   resume modal, tag editor, delete confirms with devtools console open — the automated suite
+   asserts zero CSP violations at page load, but click-flow verification was not done.
+2. **#119 Blueprint refactor** (scoped session): split `web.py` routes into Flask Blueprints
+   (api / pages / actions), move `_reload_sessions_index` into `web_jobs`, plan for
+   `web.load_index`/`web._audit_*` patch-target migration across ~15 test files. Current state:
+   audit cluster already extracted to `web_audit.py`; issue has a follow-up comment with the plan.
+3. **#112 dedicated session** (the only `critical` left): replace `StreamingV2Writer`'s
+   full-replace `begin()` with genuine upsert (UPSERT changed sessions, targeted DELETE for
+   removed ones, leave unchanged message rows) so extractors can mtime-skip. Read the issue's
+   maintainer comment FIRST — it documents why naive extractor-side skipping regressed #35.
+4. **Roadmap (need maintainer decisions):** #92 hybrid-search Phase 2 distance cutoff, #48
+   JSON-retirement exit criteria, #33 shared-memory vision, #29 MCP-over-HTTP.
+5. If issues are fixed outside GitHub: remember each closed issue carries an AI-disclaimer
+   comment; keep that convention.
 
-## TL;DR — hybrid search (#87) shipped in 4 PRs; #56 umbrella closed
+## Gotchas (current, verified this session)
 
-**Session 2026-07-01/02:** `master`→`main` rename (GitHub API rename, PR #65 closed as
-stale, CI/docs refs fixed), venv rebuilt (was still the old `ai-history` editable install
-on a broken path — now `lore 2.4.0` on Python 3.12), and **#87 hybrid search** built
-end-to-end per `docs/PLAN-hybrid-search.md`:
-
-| PR | What |
-|---|---|
-| #88 | sqlite-vec foundation — vec0 `session_embeddings` table, guarded outside MIGRATIONS |
-| #89 | one embedding per session populated on index write (post-FTS-commit, best-effort) |
-| #90 | `semantic_search_sessions` (KNN) + `rrf_merge` fusion wired into `search_index` |
-| #91 | CLI drift fixed — `lore search` now uses the shared v2 router; CLAUDE.md documents the flow |
-
-Suite **1102 passed**, coverage ~84.8%, all CI green. Design: sqlite-vec in
-`index_v2.sqlite`, per-session bge-small 384-dim vectors, RRF (k=60), `[semantic]`
-optional extra with FTS-only fallback, `LORE_HYBRID_SEARCH=0` escape hatch.
-Verified end-to-end over the real archive: 7/10 hits for a conceptual query found
-only by semantic search. **#56 + #87 closed; follow-up #92** (distance cutoff +
-message-level embeddings, Phase 2).
-
-⚠️ **Syncthing corrupted `.git` four times this session** (invalid refs/reflogs, one
-missing blob). **Fixed for good on 2026-07-02**: `/lab/ai/lore` added to
-`~/projects/.stignore` on BOTH machines (per-device file!) — lore is no longer
-Syncthing-synced at all; git push/pull is the only sync. Repair recipe for ref
-corruption lives in the project memory (`ai-workstation-syncthing-mirror`).
-
-**QA session + fixes 2026-07-02** (deep pass over hybrid search, then fixed all findings):
-- ✅ good: warm search 70–85 ms, cold first search 0.85 s; FTS-injection/unicode/5k-query
-  edge cases clean; MCP `search_history` returns fused RRF results.
-- **#94 → #100 merged**: Docker installs `[semantic]` + pre-downloads bge-small at build
-  time; `/api/build-info` now reports `semantic.*`. ⚠️ **Offline image smoke NOT run** —
-  local Docker daemon DNS is broken (can't resolve deb.debian.org, no image builds here).
-  **#101 tracks running it in a working Docker env before trusting prod hybrid search.**
-- **#95 → #99 merged**: reload no longer times out. `embed_sessions` is now incremental
-  (migration 13 `session_embedding_meta`, `LORE_EMBED_BUDGET_SECONDS` default 60s); only
-  changed sessions re-embed. Also fixed a latent bug: incremental sync's full DELETE used
-  to wipe every vector. Live web reload **92 s, done** (was 382 s → timeout/abort).
-- **#96 (p2, still open)**: reframed after investigation — the ~1.9 GB is NOT the model
-  (263 MB); it's the IndexBuilder holding all ~960 sessions in RAM (1740 MB with zero
-  embedding). Pre-existing, unrelated to hybrid search. Needs IndexBuilder streaming.
-- **#97 → #98 merged**: `/api/v1/search` now honors + validates `scope`.
-
-Suite **1109 passed**; `main @ cdcccc3`.
-
-**Open roadmap** (all need a direction decision): #96 IndexBuilder RAM (p2), #101 Docker
-offline verify (p2), #92 hybrid-search Phase 2 (distance cutoff), #48 JSON-retirement,
-#33 shared memory, #29 MCP-over-HTTP.
-
----
-
-## Previous session — 2026-06-30 (QA + 11 issues + #30 Jinja, all merged)
-
-Autonomous QA + fix sweep. **18 PRs merged** (#70–#86), each CI-green
-(lint + bandit + pip-audit + tests 3.11/3.12), squash-merged to master. Suite **1063 passed**,
-coverage ~83.9%. master HEAD **9017965**.
-
-Latest round: #62, #54, #55, #57 (diagnosed), #79 (canonical tool_call shape — fixed
-silently-dropped codex/copilot args), #53 (render rebuild closed), #83 (tool-burst ×N folding),
-and **#56 session tags end-to-end** (#85 backend: migration 12 `session_tags` + storage CRUD +
-`/api/sessions/<id>/tags` + `/api/tags` + MCP `user_tags`; #86 UI: tag-editor chips on the
-session page). All remaining work is genuinely strategic architecture.
-
-| # | Fix | PR |
-|---|---|---|
-| [#66](https://github.com/DnaMes/lore/issues/66) | `lore-web`/`lore-mcp` CLI entry points (were 0-byte) | #70 |
-| [#68](https://github.com/DnaMes/lore/issues/68) | strip `<local-command-caveat>` title leak + command noise | #71 |
-| [#67](https://github.com/DnaMes/lore/issues/67) | cost dashboard: persist per-session token total (migration 11) | #72 |
-| [#69](https://github.com/DnaMes/lore/issues/69) | antigravity/copilot drops surfaced as skip reasons | #73 |
-| — | `[dev]` extra + MCP serverInfo version → `lore.__version__` | #74 |
-| [#67](https://github.com/DnaMes/lore/issues/67)↳ | cost dashboard `untokened_count` (no silent drop) | #75 |
-| [#30](https://github.com/DnaMes/lore/issues/30) | extract 13 Jinja templates → `lore/templates/*.html`, env built once | #76 |
-| [#62](https://github.com/DnaMes/lore/issues/62) | served-path per-message tokens/model from v2 store (chips without `?live=1`) | #77 |
-| [#54](https://github.com/DnaMes/lore/issues/54) | stop truncating opencode tool output at 50k (2M cap + `truncated` flag) | #78 |
-| [#55](https://github.com/DnaMes/lore/issues/55) | parametrized extractor contract tests (tool_calls shape, empty-HOME) | #81 |
-| [#57](https://github.com/DnaMes/lore/issues/57) | diagnosed: raw→import gap is 100% MIN_USER_PROMPTS filtering, no data loss (closed) | — |
-
-- **Version** 2.4.0 · **Repo** `~/projects/lab/ai/lore` · **GitHub** `DnaMes/lore` (default `master`, HEAD **5c77393**)
-- **Data** `~/.lore` · **Docker** `lore-app` :5000 (`gunicorn --workers 1`)
-- `lore-web --port 5057` works; `pip install -e ".[dev]"` sets up the dev env.
-- Cost dashboard real; token/model chips render without `?live=1`; templates are files now.
-
-## Open issues — all genuinely strategic, need a product/design conversation first
-
-Only architecture/design work left:
-
-- **[#56](https://github.com/DnaMes/lore/issues/56)** — umbrella, **3 of 4 items shipped** (Resume, cost dashboard, tags end-to-end). Remaining: **hybrid search over the archive** — extend `memory_embeddings` (migration 10) semantic retrieval to the session archive. Sizeable: embedding-model + index-size tradeoffs, retrieval pipeline. Split into its own issue + close this umbrella when picked up.
-- **[#48](https://github.com/DnaMes/lore/issues/48)** JSON-retirement exit criteria — when the legacy index.json path is fully retired in favour of v2 (architecture decision).
-- **[#33](https://github.com/DnaMes/lore/issues/33)** shared-memory vision — architecture.
-- **[#29](https://github.com/DnaMes/lore/issues/29)** MCP-over-HTTP transport — feature.
-
-All four need a direction decision (which embedding model? when to drop JSON? HTTP transport priority?) before code. Not loop-fixable — they're the genuine roadmap.
-
-## ⚠️ repo-autosync gotcha (cost me a near-miss this session)
-
-`~/bin/repo-autosync.sh` runs `git add -A` then commits to `autosync/<host>` and `reset --soft`s —
-so it **leaves everything staged** in the working tree, and Syncthing can create
-`*.sync-conflict-*` branches. Twice this session that pulled `docs/` (untracked) and an old branch's
-changes into a feature commit; I had to soft-reset and re-stage explicitly. **Before any commit on
-this repo, run `git diff --cached --name-only` and stage only your intended files** — don't trust a
-clean-looking `git add <file>`; the autosync may have pre-staged other things. The autosync branches
-(`autosync/fedora`, `autosync/ai-workstation`) are user infra, left untouched.
-
-## Verified outcomes (real, not "should work")
-
-- **#66** — `lore-web --port 5058` → /api/health + / = 200; `lore-mcp` answers a JSON-RPC initialize handshake.
-- **#68** — example caveat session: `<title>` + `<h1>` + body (default & `?live=1`) all clean; a legit live title still wins; nh3 XSS tests still green.
-- **#67** — after a full index rebuild, `/api/stats/costs` returns total_tokens=5,569,949,748, session_count=719, by_tool (claude 58M / gemini 139M / opencode 5.37B).
-- **#69** — antigravity skip_counts = {no_task_md: 12, too_few_user_prompts: 7}; copilot's 2 sessions are real but single-prompt (correctly filtered). Neither had a lying is_available — the bug was silent drops, now surfaced.
-
-## Findings worth a follow-up — ALL SHIPPED (verified 2026-07-01)
-
-Every item previously listed here is done; kept for the trail:
-
-- **`[dev]` extra** — present, `pyproject.toml:43` (`dev = [...]`).
-- **Cost dashboard "N without token data"** — `untokened_count` surfaced, `web.py:1006/1067`.
-- **MCP serverInfo version** — uses `__version__`, `server.py:67`; live handshake returns `2.4.0`.
-- **#30** — Jinja extraction done; 13 files under `lore/templates/`, `web_templates.py` gone.
-- Planning docs `docs/EXECUTION-PROMPT.md`, `docs/UMBAU.md` — committed and tracked.
-
-## Pre-existing open issues still relevant
-
-- **#30** Jinja extraction (`web_templates.py` = 2036-LOC Python string) = the "make it leaner" item. Body references old `ai_history/` path.
-- **#62** per-message token chips only with `?live=1` — partially overlaps the now-fixed #67 (index now carries `tokens`); revisit whether the served-path chips can reuse it.
-- **#57** raw→imported gap, **#56** differentiation options (tags/bookmarks/hybrid-search/resume), **#55** parametrized contract test, **#54** opencode 50k truncation, **#33/#48/#29** roadmap.
-
-## How to run the web UI locally
-
-```bash
-cd ~/projects/lab/ai/lore
-FLASK_SECRET_KEY=devtest .venv/bin/lore-web --port 5057    # now works (#66 fixed)
-# then: curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:5057/api/health  → 200
-```
-Or Docker: `docker compose up -d app` → :5000. After token/extractor changes, rebuild the
-index with `lore export --all` (also rebuilds the v2 store + cost data).
-
-Live extractor probe (per-tool available + session count + skip reasons):
-```bash
-.venv/bin/python -c "
-from lore.extractors import claude, codex, opencode, cursor, gemini, antigravity, vscode, warp
-for m in (claude,codex,opencode,cursor,gemini,antigravity,vscode,warp):
-    import inspect
-    c=[x for _,x in inspect.getmembers(m,inspect.isclass) if x.__module__==m.__name__ and x.__name__.endswith('Extractor')][0]()
-    ok=c.is_available(); n=sum(1 for _ in c.extract_sessions()) if ok else '-'
-    print(f'{m.__name__.split(chr(46))[-1]:12} available={ok} sessions={n} skips={dict(getattr(c,\"skip_counts\",{}))}')
-"
-```
-
-## Gotchas (still valid)
-
-- Default remote branch is **`main`** (renamed from `master` on 2026-07-01; the old `master` ref is gone).
-- gunicorn is **not** in `.venv` (Docker image only); `lore-web` uses the Flask dev server locally.
-- Test deps are **not** in pyproject (no `[dev]` extra) — fresh venvs need `pip install pytest pytest-cov coverage fastembed` by hand (follow-up to fix).
-- Tailwind console warning ("cdn.tailwindcss.com should not be used in production") is the vendored dev build's banner — cosmetic.
-- Subagent sessions have `project_path: None` in the index (cosmetic, affects project filter).
-- ~~Syncthing mirrors this repo to ai-workstation incl. `.git`~~ **No longer true (2026-07-02):** lore is in `~/projects/.stignore` on both machines — Syncthing skips it entirely; sync via git push/pull only.
-
-## ai-workstation — synced to latest master (cca6def)
-
-- Repo at `master` HEAD **cca6def** (all 4 fixes), Syncthing + git agree.
-- Remote = **HTTPS** (`https://github.com/DnaMes/lore.git`) + `gh` credential helper (the
-  `github-personal` SSH alias is laptop-only). `git pull`/`push` work without SSH keys.
-- `.venv` built (python 3.12.3), editable install + test deps present, suite verified green there.
-
-## Next session start (on ai-workstation)
-
-1. `ssh ai-workstation`, `tmux attach -t ai` (or new), `cd ~/projects/lab/ai/lore`.
-2. `git pull` (already up to date as of this handoff).
-3. `.venv/bin/python -m pytest tests/ -q` — confirm green baseline.
-4. Pick a follow-up from "Findings worth a follow-up" above (e.g. add `[dev]` extra, or #30 Jinja),
-   or a roadmap issue. Branch off main, never commit to main directly without CI.
+- Remote is named **`github`**; a pre-push hook warns `[pre-push] no origin remote` — harmless.
+- Run the suite with **isolated HOME** (see What Worked); real `$HOME` breaks 94 tests via an
+  unreadable network-restore dir.
+- `pytest` needs `-o addopts=""` in this venv unless pytest-cov flags are wanted (pyproject
+  addopts pull in `--cov`).
+- Template snapshots: regenerate with `UPDATE_TEMPLATE_SNAPSHOTS=1` (documented in
+  `tests/test_template_snapshots*`).
+- `tests/test_vendored_assets.py::test_compiled_tailwind_covers_every_template_class_token`
+  fails if a new template class is neither in the compiled Tailwind sheet nor a custom CSS
+  class nor in `NON_STYLED_CLASS_TOKENS` — after adding new Tailwind classes, run
+  `scripts/build_tailwind.sh` and commit the artifact.
+- Pre-existing mypy/lint noise (24 mypy errors incl. `deps.py:62 index_path: object`,
+  `writer.py:44`, `context.py`, `knowledge.py`, `tooling.py:59`) is known — do not chase.
+- The `.githooks/pre-commit*` files are the maintainer's identity guard; leave them alone
+  unless asked.
+- repo-autosync gotcha from the 2026-07-03 handoff still applies: autosync leaves things
+  staged; before committing, check `git diff --cached --name-only` and stage only intended files.
 
 ---
 
-<details><summary>Previous handoff — 2026-05-26 (rebrand + data foundation)</summary>
-
-Product **Lore** (import package `lore`). Rebrand from `ai-history`, Forgejo deleted, data
-re-synced to `~/.lore`, laptop-freeze fix (single-pass export + memory-capped systemd timer),
-Claude subagent coverage 46→333, v2 store fixed (INSERT OR REPLACE), search v2-primary,
-MIN_USER_PROMPTS=3. Axis-1 data-completeness (removed claude.py 500-char truncation, structured
-tool_call outputs threaded by tool_use_id, skip-count tracking). See git history for detail.
-
-</details>
+generated by context-parachute vunknown
