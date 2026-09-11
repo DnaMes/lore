@@ -25,7 +25,7 @@ if [[ "$CURRENT_DIR" == *"/repos/personal/"* ]]; then
 elif [[ "$CURRENT_DIR" == *"/repos/work-github/"* ]]; then
     EXPECTED_EMAIL="$WORK_GITHUB_EMAIL"
     LOCATION="Vattenfall GitHub (erdkem)"
-elif [[ "$CURRENT_DIR" == *"/repos/work-devops/"* ]] || [[ "$CURRENT_DIR" == *"/repos/work/"* ]]; then
+elif [[ "$CURRENT_DIR" == *"/repos/work-devops/"* ]] || [[ "$CURRENT_DIR" == *"/work/"* ]]; then
     EXPECTED_EMAIL="$WORK_DEVOPS_EMAIL"
     LOCATION="Vattenfall Azure DevOps"
 elif [[ "$CURRENT_DIR" == *"/projects/"* ]]; then
@@ -38,9 +38,7 @@ else
     echo ""
     echo -e "Recommended directories:"
     echo -e "  ~/repos/personal/       (for ${PERSONAL_EMAIL})"
-    echo -e "  ~/repos/work-github/    (for ${WORK_GITHUB_EMAIL})"
-    echo -e "  ~/repos/work-devops/    (for ${WORK_DEVOPS_EMAIL})"
-    echo -e "  ~/repos/work/           (for ${WORK_DEVOPS_EMAIL})"
+    echo -e "  ~/work/                 (for ${WORK_DEVOPS_EMAIL})"
     echo ""
     # Non-interactive mode (scripts, agents): allow if personal email is set
     if [[ ! -t 0 ]]; then
