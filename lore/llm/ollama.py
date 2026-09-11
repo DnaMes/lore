@@ -1,10 +1,13 @@
 import hashlib
 import json
+import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..utils.paths import lore_home
 from .base import LLMConfig, LLMProvider, LLMResponse
+
+logger = logging.getLogger(__name__)
 
 
 class OllamaProvider(LLMProvider):
@@ -84,7 +87,10 @@ class OllamaProvider(LLMProvider):
         try:
             self._get_client()
             return True
-        except Exception:
+        except Exception as exc:
+            # Any backend failure means "not available"; keep the broad net
+            # but leave a diagnostic trail (#115).
+            logger.debug("Ollama provider unavailable: %s", exc)
             return False
 
     def get_model_info(self) -> Dict[str, Any]:
@@ -111,8 +117,8 @@ class OllamaProvider(LLMProvider):
                     tokens_used=data.get("tokens_used", 0),
                     cached=True,
                 )
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError, KeyError) as exc:
+                logger.debug("Ignoring unreadable Ollama cache entry: %s", exc)
         return None
 
     def _save_to_cache(self, cache_key: str, response: LLMResponse):
@@ -127,5 +133,5 @@ class OllamaProvider(LLMProvider):
                     },
                     f,
                 )
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Could not write Ollama cache entry: %s", exc)

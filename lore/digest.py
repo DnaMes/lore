@@ -12,12 +12,15 @@ token or cost data, so the digest reports activity counts rather than spend.
 
 from __future__ import annotations
 
+import logging
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence
 
 from .utils.datetime import make_naive, parse_timestamp
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -45,7 +48,10 @@ def _session_time(record: Dict[str, Any]) -> Optional[datetime]:
         return None
     try:
         return make_naive(parse_timestamp(raw))
-    except Exception:
+    except (ValueError, TypeError, OverflowError, OSError) as exc:
+        # Malformed timestamps skip the session — but anything else (a bug
+        # in make_naive itself) must not silently disappear (#122).
+        logger.debug("Skipping unparseable session timestamp %r: %s", raw, exc)
         return None
 
 

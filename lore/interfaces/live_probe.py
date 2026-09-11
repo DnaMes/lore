@@ -1,12 +1,15 @@
 import argparse
 import base64
 import json
+import logging
 import os
 from dataclasses import dataclass
 from typing import Iterable, List, Optional, Tuple
 from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin
 from urllib.request import Request, urlopen
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -123,8 +126,10 @@ def run_probe_case(
             response_headers = dict(exc.headers.items()) if exc.headers else {}
             body_text = ""
             error = ""
-        except Exception:
-            pass
+        except Exception as exc:
+            # The HEAD fallback failed — keep the GET attempt's error state
+            # so downstream evaluates this probe as still-failed (#123).
+            logger.debug("HEAD fallback probe failed for %s: %s", target, exc)
 
     blocked_by_gateway = is_gateway_auth_block(status_code, response_headers)
     passed = False

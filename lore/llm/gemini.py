@@ -1,11 +1,14 @@
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from ..utils.paths import lore_home
 from .base import LLMConfig, LLMProvider, LLMResponse
+
+logger = logging.getLogger(__name__)
 
 
 class GeminiProvider(LLMProvider):
@@ -47,8 +50,10 @@ class GeminiProvider(LLMProvider):
                         "client_id": client_id,
                         "client_secret": client_secret,
                     }
-        except Exception:
-            pass
+        except (OSError, json.JSONDecodeError) as exc:
+            # Malformed JSON or a permission-denied creds file must not look
+            # identical to "no credentials file" (#114).
+            logger.debug("Could not load Gemini CLI credentials: %s", exc)
         return None
 
     def _get_client(self):
@@ -185,7 +190,10 @@ class GeminiProvider(LLMProvider):
         try:
             self._get_client()
             return True
-        except Exception:
+        except Exception as exc:
+            # Any backend failure means "not available"; keep the broad net
+            # but leave a diagnostic trail (#115).
+            logger.debug("Gemini provider unavailable: %s", exc)
             return False
 
     def get_model_info(self) -> Dict[str, Any]:
@@ -212,8 +220,8 @@ class GeminiProvider(LLMProvider):
                     tokens_used=data.get("tokens_used", 0),
                     cached=True,
                 )
-            except Exception:
-                pass
+            except (OSError, json.JSONDecodeError, KeyError) as exc:
+                logger.debug("Ignoring unreadable Gemini cache entry: %s", exc)
         return None
 
     def _save_to_cache(self, cache_key: str, response: LLMResponse):
@@ -228,5 +236,5 @@ class GeminiProvider(LLMProvider):
                     },
                     f,
                 )
-        except Exception:
-            pass
+        except OSError as exc:
+            logger.debug("Could not write Gemini cache entry: %s", exc)

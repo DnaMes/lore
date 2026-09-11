@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from datetime import datetime
 from enum import Enum
@@ -31,6 +32,8 @@ except ImportError:
 import shutil
 
 from ..utils.paths import lore_home
+
+logger = logging.getLogger(__name__)
 
 GEMINI_CLI_AVAILABLE = shutil.which("gemini") is not None
 
@@ -180,8 +183,10 @@ Respond with ONLY the title, no quotes, no explanation."""
                 title = title.replace('"', "").replace("'", "").strip()
                 return title[:80] if len(title) > 80 else title
 
-        except Exception:
-            pass
+        except Exception as exc:
+            # The gemini CLI is an optional best-effort path — but a broken
+            # install must still leave a signal (#121).
+            logger.debug("gemini CLI title generation failed: %s", exc)
 
         return None
 
