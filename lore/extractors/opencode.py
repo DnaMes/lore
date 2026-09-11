@@ -12,6 +12,7 @@ import os
 import sqlite3
 import sys
 from dataclasses import dataclass
+from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Dict, Iterator, List, Optional, TypedDict
@@ -33,6 +34,37 @@ def _env_int(name: str, default: int, minimum: int = 1) -> int:
     except ValueError:
         logger.warning("Invalid %s=%r, using default %s", name, raw, default)
         return default
+
+
+# Shared between the light pass-1 scan and the legacy full loader so the
+# column list can never drift between the two (#104).
+_SQLITE_SESSION_SELECT = """
+    SELECT id, project_id, directory, title, version, time_created, time_updated
+    FROM session
+    ORDER BY time_updated DESC, time_created DESC
+"""
+
+
+@dataclass
+class _PendingSession:
+    """Pass-1 winner record: session metadata only, no messages (#104).
+
+    The heavy parse (messages + parts) is deferred to pass 2 and runs only
+    for the last-write-wins winner of each id, keeping extraction memory
+    bounded instead of holding every session's full transcript at once.
+    """
+
+    session_id: str
+    created_at: datetime
+    updated_at: datetime
+    updated_raw: float  # raw time.updated value, for the state cache
+    # File source:
+    root: Optional[Path] = None
+    session_file: Optional[Path] = None
+    session_data: Optional[Dict] = None
+    # SQLite source:
+    db_path: Optional[Path] = None
+    row: Optional[sqlite3.Row] = None
 
 
 @lru_cache(maxsize=4)
@@ -354,14 +386,23 @@ class OpenCodeExtractor(BaseExtractor):
         return len(self.storage_roots) > 0 or len(self.sqlite_db_paths) > 0
 
     def extract_sessions(self) -> Iterator[UnifiedSession]:
-        """Extract all sessions from OpenCode storage roots."""
+        """Extract all sessions from OpenCode storage roots.
+
+        Two-pass to bound memory (#104): pass 1 reads only session metadata
+        and decides the last-write-wins winner per id across all sources;
+        pass 2 fully parses (messages + parts) only the winners and yields
+        them in created_at order. Output is identical to the previous
+        materialise-then-sort approach, without holding every session's
+        transcript in memory at once (measured ~425 MB transient peak at
+        259 sessions before this change).
+        """
         if not self.is_available():
             return
 
         if not self.force_full:
             self._load_state_cache()
 
-        sessions_by_id: Dict[str, UnifiedSession] = {}
+        winners: Dict[str, _PendingSession] = {}
 
         original_paths = (self.session_path, self.message_path, self.part_path)
         try:
@@ -387,25 +428,26 @@ class OpenCodeExtractor(BaseExtractor):
                         if not session_id:
                             continue
 
-                        updated_timestamp = session_data.get("time", {}).get("updated", 0)
+                        time_data = session_data.get("time", {})
+                        updated_timestamp = time_data.get("updated", 0)
                         if not self.force_full and self._should_skip_session(
                             session_id, updated_timestamp
                         ):
                             self.stats.sessions_skipped += 1
                             continue
 
-                        session = self._parse_session(session_file, session_data)
-                        if not session or not self.should_import_session(session):
-                            continue
-
-                        existing = sessions_by_id.get(session.session_id)
-                        if existing is None or session.last_updated >= existing.last_updated:
-                            sessions_by_id[session.session_id] = session
-
-                        self.stats.sessions_loaded += 1
-                        if not self.force_full:
-                            self._update_state_cache(session_id, updated_timestamp)
-
+                        pending = _PendingSession(
+                            session_id=session_id,
+                            created_at=parse_timestamp(time_data.get("created", 0)),
+                            updated_at=parse_timestamp(updated_timestamp),
+                            updated_raw=updated_timestamp,
+                            root=root,
+                            session_file=session_file,
+                            session_data=session_data,
+                        )
+                        existing = winners.get(session_id)
+                        if existing is None or pending.updated_at >= existing.updated_at:
+                            winners[session_id] = pending
                     except Exception as e:
                         logger.debug(f"Failed to parse session {session_file}: {e}")
                         self.stats.errors_other += 1
@@ -414,19 +456,115 @@ class OpenCodeExtractor(BaseExtractor):
             self.session_path, self.message_path, self.part_path = original_paths
 
         for db_path in self.sqlite_db_paths:
-            sqlite_sessions = self._extract_sessions_from_sqlite(db_path)
-            for session_id, session in sqlite_sessions.items():
-                existing = sessions_by_id.get(session_id)
-                if existing is None or session.last_updated >= existing.last_updated:
-                    sessions_by_id[session_id] = session
+            for pending in self._pending_sessions_from_sqlite(db_path):
+                existing = winners.get(pending.session_id)
+                if existing is None or pending.updated_at >= existing.updated_at:
+                    winners[pending.session_id] = pending
+
+        # Pass 2: yield winners oldest-first, parsing one session at a time.
+        sqlite_conns: Dict[Path, sqlite3.Connection] = {}
+        try:
+            for pending in sorted(winners.values(), key=lambda p: p.created_at):
+                if pending.session_file is not None:
+                    # Point the message/part loaders at the winning root.
+                    self.session_path = pending.root / "session"
+                    self.message_path = pending.root / "message"
+                    self.part_path = pending.root / "part"
+                    try:
+                        session = self._parse_session(pending.session_file, pending.session_data)
+                    except Exception as e:
+                        logger.debug(f"Failed to parse session {pending.session_file}: {e}")
+                        self.stats.errors_other += 1
+                        continue
+                    if not session or not self.should_import_session(session):
+                        continue
+                else:
+                    conn = sqlite_conns.get(pending.db_path)
+                    if conn is None:
+                        try:
+                            conn = sqlite3.connect(f"file:{pending.db_path}?mode=ro", uri=True)
+                            conn.row_factory = sqlite3.Row
+                        except sqlite3.Error:
+                            continue
+                        sqlite_conns[pending.db_path] = conn
+                    session = self._session_from_sqlite_row(conn, pending)
+                    if not self.should_import_session(session):
+                        continue
+
+                if not self.force_full:
+                    self._update_state_cache(pending.session_id, pending.updated_raw)
+                self.stats.sessions_loaded += 1
+                yield session
+        finally:
+            for conn in sqlite_conns.values():
+                conn.close()
+            self.session_path, self.message_path, self.part_path = original_paths
 
         if not self.force_full:
+            # State updates happen during pass 2, so the cache is persisted
+            # once the consumer has exhausted the generator.
             self._save_state_cache()
-        self.stats.sessions_loaded = len(sessions_by_id)
         self.stats.print_summary()
 
-        for session in sorted(sessions_by_id.values(), key=lambda s: s.created_at, reverse=False):
-            yield session
+    def _pending_sessions_from_sqlite(self, db_path: Path) -> List[_PendingSession]:
+        """Pass 1 for one sqlite source: metadata-only winner candidates (#104)."""
+        pending: List[_PendingSession] = []
+        try:
+            conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            conn.row_factory = sqlite3.Row
+        except sqlite3.Error:
+            return pending
+
+        try:
+            rows = conn.execute(_SQLITE_SESSION_SELECT).fetchall()
+        except sqlite3.Error:
+            conn.close()
+            return pending
+        finally:
+            conn.close()
+
+        for row in rows:
+            self.stats.sessions_found += 1
+            session_id = str(row["id"] or "")
+            if not session_id:
+                continue
+
+            updated_raw = int(row["time_updated"] or 0)
+            if not self.force_full and self._should_skip_session(session_id, updated_raw):
+                self.stats.sessions_skipped += 1
+                continue
+
+            pending.append(
+                _PendingSession(
+                    session_id=session_id,
+                    created_at=parse_timestamp(int(row["time_created"] or 0)),
+                    updated_at=parse_timestamp(updated_raw),
+                    updated_raw=updated_raw,
+                    db_path=db_path,
+                    row=row,
+                )
+            )
+        return pending
+
+    def _session_from_sqlite_row(
+        self, conn: sqlite3.Connection, pending: _PendingSession
+    ) -> UnifiedSession:
+        """Pass 2 for one sqlite winner: load messages and build the session."""
+        messages = self._load_messages_from_sqlite(conn, pending.session_id)
+        row = pending.row
+        return UnifiedSession(
+            tool=Tool.OPENCODE,
+            session_id=pending.session_id,
+            created_at=pending.created_at,
+            last_updated=pending.updated_at,
+            messages=messages,
+            project_path=str(row["directory"] or "") or None,
+            project_hash=str(row["project_id"] or "") or None,
+            thread_id=make_thread_id(project_path=str(row["directory"] or "") or None),
+            title=str(row["title"] or "") or None,
+            cli_version=str(row["version"] or "") or None,
+            source_path=str(pending.db_path),
+        )
 
     def _extract_sessions_from_sqlite(self, db_path: Path) -> Dict[str, UnifiedSession]:
         sessions_by_id: Dict[str, UnifiedSession] = {}
@@ -437,13 +575,7 @@ class OpenCodeExtractor(BaseExtractor):
             return sessions_by_id
 
         try:
-            rows = conn.execute(
-                """
-                SELECT id, project_id, directory, title, version, time_created, time_updated
-                FROM session
-                ORDER BY time_updated DESC, time_created DESC
-                """
-            ).fetchall()
+            rows = conn.execute(_SQLITE_SESSION_SELECT).fetchall()
         except sqlite3.Error:
             conn.close()
             return sessions_by_id
@@ -698,9 +830,7 @@ class OpenCodeExtractor(BaseExtractor):
                 continue
 
         parts_by_message = self._load_all_parts_for_messages(
-            message_data.get("id")
-            for message_data in loaded_message_data
-            if message_data.get("id")
+            message_data.get("id") for message_data in loaded_message_data if message_data.get("id")
         )
 
         for message_data in loaded_message_data:

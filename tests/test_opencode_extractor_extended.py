@@ -768,3 +768,73 @@ def test_clamp_tool_output_passes_non_strings_through(monkeypatch, tmp_path):
     out, truncated = ex._clamp_tool_output(obj)
     assert out is obj
     assert truncated is False
+
+
+# ---------------------------------------------------------------------------
+# Two-pass extraction, bounded memory (#104)
+# ---------------------------------------------------------------------------
+
+
+def test_two_pass_last_write_wins_across_roots(monkeypatch, tmp_path):
+    """A later root with a newer time.updated supersedes an earlier root's
+    copy — the winner decision must be identical to the old
+    materialise-then-sort behaviour (#104)."""
+    session_a, message_a, part_a = _make_storage(tmp_path / "a")
+    storage_a = session_a.parent
+    session_b = tmp_path / "b" / ".local" / "share" / "opencode" / "storage" / "session"
+    message_b = session_b.parent / "message"
+    part_b = session_b.parent / "part"
+    for d in (session_b, message_b, part_b):
+        d.mkdir(parents=True)
+
+    # Same id in both roots; root B is newer (updated 2000 vs 1000 ms).
+    data_old = {
+        "id": "ses_dup",
+        "directory": "/repo/old",
+        "title": "Old copy",
+        "version": "0.1.0",
+        "time": {"created": 1700000000000, "updated": 1700000001000},
+    }
+    data_new = {
+        "id": "ses_dup",
+        "directory": "/repo/new",
+        "title": "New copy",
+        "version": "0.1.0",
+        "time": {"created": 1700000000000, "updated": 1700000002000},
+    }
+    (session_a / "ses_ses_dup.json").write_text(json.dumps(data_old), encoding="utf-8")
+    _write_message(message_a, "ses_dup", "msg_old_1", role="user")
+    _write_part(part_a, "msg_old_1", "prt_old_1", text="Old copy question")
+    (session_b / "ses_ses_dup.json").write_text(json.dumps(data_new), encoding="utf-8")
+    _write_message(message_b, "ses_dup", "msg_new_1", role="user")
+    _write_part(part_b, "msg_new_1", "prt_new_1", text="New copy question")
+
+    # Unique sessions in each root to prove nothing gets lost.
+    data_c = {
+        "id": "ses_only_a",
+        "directory": "/repo/a",
+        "title": "Only A",
+        "version": "0.1.0",
+        "time": {"created": 1700000000500, "updated": 1700000000500},
+    }
+    (session_a / "ses_ses_only_a.json").write_text(json.dumps(data_c), encoding="utf-8")
+    _write_message(message_a, "ses_only_a", "msg_only_a_1", role="user")
+    _write_part(part_a, "msg_only_a_1", "prt_only_a_1", text="Only A question")
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    extractor = OpenCodeExtractor(force_full=True)
+    # Both roots must be scanned.
+    monkeypatch.setattr(extractor, "storage_roots", [storage_a, session_b.parent], raising=False)
+
+    sessions = list(extractor.extract_sessions())
+
+    by_id = {s.session_id: s for s in sessions}
+    # Winner for the duplicate is the newer root copy.
+    assert by_id["ses_dup"].title == "New copy"
+    assert by_id["ses_dup"].project_path == "/repo/new"
+    # Nothing lost; sorted oldest-created first.
+    assert len(sessions) == 2
+    created = [s.created_at for s in sessions]
+    assert created == sorted(created)
+    # Stats count exactly what was yielded.
+    assert extractor.stats.sessions_loaded == len(sessions)
