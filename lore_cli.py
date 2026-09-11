@@ -139,6 +139,31 @@ def _merge_sessions_with_existing_index(all_sessions, existing_index_sessions):
     return list(merged_by_id.values())
 
 
+def _load_existing_index_state(index_path: Path) -> tuple[dict[str, str], list[dict]]:
+    """Read the current index.json for merge-with-extracts rebuilds (#117).
+
+    Returns ``(export_paths, sessions)`` so callers can both keep previous
+    export paths and merge session metadata. A missing, empty, or corrupt
+    index yields empty values — callers then rebuild from scratch with the
+    freshly extracted sessions. Previously this block was copy-pasted four
+    times (cmd_export, cmd_sync twice, cmd_watch) and could drift.
+    """
+    export_paths: dict[str, str] = {}
+    sessions: list[dict] = []
+    if not index_path.exists():
+        return export_paths, sessions
+    try:
+        with open(index_path, "r", encoding="utf-8") as f:
+            existing_index = json.load(f)
+        for s in existing_index.get("sessions", []):
+            if s.get("export_path"):
+                export_paths[s.get("id")] = s.get("export_path")
+            sessions.append(s)
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        pass
+    return export_paths, sessions
+
+
 def cmd_list(args):
     """List all sessions."""
     extractors = get_all_extractors()
@@ -282,17 +307,7 @@ def cmd_export(args):
                         session.git_commit = info["sha"]
                 all_sessions.append(session)
 
-    existing_paths = {}
-    index_path = output_dir / "index.json"
-    if index_path.exists():
-        try:
-            with open(index_path, "r", encoding="utf-8") as f:
-                existing_index = json.load(f)
-            for s in existing_index.get("sessions", []):
-                if s.get("export_path"):
-                    existing_paths[s.get("id")] = s.get("export_path")
-        except (FileNotFoundError, json.JSONDecodeError, KeyError):
-            pass
+    existing_paths, _ = _load_existing_index_state(output_dir / "index.json")
 
     merged_paths = {**existing_paths, **export_paths}
     index_builder.build_index(all_sessions, merged_paths)
@@ -739,19 +754,7 @@ def cmd_sync(args):
             continue
         all_sessions.extend(extractor.extract_sessions())
 
-    existing_paths = {}
-    existing_index_sessions = []
-    index_path = output_dir / "index.json"
-    if index_path.exists():
-        try:
-            with open(index_path, "r", encoding="utf-8") as f:
-                existing_index = json.load(f)
-            for s in existing_index.get("sessions", []):
-                if s.get("export_path"):
-                    existing_paths[s.get("id")] = s.get("export_path")
-                existing_index_sessions.append(s)
-        except (FileNotFoundError, json.JSONDecodeError, KeyError):
-            pass
+    existing_paths, existing_index_sessions = _load_existing_index_state(output_dir / "index.json")
 
     merged_sessions = _merge_sessions_with_existing_index(all_sessions, existing_index_sessions)
 
@@ -1195,17 +1198,7 @@ def cmd_watch(args):
                         continue
                     all_sessions.extend(extractor.extract_sessions())
 
-                existing_paths = {}
-                index_path = output_dir / "index.json"
-                if index_path.exists():
-                    try:
-                        with open(index_path, "r", encoding="utf-8") as f:
-                            existing_index = json.load(f)
-                        for s in existing_index.get("sessions", []):
-                            if s.get("export_path"):
-                                existing_paths[s.get("id")] = s.get("export_path")
-                    except (FileNotFoundError, json.JSONDecodeError, KeyError):
-                        pass
+                existing_paths, _ = _load_existing_index_state(output_dir / "index.json")
 
                 merged_paths = {**existing_paths, **export_paths}
                 index_builder.build_index(all_sessions, merged_paths)
@@ -1266,7 +1259,43 @@ def cmd_check(args):
     print(f"Summary: {available_count}/{len(extractors)} tools available.")
 
 
-def main():
+def _run_export_html(args) -> None:
+    # Historically the only command whose return value feeds sys.exit.
+    sys.exit(cmd_export_html(args) or 0)
+
+
+# Single source of truth for command dispatch (#118): every subparser added
+# in main() must have an entry here and vice versa — enforced by
+# tests/test_cli_dispatch.py so the two can never drift apart again.
+COMMANDS = {
+    "list": cmd_list,
+    "export": cmd_export,
+    "export-html": _run_export_html,
+    "search": cmd_search,
+    "stats": cmd_stats,
+    "digest": cmd_digest,
+    "memory": cmd_memory,
+    "watch": cmd_watch,
+    "check": cmd_check,
+    "threads": cmd_threads,
+    "rules": cmd_rules,
+    "prune": cmd_prune,
+    "sync": cmd_sync,
+    "run": cmd_run,
+    "generate-titles": cmd_generate_titles,
+    "reindex": cmd_reindex,
+    "analyze": cmd_analyze,
+    "knowledge": cmd_knowledge,
+    "format": cmd_format,
+}
+
+
+def build_parser() -> argparse.ArgumentParser:
+    """Construct the top-level ``lore`` argument parser.
+
+    Split out of main() so tests can introspect the registered subparsers
+    and pin them against the COMMANDS dispatch table (#118).
+    """
     parser = argparse.ArgumentParser(
         prog="lore",
         description="Lore — local-first archive and shared agent memory for your AI coding sessions",
@@ -1516,49 +1545,18 @@ Examples:
         help="Output directory (default: ~/.lore/formatted)",
     )
 
+    return parser
+
+
+def main():
+    parser = build_parser()
     args = parser.parse_args()
 
-    if args.command == "list":
-        cmd_list(args)
-    elif args.command == "export":
-        cmd_export(args)
-    elif args.command == "export-html":
-        sys.exit(cmd_export_html(args) or 0)
-    elif args.command == "search":
-        cmd_search(args)
-    elif args.command == "stats":
-        cmd_stats(args)
-    elif args.command == "digest":
-        cmd_digest(args)
-    elif args.command == "memory":
-        cmd_memory(args)
-    elif args.command == "watch":
-        cmd_watch(args)
-    elif args.command == "check":
-        cmd_check(args)
-    elif args.command == "threads":
-        cmd_threads(args)
-    elif args.command == "rules":
-        cmd_rules(args)
-    elif args.command == "prune":
-        cmd_prune(args)
-    elif args.command == "sync":
-        cmd_sync(args)
-    elif args.command == "run":
-        cmd_run(args)
-    elif args.command == "generate-titles":
-        cmd_generate_titles(args)
-    elif args.command == "reindex":
-        cmd_reindex(args)
-    elif args.command == "analyze":
-        cmd_analyze(args)
-    elif args.command == "knowledge":
-        cmd_knowledge(args)
-    elif args.command == "format":
-        cmd_format(args)
-
-    else:
+    handler = COMMANDS.get(args.command)
+    if handler is None:
         parser.print_help()
+        return
+    handler(args)
 
 
 if __name__ == "__main__":
