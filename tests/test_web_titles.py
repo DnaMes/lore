@@ -200,7 +200,9 @@ def test_api_build_info_exposes_revision_and_hardening(monkeypatch):
 
     assert response.status_code == 200
     payload = response.get_json()
-    assert payload["module"] == "lore.interfaces.web"
+    # #119 moved the builder to web_audit.py — the payload reports the
+    # module that actually built it.
+    assert payload["module"] == "lore.interfaces.web_audit"
     assert payload["revision"] == "abc123"
     assert payload["hardening"]["thread_unknown_returns_404"] is True
     assert payload["hardening"]["search_param_validation"] is True

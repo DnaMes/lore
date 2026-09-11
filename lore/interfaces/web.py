@@ -5,7 +5,6 @@ import logging
 import math
 import os
 import secrets
-import sys
 import time
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -37,6 +36,26 @@ from .api_payloads import (
     serialize_project,
     serialize_thread_messages,
     serialize_thread_overview,
+)
+
+# Audit + build-info payload builders moved verbatim to web_audit.py (#119).
+# Re-exported (PEP 484 redundant aliases) because web_jobs resolves them via
+# late `from .web import ...` lookups and the test suite patches them here —
+# the module-global bindings must keep existing.
+from .web_audit import (  # noqa: F401  (re-exports, see comment)
+    _audit_index_sessions as _audit_index_sessions,
+)
+from .web_audit import (
+    _audit_live_sessions as _audit_live_sessions,
+)
+from .web_audit import (
+    _build_info_payload as _build_info_payload,
+)
+from .web_audit import (
+    _finalize_audit_payload as _finalize_audit_payload,
+)
+from .web_audit import (
+    _new_tool_audit_row as _new_tool_audit_row,
 )
 from .web_data import (
     DELETED_SESSIONS_PATH,
@@ -222,140 +241,6 @@ def _current_revision() -> str:
 
 def _export_fallback_scan_enabled() -> bool:
     return os.environ.get("LORE_EXPORT_FALLBACK_SCAN", "").lower() == "true"
-
-
-def _build_info_payload() -> dict:
-    from lore import __version__
-    from lore.storage.embeddings import embeddings_available, sqlite_vec_available
-
-    return {
-        "module": __name__,
-        "version": __version__,
-        "revision": _current_revision(),
-        "python": sys.version.split()[0],
-        # Hybrid search silently degrades to FTS-only when either backend is
-        # missing (#94) — surface the state so a downgrade is observable.
-        "semantic": {
-            "embeddings_available": embeddings_available(),
-            "sqlite_vec_available": sqlite_vec_available(),
-        },
-        "hardening": {
-            "thread_unknown_returns_404": True,
-            "search_param_validation": True,
-            "export_unknown_returns_404_by_default": True,
-            "request_id_header": True,
-            "api_rate_limiting": True,
-            "health_ready_endpoints": True,
-            "metrics_endpoint": True,
-        },
-        "export_fallback_scan_enabled": _export_fallback_scan_enabled(),
-    }
-
-
-def _provider_formatters() -> dict:
-    return {
-        "claude-code": ["strip_command_xml_tags"],
-        "opencode": ["strip_local_command_caveat_in_user_messages"],
-        "warp": ["drop_toolu_noise_only_assistant_chunks"],
-        "default": ["normalize_newlines", "trim_whitespace"],
-    }
-
-
-def _new_tool_audit_row() -> dict:
-    return {
-        "total": 0,
-        "missing_title": 0,
-        "missing_thread_id": 0,
-        "missing_session_id": 0,
-        "empty_messages": 0,
-        "missing_prompt_count": 0,
-        "missing_message_count": 0,
-    }
-
-
-def _finalize_audit_payload(scope: str, by_tool: dict, totals: int) -> dict:
-    issue_count = sum(
-        values["missing_title"]
-        + values["missing_thread_id"]
-        + values["missing_session_id"]
-        + values["empty_messages"]
-        + values["missing_prompt_count"]
-        + values["missing_message_count"]
-        for values in by_tool.values()
-    )
-    return {
-        "scope": scope,
-        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-        "revision": _current_revision(),
-        "provider_formatters": _provider_formatters(),
-        "totals": {
-            "sessions": totals,
-            "providers": len(by_tool),
-            "issues": issue_count,
-        },
-        "uniform": issue_count == 0,
-        "by_tool": by_tool,
-    }
-
-
-def _audit_index_sessions() -> dict:
-    idx = load_index()
-    by_tool = {}
-    sessions = idx.get("sessions", [])
-    for session in sessions:
-        tool = str(session.get("tool") or "unknown")
-        row = by_tool.setdefault(tool, _new_tool_audit_row())
-        row["total"] += 1
-        if not str(session.get("id") or "").strip():
-            row["missing_session_id"] += 1
-        if not str(session.get("title") or "").strip():
-            row["missing_title"] += 1
-        if not str(session.get("thread_id") or "").strip():
-            row["missing_thread_id"] += 1
-        messages = int(session.get("messages") or 0)
-        prompts = int(session.get("prompts") or 0)
-        if messages <= 0:
-            row["empty_messages"] += 1
-        if prompts <= 0:
-            row["missing_prompt_count"] += 1
-        if messages <= 0:
-            row["missing_message_count"] += 1
-    return _finalize_audit_payload("index", by_tool, len(sessions))
-
-
-def _audit_live_sessions(provider: Optional[str] = None, should_stop=None) -> dict:
-    by_tool = {}
-    total = 0
-    tool_name = normalize_tool_name(provider or "") if provider else ""
-    if tool_name and not validate_tool_name(tool_name):
-        return _finalize_audit_payload("live", {}, 0)
-
-    for extractor in get_all_extractors():
-        if should_stop and should_stop():
-            raise ActionJobCancelledError("Cancelled by user")
-        if tool_name and extractor.tool.value != tool_name:
-            continue
-        if not extractor.is_available():
-            continue
-        tool = extractor.tool.value
-        row = by_tool.setdefault(tool, _new_tool_audit_row())
-        for session in extractor.extract_sessions():
-            if should_stop and should_stop():
-                raise ActionJobCancelledError("Cancelled by user")
-            total += 1
-            row["total"] += 1
-            if not str(session.session_id or "").strip():
-                row["missing_session_id"] += 1
-            if not str(session.title or "").strip():
-                row["missing_title"] += 1
-            if not str(session.thread_id or "").strip():
-                row["missing_thread_id"] += 1
-            if session.message_count <= 0:
-                row["empty_messages"] += 1
-                row["missing_message_count"] += 1
-            if session.user_prompt_count <= 0:
-                row["missing_prompt_count"] += 1
-    return _finalize_audit_payload("live", by_tool, total)
 
 
 def _reload_sessions_index(
