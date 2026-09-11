@@ -22,18 +22,18 @@
             {% endif %}
             <div id="session-tags" class="flex flex-wrap items-center gap-2 mt-3" data-session-id="{{ session.session_id|tojson }}">
                 <span id="tags-list" class="flex flex-wrap gap-2"></span>
-                <button type="button" id="add-tag-btn" onclick="promptAddTag()" class="text-[11px] text-slate-500 hover:text-slate-900 border border-dashed border-slate-300 px-2 py-1 rounded-lg transition-all bg-white">+ tag</button>
+                <button type="button" id="add-tag-btn" data-action="prompt-add-tag" class="text-[11px] text-slate-500 hover:text-slate-900 border border-dashed border-slate-300 px-2 py-1 rounded-lg transition-all bg-white">+ tag</button>
             </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
             {% if session.thread_id %}
-            <button type="button" onclick='copyCommand({{ ("ai-session switch gemini --thread-id " ~ session.thread_id)|tojson }})' class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Copy Continue</button>
+            <button type="button" data-action="copy-command" data-copy-text="{{ ("ai-session switch gemini --thread-id " ~ session.thread_id) }}" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Copy Continue</button>
             {% endif %}
-            <button type="button" onclick="copyLink(window.location.href)" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Copy Link</button>
-            <button type="button" onclick="resumeSession({{ session.session_id|tojson }})" class="text-[11px] text-blue-600 hover:text-blue-900 border border-blue-200 px-3 py-1.5 rounded-xl transition-all bg-white">Resume</button>
+            <button type="button" data-action="copy-link" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Copy Link</button>
+            <button type="button" data-action="resume-session" data-session-id="{{ session.session_id }}" class="text-[11px] text-blue-600 hover:text-blue-900 border border-blue-200 px-3 py-1.5 rounded-xl transition-all bg-white">Resume</button>
             <a href="/" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Dashboard</a>
             <a href="/export/{{ session.session_id|urlpath }}" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Export MD</a>
-            <form action="/session/{{ session.session_id|urlpath }}/delete" method="POST" onsubmit="return confirm('Are you sure you want to delete this session? This action cannot be undone.');" style="display:inline;">
+            <form action="/session/{{ session.session_id|urlpath }}/delete" method="POST" data-confirm="Are you sure you want to delete this session? This action cannot be undone." style="display:inline;">
                 <input type="hidden" name="next" value="{{ back_target or '/sessions' }}">
                 <button type="submit" class="text-[11px] text-red-600 hover:text-red-900 border border-red-200 px-3 py-1.5 rounded-xl transition-all bg-white">Delete</button>
             </form>
@@ -143,7 +143,7 @@
     <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 w-full max-w-lg mx-4 p-6">
         <div class="flex items-start justify-between mb-4">
             <h2 id="resume-modal-title" class="text-sm font-semibold text-slate-800 dark:text-slate-100">Resume Session</h2>
-            <button onclick="closeResumeModal()" class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 ml-4" aria-label="Close">&times;</button>
+            <button data-action="close-resume-modal" class="text-slate-500 hover:text-slate-700 dark:hover:text-slate-200 ml-4" aria-label="Close">&times;</button>
         </div>
         <div id="resume-modal-body" class="text-sm text-slate-600 dark:text-slate-300"></div>
     </div>
@@ -190,8 +190,12 @@ function resumeSession(sessionId) {
             '<p class="text-slate-500 text-xs mb-2">Run this command in your terminal:</p>' +
             '<div class="relative group">' +
               '<pre class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-mono text-slate-800 dark:text-slate-100 overflow-x-auto whitespace-pre-wrap break-all" id="resume-cmd-text">' + escHtml(data.command) + '</pre>' +
-              '<button onclick="copyResumeCmd()" class="absolute top-2 right-2 text-[10px] text-slate-500 hover:text-slate-700 border border-slate-200 bg-white rounded-lg px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity" id="resume-copy-btn">Copy</button>' +
+              '<button id="resume-copy-btn" class="absolute top-2 right-2 text-[10px] text-slate-500 hover:text-slate-700 border border-slate-200 bg-white rounded-lg px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>' +
             '</div>';
+        // Inline onclick is CSP-blocked (#106) — wire the freshly inserted
+        // copy button explicitly.
+        const copyBtn = document.getElementById('resume-copy-btn');
+        if (copyBtn) copyBtn.addEventListener('click', copyResumeCmd);
     })
     .catch(function(err) {
         body.innerHTML = '<p class="text-red-600">Request failed: ' + escHtml(String(err)) + '</p>';

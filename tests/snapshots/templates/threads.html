@@ -741,51 +741,51 @@
                         </button>
                         <div class="theme-dropdown-menu !right-0 !left-auto min-w-[180px]" role="menu" aria-label="Sync options">
                             <div class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-b border-slate-100 dark:border-slate-700">Reload</div>
-                            <button type="button" onclick="runSync('reload', '')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            <button type="button" data-action="run-sync" data-sync-action="reload" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full bg-blue-400"></span>All providers
                             </button>
-                            <button type="button" onclick="runSync('reload', 'claude-code')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            <button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="claude-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#C084FC"></span>Claude
-                            </button><button type="button" onclick="runSync('reload', 'cursor')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="cursor" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#3B82F6"></span>Cursor
-                            </button><button type="button" onclick="runSync('reload', 'gemini-cli')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="gemini-cli" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#60A5FA"></span>Gemini
-                            </button><button type="button" onclick="runSync('reload', 'warp')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="warp" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#2DD4BF"></span>Warp
-                            </button><button type="button" onclick="runSync('reload', 'codex')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="codex" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#22C55E"></span>Codex
-                            </button><button type="button" onclick="runSync('reload', 'vscode-copilot')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="vscode-copilot" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#0ea5e9"></span>VSCode Copilot
-                            </button><button type="button" onclick="runSync('reload', 'copilot-cli')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="copilot-cli" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#0284c7"></span>Copilot CLI
-                            </button><button type="button" onclick="runSync('reload', 'opencode')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="opencode" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#F97316"></span>OpenCode
-                            </button><button type="button" onclick="runSync('reload', 'antigravity')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="antigravity" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#8B5CF6"></span>Antigravity
-                            </button><button type="button" onclick="runSync('reload', 'aider')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="aider" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#14B8A6"></span>Aider
                             </button>
-                            <button type="button" onclick="runSync('reload', '', '', true)" class="w-full text-left px-3 py-2 text-[11px] hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-500 italic" title="Force full rebuild (slow). Use when incremental sync misses changes.">
+                            <button type="button" data-action="run-sync" data-sync-action="reload" data-sync-full="true" class="w-full text-left px-3 py-2 text-[11px] hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-500 italic" title="Force full rebuild (slow). Use when incremental sync misses changes.">
                                 <span class="w-2 h-2 rounded-full bg-amber-400"></span>Full rebuild (slow)
                             </button>
                             <div class="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500 border-t border-slate-100 dark:border-slate-700 mt-1 pt-1">Audit</div>
-                            <button type="button" onclick="runSync('audit', '', 'index')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            <button type="button" data-action="run-sync" data-sync-action="audit" data-sync-scope="index" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full bg-green-400"></span>Quick (index)
                             </button>
-                            <button type="button" onclick="runSync('audit', '', 'live')" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                            <button type="button" data-action="run-sync" data-sync-action="audit" data-sync-scope="live" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full bg-yellow-400"></span>Deep (live)
                             </button>
                         </div>
                     </div>
-                    <button id="cancelActionBtn" type="button" aria-label="Cancel" onclick="cancelActiveAction()" class="cancel-toggle border rounded-lg px-3 py-1.5 text-xs" disabled hidden>Cancel</button>
+                    <button id="cancelActionBtn" type="button" aria-label="Cancel" data-action="cancel-action" class="cancel-toggle border rounded-lg px-3 py-1.5 text-xs" disabled hidden>Cancel</button>
                     
                     <div class="theme-dropdown" id="themeDropdown">
                         <button id="themeToggle" type="button" aria-label="Toggle dark mode" aria-pressed="false" aria-haspopup="menu" aria-expanded="false" class="theme-toggle w-9 h-9 rounded-full border text-slate-500 flex items-center justify-center" title="Select theme">
                             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
                         </button>
                         <div class="theme-dropdown-menu" role="menu" aria-label="Theme options">
-                            <button type="button" role="menuitemradio" aria-checked="true" class="theme-option active" data-theme="light" onclick="selectTheme('light')"><span class="theme-swatch" style="background:#f6f7fb"></span><span class="theme-option-label">Light</span><svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7"/></svg></button>
-                            <button type="button" role="menuitemradio" aria-checked="false" class="theme-option" data-theme="dark" onclick="selectTheme('dark')"><span class="theme-swatch" style="background:#0f172a"></span><span class="theme-option-label">Dark</span><svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7"/></svg></button>
+                            <button type="button" role="menuitemradio" aria-checked="true" class="theme-option active" data-theme="light" data-action="select-theme"><span class="theme-swatch" style="background:#f6f7fb"></span><span class="theme-option-label">Light</span><svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7"/></svg></button>
+                            <button type="button" role="menuitemradio" aria-checked="false" class="theme-option" data-theme="dark" data-action="select-theme"><span class="theme-swatch" style="background:#0f172a"></span><span class="theme-option-label">Dark</span><svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7"/></svg></button>
                         </div>
                     </div>
                     <script nonce="NONCE">
@@ -1149,8 +1149,12 @@
             toast.className = 'fixed bottom-4 right-4 max-w-md bg-red-50 border border-red-200 rounded-xl shadow-2xl p-4 z-50';
             const safeTitle = String(title || 'Error');
             const safeMessage = String(message || 'Unexpected error');
-            toast.innerHTML = `<div class="flex items-start gap-3"><div class="text-red-600" aria-hidden="true">!</div><div class="flex-1"><div class="text-sm font-semibold text-red-900">${escapeHtml(safeTitle)}</div><div class="text-sm text-red-700 mt-1">${escapeHtml(safeMessage)}</div></div><button type="button" class="text-red-500 hover:text-red-700" aria-label="Close error" onclick="this.closest('#errorToast').remove()"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/></svg></button></div>`;
+            toast.innerHTML = `<div class="flex items-start gap-3"><div class="text-red-600" aria-hidden="true">!</div><div class="flex-1"><div class="text-sm font-semibold text-red-900">${escapeHtml(safeTitle)}</div><div class="text-sm text-red-700 mt-1">${escapeHtml(safeMessage)}</div></div><button type="button" class="toast-close text-red-500 hover:text-red-700" aria-label="Close error"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/></svg></button></div>`;
             document.body.appendChild(toast);
+            // Inline onclick attributes are blocked by the nonce-based CSP
+            // (#106) — wire the dynamically created close button here.
+            const closeBtn = toast.querySelector('.toast-close');
+            if (closeBtn) closeBtn.addEventListener('click', () => toast.remove());
             setTimeout(() => {
                 const current = document.getElementById('errorToast');
                 if (current) current.remove();
@@ -1677,6 +1681,90 @@
             });
             sidebar.querySelectorAll('a').forEach(function (link) {
                 link.addEventListener('click', closeSidebar);
+            });
+        })();
+    </script>
+    <script nonce="NONCE">
+        // CSP-safe delegated event wiring (#106).
+        //
+        // Inline on* attributes are blocked by the nonce-based script-src,
+        // so every formerly-inline handler is expressed as data-* attributes
+        // and resolved here through event delegation. The guarded calls
+        // (typeof/optional checks) cover handlers that only exist on pages
+        // which include this base template.
+        (function () {
+            function runDataAction(el) {
+                var action = el.dataset.action;
+                var d = el.dataset;
+                switch (action) {
+                    case 'run-sync':
+                        if (typeof runSync === 'function') {
+                            runSync(d.syncAction, d.syncProvider || '', d.syncScope || '', d.syncFull === 'true');
+                        }
+                        break;
+                    case 'select-theme':
+                        if (typeof selectTheme === 'function') selectTheme(d.theme);
+                        break;
+                    case 'cancel-action':
+                        if (typeof cancelActiveAction === 'function') cancelActiveAction();
+                        break;
+                    case 'toggle-clean':
+                        if (typeof toggleCleanMode === 'function') toggleCleanMode();
+                        break;
+                    case 'toggle-ultra':
+                        if (typeof toggleUltraClean === 'function') toggleUltraClean();
+                        break;
+                    case 'toggle-readable':
+                        if (typeof toggleReadability === 'function') toggleReadability();
+                        break;
+                    case 'toggle-presenter':
+                        if (typeof togglePresenterMode === 'function') togglePresenterMode();
+                        break;
+                    case 'toggle-density':
+                        if (typeof toggleDensity === 'function') toggleDensity();
+                        break;
+                    case 'open-search':
+                        if (typeof openSearch === 'function') openSearch();
+                        break;
+                    case 'copy-command':
+                        if (typeof copyCommand === 'function') copyCommand(d.copyText || '');
+                        break;
+                    case 'copy-link':
+                        if (typeof copyLink === 'function') copyLink(window.location.href);
+                        break;
+                    case 'resume-session':
+                        if (typeof resumeSession === 'function' && d.sessionId) resumeSession(d.sessionId);
+                        break;
+                    case 'close-resume-modal':
+                        if (typeof closeResumeModal === 'function') closeResumeModal();
+                        break;
+                    case 'prompt-add-tag':
+                        if (typeof window.promptAddTag === 'function') window.promptAddTag();
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            document.addEventListener('click', function (e) {
+                var el = e.target.closest('[data-action]');
+                if (el) runDataAction(el);
+            });
+
+            // onsubmit="return confirm(...)" replacements.
+            document.addEventListener('submit', function (e) {
+                var form = e.target.closest('form[data-confirm]');
+                if (form && !window.confirm(form.dataset.confirm)) {
+                    e.preventDefault();
+                }
+            });
+
+            // onchange="this.form.submit()" replacements.
+            document.addEventListener('change', function (e) {
+                var field = e.target;
+                if (field && field.matches && field.matches('[data-auto-submit]') && field.form) {
+                    field.form.submit();
+                }
             });
         })();
     </script>

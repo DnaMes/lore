@@ -9,16 +9,16 @@
         </div>
     </div>
     <form method="get" data-autosubmit="true" class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-8">
-        <select name="tool" onchange="this.form.submit()" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <select name="tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
             <option value="">All Tools</option>
             {% for t in tools %}<option value="{{ t }}" {{ 'selected' if tool==t else '' }}>{{ get_style(t).name }}</option>{% endfor %}
         </select>
-        <select name="tag" onchange="this.form.submit()" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <select name="tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
             <option value="">All Tags</option>
             {% for t in tags %}<option value="{{ t }}" {{ 'selected' if tag==t else '' }}>{{ t }}</option>{% endfor %}
         </select>
-        <input type="date" name="start" onchange="this.form.submit()" value="{{ start or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-        <input type="date" name="end" onchange="this.form.submit()" value="{{ end or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <input type="date" name="start" data-auto-submit value="{{ start or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <input type="date" name="end" data-auto-submit value="{{ end or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
         <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
     </form>
 

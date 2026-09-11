@@ -94,7 +94,14 @@ def test_rules_view_escapes_when_markdown_unavailable(monkeypatch, tmp_path):
     assert "&lt;img src=x onerror=alert(1)&gt;" in page
 
 
-def test_thread_continue_command_is_json_escaped():
+def test_thread_continue_command_is_attribute_escaped():
+    """The continue command must not be able to break out of its attribute.
+
+    #106 moved the payload out of an inline onclick (JS context, |tojson
+    escaping) into a data-copy-text attribute (HTML attribute context,
+    autoescape). The adversarial quote must therefore arrive as &quot;
+    inside the double-quoted attribute — never as a raw quote.
+    """
     cmd = 'ai-session switch gemini --thread-id bad";alert(1)//'
 
     page = web.render(
@@ -116,8 +123,8 @@ def test_thread_continue_command_is_json_escaped():
         title="Thread",
     )
 
-    assert 'copyCommand("ai-session switch gemini --thread-id bad\\";alert(1)//")' in page
-    assert 'copyCommand("ai-session switch gemini --thread-id bad";alert(1)//")' not in page
+    assert 'data-copy-text="ai-session switch gemini --thread-id bad&#34;;alert(1)//"' in page
+    assert 'data-copy-text="ai-session switch gemini --thread-id bad"' not in page
 
 
 def test_threads_list_urlencodes_thread_links():

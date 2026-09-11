@@ -16,7 +16,7 @@
         </div>
         <div class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">2026-04-01</div>
     </a>
-    <form action="/session/session-1/delete" method="POST" onsubmit="return confirm('Delete this session?');" class="ml-2">
+    <form action="/session/session-1/delete" method="POST" data-confirm="Delete this session?" class="ml-2">
         <input type="hidden" name="next" value="/sessions">
         <button type="submit" aria-label="Delete session Claude debugging session" class="text-red-600 hover:text-red-900 border border-red-200 p-1.5 rounded-lg transition-all bg-white"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/></svg></button>
     </form>

@@ -121,6 +121,7 @@ def test_vendor_manifest_hashes_match():
 # Tailwind utilities and deliberately unstyled (no CSS rule anywhere).
 NON_STYLED_CLASS_TOKENS = {
     "tag-remove",  # JS hook on the tag editor remove button (session.html)
+    "toast-close",  # JS hook on the dynamically created error toast
     "compact",  # density-mode value comparison, body gets density-compact
 }
 

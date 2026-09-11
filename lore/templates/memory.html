@@ -59,7 +59,7 @@
                     </div>
                 </div>
                 <form action="/memory/{{ m.id }}/delete" method="POST"
-                      onsubmit="return confirm('Delete this memory?');">
+                      data-confirm="Delete this memory?">
                     <button type="submit" aria-label="Delete memory {{ m.title }}"
                             class="text-[10px] text-red-600 hover:text-red-900 border border-red-200 px-2 py-1 rounded-lg bg-white transition-all">
                         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor"
