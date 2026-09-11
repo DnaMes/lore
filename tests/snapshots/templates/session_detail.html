@@ -55,7 +55,14 @@
         }
         body { background-color: var(--bg); color: var(--text); font-family: "Helvetica Neue", Inter, Arial, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif; position: relative; }
         .skip-link { position: absolute; left: 8px; top: -48px; z-index: 200; background: #0f172a; color: #ffffff; padding: 10px 16px; border-radius: 8px; font-size: 13px; font-weight: 600; text-decoration: none; transition: top 0.15s ease; }
-        .skip-link:focus { top: 8px; outline: 2px solid #3b82f6; outline-offset: 2px; }
+        .skip-link:focus {
+            top: 8px;
+            /* White double outline + blue halo stays visible on both the
+             * light gradient and the dark background (WCAG 2.4.7, #130). */
+            outline: 3px double #ffffff;
+            outline-offset: 2px;
+            box-shadow: 0 0 0 2px #3b82f6;
+        }
         body.session-view { background: var(--bg); }
         body::before { content:""; position: fixed; inset: 0; background:
             radial-gradient(circle at 18% 8%, rgba(147, 197, 253, 0.28), transparent 42%),
@@ -720,12 +727,12 @@
                     </button>
                     <div class="flex-1 flex items-center gap-2 bg-white border border-slate-200 rounded-full px-4 py-2 shadow-sm">
                         <svg class="w-4 h-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                        <input type="text" id="searchTrigger" class="w-full bg-transparent outline-none text-sm text-slate-700" placeholder="Start a new chat across all your AI context...">
+                        <input type="text" id="searchTrigger" aria-label="Search sessions and prompts" class="w-full bg-transparent outline-none text-sm text-slate-700" placeholder="Start a new chat across all your AI context...">
                     </div>
                 </div>
                 <div class="top-controls">
                     <div class="theme-dropdown" id="syncDropdown">
-                        <button id="syncBtn" type="button" aria-haspopup="menu" aria-expanded="false" class="density-toggle border rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5" title="Sync: reload & audit">
+                        <button id="syncBtn" type="button" aria-label="Sync: reload and audit sessions" aria-haspopup="menu" aria-expanded="false" class="density-toggle border rounded-lg px-3 py-1.5 text-xs flex items-center gap-1.5" title="Sync: reload & audit">
                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                             Sync
                             <svg class="w-3 h-3 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
@@ -796,6 +803,20 @@
                         var dd=document.getElementById(dropdownId);
                         var btn=document.getElementById(btnId);
                         if(dd&&btn){btn.setAttribute('aria-expanded',dd.classList.contains('open')?'true':'false');}
+                      }
+                      // Native Space-toggle on <summary> is inconsistent across
+                      // browsers (Firefox notably) — handle Space/Enter
+                      // explicitly and preventDefault so the native toggle
+                      // doesn't double-flip the state (#134).
+                      var viewMenuSummary=document.querySelector('#viewMenu > summary');
+                      if(viewMenuSummary){
+                        viewMenuSummary.addEventListener('keydown',function(e){
+                          if(e.key===' '||e.key==='Enter'){
+                            e.preventDefault();
+                            var details=this.parentElement;
+                            if(details){details.open=!details.open;}
+                          }
+                        });
                       }
                       window.selectTheme=function(t){
                         window.aiHistoryTheme.set(t);
