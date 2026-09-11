@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
-"""Download and verify the vendored web assets (Tailwind, highlight.js).
+"""Download and verify the vendored web assets (highlight.js).
 
 The web UI loads no third-party CDNs so it works in air-gapped installs
 (issue #19). This script (re-)downloads the pinned asset versions into
 ``lore/interfaces/static/`` and verifies their SHA-256 hashes against
 the manifest below.
+
+Tailwind is NOT downloaded here anymore: since issue #129 the UI ships a
+build-time compiled stylesheet (``tailwind-compiled.min.css``) produced by
+``scripts/build_tailwind.sh`` — a build artifact, not a vendored runtime.
 
 Usage:
     python scripts/vendor_assets.py           # verify checked-in assets
@@ -26,10 +30,6 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "lore" / "interfaces" / "s
 
 # filename -> (download URL, expected SHA-256)
 ASSETS: dict[str, tuple[str, str]] = {
-    "tailwind-3.4.16.min.js": (
-        "https://cdn.tailwindcss.com/3.4.16",
-        "3f81aa7f6ecdb1acc14c202e513dfee00b6c7703cd81ce1be25bf5215a92e8cb",
-    ),
     "highlight-11.9.0.min.js": (
         "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js",
         "837a6fa5b0c736b52bbde2b2b6190f305da3fc9ed41681db5321507057b5c846",

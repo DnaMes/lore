@@ -600,17 +600,19 @@ def add_security_headers(response):
     nonce = get_csp_nonce()
     nonce_src = f"'nonce-{nonce}'" if nonce else ""
     # All assets (Tailwind, highlight.js) are vendored under /static/ — no CDN
-    # origins are allowed, so the UI works in air-gapped installs.
+    # origins are allowed, so the UI works in air-gapped installs. Tailwind is
+    # a build-time compiled stylesheet (#129), not a browser-side JIT runtime.
     #
     # script-src is nonce-only — strong protection against script injection.
     #
     # style-src uses 'unsafe-inline' WITHOUT a nonce. This is deliberate and
-    # required: the Tailwind play-CDN runtime sets inline style= attributes
-    # and injects un-nonced <style> elements. Per CSP3, a nonce in style-src
-    # makes 'unsafe-inline' be IGNORED — which would block every Tailwind
-    # style and leave the whole UI unstyled. Style injection cannot exfiltrate
-    # data the way script injection can, and all user content is nh3-
-    # sanitised, so an attacker cannot inject a raw <style>/style= anyway.
+    # required: templates and their inline scripts set style= attributes and
+    # <style> blocks directly (code-block wrappers, toast positioning, etc.).
+    # Per CSP3, a nonce in style-src makes 'unsafe-inline' be IGNORED — which
+    # would block every inline style and leave parts of the UI unstyled.
+    # Style injection cannot exfiltrate data the way script injection can,
+    # and all user content is nh3-sanitised, so an attacker cannot inject a
+    # raw <style>/style= anyway.
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         f"script-src 'self' {nonce_src}; "

@@ -1,0 +1,6 @@
+/* Tailwind entry sheet — compiled to lore/interfaces/static/tailwind-compiled.min.css
+ * via scripts/build_tailwind.sh (issue #129). Keep the three directives; the
+ * theme lives in tailwind.config.js. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

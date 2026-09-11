@@ -69,7 +69,7 @@
         {% set _visible_pairs = visible_pairs if (visible_pairs is defined and visible_pairs is not none) else session.pairs %}
         {% set _total_pairs = total_pairs | default(_visible_pairs | length, true) %}
         {% set _message_pages = message_pages | default(1, true) %}
-        <div class="lg:flex-grow-0 lg:flex-shrink-1 lg:basis-[850px] lg:min-w-[500px] lg:px-8 space-y-6"
+        <div class="lg:flex-grow-0 lg:shrink lg:basis-[850px] lg:min-w-[500px] lg:px-8 space-y-6"
              id="messageStream"
              data-session-id="{{ session.session_id }}"
              data-per-page="{{ _messages_per_page }}"

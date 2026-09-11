@@ -18,23 +18,10 @@
             } catch (_) {}
         })();
     </script>
-    <script src="/static/tailwind-3.4.16.min.js"></script>
+    <!-- Tailwind is precompiled at build time (scripts/build_tailwind.sh, #129) —
+         no render-blocking JIT compiler in the browser. -->
+    <link rel="stylesheet" href="/static/tailwind-compiled.min.css">
     <link rel="stylesheet" href="/static/highlight-github-11.9.0.min.css">
-    <script nonce="NONCE">
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        bg: "#09090b",
-                        surface: "#121214",
-                        border: "#1f1f23",
-                        accent: "#3b82f6",
-                    }
-                }
-            }
-        }
-    </script>
     <style nonce="NONCE">
         :root {
             --bg: #f6f7fb;
@@ -884,15 +871,17 @@
             <div id="searchResults" class="max-h-[60vh] overflow-y-auto p-2"></div>
         </div>
     </div>
-    <script src="/static/highlight-11.9.0.min.js"></script>
+    <script src="/static/highlight-11.9.0.min.js" defer></script>
     <script nonce="NONCE">
-        if (typeof window.hljs !== 'undefined') {
-            window.hljs.configure({ ignoreUnescapedHTML: true });
-        }
         function initCodeBlocks() {
             if (typeof window.hljs === 'undefined') {
                 return;
             }
+            // Deferred scripts run before DOMContentLoaded, so hljs is
+            // available here on first paint; the configure call moved from
+            // the old top-level guard, which would run before a deferred
+            // hljs existed (#129).
+            window.hljs.configure({ ignoreUnescapedHTML: true });
             document.querySelectorAll('pre code').forEach((el) => {
                 if (!el.dataset.highlighted) {
                     hljs.highlightElement(el);
