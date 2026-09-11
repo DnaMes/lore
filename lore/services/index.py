@@ -157,11 +157,83 @@ def _load_index_v2_cached(db_path: str, _mtime_ns: int, _size: int) -> dict:
     return load_index_v2(Path(db_path).parent)
 
 
+def _finalize_index_payload(payload: dict, deleted: frozenset[str]) -> dict:
+    """Apply the tombstone filter + display titles to a raw index payload.
+
+    With no tombstones the shared cached payload is returned as-is (the
+    historical behavior) — ``annotate_display_titles`` only fills missing
+    ``display_title`` keys, so re-running it stays idempotent. With
+    tombstones a shallow copy is filtered instead, so the raw cached
+    payload keeps its full session list and a later call with a different
+    tombstone set (e.g. an un-delete) still sees every session.
+    """
+    if deleted:
+        payload = apply_deleted_filter(dict(payload), set(deleted))
+    payload["sessions"] = annotate_display_titles(payload.get("sessions", []))
+    return payload
+
+
+@threadsafe_lru_cache(maxsize=4)
+def _processed_index_cached(
+    index_path: str, mtime_ns: int, size: int, deleted: frozenset[str]
+) -> dict:
+    """Stat- and tombstone-keyed cache of the finalized JSON payload.
+
+    ``load_index`` runs several times per session-detail page load (#125);
+    without this memo each call would redo the O(n) filter/annotate passes
+    over ~1k sessions even though the raw file read is already cached.
+    """
+    return _finalize_index_payload(_load_index_cached(index_path, mtime_ns, size), deleted)
+
+
+@threadsafe_lru_cache(maxsize=4)
+def _processed_index_v2_cached(
+    db_path: str, mtime_ns: int, size: int, deleted: frozenset[str]
+) -> dict:
+    """v2-store mirror of ``_processed_index_cached``."""
+    return _finalize_index_payload(_load_index_v2_cached(db_path, mtime_ns, size), deleted)
+
+
 def clear_index_cache() -> None:
     """Clear the index-read caches owned by the service layer."""
     _load_index_cached.cache_clear()
     _load_index_v2_cached.cache_clear()
     _load_deleted_session_ids_cached.cache_clear()
+    _processed_index_cached.cache_clear()
+    _processed_index_v2_cached.cache_clear()
+
+
+# --- By-id lookup over an index payload ---
+#
+# Memoized {id: session} map over a payload object (#125, #126). Both the
+# web interface and the MCP server look sessions up by id several times per
+# request; building the dict once per payload object turns each lookup from
+# an O(n) scan over ~1k sessions into a dict hit. The memo holds a strong
+# reference to the payload it was built from, so the identity comparison
+# stays valid (no id() reuse after GC), and any change — an index rebuild or
+# tombstone update (new stat/deleted key → a different payload object from
+# the processed-payload caches above) or a swapped-in test fake — naturally
+# produces a different object and rebuilds the map on the next call.
+_SESSION_BY_ID_MEMO: Optional[tuple[dict, dict[str, dict]]] = None
+
+
+def session_by_id_map(payload: dict) -> dict[str, dict]:
+    """Return the memoized ``{id: session}`` mapping for ``payload``.
+
+    First occurrence wins for duplicate ids, matching the linear
+    ``next()``-based scans this replaces.
+    """
+    global _SESSION_BY_ID_MEMO
+    memo = _SESSION_BY_ID_MEMO
+    if memo is None or memo[0] is not payload:
+        by_id: dict[str, dict] = {}
+        for session in payload.get("sessions", []):
+            session_key = session.get("id")
+            if session_key and session_key not in by_id:
+                by_id[session_key] = session
+        memo = (payload, by_id)
+        _SESSION_BY_ID_MEMO = memo
+    return memo[1]
 
 
 # --- v2 store ---
@@ -231,12 +303,12 @@ def _load_index_from_v2(index_path: Path, deleted: set[str]) -> Optional[dict]:
             return None
         v2_db = index_dir / "index_v2.sqlite"
         stat = v2_db.stat()
-        payload = _load_index_v2_cached(str(v2_db), stat.st_mtime_ns, stat.st_size)
+        payload = _processed_index_v2_cached(
+            str(v2_db), stat.st_mtime_ns, stat.st_size, frozenset(deleted)
+        )
     except Exception as exc:
         logger.warning("v2 index read failed, falling back to JSON: %s", exc)
         return None
-    payload = apply_deleted_filter(payload, deleted)
-    payload["sessions"] = annotate_display_titles(payload.get("sessions", []))
     return payload
 
 
@@ -270,10 +342,9 @@ def load_index(
     if not index_path.exists():
         return {"stats": {}, "sessions": []}
     stat = index_path.stat()
-    payload = _load_index_cached(str(index_path), stat.st_mtime_ns, stat.st_size)
-    payload = apply_deleted_filter(payload, deleted)
-    payload["sessions"] = annotate_display_titles(payload.get("sessions", []))
-    return payload
+    return _processed_index_cached(
+        str(index_path), stat.st_mtime_ns, stat.st_size, frozenset(deleted)
+    )
 
 
 def load_index_summary(index_path: Path, deleted: set[str]) -> dict:

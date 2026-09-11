@@ -17,7 +17,10 @@ from lore.storage import (
     initialise,
     open_connection,
 )
-from lore.storage.schema import MIGRATIONS
+from lore.storage import schema as schema_module
+from lore.storage.memory import add_memory
+from lore.storage.schema import MIGRATIONS, open_v2_connection
+from lore.storage.tags import add_session_tag, get_session_tags
 
 # ---------------------------------------------------------------------------
 # Connection PRAGMAs
@@ -263,3 +266,78 @@ def test_migration_versions_are_unique_and_sorted():
     versions = [v for v, _, _ in MIGRATIONS]
     assert versions == sorted(versions), "MIGRATIONS must be in ascending order"
     assert len(versions) == len(set(versions)), "duplicate migration version"
+
+
+# ---------------------------------------------------------------------------
+# Fast-path connection for high-frequency callers (#128)
+# ---------------------------------------------------------------------------
+
+
+def test_open_v2_connection_migrates_fresh_db(tmp_path):
+    db = tmp_path / "v2.sqlite"
+    conn = open_v2_connection(db)
+    try:
+        assert current_version(conn) == len(MIGRATIONS)
+    finally:
+        conn.close()
+
+
+def test_open_v2_connection_skips_migration_bookkeeping_on_current_schema(tmp_path, monkeypatch):
+    """A schema-current DB must not re-run the migration machinery (#128).
+
+    Tag/memory operations open a fresh connection per call; the whole point
+    of the fast path is that the steady-state connect pays no migration
+    bookkeeping. Prove it by failing loudly if apply_migrations is entered.
+    """
+    db = tmp_path / "v2.sqlite"
+    first = open_v2_connection(db)
+    first.close()
+
+    def _must_not_run(conn):
+        raise AssertionError("apply_migrations must not run on a current schema")
+
+    monkeypatch.setattr(schema_module, "apply_migrations", _must_not_run)
+
+    conn = open_v2_connection(db)
+    try:
+        assert current_version(conn) == len(MIGRATIONS)
+    finally:
+        conn.close()
+
+
+def test_open_v2_connection_migrates_behind_version_db(tmp_path):
+    """A DB at an older schema version still migrates (parity with initialise)."""
+    db = tmp_path / "v2.sqlite"
+    conn = open_connection(db)
+    # Fabricate a "one migration behind" state by stamping the first version.
+    first_version = MIGRATIONS[0][0]
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS schema_version ("
+        "version INTEGER PRIMARY KEY, description TEXT NOT NULL, applied_at TEXT NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO schema_version(version, description, applied_at) VALUES (?, 'seed', 'now')",
+        (first_version,),
+    )
+    conn.close()
+
+    conn = open_v2_connection(db)
+    try:
+        assert current_version(conn) == len(MIGRATIONS)
+    finally:
+        conn.close()
+
+
+def test_tags_and_memory_ops_run_through_fast_path(tmp_path):
+    """End-to-end: tag + memory writes work via the fast-path connect."""
+    output_dir = tmp_path / "out"
+    tags = add_session_tag(output_dir, "ses-1", "bookmark")
+    assert tags == ["bookmark"]
+    memory_id = add_memory(
+        output_dir,
+        kind="decision",
+        title="Use fast path",
+        body="Single-row ops must not pay full migration bookkeeping.",
+    )
+    assert memory_id >= 1
+    assert get_session_tags(output_dir, "ses-1") == ["bookmark"]

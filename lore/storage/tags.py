@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List
 
-from .schema import initialise
+from .schema import open_v2_connection
 from .writer import v2_db_path
 
 # A reserved tag the UI may treat specially (star / favourite).
@@ -30,8 +30,9 @@ def _normalize_tag(tag: str) -> str:
 
 
 def _connect(output_dir: Path) -> sqlite3.Connection:
-    # initialise() applies pending migrations (incl. 12) and returns a connection.
-    return initialise(v2_db_path(output_dir))
+    # open_v2_connection applies pending migrations (incl. 12) only when the
+    # schema is behind (#128); a current DB skips the bookkeeping entirely.
+    return open_v2_connection(v2_db_path(output_dir))
 
 
 def add_session_tag(output_dir: Path, session_id: str, tag: str) -> List[str]:

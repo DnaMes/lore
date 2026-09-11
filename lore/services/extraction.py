@@ -92,6 +92,51 @@ def collect_sessions(
     return sessions
 
 
+def find_live_session(
+    session_id: str,
+    tool_filter: Optional[str] = None,
+    *,
+    apply_titles: bool = True,
+    deleted_ids: Optional[set[str]] = None,
+) -> Optional[UnifiedSession]:
+    """Locate one live session by id, preferring a direct file lookup (#127).
+
+    Cold-cache bulk collection parses every session file of a tool just to
+    serve a single-session lookup. Extractors with deterministic layouts
+    (see ``BaseExtractor.find_session_by_id``) resolve the session by
+    parsing only its source file; tools without such a layout return
+    ``None`` here and the caller falls back to its cached bulk path.
+    Tombstoned ids are never returned.
+
+    Extractor failures are logged and skipped — one broken tool never
+    aborts the lookup.
+    """
+    if not session_id:
+        return None
+    if deleted_ids and session_id in deleted_ids:
+        return None
+    title_generator = TitleGenerator(strategy=TitleStrategy.FAST) if apply_titles else None
+    for extractor in select_extractors(tool_filter):
+        try:
+            session = extractor.find_session_by_id(session_id)
+        except Exception as exc:
+            logger.debug(
+                "Extractor %s failed direct lookup for %s: %s",
+                extractor.tool.value,
+                session_id,
+                exc,
+            )
+            continue
+        if session is None or session.session_id != session_id:
+            continue
+        if title_generator is not None:
+            title = title_generator.generate(session, force=False)
+            if title:
+                session.title = title
+        return session
+    return None
+
+
 def build_index_if_missing(
     output_dir: Path,
     index_path: Path,

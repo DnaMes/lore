@@ -412,3 +412,23 @@ def initialise(path: Path) -> sqlite3.Connection:
     # No-op when sqlite-vec is unavailable — search stays FTS-only.
     ensure_session_vec_table(conn)
     return conn
+
+
+def open_v2_connection(db_path: Path) -> sqlite3.Connection:
+    """Open the v2 store, migrating only when the schema is behind (#128).
+
+    ``initialise`` re-runs the full migration bookkeeping on every connect
+    (``current_version`` lookup, migration loop, vec-table ensure). For
+    high-frequency single-row callers — every tag/memory operation opens a
+    fresh connection — that fixed overhead dominates the actual work once
+    the schema is current. This variant pays the check once and takes the
+    fast path afterwards; a behind-version DB still migrates exactly like
+    ``initialise``.
+    """
+    conn = open_connection(db_path)
+    if current_version(conn) < len(MIGRATIONS):
+        apply_migrations(conn)
+        # Create the optional vector table once the base schema is in
+        # place. No-op when sqlite-vec is unavailable — FTS-only search.
+        ensure_session_vec_table(conn)
+    return conn

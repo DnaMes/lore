@@ -1,7 +1,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import Iterator
+from typing import Iterator, Optional
 
 from ..core.models import Role, TitleSource, Tool, UnifiedSession
 
@@ -42,6 +42,17 @@ class BaseExtractor(ABC):
     @abstractmethod
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         pass
+
+    def find_session_by_id(self, session_id: str) -> Optional[UnifiedSession]:
+        """Locate a single session by id without a full archive scan (#127).
+
+        Extractors with deterministic source-file layouts override this to
+        parse only the matching source file (e.g. claude stores main
+        sessions as ``<projectdir>/<session_id>.jsonl``). The default
+        returns ``None`` so callers fall back to the cached bulk
+        collection without paying any per-tool extraction cost.
+        """
+        return None
 
     def is_available(self) -> bool:
         """Check if the tool's data is available on this system."""

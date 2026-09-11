@@ -18,7 +18,7 @@ from ..api_payloads import (
 from ..web_services import (
     build_projects_payload,
     build_thread_detail_payload,
-    build_threads_overview,
+    thread_overview_by_id,
 )
 from .deps import MCPToolDeps
 
@@ -182,14 +182,9 @@ def register(server, deps: MCPToolDeps) -> None:
             return "Invalid thread_id parameter."
 
         idx = deps.ensure_index()
-        overview = next(
-            (
-                thread
-                for thread in build_threads_overview(idx.get("sessions", []))
-                if thread.get("thread_id") == thread_id
-            ),
-            None,
-        )
+        # O(1) bucket hit via the memoized {thread_id: overview} map (#126)
+        # instead of regrouping every indexed session per call.
+        overview = thread_overview_by_id(idx.get("sessions", [])).get(thread_id)
         if not overview:
             return deps.json_text({"error": "Thread not found", "thread_id": thread_id})
 

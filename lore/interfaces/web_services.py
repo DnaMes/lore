@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from lore.utils.formatting import format_message as format_message_with_rules
 
@@ -466,9 +466,8 @@ def enrich_session_for_detail(
     return toc
 
 
-def build_threads_overview(
-    index_sessions: List[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+def _group_threads_by_id(index_sessions: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Bucket ``index_sessions`` into one aggregate overview dict per thread."""
     by_thread: Dict[str, Dict[str, Any]] = {}
     for session in index_sessions:
         thread_id = session.get("thread_id")
@@ -487,7 +486,43 @@ def build_threads_overview(
             by_thread[thread_id]["updated"] = session.get("updated")
             by_thread[thread_id]["title"] = session.get("title") or session.get("id")
             by_thread[thread_id]["project"] = session.get("project")
-    return sorted(by_thread.values(), key=lambda item: item.get("updated", ""), reverse=True)
+    return by_thread
+
+
+def build_threads_overview(
+    index_sessions: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    return sorted(
+        _group_threads_by_id(index_sessions).values(),
+        key=lambda item: item.get("updated", ""),
+        reverse=True,
+    )
+
+
+# Memoized {thread_id: overview} bucketing over one sessions list (#126).
+# A thread's overview aggregates every session in the thread, so the O(n)
+# grouping pass is inherent — but get_thread (MCP) used to redo it per call
+# just to locate a single bucket. Like the session by-id map, the memo keys
+# on the sessions-list object: a rebuilt index (or a test fake) yields a
+# different list and rebuilds the buckets. The strong reference in the memo
+# keeps the identity comparison safe.
+_THREAD_BY_ID_MEMO: Optional[tuple[list, Dict[str, Dict[str, Any]]]] = None
+
+
+def thread_overview_by_id(
+    index_sessions: List[Dict[str, Any]],
+) -> Dict[str, Dict[str, Any]]:
+    """Return ``{thread_id: overview}`` for ``index_sessions``, memoized.
+
+    Overviews are shared (not copies) with :func:`build_threads_overview`
+    callers reading the same list — treat them as read-only.
+    """
+    global _THREAD_BY_ID_MEMO
+    memo = _THREAD_BY_ID_MEMO
+    if memo is None or memo[0] is not index_sessions:
+        memo = (index_sessions, _group_threads_by_id(index_sessions))
+        _THREAD_BY_ID_MEMO = memo
+    return memo[1]
 
 
 def build_thread_detail_payload(

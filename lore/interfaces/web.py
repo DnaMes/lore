@@ -29,6 +29,8 @@ from lore.utils.text_processing import format_thinking
 from lore.utils.tooling import normalize_tool_name
 
 from ..services.cache import threadsafe_lru_cache
+from ..services.extraction import find_live_session
+from ..services.index import session_by_id_map
 from .api_payloads import (
     serialize_index_session_summary,
     serialize_live_session,
@@ -910,7 +912,9 @@ def _filtered_sorted_sessions(tool, tag, start, end):
     session_ids = _filtered_sorted_session_ids(tool, tag, start, end, _index_mtime())
     all_s = load_index().get("sessions", [])
     sessions_by_id = {session.get("id"): session for session in all_s}
-    return [sessions_by_id[session_id] for session_id in session_ids if session_id in sessions_by_id]
+    return [
+        sessions_by_id[session_id] for session_id in session_ids if session_id in sessions_by_id
+    ]
 
 
 @app.route("/sessions")
@@ -1152,6 +1156,17 @@ def load_session_by_id(
     for tool in tools:
         if tool and not validate_tool_name(tool):
             continue
+        # Direct single-file lookup first (#127): a cold cache used to pay
+        # the full per-tool extraction just to find one session. Falls
+        # through to the cached bulk scan when the tool has no
+        # deterministic layout or the id is not directly addressable.
+        try:
+            direct = find_live_session(session_id, tool or None)
+        except Exception as exc:
+            logger.debug("Direct session lookup failed for %s: %s", tool, exc)
+            direct = None
+        if direct is not None:
+            return direct
         try:
             sessions = load_sessions_for_tool(tool if tool else None)
         except Exception as exc:
@@ -1177,11 +1192,10 @@ def _api_limit_param(name: str = "limit", default: int = 20, max_value: int = 20
 
 
 def _index_session_meta(session_id: str) -> Optional[dict[str, Any]]:
-    idx = load_index()
-    return next(
-        (session for session in idx.get("sessions", []) if session.get("id") == session_id),
-        None,
-    )
+    # O(1) dict hit via the payload-identity-keyed memo in the service
+    # layer (#125); load_index() stays in the path so test fakes of
+    # web.load_index keep driving this lookup.
+    return session_by_id_map(load_index()).get(session_id)
 
 
 # Conversation pairs rendered into the initial session page; the rest are

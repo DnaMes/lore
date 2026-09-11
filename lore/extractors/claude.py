@@ -3,7 +3,7 @@ import logging
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Optional
 
 from ..core.models import Role, Tool, UnifiedMessage, UnifiedSession
 from ..utils.datetime import parse_timestamp
@@ -115,6 +115,36 @@ class ClaudeCodeExtractor(BaseExtractor):
             return "/" + "/".join(result_parts)
 
         return "/" + encoded[1:].replace("-", "/")
+
+    def find_session_by_id(self, session_id: str) -> Optional[UnifiedSession]:
+        """Locate one session by id, parsing only its source file (#127).
+
+        Main sessions live at ``<projectdir>/<session_id>.jsonl``, so the
+        file is directly addressable — no per-project glob, no reading of
+        every transcript in the archive. Subagent transcripts keep
+        composite ids (``<parent>:agent-xxx``) with non-addressable file
+        names and simply miss here, falling through to the caller's bulk
+        scan. Mirrors the main-session branch of :meth:`extract_sessions`
+        including the import-quality filter.
+        """
+        if not self.is_available():
+            return None
+        for base_path in self.base_paths:
+            for project_dir in base_path.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                candidate = project_dir / f"{session_id}.jsonl"
+                if not candidate.is_file():
+                    continue
+                try:
+                    project_path = self._decode_project_name(project_dir.name)
+                    session = self._parse_session(candidate, project_path)
+                except Exception as e:
+                    logger.warning("Failed to parse %s: %s", candidate, e)
+                    continue
+                if self.should_import_session(session):
+                    return session
+        return None
 
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         if not self.is_available():

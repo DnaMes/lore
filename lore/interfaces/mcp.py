@@ -22,6 +22,9 @@ from ..services import (
     collect_sessions,
 )
 from ..services import (
+    find_live_session as _service_find_live_session,
+)
+from ..services import (
     load_deleted_session_ids as _service_load_deleted_session_ids,
 )
 from ..services import (
@@ -40,6 +43,7 @@ __all__ = [
     "INDEX_PATH",
     "load_index",
     "load_sessions_for_tool",
+    "find_live_session_by_id",
     "search_index",
     "create_server",
 ]
@@ -63,6 +67,16 @@ def load_index():
 def load_sessions_for_tool(tool=None):
     """Collect live sessions for a tool (shared service-layer routine)."""
     return collect_sessions(tool, deleted_ids=_deleted_ids())
+
+
+def find_live_session_by_id(session_id, tool=None):
+    """Direct single-session lookup honouring tombstones (#127).
+
+    Parses only the matching source file when the tool's layout allows it
+    (see ``BaseExtractor.find_session_by_id``); returns None otherwise so
+    callers fall back to the cached bulk scan.
+    """
+    return _service_find_live_session(session_id, tool, deleted_ids=_deleted_ids())
 
 
 def search_index(query, tool=None, project=None, limit=50, scope=None):

@@ -20,6 +20,7 @@ from .extraction import (
     build_index_if_missing,
     build_search_index,
     collect_sessions,
+    find_live_session,
     select_extractors,
 )
 from .index import (
@@ -41,6 +42,7 @@ __all__ = [
     "build_index_if_missing",
     "build_search_index",
     "collect_sessions",
+    "find_live_session",
     "select_extractors",
     "annotate_display_titles",
     "apply_deleted_filter",

@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from ...services import build_index_if_missing as _service_build_index_if_missing
+from ...services.index import session_by_id_map
 from ..server import MCPServer
 
 
@@ -44,6 +45,7 @@ class MCPToolDeps:
     load_index: Callable[[], dict]
     load_sessions_for_tool: Callable[..., list]
     search_index: Callable[..., list]
+    find_live_session: Callable[..., Optional[Any]]
     index_path: object
 
     # -- helpers (formerly closures inside create_server) -------------------
@@ -78,6 +80,16 @@ class MCPToolDeps:
             ]
         )
         for tool_name in tools:
+            # Direct single-file lookup first (#127): a cold cache used to
+            # pay the full per-tool extraction just to find one session.
+            # Falls through to the cached bulk scan when the tool has no
+            # deterministic layout or the id is not directly addressable.
+            try:
+                direct = self.find_live_session(session_id, tool_name)
+            except Exception:
+                direct = None
+            if direct is not None:
+                return direct
             try:
                 sessions = self.load_sessions_for_tool(tool_name)
             except Exception:
@@ -89,10 +101,9 @@ class MCPToolDeps:
 
     def session_meta_by_id(self, session_id: str) -> Optional[dict]:
         idx = self.ensure_index()
-        return next(
-            (session for session in idx.get("sessions", []) if session.get("id") == session_id),
-            None,
-        )
+        # O(1) dict hit via the shared payload-identity memo (#126) instead
+        # of a linear scan over every indexed session.
+        return session_by_id_map(idx).get(session_id)
 
 
 def build_deps(server: MCPServer, mcp_module) -> MCPToolDeps:
@@ -108,5 +119,14 @@ def build_deps(server: MCPServer, mcp_module) -> MCPToolDeps:
         load_index=mcp_module.load_index,
         load_sessions_for_tool=mcp_module.load_sessions_for_tool,
         search_index=mcp_module.search_index,
+        find_live_session=getattr(mcp_module, "find_live_session_by_id", None)
+        or _fallback_find_live_session,
         index_path=mcp_module.INDEX_PATH,
     )
+
+
+def _fallback_find_live_session(session_id, tool=None):
+    """Direct-lookup shim for ``mcp`` modules predating #127 wiring."""
+    from ...services import find_live_session
+
+    return find_live_session(session_id, tool)

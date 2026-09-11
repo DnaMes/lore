@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .schema import initialise
+from .schema import open_v2_connection
 from .writer import v2_db_path
 
 logger = logging.getLogger(__name__)
@@ -81,7 +81,7 @@ def _now() -> str:
 
 def _connect(output_dir: Path) -> sqlite3.Connection:
     """Open the v2 DB (creating + migrating it if needed) for memory ops."""
-    conn = initialise(v2_db_path(output_dir))
+    conn = open_v2_connection(v2_db_path(output_dir))
     conn.row_factory = sqlite3.Row
     return conn
 
