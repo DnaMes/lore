@@ -1060,6 +1060,14 @@ function resumeSession(sessionId) {
     if (resumeTrapRelease) { resumeTrapRelease(); resumeTrapRelease = null; }
     if (window.FocusTrap) {
         resumeTrapRelease = window.FocusTrap.activate(dialog);
+    } else {
+        // Fallback when the shared focus-trap helper is unavailable: still move
+        // focus to the first interactive element so the dialog receives focus on
+        // open (WCAG 2.4.8 Focus Order).
+        const firstFocusable = dialog.querySelector('button, input[type="button"], input[type="text"]');
+        if (firstFocusable) {
+            setTimeout(function() { firstFocusable.focus(); }, 100);
+        }
     }
 
     fetch('/api/sessions/' + encodeURIComponent(sessionId) + '/resume', {
