@@ -19,6 +19,13 @@ COPY pyproject.toml README.md ./
 COPY lore ./lore/
 # Top-level CLI entry modules referenced by [project.scripts] / py-modules.
 COPY lore_cli.py lore_session_cli.py ./
+# COPY preserves the host's directory modes. A checkout restored from a
+# backup (rsync -a) or a stricter umask can leave lore/ at 0750; the process
+# runs as the non-root `ai` user (or compose's `user:` override) and then
+# fails at import with "No module named 'lore.interfaces.web'" — twice now
+# (2026-09-15, 2026-09-16). Normalise inside the image so builds do not
+# depend on host permissions.
+RUN chmod -R a+rX /app/lore /app/pyproject.toml /app/README.md /app/lore_cli.py /app/lore_session_cli.py
 
 # Install dependencies (no postgres or redis — this app uses JSON + SQLite).
 # [semantic] pulls fastembed + sqlite-vec so hybrid search works in the
