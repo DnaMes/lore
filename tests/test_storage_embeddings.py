@@ -136,7 +136,6 @@ def test_embedding_stored_on_add(tmp_path):
 def test_warmup_layer_supports_offline_embed(tmp_path, monkeypatch):
     """#101: the cache populated by the warmup step must suffice offline."""
     import importlib
-    import os
     import sys
 
     cache_dir = tmp_path / "fastembed-cache"
@@ -172,7 +171,9 @@ def test_warmup_layer_supports_offline_embed(tmp_path, monkeypatch):
     monkeypatch.setattr(emb, "_model_failed", False)
     # Force a fresh module load of fastembed's model manager so the offline
     # flags take effect at the huggingface_hub boundary.
-    for mod_name in [m for m in list(sys.modules) if m.startswith(("fastembed", "huggingface_hub"))]:
+    for mod_name in [
+        m for m in list(sys.modules) if m.startswith(("fastembed", "huggingface_hub"))
+    ]:
         sys.modules.pop(mod_name, None)
     importlib.import_module("fastembed")
     importlib.import_module("lore.storage.embeddings")  # re-bind module ref

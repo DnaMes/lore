@@ -52,9 +52,7 @@ def test_filtered_sorted_sessions_reuses_cached_ids(monkeypatch, tmp_path):
     assert filter_calls == 1
 
 
-def test_filtered_sorted_sessions_invalidates_when_index_mtime_changes(
-    monkeypatch, tmp_path
-):
+def test_filtered_sorted_sessions_invalidates_when_index_mtime_changes(monkeypatch, tmp_path):
     index_path = tmp_path / "index.json"
     index_path.write_text("{}", encoding="utf-8")
     monkeypatch.setattr(web, "INDEX_PATH", index_path)

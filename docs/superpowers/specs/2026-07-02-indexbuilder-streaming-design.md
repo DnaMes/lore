@@ -87,10 +87,10 @@ class MultiWriter:
 
 ```python
 def build_index(self, sessions, export_paths, reused_entries=None):
-    writer = MultiWriter(self.output_dir,
-                         ignored_ids=self._load_ignored(),
-                         reused_entries=reused_entries)
-    for session in sessions:            # sessions may be a generator
+    writer = MultiWriter(
+        self.output_dir, ignored_ids=self._load_ignored(), reused_entries=reused_entries
+    )
+    for session in sessions:  # sessions may be a generator
         writer.add(session, export_paths.get(session.session_id, ""))
     writer.finalize()
 ```
