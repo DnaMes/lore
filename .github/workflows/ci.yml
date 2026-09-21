@@ -39,7 +39,9 @@ jobs:
 
       - name: Install lint tools
         # ruff replaces black + isort + flake8 (config lives in pyproject)
-        run: pip install ruff bandit[toml]
+        # Pinned: an unpinned ruff changes formatting rules under us and turns main red
+        # without any code change. Bump deliberately in its own commit.
+        run: pip install "ruff==0.16.8" bandit[toml]
 
       - name: ruff format (check)
         run: ruff format --check .

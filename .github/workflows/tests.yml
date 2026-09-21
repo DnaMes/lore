@@ -4,6 +4,10 @@ on: [push, pull_request]
 
 jobs:
   test:
+    # Unique check name: ci.yml also has a matrix job `test`, so without this both
+    # workflows would publish `test (3.11)` / `test (3.12)` and a required check could
+    # not tell them apart.
+    name: coverage (${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
