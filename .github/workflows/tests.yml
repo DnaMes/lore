@@ -1,6 +1,12 @@
 name: Tests
 
-on: [push, pull_request]
+on:
+  # Same triggers as ci.yml. `[push, pull_request]` ran this workflow twice for a PR commit
+  # and published every check name twice.
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
 jobs:
   test:
