@@ -16,6 +16,13 @@
 
 set -uo pipefail   # deliberately no -e
 
+# Inside a linked worktree git exports GIT_DIR (in the main checkout it does not).
+# Every `git -C <other dir>` below would then operate on THIS repository instead of
+# the directory it names: the wiki sync committed a tree containing only Home.md
+# onto the pushed branch (claude-setup#214). Nothing here needs the inherited
+# values; discovery from the current directory works in both kinds of checkout.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR
+
 log() { printf '[pre-push] %s\n' "$*"; }
 
 # git feeds "<local-ref> <local-sha> <remote-ref> <remote-sha>" on stdin.
@@ -27,7 +34,11 @@ while read -r local_ref local_sha _remote_ref _remote_sha; do
 done || true
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
-repo_name="$(basename "${repo_root}")"
+# In a linked worktree the toplevel is the worktree directory, not the repository:
+# name things after the main checkout so all worktrees of one repo share one cache.
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+    && repo_name="$(basename "$(dirname "${common_dir}")")" \
+    || repo_name="$(basename "${repo_root}")"
 [[ -n "${pushed_refs}" ]] || exit 0
 
 # ---------------------------------------------------------------- Obsidian ---
