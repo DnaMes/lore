@@ -70,12 +70,14 @@ lore-web  # http://localhost:5000
 ```python
 def extract_sessions(self) -> Iterator[UnifiedSession]: ...
 
+
 @dataclass
 class UnifiedMessage:
     role: Role
     content: str
     timestamp: datetime
     metadata: Dict[str, Any] = field(default_factory=dict)
+
 
 class Tool(Enum):
     CLAUDE_CODE = "claude-code"

@@ -16,7 +16,8 @@ bereits zu Text formatierten `content`-String** zurück:
 
 ```python
 # web_formatting.py:148-165 — Tool-Calls/Results werden aus Strings re-geparst:
-r"\[Tool Result\]\s*\n(.*?)(?=\n\[Tool:|\n\[Tool Result\]|\Z)"   # → format_tool_result
+r"\[Tool Result\]\s*\n(.*?)(?=\n\[Tool:|\n\[Tool Result\]|\Z)"  # → format_tool_result
+
 r"\[Tool:\s*([^\]]+)\]\s*(.*?)(?=\n\[Tool:|\n\[Tool Result\]|\Z)"  # → format_tool_display
 ```
 
