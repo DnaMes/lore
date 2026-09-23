@@ -5,9 +5,9 @@ This is the *dual-write* stage: ``IndexBuilder`` keeps producing the legacy
 :func:`write_sessions` here to mirror the same data into the v2 schema
 (``index_v2.sqlite``). Nothing reads v2 yet — PR 3 flips the readers over.
 
-The write is a full replace inside one transaction: the v2 DB always
-reflects the set of sessions handed in, so a rebuild stays consistent.
-Callers treat failures here as non-fatal — a v2 write error must never
+Writes are transaction-scoped upserts: sessions not mentioned by a build remain
+available, while a refreshed session replaces only its own messages and search
+row. Callers treat failures here as non-fatal — a v2 write error must never
 break the legacy index path.
 """
 
@@ -63,19 +63,61 @@ def _source_mtime_ns(source_path: Optional[str]) -> Optional[int]:
 # messages_synced flag is 1 when the session's message rows were written,
 # 0 for a metadata-only reused row.
 #
-# INSERT OR REPLACE so a duplicate session_id from upstream (e.g. Claude
-# Code occasionally stores the same sessionId under two project dirs after
-# a resume) doesn't abort the whole sync transaction. Last write wins; the
-# extractors deduplicate ahead of us, this is a safety net.
+# ON CONFLICT keeps the existing sessions row in place. INSERT OR REPLACE would
+# delete that row first, triggering ON DELETE CASCADE and destroying messages.
+# Last write wins for duplicate ids; extractors deduplicate ahead of us, this is
+# a safety net for duplicate session ids from upstream.
 _SESSION_INSERT = """
-    INSERT OR REPLACE INTO sessions (
+    INSERT INTO sessions (
         id, tool, project, thread_id, title, created, updated,
         source_path, source_mtime_ns, git_branch, git_commit,
         cli_version, metadata_json,
         messages_count, prompt_count, prompt_outline, export_path,
         total_tokens, messages_synced
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+        tool = excluded.tool,
+        project = excluded.project,
+        thread_id = excluded.thread_id,
+        title = excluded.title,
+        created = excluded.created,
+        updated = excluded.updated,
+        source_path = excluded.source_path,
+        source_mtime_ns = excluded.source_mtime_ns,
+        git_branch = excluded.git_branch,
+        git_commit = excluded.git_commit,
+        cli_version = excluded.cli_version,
+        metadata_json = excluded.metadata_json,
+        messages_count = excluded.messages_count,
+        prompt_count = excluded.prompt_count,
+        prompt_outline = excluded.prompt_outline,
+        export_path = excluded.export_path,
+        total_tokens = excluded.total_tokens,
+        messages_synced = excluded.messages_synced
 """
+
+
+def _replace_session_fts(
+    conn: sqlite3.Connection,
+    session_id: str,
+    tool: str,
+    project: Optional[str],
+    title: str,
+    body: str,
+) -> None:
+    """Replace only one session's FTS row inside the active transaction."""
+    conn.execute(
+        "DELETE FROM search_index WHERE entity_type = 'session' AND entity_id = ?",
+        (session_id,),
+    )
+    conn.execute(
+        """
+        INSERT INTO search_index (
+            entity_type, entity_id, tool, project, title, body
+        ) VALUES ('session', ?, ?, ?, ?, ?)
+        """,
+        (session_id, tool, project or "", title, body),
+    )
 
 
 def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
@@ -83,14 +125,18 @@ def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
 
     Incremental sync hands the IndexBuilder pre-built dicts for unchanged
     sessions instead of re-extracting them — so we have no UnifiedMessage
-    objects for those. The row is written with ``messages_synced = 0`` so
+    objects for those. A new row is written with ``messages_synced = 0`` so
     readers and the backfill (#35) can tell it apart from a fully-synced
-    session; its messages are filled in on the next full rebuild.
+    session. If the row already has complete messages, the metadata update
+    preserves them.
     """
     session_id = entry.get("id")
     if not session_id:
         return
     title = entry.get("title") or ""
+    existing = conn.execute(
+        "SELECT messages_synced FROM sessions WHERE id = ?", (session_id,)
+    ).fetchone()
     conn.execute(
         _SESSION_INSERT,
         (
@@ -112,22 +158,16 @@ def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
             entry.get("prompt_outline"),
             entry.get("export_path"),
             int(entry.get("tokens") or 0),
-            0,  # messages_synced — metadata-only, no message rows
+            int(existing[0]) if existing else 0,
         ),
     )
-    conn.execute(
-        """
-        INSERT INTO search_index (
-            entity_type, entity_id, tool, project, title, body
-        ) VALUES ('session', ?, ?, ?, ?, ?)
-        """,
-        (
-            session_id,
-            entry.get("tool") or "",
-            entry.get("project") or "",
-            title,
-            entry.get("search_text") or "",
-        ),
+    _replace_session_fts(
+        conn,
+        session_id,
+        entry.get("tool") or "",
+        entry.get("project"),
+        title,
+        entry.get("search_text") or "",
     )
 
 
@@ -145,6 +185,11 @@ def _write_full_session(
     identical rows.
     """
     source_mtime_ns = _source_mtime_ns(session.source_path)
+    conn.execute("DELETE FROM messages WHERE session_id = ?", (session.session_id,))
+    conn.execute(
+        "DELETE FROM search_index WHERE entity_type = 'session' AND entity_id = ?",
+        (session.session_id,),
+    )
     conn.execute(
         _SESSION_INSERT,
         (
@@ -194,21 +239,62 @@ def _write_full_session(
 
     # One FTS row per session: title + concatenated message bodies.
     fts_body = "\n".join(p for p in body_parts if p)
-    conn.execute(
-        """
-        INSERT INTO search_index (
-            entity_type, entity_id, tool, project, title, body
-        ) VALUES ('session', ?, ?, ?, ?, ?)
-        """,
-        (
-            session.session_id,
-            session.tool.value,
-            session.project_path or "",
-            title,
-            fts_body,
-        ),
+    _replace_session_fts(
+        conn, session.session_id, session.tool.value, session.project_path, title, fts_body
     )
     return (session.session_id, fts_body, source_mtime_ns)
+
+
+def _write_reused_full_session(
+    conn: sqlite3.Connection,
+    session: UnifiedSession,
+    title: str,
+    session_extras: Dict,
+) -> Tuple[bool, Tuple[str, Optional[str], Optional[int]]]:
+    """Update reused metadata without rewriting messages when they are complete."""
+    row = conn.execute(
+        "SELECT messages_synced FROM sessions WHERE id = ?", (session.session_id,)
+    ).fetchone()
+    if not row or not row[0]:
+        return False, _write_full_session(conn, session, title, session_extras)
+
+    source_mtime_ns = _source_mtime_ns(session.source_path)
+    values = (
+        session.session_id,
+        session.tool.value,
+        session.project_path,
+        session.thread_id,
+        title,
+        session.created_at.isoformat(),
+        session.last_updated.isoformat(),
+        session.source_path,
+        source_mtime_ns,
+        session.git_branch,
+        session.git_commit,
+        session.cli_version,
+        _session_metadata_json(session),
+        session.message_count,
+        session.user_prompt_count,
+        session_extras.get("prompt_outline"),
+        session_extras.get("export_path"),
+        session.total_tokens or 0,
+        1,
+    )
+    conn.execute(_SESSION_INSERT, values)
+    body_parts = [title]
+    body_parts.extend(
+        content
+        for (content,) in conn.execute(
+            "SELECT content FROM messages WHERE session_id = ? ORDER BY seq",
+            (session.session_id,),
+        )
+        if content
+    )
+    fts_body = "\n".join(body_parts)
+    _replace_session_fts(
+        conn, session.session_id, session.tool.value, session.project_path, title, fts_body
+    )
+    return True, (session.session_id, None, source_mtime_ns)
 
 
 def _stamp_and_commit(conn: sqlite3.Connection) -> None:
@@ -241,9 +327,9 @@ class StreamingV2Writer:
     can drop each session right after handing it over — bounding peak memory.
 
     Rows are identical to :func:`write_sessions`; only the memory profile
-    differs. The write is still a single full-replace transaction: ``begin()``
-    opens it and clears the store, then each ``add_*`` inserts inside it, and
-    :meth:`finalize` stamps + commits + runs the post-commit embed pass.
+    differs. The write is one transaction: ``begin()`` opens it, each ``add_*``
+    upserts only its session, and :meth:`finalize` stamps + commits + runs the
+    post-commit embed pass. Sessions not mentioned by the transaction remain.
     """
 
     def __init__(self, db_path: Path, titles: Dict[str, str], extras: Dict[str, Dict]):
@@ -257,10 +343,6 @@ class StreamingV2Writer:
 
     def begin(self) -> None:
         self.conn.execute("BEGIN")
-        # Full replace — ON DELETE CASCADE clears dependent messages; the
-        # search_index rows are rebuilt as sessions stream in.
-        self.conn.execute("DELETE FROM sessions")
-        self.conn.execute("DELETE FROM search_index")
         self._begun = True
 
     def add_full(self, session: UnifiedSession) -> None:
@@ -283,7 +365,26 @@ class StreamingV2Writer:
             self._embed_inputs.append((str(entry_id), None, None))
         self.count += 1
 
+    def add_reused_full(self, session: UnifiedSession) -> None:
+        """Preserve complete reused messages while refreshing session metadata."""
+        title = self.titles.get(session.session_id) or session.title or ""
+        preserved, triple = _write_reused_full_session(
+            self.conn, session, title, self.extras.get(session.session_id, {})
+        )
+        if preserved:
+            self._embed_inputs.append((session.session_id, None, None))
+        else:
+            self._embed_inputs.append(triple)
+        self.count += 1
+
     def finalize(self) -> int:
+        # The embedding pass removes ids absent from its input. Keep every
+        # session retained by this transaction so archive preservation applies
+        # to vectors as well as session/message rows.
+        embedded_ids = {session_id for session_id, _, _ in self._embed_inputs}
+        for (session_id,) in self.conn.execute("SELECT id FROM sessions"):
+            if session_id not in embedded_ids:
+                self._embed_inputs.append((session_id, None, None))
         _stamp_and_commit(self.conn)
         # Embed AFTER the commit — holding the write lock across model calls
         # would block web-UI reads, and a vector failure must never roll back
@@ -309,7 +410,7 @@ def write_sessions(
     reused_entries: Optional[Iterable[Dict]] = None,
     extras: Optional[Dict[str, Dict]] = None,
 ) -> int:
-    """Replace the v2 store's contents with ``sessions`` (+ reused entries).
+    """Upsert ``sessions`` (+ reused entries) without deleting other rows.
 
     Args:
         db_path: path to the v2 SQLite file (see :func:`v2_db_path`).

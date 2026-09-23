@@ -9,6 +9,7 @@ directly here with stub extractors.
 from __future__ import annotations
 
 import json
+import sqlite3
 from datetime import datetime
 
 import pytest
@@ -113,6 +114,63 @@ def test_throwing_extractor_is_collected_not_fatal(tmp_path, patched_extractors)
     assert "exploded" in errors[0]["error"]
 
 
+def test_failed_extractor_preserves_prior_entries(tmp_path, patched_extractors):
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("old")])])
+    extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [], raises=RuntimeError("gone"))])
+
+    errors = extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
+
+    payload = json.loads((tmp_path / "index.json").read_text())
+    assert [row["id"] for row in payload["sessions"]] == ["old"]
+    assert errors == [{"extractor": "claude-code", "error": "gone"}]
+    conn = sqlite3.connect(tmp_path / "index_v2.sqlite")
+    assert conn.execute("SELECT COUNT(*) FROM messages WHERE session_id='old'").fetchone() == (2,)
+
+
+def test_empty_extractor_preserves_prior_entries_and_adds_healthy_rows(
+    tmp_path, patched_extractors
+):
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("old")])])
+    extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
+    patched_extractors(
+        [_StubExtractor(Tool.CLAUDE_CODE, []), _StubExtractor(Tool.CODEX, [_session("new")])]
+    )
+
+    extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
+
+    ids = [row["id"] for row in json.loads((tmp_path / "index.json").read_text())["sessions"]]
+    assert sorted(ids) == ["new", "old"]
+    conn = sqlite3.connect(tmp_path / "index_v2.sqlite")
+    assert {row[0] for row in conn.execute("SELECT id FROM sessions")} == {"new", "old"}
+
+
+def test_partial_extractor_preserves_unseen_prior_entries(tmp_path, patched_extractors):
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("old-a"), _session("old-b")])])
+    extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("old-a")])])
+
+    extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
+
+    ids = [row["id"] for row in json.loads((tmp_path / "index.json").read_text())["sessions"]]
+    assert sorted(ids) == ["old-a", "old-b"]
+
+
+def test_explicit_tombstone_is_not_reintroduced_while_other_entries_survive(
+    tmp_path, patched_extractors
+):
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("keep"), _session("drop")])])
+    extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [])])
+
+    extraction.build_search_index(
+        tmp_path, tmp_path / "index.json", deleted_ids={"drop"}, incremental=False
+    )
+
+    ids = [row["id"] for row in json.loads((tmp_path / "index.json").read_text())["sessions"]]
+    assert ids == ["keep"]
+
+
 # ---------------------------------------------------------------------------
 # Cancellation
 # ---------------------------------------------------------------------------
@@ -122,6 +180,25 @@ def test_should_stop_raises_cancelled(tmp_path, patched_extractors):
     patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("a")])])
     with pytest.raises(extraction.ActionJobCancelledError):
         extraction.build_search_index(tmp_path, tmp_path / "index.json", should_stop=lambda: True)
+
+
+def test_cancelled_build_leaves_previous_indexes_untouched(tmp_path, patched_extractors):
+    """Cancellation rolls back the in-flight v2 transaction and JSON write."""
+    from lore.storage import v2_db_path
+
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("old")])])
+    extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
+    before = (tmp_path / "index.json").read_bytes()
+
+    patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("new")])])
+    with pytest.raises(extraction.ActionJobCancelledError):
+        extraction.build_search_index(
+            tmp_path, tmp_path / "index.json", incremental=False, should_stop=lambda: True
+        )
+
+    assert (tmp_path / "index.json").read_bytes() == before
+    conn = sqlite3.connect(v2_db_path(tmp_path))
+    assert [row[0] for row in conn.execute("SELECT id FROM sessions")] == ["old"]
 
 
 # ---------------------------------------------------------------------------

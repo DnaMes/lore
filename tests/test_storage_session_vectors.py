@@ -199,12 +199,12 @@ def test_write_sessions_populates_vectors(tmp_path):
 
 
 @requires_vectors
-def test_write_sessions_vectors_track_replace(tmp_path):
+def test_write_sessions_vectors_preserve_prior_sessions(tmp_path):
     db = v2_db_path(tmp_path)
     write_sessions(db, [_session("old")])
     write_sessions(db, [_session("new")])
     conn = initialise(db)
-    assert _vec_ids(conn) == {"new"}
+    assert _vec_ids(conn) == {"new", "old"}
 
 
 @requires_vectors

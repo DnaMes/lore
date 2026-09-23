@@ -178,8 +178,10 @@ def build_search_index(
 
     When ``incremental=True`` (default) sessions already present in the
     existing index whose source-file mtime hasn't changed are reused
-    verbatim instead of being re-processed by :class:`IndexBuilder`. Set
-    ``incremental=False`` to force a full rebuild.
+    verbatim instead of being re-processed by :class:`IndexBuilder`. Entries
+    not observed during an incomplete extractor run are preserved unless they
+    have an explicit tombstone. Set ``incremental=False`` to force refreshed
+    extraction while retaining that preservation guarantee.
 
     Returns a list of report dicts:
     - ``{"extractor": ..., "error": ...}`` for an extractor that crashed.
@@ -190,7 +192,7 @@ def build_search_index(
     selected = select_extractors(tool_filter)
 
     existing_by_id: dict[str, dict] = {}
-    if incremental and index_path.exists():
+    if index_path.exists():
         try:
             with open(index_path, "r", encoding="utf-8") as handle:
                 existing_payload = json.load(handle)
@@ -199,7 +201,7 @@ def build_search_index(
                 if sid:
                     existing_by_id[sid] = entry
         except (OSError, json.JSONDecodeError) as exc:
-            logger.warning("Failed to read existing index for incremental build: %s", exc)
+            logger.warning("Failed to read existing index for preservation merge: %s", exc)
 
     reused_entries: list[dict] = []
     # Ids of the reused (unchanged) sessions. They are yielded through the SAME
@@ -209,6 +211,7 @@ def build_search_index(
     # list to re-write its v2 message rows (#96/#103/#35).
     reused_ids: set[str] = set()
     errors: list[dict] = []
+    seen_ids: set[str] = set()
     title_generator = TitleGenerator(strategy=TitleStrategy.FAST)
     total = len(selected) or 1
     deleted = deleted_ids or set()
@@ -262,6 +265,7 @@ def build_search_index(
 
                     if session.session_id in deleted:
                         continue
+                    seen_ids.add(session.session_id)
 
                     if incremental:
                         prior = existing_by_id.get(session.session_id)
@@ -314,6 +318,13 @@ def build_search_index(
                     ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())),
                 )
                 errors.append({"extractor": tool_name, "skipped": skipped, "imported": imported})
+
+        # An extractor can fail, be unavailable, or return only part of its
+        # source. Preserve prior derived entries that were not observed in this
+        # run; explicit tombstones remain the only deletion signal.
+        for session_id, prior in existing_by_id.items():
+            if session_id not in seen_ids and session_id not in deleted:
+                reused_entries.append(prior)
 
     # reused_entries / reused_ids are populated as session_stream runs. They are
     # consumed only after the generator drains (build_index seeds reused-entry

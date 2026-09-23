@@ -227,6 +227,35 @@ def test_reused_ids_route_to_v2_only_and_preserve_json(tmp_path):
     assert r1_synced == 1
 
 
+def test_reused_stream_preserves_existing_v2_messages(tmp_path):
+    """A complete reused row keeps its stored messages during a later sync."""
+    from lore.storage import v2_db_path
+
+    IndexBuilder(tmp_path).build_index([_session("reused", n_messages=2)], {})
+    prior = {
+        "id": "reused",
+        "tool": "claude-code",
+        "project": "/proj",
+        "thread_id": None,
+        "title": "Reused One",
+        "created": "2025-06-15T10:00:00",
+        "updated": "2025-06-15T10:00:00",
+        "messages": 2,
+        "prompts": 0,
+        "keywords": [],
+        "search_text": "message body",
+    }
+    changed = _session("reused", n_messages=2)
+    changed.messages[0].content = "replacement content"
+    IndexBuilder(tmp_path).build_index([changed], {}, reused_entries=[prior], reused_ids={"reused"})
+
+    conn = sqlite3.connect(v2_db_path(tmp_path))
+    assert conn.execute(
+        "SELECT content FROM messages WHERE session_id='reused' ORDER BY seq"
+    ).fetchone() == ("message 0 for reused",)
+    assert conn.execute("SELECT messages_synced FROM sessions WHERE id='reused'").fetchone() == (1,)
+
+
 def test_reused_ids_stream_does_not_materialise(tmp_path):
     """Reused sessions in the merged stream are dropped one at a time (#103)."""
     import gc
