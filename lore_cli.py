@@ -233,87 +233,104 @@ def cmd_list(args):
         print(f"\nTotal: {total_sessions} sessions")
 
 
+def _tag_git_info(session, cache: dict) -> None:
+    """Fill a session's missing git branch/SHA from its project directory.
+
+    ``cache`` maps project path → ``get_git_info`` result so a project shared
+    by many sessions costs one pair of ``git`` calls instead of one per session.
+    """
+    if session.git_branch is not None and session.git_commit is not None:
+        return
+    key = session.project_path or ""
+    if key not in cache:
+        cache[key] = get_git_info(session.project_path)
+    info = cache[key]
+    if session.git_branch is None:
+        session.git_branch = info["branch"]
+    if session.git_commit is None:
+        session.git_commit = info["sha"]
+
+
 def cmd_export(args):
     """Export sessions to Markdown."""
     output_dir = Path(args.output_dir).expanduser()
     exporter = MarkdownExporter(output_dir)
     index_builder = IndexBuilder(output_dir)
 
-    extractors = get_all_extractors()
-    sessions = []
-    export_paths = {}
-
     tool_filter = normalize_tool_name(args.tool) if args.tool else None
+    git_info_cache: dict = {}
 
-    for extractor in extractors:
-        if tool_filter and extractor.tool.value != tool_filter:
-            continue
-        if not extractor.is_available():
-            continue
+    # Export paths of earlier runs, updated in place as sessions stream past so
+    # the index builder sees every fresh path without a second pass.
+    merged_paths, _ = _load_existing_index_state(output_dir / "index.json")
+    exported = 0
 
-        print(f"Extracting from {extractor.tool.value}...")
+    def export_stream():
+        """Export each matching session, then yield it — one at a time.
 
-        for session in extractor.extract_sessions():
-            # Filter by project
-            if args.project and session.project_path != args.project:
+        Sessions are deliberately never collected: keeping every
+        ``UnifiedSession`` (with message bodies) alive made a full sync peak
+        at ~3 GB for ~1000 sessions (lore-sync). ``IndexBuilder.build_index``
+        consumes this stream and drops each session after indexing it.
+        """
+        nonlocal exported
+        for extractor in get_all_extractors():
+            if tool_filter and extractor.tool.value != tool_filter:
+                continue
+            if not extractor.is_available():
                 continue
 
-            # Tag session with current git branch/SHA of its project directory
-            if session.git_branch is None or session.git_commit is None:
-                info = get_git_info(session.project_path)
-                if session.git_branch is None:
-                    session.git_branch = info["branch"]
-                if session.git_commit is None:
-                    session.git_commit = info["sha"]
+            print(f"Extracting from {extractor.tool.value}...")
 
-            sessions.append(session)
+            for session in extractor.extract_sessions():
+                # Filter by project
+                if args.project and session.project_path != args.project:
+                    continue
 
-            # Export to markdown (skips if file is already up-to-date)
-            try:
-                candidate = exporter._candidate_path(session)
-                was_current = (
-                    candidate.exists()
-                    and candidate.stat().st_mtime >= session.last_updated.timestamp()
-                )
-                path = exporter.export_session(session)
-                export_paths[session.session_id] = path
-                if not was_current:
-                    print(f"  Exported: {path}")
-            except Exception as e:
-                print(f"  Error exporting {session.session_id}: {e}", file=sys.stderr)
+                _tag_git_info(session, git_info_cache)
+                exported += 1
 
-    # Build index. When no --tool/--project filter is active, the sessions
-    # already collected by the export loop above ARE the full set — re-running
-    # every extractor here would double the I/O, CPU and memory on a full
-    # sync (1885 sessions × 10 tools easily exhausts a 38 GiB box).
-    print("\nBuilding index...")
-    if not tool_filter and not args.project:
-        all_sessions = sessions
-    else:
-        all_sessions = []
-        git_info_cache = {}
+                # Export to markdown (skips if file is already up-to-date)
+                try:
+                    candidate = exporter._candidate_path(session)
+                    was_current = (
+                        candidate.exists()
+                        and candidate.stat().st_mtime >= session.last_updated.timestamp()
+                    )
+                    path = exporter.export_session(session)
+                    merged_paths[session.session_id] = path
+                    if not was_current:
+                        print(f"  Exported: {path}")
+                except Exception as e:
+                    print(f"  Error exporting {session.session_id}: {e}", file=sys.stderr)
+
+                yield session
+
+    def all_sessions_stream():
+        """Yield every session from every extractor for the unfiltered index."""
         for extractor in get_all_extractors():
             if not extractor.is_available():
                 continue
             for session in extractor.extract_sessions():
-                if session.git_branch is None or session.git_commit is None:
-                    key = session.project_path or ""
-                    if key not in git_info_cache:
-                        git_info_cache[key] = get_git_info(session.project_path)
-                    info = git_info_cache[key]
-                    if session.git_branch is None:
-                        session.git_branch = info["branch"]
-                    if session.git_commit is None:
-                        session.git_commit = info["sha"]
-                all_sessions.append(session)
+                _tag_git_info(session, git_info_cache)
+                yield session
 
-    existing_paths, _ = _load_existing_index_state(output_dir / "index.json")
-
-    merged_paths = {**existing_paths, **export_paths}
-    index_builder.build_index(all_sessions, merged_paths)
+    # Build index. Without a --tool/--project filter the export stream already
+    # covers the full set, so it feeds the index directly — re-running every
+    # extractor would double the I/O, CPU and memory on a full sync (1885
+    # sessions × 10 tools easily exhausts a 38 GiB box). With a filter the
+    # index must still cover all tools, so export first, then stream them all.
+    if not tool_filter and not args.project:
+        print("Exporting sessions and building index...")
+        index_builder.build_index(export_stream(), merged_paths)
+    else:
+        for _ in export_stream():
+            pass
+        print("\nBuilding index...")
+        index_builder.build_index(all_sessions_stream(), merged_paths)
     print(f"Index saved to: {index_builder.index_path}")
 
-    print(f"\nExported {len(sessions)} sessions to {output_dir}")
+    print(f"\nExported {exported} sessions to {output_dir}")
 
 
 def _find_session_by_id(session_id: str):
