@@ -72,14 +72,62 @@ def test_write_sessions_persists_messages_in_order(tmp_path):
     assert rows[1][1] == "assistant"
 
 
-def test_write_sessions_is_full_replace(tmp_path):
-    """A second write replaces the store — stale sessions are gone."""
+def test_write_sessions_preserves_sessions_from_prior_commits(tmp_path):
+    """A later write does not erase sessions that were not part of the batch."""
     db = tmp_path / "v2.sqlite"
-    write_sessions(db, [_session("old")])
-    write_sessions(db, [_session("new")])
+    write_sessions(db, [_session("old", n_messages=2)])
+    write_sessions(db, [_session("new", n_messages=1)])
+
     conn = sqlite3.connect(db)
     ids = sorted(r[0] for r in conn.execute("SELECT id FROM sessions"))
-    assert ids == ["new"]
+    assert ids == ["new", "old"]
+    assert conn.execute(
+        "SELECT content FROM messages WHERE session_id='old' ORDER BY seq"
+    ).fetchall() == [("message body 0",), ("message body 1",)]
+    assert {
+        row[0]
+        for row in conn.execute(
+            "SELECT entity_id FROM search_index WHERE search_index MATCH 'message'"
+        )
+    } == {"old", "new"}
+
+
+def test_write_sessions_replaces_only_a_refreshed_session(tmp_path):
+    """Refreshing one id leaves other sessions and their messages intact."""
+    db = tmp_path / "v2.sqlite"
+    write_sessions(db, [_session("old", n_messages=2), _session("fresh", n_messages=1)])
+    write_sessions(db, [_session("old", title="Refreshed", n_messages=3)])
+
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT title FROM sessions WHERE id='old'").fetchone() == ("Refreshed",)
+    assert conn.execute("SELECT COUNT(*) FROM messages WHERE session_id='old'").fetchone() == (3,)
+    assert conn.execute("SELECT COUNT(*) FROM messages WHERE session_id='fresh'").fetchone() == (1,)
+
+
+def test_reused_entry_does_not_delete_existing_messages(tmp_path):
+    """Metadata refreshes preserve complete message rows for an existing id."""
+    db = tmp_path / "v2.sqlite"
+    write_sessions(db, [_session("kept", n_messages=2)])
+    write_sessions(
+        db,
+        [],
+        reused_entries=[
+            {
+                "id": "kept",
+                "tool": "claude-code",
+                "project": "/home/u/proj",
+                "title": "Kept metadata",
+                "created": "2026-01-01",
+                "updated": "2026-01-02",
+                "messages": 2,
+                "search_text": "kept metadata",
+            }
+        ],
+    )
+
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT COUNT(*) FROM messages WHERE session_id='kept'").fetchone() == (2,)
+    assert conn.execute("SELECT messages_synced FROM sessions WHERE id='kept'").fetchone() == (1,)
 
 
 def test_write_sessions_title_override(tmp_path):

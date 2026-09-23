@@ -431,7 +431,7 @@ class _MultiWriter:
         # finalize() — after the refresh drain — so we only keep the reference
         # here; reading it now would see an empty list.
         self._reused_entries = reused_entries
-        self._had_reused_session = False
+        self._full_reused_ids: set[str] = set()
         self.index: Dict = {
             "version": "1.0.0",
             "generated_at": datetime.now().isoformat(),
@@ -480,9 +480,9 @@ class _MultiWriter:
         ``sessions`` array + legacy rows, preserving the pre-#96 order
         (reused-first, then refreshed).
 
-        v2 metadata rows are written ONLY when no full reused_session was added
-        (the #35 incremental path streams those full rows instead, which carry
-        the message rows a metadata-only entry lacks).
+        v2 metadata rows are written only for ids without a full reused session
+        in this build. Complete existing reused ids use a metadata-preserving
+        v2 update; incomplete/new ids receive their full message rows (#35).
         """
         entries = list(self._reused_entries or [])
         if not entries:
@@ -519,7 +519,7 @@ class _MultiWriter:
                     entry.get("search_text") or "",
                 )
             )
-            if not self._had_reused_session:
+            if entry.get("id") not in self._full_reused_ids:
                 self._v2_add(lambda e=entry: self.v2.add_reused_entry(e))
         # Prepend so reused entries precede the streamed sessions in both the
         # JSON array and the buffered legacy rows (written in finalize).
@@ -613,8 +613,8 @@ class _MultiWriter:
         """Write a reused session's full rows to the v2 store only (#35).
 
         Its JSON/legacy entry already came from a reused_entries dict; here we
-        only need the complete v2 row + message rows. Title/extras mirror what
-        the reused_entries seeding used, so v2 and the JSON index agree.
+        supply the v2 row and messages. A complete existing v2 row takes a
+        metadata-only update so unchanged message rows are not rewritten.
         """
         if session.session_id not in self._titles:
             # Fall back to the session's own title if no reused entry seeded one.
@@ -625,8 +625,8 @@ class _MultiWriter:
                 "prompt_outline": None,
                 "export_path": export_str,
             }
-        self._had_reused_session = True
-        self._v2_add(lambda: self.v2.add_full(session))
+        self._full_reused_ids.add(session.session_id)
+        self._v2_add(lambda: self.v2.add_reused_full(session))
 
     def _flush_legacy(self) -> None:
         if self._legacy_rows:
