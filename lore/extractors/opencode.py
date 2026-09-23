@@ -704,7 +704,10 @@ class OpenCodeExtractor(BaseExtractor):
     def _load_parts_for_session_sqlite(
         self, conn: sqlite3.Connection, session_id: str
     ) -> Dict[str, List[Dict]]:
+        parts_by_message: Dict[str, List[Dict]] = {}
         try:
+            # Stream the cursor: fetchall() would hold every part's raw JSON at
+            # once, and one real session carries ~350 MB of it.
             rows = conn.execute(
                 """
                 SELECT message_id, data
@@ -713,26 +716,40 @@ class OpenCodeExtractor(BaseExtractor):
                 ORDER BY message_id, time_created
                 """,
                 (session_id,),
-            ).fetchall()
+            )
+            for row in rows:
+                self.stats.parts_found += 1
+                try:
+                    payload = json.loads(str(row["data"] or "{}"))
+                except json.JSONDecodeError:
+                    self.stats.errors_json_decode += 1
+                    continue
+                if isinstance(payload, dict):
+                    message_id = str(row["message_id"] or "")
+                    if not message_id:
+                        continue
+                    parts_by_message.setdefault(message_id, []).append(self._slim_part(payload))
+                    self.stats.parts_loaded += 1
         except sqlite3.Error:
             return {}
 
-        self.stats.parts_found += len(rows)
-        parts_by_message: Dict[str, List[Dict]] = {}
-        for row in rows:
-            try:
-                payload = json.loads(str(row["data"] or "{}"))
-            except json.JSONDecodeError:
-                self.stats.errors_json_decode += 1
-                continue
-            if isinstance(payload, dict):
-                message_id = str(row["message_id"] or "")
-                if not message_id:
-                    continue
-                parts_by_message.setdefault(message_id, []).append(payload)
-                self.stats.parts_loaded += 1
-
         return parts_by_message
+
+    @staticmethod
+    def _slim_part(part: Dict) -> Dict:
+        """Keep only the fields ``_assemble_message_content_from_parts`` reads.
+
+        Tool parts carry large payloads the transcript never uses
+        (``state.metadata``, attachments, diffs); dropping them here keeps a
+        session's parts from pinning hundreds of MB until assembly.
+        """
+        slim = {key: part[key] for key in ("type", "text", "tool", "callID") if key in part}
+        state = part.get("state")
+        if isinstance(state, dict):
+            slim["state"] = {
+                key: state[key] for key in ("input", "output", "status") if key in state
+            }
+        return slim
 
     def _assemble_message_content_from_parts(
         self, parts: List[Dict]
