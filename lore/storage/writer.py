@@ -22,7 +22,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from ..core.models import UnifiedSession
 from .schema import initialise
-from .session_vectors import embed_sessions
+from .session_vectors import _MAX_EMBED_CHARS, embed_sessions
 
 logger = logging.getLogger(__name__)
 
@@ -268,7 +268,11 @@ class StreamingV2Writer:
         triple = _write_full_session(
             self.conn, session, title, self.extras.get(session.session_id, {})
         )
-        self._embed_inputs.append(triple)
+        # Queue only what embed_sessions will actually embed. The full body
+        # (all message text) would otherwise stay pinned until finalize().
+        session_id, text, mtime = triple
+        capped = text[:_MAX_EMBED_CHARS] if text is not None else None
+        self._embed_inputs.append((session_id, capped, mtime))
         self.count += 1
 
     def add_reused_entry(self, entry: Dict) -> None:
