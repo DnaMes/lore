@@ -59,12 +59,8 @@ def test_write_sessions_replaces_only_a_refreshed_session(tmp_path):
 
     conn = sqlite3.connect(db)
     assert conn.execute("SELECT title FROM sessions WHERE id='old'").fetchone() == ("Refreshed",)
-    assert conn.execute(
-        "SELECT COUNT(*) FROM messages WHERE session_id='old'"
-    ).fetchone() == (3,)
-    assert conn.execute(
-        "SELECT COUNT(*) FROM messages WHERE session_id='fresh'"
-    ).fetchone() == (1,)
+    assert conn.execute("SELECT COUNT(*) FROM messages WHERE session_id='old'").fetchone() == (3,)
+    assert conn.execute("SELECT COUNT(*) FROM messages WHERE session_id='fresh'").fetchone() == (1,)
 
 
 def test_reused_entry_does_not_delete_existing_messages(tmp_path):
@@ -88,12 +84,8 @@ def test_reused_entry_does_not_delete_existing_messages(tmp_path):
     )
 
     conn = sqlite3.connect(db)
-    assert conn.execute(
-        "SELECT COUNT(*) FROM messages WHERE session_id='kept'"
-    ).fetchone() == (2,)
-    assert conn.execute(
-        "SELECT messages_synced FROM sessions WHERE id='kept'"
-    ).fetchone() == (1,)
+    assert conn.execute("SELECT COUNT(*) FROM messages WHERE session_id='kept'").fetchone() == (2,)
+    assert conn.execute("SELECT messages_synced FROM sessions WHERE id='kept'").fetchone() == (1,)
 ```
 
 Keep the existing metadata-only reused-entry test for an id that does not yet exist; a new row must still have `messages_synced = 0` and no message rows. Update its wording/docstrings so they describe metadata-only rows without claiming the entire store is replaced.
@@ -162,12 +154,10 @@ def test_reused_stream_preserves_existing_v2_messages(tmp_path):
     )
 
     conn = sqlite3.connect(v2_db_path(tmp_path))
-    assert conn.execute(
-        "SELECT COUNT(*) FROM messages WHERE session_id='reused'"
-    ).fetchone() == (2,)
-    assert conn.execute(
-        "SELECT messages_synced FROM sessions WHERE id='reused'"
-    ).fetchone() == (1,)
+    assert conn.execute("SELECT COUNT(*) FROM messages WHERE session_id='reused'").fetchone() == (
+        2,
+    )
+    assert conn.execute("SELECT messages_synced FROM sessions WHERE id='reused'").fetchone() == (1,)
 ```
 
 - [x] **Step 2: Run the new test and verify red**
@@ -217,7 +207,9 @@ def test_failed_extractor_preserves_prior_entries(tmp_path, patched_extractors):
 
     errors = extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
 
-    assert [row["id"] for row in json.loads((tmp_path / "index.json").read_text())["sessions"]] == ["old"]
+    assert [row["id"] for row in json.loads((tmp_path / "index.json").read_text())["sessions"]] == [
+        "old"
+    ]
     assert errors == [{"extractor": "claude-code", "error": "gone"}]
 
 
