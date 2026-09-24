@@ -22,8 +22,9 @@ The 2026-09-23 Lore/Forgejo nightly made no source or tracker changes. Three Cla
 windows failed before invocation because GNU `timeout` rejected `4h55m`. MiniMax
 batch 1 hit Token Plan error 2056; batches 2–5 returned no report. A preliminary
 OpenCode Lore audit was superseded. Lore has 51 open issues, no open PRs, and only
-remote `main`; the local checkout is clean at `b0e84a2`. The temporary Lore
-AI-Workstation worktree was removed. The final nightly report is at
+remote `main`; the local checkout is clean at `407a806`. The AI-Workstation Lore
+checkout remains at its previously inspected commit; GitHub advanced after that
+inspection. The temporary Lore worktree was removed. The final nightly report is at
 `ai-workstation:~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
 
 ## Boundaries and test evidence

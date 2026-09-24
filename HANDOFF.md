@@ -6,9 +6,10 @@ The 2026-09-23 Lore/Forgejo nightly made no source or tracker changes: all three
 Claude windows failed before invocation because GNU `timeout` rejected `4h55m`;
 MiniMax batch 1 hit provider error 2056 and batches 2–5 produced no report. A
 preliminary OpenCode Lore audit was superseded and is not authoritative. The
-nightly run worktree was removed. Local Lore `main` is clean at `b0e84a2`, equal
-to `github/main`; GitHub has 51 open issues, zero open PRs, and only remote `main`.
-No code tests were run for the failed nightly.
+nightly run worktree was removed. Local Lore `main` is clean at `407a806`, equal
+to `github/main`; this docs-only closeout records the investigation and merge
+state. GitHub has 51 open issues, zero open PRs, and only remote `main`. No code
+tests were run for the failed nightly.
 
 At the user's request, the separate cross-tool Skill Assistant work was merged:
 `claude-setup#217`, `codex-setup#1`, `opencode#9`, `harness#18`, and `ai-stack#20`.
@@ -18,9 +19,11 @@ contexts and no branch protections. Prior focused results are recorded in the
 older stack handoff (Codex 50, Claude pipeline 33 plus shell profile checks,
 OpenCode 6, Harness 1, Antigravity 1); they were not rerun here.
 
-On AI-Workstation, Lore's local `main` ref tracks `origin/main` at `b0e84a2`,
+On AI-Workstation, Lore's local `main` ref was at `b0e84a2` at last inspection,
 while the canonical submodule checkout remains detached at `9ffb3ee`; the
-`ai-stack` superproject records `d3953c1`. The superproject is 17 commits behind
+`ai-stack` superproject records `d3953c1`. GitHub `main` has since advanced to
+`407a806`; the AI-Workstation checkout has not been updated to that docs-only
+commit. The superproject is 17 commits behind
 `origin/main` and has unrelated dirty submodule pointers plus an untracked
 `docs/night-ops/.../HALT.md`. Preserve those paths. Its other branches
 (`autosync/*`, `feat/5-harness-rollout`, `fix/9-harness-ecc-remediation`,
