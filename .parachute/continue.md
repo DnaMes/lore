@@ -1,63 +1,27 @@
-# Continue — Lore issue-backlog sweep follow-ups (any agent)
+# Continue — Lore nightly and AI-stack merge
 
 ## Verify state before trusting this document
 
-The repo may have moved on since this was written (2026-09-11). FIRST run:
-
-```
-git branch --show-current          # expect: main
-git status                          # expect: clean (or only maintainer's local .githooks edits)
-git log --oneline -5                # expect top: 2ac30bd chore(hooks) / d88bee0 / 52177c2 ...
-git fetch github && git status -sb  # expect: main...github/main in sync
-```
-
-Then read `HANDOFF.md` (repo root) — it is the source of truth for context, decisions,
-and the full file/commit map of the 2026-09-11 sweep (26 issues closed, 13 commits pushed).
-
-## Context (30-second version)
-
-The whole open-issue backlog of `DnaMes/lore` was worked through in a fix-verify-commit
-loop: 26 issues closed (each with an AI-disclaimer comment + commit hash on GitHub),
-test suite at **1164 passed / 10 skipped**, ruff clean, mypy at its pre-existing baseline
-(24 known errors — do NOT chase them). Everything is pushed to `github/main`.
-
-Test command (isolated HOME is required on this host, else 94 tests fail on an unreadable
-network-restore dir):
-
-```
-HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests/ -p no:cacheprovider -q -o addopts=""
-```
-
-(Create the dir first if missing: `mkdir -p /tmp/opencode/lore-test-home`. `.venv` exists in
-the repo with all dev deps installed.)
+Run `git status --short --branch`, `git log --oneline -5`, and `git worktree list` in Lore. Check current Forgejo PR states and the AI-Workstation stack state before acting. Read `HANDOFF.md` for the source of truth; do not rely on this prompt over newer Git or tracker state.
 
 ## Immediate next step
 
-**#106 manual browser pass** (~30 min): start the UI
-(`FLASK_SECRET_KEY=devtest .venv/bin/lore-web --port 5057`), open devtools console, and
-click through: theme menu (both options), sync dropdown (all items), View menu (Clean/Ultra/
-Readable/Present/Compact), resume modal (open/close/copy), tag editor (add/remove), delete
-confirmations, search overlay. Confirm zero CSP violations ("Refused to execute inline
-event handler") — the inline-handler sweep in commit `52177c2` replaced all `on*=`
-attributes with a delegated `data-action` dispatcher, and the automated suite only verifies
-page-load, not click flows.
+The user asked to merge all work and leave no branches. All five Skill Assistant PRs are merged: `claude-setup#217`, `codex-setup#1`, `opencode#9`, `harness#18`, and `ai-stack#20`. All five `feat/153-skill-assistant` remote refs were deleted and verified absent. Do not claim the entire AI stack is branch-free; separate autosync, harness, and pilot branches remain outside this task.
 
-## After that (ordered, see HANDOFF.md for detail)
+## Current Lore nightly result
 
-1. **#119** — Flask Blueprint refactor of `web.py` (scoped session; audit cluster already
-   extracted to `web_audit.py`; ~15 test files patch `web.*` names — plan the migration).
-2. **#112** — v2 store upsert redesign (read the maintainer comment on the issue FIRST;
-   naive extractor-side mtime skipping regressed #35 once already).
-3. **Roadmap decisions needed from the maintainer:** #92, #48, #33, #29.
+The 2026-09-23 Lore/Forgejo nightly made no source or tracker changes. Three Claude windows failed before invocation because GNU `timeout` rejected `4h55m`; MiniMax Forgejo batch 1 hit Token Plan error 2056 and batches 2–5 had no output. The preliminary OpenCode audit was superseded. Lore has 51 open issues, no open PRs, and only remote `main`. Local Lore is clean at `b0e84a2`; its temporary AI-Workstation worktree was removed. The final nightly report is on AI-Workstation at `~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
 
-## Key facts
+## Preserve unrelated state
 
-- Remote is named **`github`** (not origin); default branch `main`.
-- Template snapshots regenerate via `UPDATE_TEMPLATE_SNAPSHOTS=1` + full test run.
-- New Tailwind classes in templates → run `scripts/build_tailwind.sh`, commit the CSS.
-- `pytest` addopts pull in coverage → add `-o addopts=""` for plain runs.
-- 6 issues intentionally open: #106-verify (manual), #119, #112, #92, #48, #33, #29.
+AI-Workstation's `ai-stack` checkout is 17 commits behind `origin/main` and has unrelated modified submodule pointers plus an untracked `docs/night-ops/.../HALT.md`. Preserve them. Its independent `autosync/*`, `feat/5-harness-rollout`, `fix/9-harness-ecc-remediation`, and `herdr-pilot` branches are outside the #153 merge; classify before any cleanup. Do not claim the entire AI stack is branch-free after removing only #153 branches.
+
+## Test evidence and limits
+
+The prior implementation handoff records 50 Codex tests, 33 Claude pipeline tests plus shell profile checks, 6 OpenCode tests, 1 Harness test, and 1 Antigravity test passed. This session did not rerun them. Forgejo reported no status contexts or branch protections; the changes had earlier independent review and focused test evidence.
+
+The final nightly report is at `~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
 
 ---
 
-generated by context-parachute vunknown
+generated by context-parachute v1.1.0

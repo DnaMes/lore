@@ -1,61 +1,41 @@
-# Continue (fresh Claude Code session) — Lore follow-ups after the 2026-09-11 sweep
+# Continue — Fresh Claude session: Lore nightly and AI-stack merge
 
-Recommended: run `/clear`, then paste this into a clean session (cheaper + sharper than
-a compacted context).
+Run `/clear`, then paste this prompt into a fresh session if needed.
 
-## Verify first (the repo may have moved on)
+## Verify before acting
 
-```
-git branch --show-current     # expect: main
-git status                    # expect: clean
-git log --oneline -5          # expect top: 2ac30bd chore(hooks) ... 52177c2 fix(web) #106
-git fetch github && git status -sb
-HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests/ -p no:cacheprovider -q -o addopts=""
-                              # expect: 1164 passed, 10 skipped (mkdir -p the HOME dir first)
-```
+The workspace and remote state may have moved. Run `git status --short --branch`,
+`git log --oneline -5`, and `git worktree list` in Lore. Read `HANDOFF.md`
+for the source of truth, and re-query remote PR and branch state before acting.
 
-Then read `HANDOFF.md` (repo root) — source of truth for the full session context,
-decisions, and the commit/issue map (26 issues closed, 13 commits pushed).
+## Completed Skill Assistant merge
 
-## Where we are
+All five PRs are merged: `claude-setup#217`, `codex-setup#1`, `opencode#9`,
+`harness#18`, and `ai-stack#20`. All five remote refs named
+`feat/153-skill-assistant` were deleted and verified absent. Do not claim the
+entire AI stack is branch-free; preserve and separately classify unrelated
+autosync, harness, and pilot branches.
 
-The open-issue backlog was worked through end-to-end: a11y, performance, CSP, CLI
-refactor, extractor memory bound, exception hygiene — all committed per batch with
-issue references and pushed to `github/main`. 6 issues intentionally remain open:
-#106-verify (manual browser pass), #119 (Blueprint refactor), #112 (storage upsert
-redesign), #92/#48/#33/#29 (roadmap decisions).
+## Nightly run result
 
-## Do this next (in order)
+The 2026-09-23 Lore/Forgejo nightly made no source or tracker changes. Three Claude
+windows failed before invocation because GNU `timeout` rejected `4h55m`. MiniMax
+batch 1 hit Token Plan error 2056; batches 2–5 returned no report. A preliminary
+OpenCode Lore audit was superseded. Lore has 51 open issues, no open PRs, and only
+remote `main`; the local checkout is clean at `b0e84a2`. The temporary Lore
+AI-Workstation worktree was removed. The final nightly report is at
+`ai-workstation:~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
 
-1. **#106 manual browser pass** (~30 min): `FLASK_SECRET_KEY=devtest .venv/bin/lore-web
---port 5057`, open devtools console, click through theme/sync/view menus, resume
-   modal, tag editor, delete confirms — confirm zero "Refused to execute inline event
-   handler" CSP errors (commit `52177c2` replaced all inline `on*=` with a delegated
-   `data-action` dispatcher; automated tests only cover page load).
-2. **#119 Blueprint refactor** (own scoped session): split `web.py` into Flask
-   Blueprints, move `_reload_sessions_index` into `web_jobs`, migrate the ~15 test
-   files that patch `web.*` globals. The audit cluster already lives in
-   `lore/interfaces/web_audit.py` with re-export patch-target compatibility — read the
-   follow-up comment on the GitHub issue before planning.
-3. **#112** (own scoped session, only remaining `critical`): replace
-   `StreamingV2Writer`'s DELETE+rebuild `begin()` with genuine upsert so extractors can
-   mtime-skip. READ the maintainer comment on the issue first — it explains why the
-   naive approach regressed #35.
-4. Surface roadmap decisions to the maintainer: #92, #48, #33, #29.
+## Boundaries and test evidence
 
-## Guardrails / gotchas
-
-- Remote is **`github`**, not origin. Default branch `main`.
-- Always run tests with **isolated HOME** (above) — the real `$HOME` breaks 94 tests
-  via an unreadable `~/.local/state/network-restore-20260907/` dir.
-- mypy baseline is **24 pre-existing errors** — diff against baseline, don't chase them.
-- Template snapshots: `UPDATE_TEMPLATE_SNAPSHOTS=1` + full test run.
-- New Tailwind classes → `scripts/build_tailwind.sh`, commit the compiled CSS; the
-  coverage test in `tests/test_vendored_assets.py` will tell you if you forgot.
-- Autosync gotcha (still valid): autosync may leave things staged — check
-  `git diff --cached --name-only` before committing; stage only intended files.
-- `autosync/e14` (local + remote) is maintainer infra — leave it alone.
+AI-Workstation's `ai-stack` checkout is 17 commits behind `origin/main` and has
+unrelated dirty submodule pointers plus an untracked
+`docs/night-ops/.../HALT.md`. Preserve them. The prior handoff records focused
+results: Codex 50 tests, Claude pipeline 33 plus shell profile checks, OpenCode 6,
+Harness 1, Antigravity 1; this session did not rerun tests. Forgejo reported no
+status contexts or branch protection. Separate stack branches remain outside this
+task.
 
 ---
 
-generated by context-parachute vunknown
+generated by context-parachute v1.1.0
