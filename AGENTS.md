@@ -192,7 +192,7 @@ Conventions before editing the vault: skill `obsidian-keeper`.
 
 **2026-09-24 — current task complete:** the Lore/Forgejo nightly made no changes; its
 three Claude windows failed on invalid `timeout 4h55m` and MiniMax stopped at provider
-error 2056. Lore is clean on `main` at `407a806`, with 51 open issues and no open PRs.
+error 2056. Lore is clean on `main`, with 51 open issues and no open PRs.
 The temporary Lore AI-Workstation worktree is removed.
 
 All Skill Assistant PRs are merged (`claude-setup#217`, `codex-setup#1`, `opencode#9`,

@@ -10,7 +10,7 @@ The user asked to merge all work and leave no branches. All five Skill Assistant
 
 ## Current Lore nightly result
 
-The 2026-09-23 Lore/Forgejo nightly made no source or tracker changes. Three Claude windows failed before invocation because GNU `timeout` rejected `4h55m`; MiniMax Forgejo batch 1 hit Token Plan error 2056 and batches 2–5 had no output. The preliminary OpenCode audit was superseded. Lore has 51 open issues, no open PRs, and only remote `main`. Local Lore is clean at `407a806`; its temporary AI-Workstation worktree was removed. The AI-Workstation Lore checkout remains at its previously inspected commit; GitHub advanced after that inspection. The final nightly report is on AI-Workstation at `~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
+The 2026-09-23 Lore/Forgejo nightly made no source or tracker changes. Three Claude windows failed before invocation because GNU `timeout` rejected `4h55m`; MiniMax Forgejo batch 1 hit Token Plan error 2056 and batches 2–5 had no output. The preliminary OpenCode audit was superseded. Lore has 51 open issues, no open PRs, and only remote `main`. Local Lore is clean on `main`; its temporary AI-Workstation worktree was removed. The AI-Workstation Lore checkout remains at its previously inspected commit; GitHub advanced after that inspection. The final nightly report is on AI-Workstation at `~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
 
 ## Preserve unrelated state
 
