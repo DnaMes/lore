@@ -99,7 +99,11 @@ def _discover_home_subfolder_roots(home_path: str, max_depth: int, max_hits: int
         for entry in entries:
             if len(roots) >= max_hits:
                 return
-            if not entry.is_dir():
+            try:
+                if not entry.is_dir():
+                    continue
+            except OSError:
+                # Listable but not searchable (mode r--): skip it, never abort.
                 continue
 
             name = entry.name
@@ -108,7 +112,11 @@ def _discover_home_subfolder_roots(home_path: str, max_depth: int, max_hits: int
 
             if name == ".opencode":
                 storage = entry / "storage"
-                if (storage / "session").exists() and (storage / "message").exists():
+                try:
+                    has_storage = (storage / "session").exists() and (storage / "message").exists()
+                except OSError:
+                    has_storage = False
+                if has_storage:
                     try:
                         roots.append(storage.resolve())
                     except Exception:

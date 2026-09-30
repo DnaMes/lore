@@ -76,7 +76,11 @@ def _discover_cached(home: str, marker: str, max_depth: int, max_hits: int) -> t
         visited_nodes += 1
 
         candidate = current / marker_rel
-        if candidate.exists():
+        try:
+            candidate_exists = candidate.exists()
+        except OSError:
+            candidate_exists = False
+        if candidate_exists:
             try:
                 resolved = str(candidate.resolve())
             except Exception:
@@ -95,7 +99,12 @@ def _discover_cached(home: str, marker: str, max_depth: int, max_hits: int) -> t
             continue
 
         for entry in entries:
-            if not entry.is_dir() or entry.is_symlink():
+            try:
+                if not entry.is_dir() or entry.is_symlink():
+                    continue
+            except OSError:
+                # Listable but not searchable (mode r--): skip instead of
+                # aborting the whole export.
                 continue
             if entry.name in skip_dirnames:
                 continue
