@@ -130,6 +130,83 @@ def test_reused_entry_does_not_delete_existing_messages(tmp_path):
     assert conn.execute("SELECT messages_synced FROM sessions WHERE id='kept'").fetchone() == (1,)
 
 
+def _reused(sid: str, title: str, search_text: str) -> dict:
+    return {
+        "id": sid,
+        "tool": "claude-code",
+        "project": "/home/u/proj",
+        "title": title,
+        "created": "2026-01-01",
+        "updated": "2026-01-02",
+        "messages": 1,
+        "search_text": search_text,
+    }
+
+
+def _fts_ids(conn: sqlite3.Connection, term: str) -> list[str]:
+    return sorted(
+        row[0]
+        for row in conn.execute(
+            "SELECT entity_id FROM search_index WHERE search_index MATCH ?", (term,)
+        )
+    )
+
+
+def _kubernetes_session(sid: str, title: str = "Cluster talk") -> UnifiedSession:
+    session = _session(sid, title=title, n_messages=0)
+    session.cli_version = "2.1.0"
+    session.messages = [
+        UnifiedMessage(
+            role=Role.USER, content="how does kubernetes scale", timestamp=datetime(2026, 1, 1)
+        ),
+    ]
+    return session
+
+
+def test_reused_entry_keeps_full_text_of_a_complete_session(tmp_path):
+    """An unchanged session must stay searchable by its message bodies.
+
+    The reused dict only carries the short ``search_text``; replacing the FTS
+    row with it would make every incremental export forget the message text.
+    """
+    db = tmp_path / "v2.sqlite"
+    write_sessions(db, [_kubernetes_session("kept")])
+    write_sessions(db, [], reused_entries=[_reused("kept", "Cluster talk", "short summary")])
+
+    conn = sqlite3.connect(db)
+    assert _fts_ids(conn, "kubernetes") == ["kept"]
+
+
+def test_reused_entry_keeps_cli_version_of_a_complete_session(tmp_path):
+    db = tmp_path / "v2.sqlite"
+    write_sessions(db, [_kubernetes_session("kept")])
+    write_sessions(db, [], reused_entries=[_reused("kept", "Cluster talk", "short summary")])
+
+    conn = sqlite3.connect(db)
+    assert conn.execute("SELECT cli_version FROM sessions WHERE id='kept'").fetchone() == ("2.1.0",)
+
+
+def test_reused_entry_with_new_title_updates_fts_title_and_keeps_body(tmp_path):
+    db = tmp_path / "v2.sqlite"
+    write_sessions(db, [_kubernetes_session("kept")])
+    write_sessions(db, [], reused_entries=[_reused("kept", "Renamed zebra", "short summary")])
+
+    conn = sqlite3.connect(db)
+    assert _fts_ids(conn, "zebra") == ["kept"]
+    assert _fts_ids(conn, "kubernetes") == ["kept"]
+    assert conn.execute("SELECT COUNT(*) FROM search_index WHERE entity_id='kept'").fetchone() == (
+        1,
+    )
+
+
+def test_reused_entry_for_an_unknown_session_is_searchable_by_its_summary(tmp_path):
+    db = tmp_path / "v2.sqlite"
+    write_sessions(db, [], reused_entries=[_reused("fresh", "Brand new", "quokka summary")])
+
+    conn = sqlite3.connect(db)
+    assert _fts_ids(conn, "quokka") == ["fresh"]
+
+
 def test_write_sessions_title_override(tmp_path):
     db = tmp_path / "v2.sqlite"
     write_sessions(db, [_session("a", title="original")], titles={"a": "overridden"})

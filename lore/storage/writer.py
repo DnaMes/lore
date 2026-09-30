@@ -120,6 +120,67 @@ def _replace_session_fts(
     )
 
 
+def _rebuild_session_fts(
+    conn: sqlite3.Connection, session_id: str, tool: str, project: Optional[str], title: str
+) -> None:
+    """Rebuild one session's FTS row as title + its stored message bodies."""
+    body_parts = [title]
+    body_parts.extend(
+        content
+        for (content,) in conn.execute(
+            "SELECT content FROM messages WHERE session_id = ? ORDER BY seq", (session_id,)
+        )
+        if content
+    )
+    _replace_session_fts(
+        conn, session_id, tool, project, title, "\n".join(p for p in body_parts if p)
+    )
+
+
+def _refresh_complete_session(
+    conn: sqlite3.Connection, entry: Dict, title: str, previous_title: str
+) -> None:
+    """Refresh metadata of a session whose message rows are already complete.
+
+    Only the columns the index dict actually carries are updated, so
+    ``cli_version``, ``metadata_json`` and ``messages_synced`` survive. The FTS
+    row holds title + message bodies and is left alone unless the title moved:
+    replacing it with the dict's short ``search_text`` would drop the message
+    text, and ``entity_id`` is UNINDEXED so each replace scans the whole table.
+    """
+    session_id = entry["id"]
+    conn.execute(
+        """
+        UPDATE sessions SET
+            tool = ?, project = ?, thread_id = ?, title = ?, created = ?, updated = ?,
+            source_path = ?, source_mtime_ns = ?, git_branch = ?, git_commit = ?,
+            messages_count = ?, prompt_count = ?, prompt_outline = ?, export_path = ?,
+            total_tokens = ?
+        WHERE id = ?
+        """,
+        (
+            entry.get("tool"),
+            entry.get("project"),
+            entry.get("thread_id"),
+            title,
+            entry.get("created"),
+            entry.get("updated"),
+            entry.get("source_path"),
+            entry.get("source_mtime"),
+            entry.get("git_branch"),
+            entry.get("git_commit"),
+            int(entry.get("messages") or 0),
+            int(entry.get("prompts") or 0),
+            entry.get("prompt_outline"),
+            entry.get("export_path"),
+            int(entry.get("tokens") or 0),
+            session_id,
+        ),
+    )
+    if title != previous_title:
+        _rebuild_session_fts(conn, session_id, entry.get("tool") or "", entry.get("project"), title)
+
+
 def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
     """Write a metadata-only row from a pre-built index dict.
 
@@ -135,8 +196,11 @@ def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
         return
     title = entry.get("title") or ""
     existing = conn.execute(
-        "SELECT messages_synced FROM sessions WHERE id = ?", (session_id,)
+        "SELECT messages_synced, title FROM sessions WHERE id = ?", (session_id,)
     ).fetchone()
+    if existing and existing[0]:
+        _refresh_complete_session(conn, entry, title, previous_title=existing[1] or "")
+        return
     conn.execute(
         _SESSION_INSERT,
         (
