@@ -251,6 +251,44 @@ def _tag_git_info(session, cache: dict) -> None:
         session.git_commit = info["sha"]
 
 
+def _incremental_baseline(
+    index_path: Path, prior_sessions: list[dict]
+) -> tuple[dict[str, int], dict[str, dict]]:
+    """Map source path -> mtime_ns and -> entry for sources safe to skip.
+
+    The index stamps ``source_mtime`` when it writes a row, which can be later
+    than the moment the file was parsed. Only rows whose mtime is older than the
+    previous run's ``generated_at`` (set before that scan started) are known to
+    have been read completely; anything newer is parsed again. A missing or
+    unreadable ``generated_at`` disables the shortcut.
+    """
+    try:
+        with open(index_path, "r", encoding="utf-8") as f:
+            generated_at = datetime.fromisoformat(json.load(f)["generated_at"])
+        cutoff_ns = int(generated_at.timestamp() * 1_000_000_000)
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}, {}
+    known: dict[str, int] = {}
+    by_path: dict[str, dict] = {}
+    for entry in prior_sessions:
+        path, mtime = entry.get("source_path"), entry.get("source_mtime")
+        if path and isinstance(mtime, int) and mtime < cutoff_ns:
+            known[path] = mtime
+            by_path[path] = entry
+    return known, by_path
+
+
+def _reusable_entries(extractor, prior_by_path: dict, ignored_ids: set) -> dict[str, dict]:
+    """Prior index entries (by id) for the sources ``extractor`` skipped."""
+    reusable: dict[str, dict] = {}
+    for path in getattr(extractor, "skipped_sources", ()):
+        entry = prior_by_path.get(path)
+        session_id = entry.get("id") if entry else None
+        if session_id and session_id not in ignored_ids:
+            reusable[session_id] = entry
+    return reusable
+
+
 def cmd_export(args):
     """Export sessions to Markdown."""
     output_dir = Path(args.output_dir).expanduser()
@@ -262,8 +300,20 @@ def cmd_export(args):
 
     # Export paths of earlier runs, updated in place as sessions stream past so
     # the index builder sees every fresh path without a second pass.
-    merged_paths, _ = _load_existing_index_state(output_dir / "index.json")
+    index_path = output_dir / "index.json"
+    merged_paths, prior_sessions = _load_existing_index_state(index_path)
     exported = 0
+
+    # Incremental: a source file the last scan had already finished reading and
+    # that has not changed since is not parsed again; its prior index entry is
+    # reused. Only valid for an unfiltered run, because a filtered run rebuilds
+    # the index from a separate full pass.
+    incremental = not getattr(args, "full", False) and not tool_filter and not args.project
+    known_mtimes, prior_by_path = (
+        _incremental_baseline(index_path, prior_sessions) if incremental else ({}, {})
+    )
+    ignored_ids = index_builder._load_ignored() if incremental else set()
+    reused_entries: list[dict] = []
 
     def export_stream():
         """Export each matching session, then yield it — one at a time.
@@ -282,10 +332,26 @@ def cmd_export(args):
 
             print(f"Extracting from {extractor.tool.value}...")
 
+            extractor.known_source_mtimes = known_mtimes
+            extractor.skipped_sources = set()
+            skipped_by_id: dict[str, dict] | None = None
+
             for session in extractor.extract_sessions():
                 # Filter by project
                 if args.project and session.project_path != args.project:
                     continue
+
+                # An extractor scans every source before its first yield, so the
+                # skipped set is complete here.
+                if skipped_by_id is None:
+                    skipped_by_id = _reusable_entries(extractor, prior_by_path, ignored_ids)
+                prior = skipped_by_id.get(session.session_id)
+                if prior is not None:
+                    # Same id also arrived from a changed copy elsewhere: the newer
+                    # one wins, never both (the index id is unique).
+                    if str(prior.get("updated") or "") > session.last_updated.isoformat():
+                        continue
+                    del skipped_by_id[session.session_id]
 
                 _tag_git_info(session, git_info_cache)
                 exported += 1
@@ -306,6 +372,10 @@ def cmd_export(args):
 
                 yield session
 
+            if skipped_by_id is None:
+                skipped_by_id = _reusable_entries(extractor, prior_by_path, ignored_ids)
+            reused_entries.extend(skipped_by_id.values())
+
     def all_sessions_stream():
         """Yield every session from every extractor for the unfiltered index."""
         for extractor in get_all_extractors():
@@ -322,7 +392,7 @@ def cmd_export(args):
     # index must still cover all tools, so export first, then stream them all.
     if not tool_filter and not args.project:
         print("Exporting sessions and building index...")
-        index_builder.build_index(export_stream(), merged_paths)
+        index_builder.build_index(export_stream(), merged_paths, reused_entries=reused_entries)
     else:
         for _ in export_stream():
             pass
@@ -330,7 +400,8 @@ def cmd_export(args):
         index_builder.build_index(all_sessions_stream(), merged_paths)
     print(f"Index saved to: {index_builder.index_path}")
 
-    print(f"\nExported {exported} sessions to {output_dir}")
+    unchanged = f" (+{len(reused_entries)} unchanged, not re-parsed)" if reused_entries else ""
+    print(f"\nExported {exported} sessions{unchanged} to {output_dir}")
 
 
 def _find_session_by_id(session_id: str):
@@ -1359,6 +1430,11 @@ Examples:
     export_parser.add_argument("--all", action="store_true", help="Export all sessions")
     export_parser.add_argument("--tool", help="Export only specific tool")
     export_parser.add_argument("--project", help="Export only specific project")
+    export_parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Re-parse every source, even those unchanged since the last export",
+    )
 
     # export-html command — single shareable standalone HTML file
     export_html_parser = subparsers.add_parser(

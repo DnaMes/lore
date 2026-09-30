@@ -184,6 +184,8 @@ class ClaudeCodeExtractor(BaseExtractor):
 
                 # Main sessions: <projectdir>/<sessionid>.jsonl
                 for jsonl_file in project_dir.glob("*.jsonl"):
+                    if self._source_unchanged(jsonl_file):
+                        continue
                     try:
                         session = self._parse_session(jsonl_file, project_path)
 
@@ -199,6 +201,8 @@ class ClaudeCodeExtractor(BaseExtractor):
                 # would all be invisible — only the 46 direct-child files
                 # would show up while the 300+ subagent transcripts get lost.
                 for subagent_file in project_dir.glob("*/subagents/*.jsonl"):
+                    if self._source_unchanged(subagent_file):
+                        continue
                     try:
                         parent_session_id = subagent_file.parent.parent.name
                         session = self._parse_session(

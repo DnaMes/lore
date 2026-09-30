@@ -1,6 +1,7 @@
 import logging
 import os
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Iterator, Optional
 
 from ..core.models import Role, TitleSource, Tool, UnifiedSession
@@ -42,6 +43,33 @@ class BaseExtractor(ABC):
     @abstractmethod
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         pass
+
+    def _source_unchanged(self, path: Path) -> bool:
+        """True when ``path`` is recorded as up to date, so it need not be parsed.
+
+        The caller sets ``known_source_mtimes`` (source path -> mtime_ns of the
+        last indexed copy). A match is remembered in ``skipped_sources`` so the
+        caller can reuse the prior index entry instead of a fresh parse.
+        Extractors opt in by calling this before parsing a source file.
+        """
+        known = getattr(self, "known_source_mtimes", None)
+        if not known:
+            return False
+        recorded = known.get(str(path))
+        if recorded is None:
+            return False
+        try:
+            current = path.stat().st_mtime_ns
+        except OSError:
+            return False
+        if current != recorded:
+            return False
+        skipped = getattr(self, "skipped_sources", None)
+        if skipped is None:
+            skipped = set()
+            self.skipped_sources = skipped
+        skipped.add(str(path))
+        return True
 
     def find_session_by_id(self, session_id: str) -> Optional[UnifiedSession]:
         """Locate a single session by id without a full archive scan (#127).
