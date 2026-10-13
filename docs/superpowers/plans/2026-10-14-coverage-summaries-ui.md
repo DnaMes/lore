@@ -49,7 +49,7 @@
 **Files:** `lore/extractors/gemini.py`, `tests/test_gemini_extractor.py` (update what pins the old `.json` behaviour), new `tests/test_extractor_gemini_jsonl.py`, fixtures built in `tmp_path`.
 **Spec:** dossier section 2 "Gemini CLI". Accept `session-*.jsonl` (and legacy `session-*.json`); directory names are slugs, not 64-char hashes; replay `$set`, `$patch` (`updates`, `removeIds`, `orderIds`, `toolCalls`) and `$rewindTo`, last write per message id wins; `content` is `str | list[{text}]`; map `type` user/gemini/info/error/warning; tool calls, thoughts, tokens, model; header `kind` main/subagent and subagent files under `chats/<parent>/`; project path from `<tmp>/<slug>/.project_root`, then `~/.gemini/projects.json`, then the old hash walk; `.jsonl` malformed line is skipped and counted.
 **Done when:** fixtures for set-only, set+patch, rewind, subagent, malformed line and a version bump pass; a read-only run on the real home reports sessions > 0 (report the number).
-- [ ] done
+- [x] done
 
 ## Block B1 — contract
 
