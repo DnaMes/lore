@@ -27,7 +27,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .fts import SNIPPET_CLOSE, SNIPPET_OPEN, build_fts_query, snippet_to_text
+from .feedback import feedback_influence, ranking_factor, weight_from_scores
+from .fts import (
+    SEARCH_INDEX_BODY_COLUMN,
+    SNIPPET_CLOSE,
+    SNIPPET_OPEN,
+    build_fts_query,
+    snippet_to_text,
+)
 from .fusion import rrf_merge
 from .schema import open_v2_connection
 from .writer import v2_db_path
@@ -90,6 +97,9 @@ class MemoryEntry:
     # Sessions this memory came from: ``[{"session_id", "note"}]``. ``message_id``
     # is left out on purpose — ``messages.id`` changes on every full re-sync.
     sources: List[Dict[str, str]] = field(default_factory=list)
+    # Derived from memory_feedback ratings; 0.5 / 0 for an unrated memory.
+    feedback_weight: float = 0.5
+    feedback_count: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -107,6 +117,8 @@ class MemoryEntry:
             "snippet": self.snippet,
             "source": "memory",
             "sources": self.sources,
+            "feedback_weight": self.feedback_weight,
+            "feedback_count": self.feedback_count,
         }
 
 
@@ -254,36 +266,62 @@ def _store_embedding(output_dir: Path, memory_id: int, text: str) -> None:
         conn.close()
 
 
-def _load_tags(conn: sqlite3.Connection, memory_id: int) -> List[str]:
-    rows = conn.execute(
-        "SELECT tag FROM memory_tags WHERE memory_id = ? ORDER BY tag", (memory_id,)
-    ).fetchall()
-    return [r["tag"] for r in rows]
+# Stay well under SQLite's bound-variable limit (999 on older builds).
+_IN_CHUNK = 500
 
 
-def _load_sources(conn: sqlite3.Connection, memory_id: int) -> List[Dict[str, str]]:
-    rows = conn.execute(
-        "SELECT session_id, note FROM memory_sources WHERE memory_id = ? ORDER BY session_id",
-        (memory_id,),
-    ).fetchall()
-    return [{"session_id": r["session_id"], "note": r["note"] or ""} for r in rows]
+def _load_entries(conn: sqlite3.Connection, rows: List[sqlite3.Row]) -> List[MemoryEntry]:
+    """Build entries for ``rows`` with tags, sources and feedback batch-loaded.
 
+    Pass only rows that survived filtering: each relation costs one ``IN (...)``
+    query per chunk of ids, not one per row.
+    """
+    ids = [row["id"] for row in rows]
+    tags: Dict[int, List[str]] = {i: [] for i in ids}
+    sources: Dict[int, List[Dict[str, str]]] = {i: [] for i in ids}
+    scores: Dict[int, List[int]] = {i: [] for i in ids}
+    for start in range(0, len(ids), _IN_CHUNK):
+        chunk = ids[start : start + _IN_CHUNK]
+        marks = ",".join("?" * len(chunk))
+        for r in conn.execute(
+            f"SELECT memory_id, tag FROM memory_tags WHERE memory_id IN ({marks}) ORDER BY tag",
+            chunk,
+        ):
+            tags[r["memory_id"]].append(r["tag"])
+        for r in conn.execute(
+            "SELECT memory_id, session_id, note FROM memory_sources "
+            f"WHERE memory_id IN ({marks}) ORDER BY session_id",
+            chunk,
+        ):
+            sources[r["memory_id"]].append({"session_id": r["session_id"], "note": r["note"] or ""})
+        for r in conn.execute(
+            f"SELECT memory_id, score FROM memory_feedback WHERE memory_id IN ({marks})",
+            chunk,
+        ):
+            scores[r["memory_id"]].append(r["score"])
 
-def _row_to_entry(conn: sqlite3.Connection, row: sqlite3.Row) -> MemoryEntry:
-    return MemoryEntry(
-        id=row["id"],
-        kind=row["kind"],
-        title=row["title"],
-        body=row["body"],
-        author=row["author"],
-        created=row["created"],
-        updated=row["updated"],
-        scope_project=row["scope_project"],
-        scope_tool=row["scope_tool"],
-        superseded_by=row["superseded_by"],
-        tags=_load_tags(conn, row["id"]),
-        sources=_load_sources(conn, row["id"]),
-    )
+    entries: List[MemoryEntry] = []
+    for row in rows:
+        weight, count = weight_from_scores(scores[row["id"]])
+        entries.append(
+            MemoryEntry(
+                id=row["id"],
+                kind=row["kind"],
+                title=row["title"],
+                body=row["body"],
+                author=row["author"],
+                created=row["created"],
+                updated=row["updated"],
+                scope_project=row["scope_project"],
+                scope_tool=row["scope_tool"],
+                superseded_by=row["superseded_by"],
+                tags=tags[row["id"]],
+                sources=sources[row["id"]],
+                feedback_weight=weight,
+                feedback_count=count,
+            )
+        )
+    return entries
 
 
 def get_memory(output_dir: Path, memory_id: int) -> Optional[MemoryEntry]:
@@ -291,7 +329,7 @@ def get_memory(output_dir: Path, memory_id: int) -> Optional[MemoryEntry]:
     conn = _connect(output_dir)
     try:
         row = conn.execute("SELECT * FROM memory WHERE id = ?", (memory_id,)).fetchone()
-        return _row_to_entry(conn, row) if row else None
+        return _load_entries(conn, [row])[0] if row else None
     finally:
         conn.close()
 
@@ -325,7 +363,7 @@ def list_memory(
             f"SELECT * FROM memory{where} ORDER BY updated DESC, id DESC LIMIT ?",
             (*params, max(1, limit)),
         ).fetchall()
-        return [_row_to_entry(conn, r) for r in rows]
+        return _load_entries(conn, rows)
     finally:
         conn.close()
 
@@ -379,7 +417,9 @@ def _semantic_candidates(
             scored.append((score, row))
 
         scored.sort(key=lambda pair: pair[0], reverse=True)
-        return [(_row_to_entry(conn, row), score) for score, row in scored[:limit]]
+        top = scored[:limit]
+        entries = _load_entries(conn, [row for _score, row in top])
+        return [(entry, score) for entry, (score, _row) in zip(entries, top)]
     except sqlite3.Error:
         return None
     finally:
@@ -435,9 +475,9 @@ def _fts_recall(
     conn = _connect(output_dir)
     try:
         rows = conn.execute(
-            """
+            f"""
             SELECT m.*, bm25(search_index) AS score,
-                   snippet(search_index, 5, ?, ?, '…', 24) AS snippet
+                   snippet(search_index, {SEARCH_INDEX_BODY_COLUMN}, ?, ?, '…', 24) AS snippet
             FROM search_index
             JOIN memory m ON m.id = CAST(search_index.entity_id AS INTEGER)
             WHERE search_index MATCH ?
@@ -448,7 +488,7 @@ def _fts_recall(
             (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, max(1, limit) * 4),
         ).fetchall()
 
-        entries: List[MemoryEntry] = []
+        kept: List[sqlite3.Row] = []
         for row in rows:
             if kind and row["kind"] != kind:
                 continue
@@ -456,17 +496,28 @@ def _fts_recall(
                 continue
             if not include_superseded and row["superseded_by"] is not None:
                 continue
-            entry = _row_to_entry(conn, row)
+            kept.append(row)
+            if len(kept) >= limit:
+                break
+        entries = _load_entries(conn, kept)
+        for entry, row in zip(entries, kept):
             if row["snippet"]:
                 entry.snippet = snippet_to_text(row["snippet"])
-            entries.append(entry)
-            if len(entries) >= limit:
-                break
         return entries
     except sqlite3.Error:
         return []
     finally:
         conn.close()
+
+
+def _apply_feedback_ranking(entries: List[MemoryEntry], influence: float) -> List[MemoryEntry]:
+    """Reorder by ``1 / (60 + rank)`` times the feedback factor; stable on ties."""
+    scored = [
+        (ranking_factor(e.feedback_weight, influence) / (60 + rank), e)
+        for rank, e in enumerate(entries, start=1)
+    ]
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [e for _score, e in scored]
 
 
 def recall_memory(
@@ -478,6 +529,37 @@ def recall_memory(
     include_superseded: bool = False,
     limit: int = 10,
     semantic: Optional[bool] = None,
+) -> List[MemoryEntry]:
+    """Search recorded memory; see :func:`_recall` for the retrieval modes.
+
+    Only when ``LORE_FEEDBACK_INFLUENCE`` is above 0 are the results reordered
+    by their feedback weight (bounded to +-25%); otherwise the order is the
+    retrieval order, untouched.
+    """
+    entries = _recall(
+        output_dir,
+        query,
+        kind=kind,
+        scope_project=scope_project,
+        include_superseded=include_superseded,
+        limit=limit,
+        semantic=semantic,
+    )
+    influence = feedback_influence()
+    if influence > 0 and len(entries) > 1:
+        return _apply_feedback_ranking(entries, influence)
+    return entries
+
+
+def _recall(
+    output_dir: Path,
+    query: str,
+    *,
+    kind: Optional[str],
+    scope_project: Optional[str],
+    include_superseded: bool,
+    limit: int,
+    semantic: Optional[bool],
 ) -> List[MemoryEntry]:
     """Search recorded memory.
 

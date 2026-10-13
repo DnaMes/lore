@@ -19,7 +19,7 @@ Usage:
     lore search QUERY [--tool TOOL] [--context N]
     lore stats
     lore digest [--since 7d] [--format text|markdown]
-    lore memory add|list|search ...
+    lore memory add|list|search|rate ...
     lore watch [--interval SECS] [--git]
     lore check
     lore sync TOOL [--session-id ID] [--project PATH]
@@ -1091,10 +1091,27 @@ def cmd_digest(args):
 
 def cmd_memory(args):
     """Manage the shared cross-tool memory store (issue #44 / #33)."""
-    from lore.storage import MEMORY_KINDS, add_memory, list_memory, recall_memory
+    from lore.storage import (
+        MEMORY_KINDS,
+        add_memory,
+        feedback_weight,
+        list_memory,
+        recall_memory,
+        record_feedback,
+    )
 
     output_dir = Path(args.output_dir).expanduser()
     action = args.memory_action
+
+    if action == "rate":
+        try:
+            record_feedback(output_dir, args.memory_id, args.rater, args.score)
+        except ValueError as exc:
+            print(f"Could not rate memory: {exc}", file=sys.stderr)
+            sys.exit(1)
+        weight, count = feedback_weight(output_dir, args.memory_id)
+        print(f"Rated memory #{args.memory_id} {args.score}/5 (weight {weight:.2f}, n={count}).")
+        return
 
     if action == "add":
         if args.kind not in MEMORY_KINDS:
@@ -1553,6 +1570,11 @@ Examples:
         help="rank by meaning only (default: keywords plus meaning when the "
         "'semantic' extra is installed)",
     )
+
+    mem_rate = memory_sub.add_parser("rate", help="Rate a memory from 1 to 5")
+    mem_rate.add_argument("memory_id", type=int, help="memory id")
+    mem_rate.add_argument("score", type=int, help="1 (wrong) to 5 (right and useful)")
+    mem_rate.add_argument("--rater", default="human", help="who rates (default: human)")
 
     # watch command
     watch_parser = subparsers.add_parser("watch", help="Watch for new sessions")

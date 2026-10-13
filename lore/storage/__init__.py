@@ -18,6 +18,7 @@ Public surface:
 from __future__ import annotations
 
 from .embeddings import embed_text, embeddings_available
+from .feedback import feedback_influence, feedback_weight, ranking_factor, record_feedback
 from .fusion import rrf_merge
 from .knowledge import (
     get_session_knowledge,
@@ -61,6 +62,8 @@ __all__ = [
     "delete_memory",
     "embed_text",
     "embeddings_available",
+    "feedback_influence",
+    "feedback_weight",
     "get_memory",
     "get_session_knowledge",
     "get_session_tags",
@@ -75,7 +78,9 @@ __all__ = [
     "load_session_messages_v2",
     "open_connection",
     "prompt_fingerprint",
+    "ranking_factor",
     "recall_memory",
+    "record_feedback",
     "remove_session_tag",
     "rrf_merge",
     "save_session_knowledge",

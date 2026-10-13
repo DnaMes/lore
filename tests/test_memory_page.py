@@ -170,3 +170,24 @@ def test_memory_page_no_source_section_when_unlinked(client):
     assert "Unlinked memory" in body
     # No "From:" provenance line for a memory with no sources.
     assert "From:" not in body
+
+
+# ---------------------------------------------------------------------------
+# #197 — feedback chip
+# ---------------------------------------------------------------------------
+
+
+def test_memory_page_feedback_chip_only_when_rated(client):
+    from lore.storage import record_feedback
+
+    c, tmp_path = client
+    rated = add_memory(tmp_path, "fact", "Rated entry", "body")
+    add_memory(tmp_path, "fact", "Unrated entry", "body")
+    assert "★" not in c.get("/memory").get_data(as_text=True)
+
+    for rater, score in (("a", 5), ("b", 4), ("c", 3)):
+        record_feedback(tmp_path, rated, rater, score)
+    body = c.get("/memory").get_data(as_text=True)
+    # (1.0 + 0.75 + 0.5 + 1.5) / (3 + 3) = 0.625 -> "0.62"
+    assert body.count("★") == 1
+    assert "★ 0.62 (3)" in body

@@ -1,4 +1,5 @@
-"""MCP shared-memory tools: ``memory_write`` and ``memory_recall`` (issue #44 / #33).
+"""MCP shared-memory tools: ``memory_write``, ``memory_recall``, ``memory_feedback``
+(issue #44 / #33 / #197).
 
 These tools turn lore into a cross-tool memory: an agent in one tool
 records a fact, an agent in any other tool recalls it later. Backed by the v2
@@ -153,4 +154,44 @@ def register(server, deps: MCPToolDeps) -> None:
             },
         },
         memory_recall,
+    )
+
+    async def memory_feedback(args: dict) -> str:
+        from ...storage import feedback_weight, record_feedback
+
+        try:
+            memory_id = int(str(args.get("memory_id")))
+        except ValueError:
+            return "'memory_id' must be an integer."
+        try:
+            score = int(str(args.get("score")))
+        except ValueError:
+            return "Invalid score. Expected an integer from 1 to 5."
+
+        rater = str(args.get("rater") or "agent")
+        try:
+            record_feedback(deps.server.output_dir, memory_id, rater, score)
+        except ValueError as exc:
+            return f"Could not record feedback: {exc}"
+        weight, count = feedback_weight(deps.server.output_dir, memory_id)
+        return deps.json_text({"status": "recorded", "weight": weight, "count": count})
+
+    server.register_tool(
+        "memory_feedback",
+        "Rate a recalled memory from 1 (wrong or unhelpful) to 5 (right and useful). "
+        "One rating per rater and memory; a new rating replaces the old one. The "
+        "resulting weight is shown with the memory in memory_recall.",
+        {
+            "type": "object",
+            "properties": {
+                "memory_id": {"type": "integer"},
+                "score": {"type": "integer", "description": "1 to 5"},
+                "rater": {
+                    "type": "string",
+                    "description": "who rates (default: agent); an unverified label",
+                },
+            },
+            "required": ["memory_id", "score"],
+        },
+        memory_feedback,
     )

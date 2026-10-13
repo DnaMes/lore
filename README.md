@@ -118,6 +118,7 @@ lore memory search "database performance"              # keywords + meaning when
 lore memory search "database performance" --semantic   # meaning only, no relevance floor
 lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
+lore memory rate 7 5                                    # rate a memory 1-5
 
 # Semantic memory search needs the optional embedding model:
 #   pip install -e ".[semantic]"
@@ -220,7 +221,7 @@ Add this block to `opencode.json`:
 }
 ```
 
-Available MCP tools: `search_history`, `list_sessions`, `get_session`, `get_session_messages`, `get_thread`, `list_projects`, `switch_to_tool`, `memory_write`, `memory_recall`.
+Available MCP tools: `search_history`, `list_sessions`, `get_session`, `get_session_messages`, `get_thread`, `list_projects`, `switch_to_tool`, `memory_write`, `memory_recall`, `memory_feedback`.
 
 See [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) for full inputs, outputs, and HTTP endpoint reference.
 
@@ -237,6 +238,7 @@ See [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) for full inputs, outputs, a
 - `switch_to_tool`: Hand off to `lore-session switch`.
 - `memory_write`: Record a fact, decision, or lesson into shared agent memory.
 - `memory_recall`: Recall from shared memory by keyword or meaning, with provenance.
+- `memory_feedback`: Rate a recalled memory 1-5; the bounded weight is shown with it (`lore memory rate`).
 
 ### API reference
 

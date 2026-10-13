@@ -9,6 +9,8 @@ from __future__ import annotations
 import asyncio
 import json
 
+import pytest
+
 from lore.interfaces import mcp
 
 
@@ -181,3 +183,75 @@ def test_memory_recall_semantic_false_calls_no_embedder(tmp_path, monkeypatch):
     payload = json.loads(_call(server, "memory_recall", {"query": "redis", "semantic": False}))
     assert payload["count"] == 1
     assert calls == []
+
+
+# ---------------------------------------------------------------------------
+# #197 — memory_feedback
+# ---------------------------------------------------------------------------
+
+
+def _stored_id(server) -> int:
+    result = _call(server, "memory_write", {"title": "Rate me", "body": "feedback target"})
+    return json.loads(result)["memory_id"]
+
+
+def test_memory_feedback_is_registered(tmp_path):
+    assert "memory_feedback" in {t["name"] for t in _server(tmp_path).tools.values()}
+
+
+def test_memory_feedback_records_and_returns_weight(tmp_path):
+    server = _server(tmp_path)
+    memory_id = _stored_id(server)
+    result = _call(server, "memory_feedback", {"memory_id": memory_id, "score": 5})
+    payload = json.loads(result)
+    # one score of 1.0: (1.0 + 1.5) / (1 + 3)
+    assert payload == {"status": "recorded", "weight": 0.625, "count": 1}
+
+    # Same default rater re-rates; a named rater adds a second row.
+    _call(server, "memory_feedback", {"memory_id": memory_id, "score": 1})
+    again = json.loads(
+        _call(server, "memory_feedback", {"memory_id": memory_id, "score": 5, "rater": "cursor"})
+    )
+    assert again["count"] == 2
+
+
+@pytest.mark.parametrize("score", [0, 6, -1, "x", 3.5, True, None])
+def test_memory_feedback_rejects_invalid_score(tmp_path, score):
+    server = _server(tmp_path)
+    memory_id = _stored_id(server)
+    result = _call(server, "memory_feedback", {"memory_id": memory_id, "score": score})
+    assert "score" in result.lower()
+    assert "recorded" not in result
+
+
+@pytest.mark.parametrize("memory_id", [None, "abc", 1.5, False])
+def test_memory_feedback_rejects_invalid_memory_id(tmp_path, memory_id):
+    result = _call(_server(tmp_path), "memory_feedback", {"memory_id": memory_id, "score": 3})
+    assert "memory_id" in result
+
+
+def test_memory_feedback_unknown_memory(tmp_path):
+    result = _call(_server(tmp_path), "memory_feedback", {"memory_id": 4242, "score": 3})
+    assert "does not exist" in result
+
+
+def test_memory_feedback_rejects_bad_rater(tmp_path):
+    server = _server(tmp_path)
+    memory_id = _stored_id(server)
+    result = _call(
+        server, "memory_feedback", {"memory_id": memory_id, "score": 3, "rater": "x" * 65}
+    )
+    assert "Could not record feedback" in result
+
+
+def test_memory_recall_payload_shows_feedback(tmp_path):
+    server = _server(tmp_path)
+    memory_id = _stored_id(server)
+    before = json.loads(_call(server, "memory_recall", {"query": "feedback"}))
+    assert before["memories"][0]["feedback_weight"] == 0.5
+    assert before["memories"][0]["feedback_count"] == 0
+
+    _call(server, "memory_feedback", {"memory_id": memory_id, "score": 5})
+    after = json.loads(_call(server, "memory_recall", {"query": "feedback"}))
+    assert after["memories"][0]["feedback_weight"] == 0.625
+    assert after["memories"][0]["feedback_count"] == 1

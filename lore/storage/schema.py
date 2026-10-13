@@ -268,6 +268,22 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        15,
+        "memory feedback ratings (#197)",
+        # One 1-5 rating per (memory, rater); a re-rating replaces the row. The
+        # weight is derived at read time (lore.storage.feedback), never stored.
+        # Rater names are unverified labels, not identities.
+        """
+        CREATE TABLE IF NOT EXISTS memory_feedback (
+            memory_id INTEGER NOT NULL REFERENCES memory(id) ON DELETE CASCADE,
+            rater     TEXT    NOT NULL,
+            score     INTEGER NOT NULL CHECK (score BETWEEN 1 AND 5),
+            created   TEXT    NOT NULL,
+            PRIMARY KEY (memory_id, rater)
+        );
+        """,
+    ),
 ]
 
 

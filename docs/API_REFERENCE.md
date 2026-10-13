@@ -272,7 +272,9 @@ Output shape:
       "tags": ["db"],
       "snippet": "Standardise the stack on «PG16»",
       "source": "memory",
-      "sources": [{"session_id": "session-1", "note": "recorded from this session"}]
+      "sources": [{"session_id": "session-1", "note": "recorded from this session"}],
+      "feedback_weight": 0.5,
+      "feedback_count": 0
     }
   ]
 }
@@ -280,6 +282,30 @@ Output shape:
 
 `snippet` is set for keyword hits only. `sources` lists the sessions the memory was
 recorded from (session ids only, empty when none); `source` is always `"memory"`.
+`feedback_weight` (0 to 1, `0.5` when unrated) and `feedback_count` come from
+`memory_feedback` ratings and are always present.
+
+### `memory_feedback`
+
+Rate a recalled memory. Input: `memory_id` (integer), `score` (integer 1 to 5) and
+optional `rater` (default `agent`, at most 64 chars, no control characters).
+
+```json
+{"memory_id": 7, "score": 5, "rater": "cursor"}
+```
+
+Output: `{"status": "recorded", "weight": 0.625, "count": 1}`. Invalid input or an
+unknown memory returns a plain error string. One rating per rater and memory: a new
+rating replaces the old one. The same operation is `lore memory rate <id> <1-5>
+[--rater NAME]`.
+
+The weight is `(sum((score - 1) / 4) + 1.5) / (n + 3)`, a mean pulled toward the
+neutral 0.5 by three virtual votes. It is derived at read time, never stored, and
+only shown by default. Set `LORE_FEEDBACK_INFLUENCE` (0 to 1, default `0`, invalid
+values fall back to `0`) to let it nudge `memory_recall` ranking: results are
+reordered by `1/(60 + rank)` times `1 + influence * (0.75 + 0.5 * weight - 1)`.
+Caveat: rater names are unverified labels, so one party can pose as many raters;
+the influence is therefore bounded to +-25% and off by default.
 
 ## HTTP API
 

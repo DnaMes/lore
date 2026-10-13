@@ -18,7 +18,13 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .fts import SNIPPET_CLOSE, SNIPPET_OPEN, build_fts_query, phrase_of
+from .fts import (
+    SEARCH_INDEX_BODY_COLUMN,
+    SNIPPET_CLOSE,
+    SNIPPET_OPEN,
+    build_fts_query,
+    phrase_of,
+)
 from .reader import _row_to_session_dict
 from .schema import open_connection
 from .writer import v2_db_path
@@ -90,14 +96,14 @@ def search_sessions(
     conn = open_connection(db)
     try:
         rows = conn.execute(
-            """
+            f"""
             SELECT s.id, s.tool, s.project, s.thread_id, s.title,
                    s.created, s.updated, s.source_path, s.source_mtime_ns,
                    s.git_branch, s.git_commit, s.metadata_json,
                    s.messages_count, s.prompt_count, s.prompt_outline,
                    s.export_path, s.total_tokens,
                    bm25(search_index) AS score,
-                   snippet(search_index, 5, ?, ?, '…', 24) AS snippet
+                   snippet(search_index, {SEARCH_INDEX_BODY_COLUMN}, ?, ?, '…', 24) AS snippet
             FROM search_index
             JOIN sessions s ON s.id = search_index.entity_id
             WHERE search_index MATCH ?

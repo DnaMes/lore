@@ -36,6 +36,11 @@ def build_fts_query(query: str) -> Optional[str]:
     return " ".join(f"{_quote(t)}*" for t in text.split())
 
 
+# Index of the ``body`` column in the ``search_index`` FTS5 table, in the order
+# of its column list (entity_type, entity_id, tool, project, title, body; see
+# migration 4 in schema.py). ``snippet()`` takes a column number, not a name.
+SEARCH_INDEX_BODY_COLUMN = 5
+
 # FTS5 ``snippet()`` brackets each match with these sentinels at the storage
 # layer. Payloads convert them with :func:`snippet_to_text`; nothing outside
 # ``lore.storage`` should see the raw form.

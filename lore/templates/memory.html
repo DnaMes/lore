@@ -48,6 +48,7 @@
                         <span class="tag-chip uppercase">{{ m.kind }}</span>
                         {% if m.scope_project %}<span class="tag-chip">{{ project_label(m.scope_project) }}</span>{% endif %}
                         {% if m.scope_tool %}<span class="tag-chip">{{ m.scope_tool }}</span>{% endif %}
+                        {% if m.feedback_count %}<span class="tag-chip" title="Feedback weight (0 to 1) and number of ratings">★ {{ '%.2f'|format(m.feedback_weight) }} ({{ m.feedback_count }})</span>{% endif %}
                     </div>
                     {# SECURITY (#43): memory is agent-writable — title/body
                        MUST stay {{ }}-escaped. Never switch these to | safe
