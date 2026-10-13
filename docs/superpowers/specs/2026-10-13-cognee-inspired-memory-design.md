@@ -123,7 +123,11 @@ FTS5) and use it for `query` only; `project` and `tool` keep the strict one.
 and embeddings are available, fuse FTS and semantic results with the existing
 `rrf_merge`; memories without a vector stay visible through FTS.
 `semantic=false` forces FTS only, `semantic=true` keeps today's behaviour.
-Result entries gain `sources` (from `memory_sources`, session ids only) and
+In auto mode only semantic candidates with cosine similarity at or above
+`LORE_MEMORY_RECALL_MIN_SIMILARITY` (default `0.7`, a placeholder to be
+calibrated with #92) take part in the fusion; without a floor every query
+would be padded with the nearest unrelated memories. Explicit
+`semantic=true` stays unfloored. Result entries gain `sources` (from `memory_sources`, session ids only) and
 `source`. `message_id` is **not** exposed: `messages.id` changes on every full
 re-sync (`writer.py` deletes and re-inserts), so such links would dangle.
 Stable message evidence stays with #160/#175.
@@ -266,7 +270,9 @@ Migrations are numbered 14 (`session_knowledge`), 15 (`memory_feedback`) and 16
 - Similarity thresholds are uncalibrated (same root as #92); candidates are
   suggestions only, never automatic actions.
 - Making hybrid the memory default changes result order for existing callers
-  of `memory_recall` (keys unchanged).
+  of `memory_recall` (keys unchanged). The relevance floor (default 0.7) is
+  uncalibrated: too low pads results with loosely related memories, too high
+  hides useful ones; `semantic=false` is the escape hatch.
 - The `lesson` quality depends on the configured provider (gemini/ollama); the
   review queue is the safety net, not a quality guarantee.
 - Cognee facts above come from source at one commit and were not executed.
