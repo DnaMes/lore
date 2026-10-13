@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lore - Session detail (mock)</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--text:#0f172a;--muted:#546b81;--border:#dbe2ea;--hover:#f1f5f9;--primary:#2563eb;--primary-soft:#eaf1ff;--user:#2563eb;--ok:#15803d;--bad:#b91c1c;--chip:#eef2f7;--code:#f4f6fa;--add:#e7f6ea;--del:#fdecec;--mark:#fde68a}
+html[data-theme=dark]{--bg:#090b12;--card:#0f172a;--text:#e2e8f0;--muted:#a8b5c3;--border:#253247;--hover:#16203a;--primary:#7aa7ff;--primary-soft:#15284a;--user:#7aa7ff;--ok:#4ade80;--bad:#f87171;--chip:#1a2438;--code:#0b1220;--add:#12301c;--del:#3a1517;--mark:#7c5e10}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 "Helvetica Neue",Inter,Arial,sans-serif}
+button{font:inherit;color:inherit}
+.btn{border:1px solid var(--border);background:var(--card);border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.btn:focus-visible,summary:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--primary);outline-offset:1px}
+kbd{font:11px ui-monospace,monospace;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:0 5px;color:var(--muted);background:var(--card)}
+/* sticky header */
+.hdr{position:sticky;top:0;z-index:10;background:var(--card);border-bottom:1px solid var(--border)}
+.hdr-in{max-width:1200px;margin:0 auto;padding:8px 16px}
+.crumb{font-size:12px;color:var(--muted)}
+.crumb a{color:var(--muted)}
+.titlerow{display:flex;gap:12px;align-items:center}
+h1{font-size:18px;line-height:1.3;margin:0;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--muted);margin-top:2px}
+.meta b{color:var(--text);font-weight:600}
+.acts{display:flex;gap:6px;align-items:center}
+.jump{display:inline-block}
+.bar2{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.seg button{border:0;background:transparent;padding:3px 10px;font-size:12px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed=true]{background:var(--primary-soft);color:var(--primary);font-weight:600}
+.find{display:flex;gap:6px;align-items:center;border:1px solid var(--border);border-radius:9px;padding:2px 8px;background:var(--card);font-size:12px;margin-left:auto}
+.find #findCnt{white-space:nowrap}.hdr.compact .meta,.hdr.compact .bar2,.hdr.compact .crumb{display:none}.find input{border:0;background:transparent;color:var(--text);width:140px;outline:none;font:inherit}
+/* layout */
+.wrap{max-width:1200px;margin:0 auto;padding:12px 16px 80px;display:block}
+.outline{display:none}
+.stream{max-width:780px;margin:0 auto;min-width:0}
+/* summary card */
+.sum{border:1px solid var(--border);border-radius:12px;background:var(--card);margin:4px 0 20px}
+.sum summary{cursor:pointer;padding:10px 14px;font-weight:600;display:flex;gap:8px;align-items:center;list-style:none}
+.sum summary::-webkit-details-marker{display:none}
+.sum .body{padding:0 14px 12px;font-size:14px}
+.sum .lab{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 0 2px;font-weight:600}
+.sum ul{margin:0;padding-left:18px}
+.pill{display:inline-block;border:1px solid var(--border);background:var(--chip);border-radius:999px;padding:0 8px;font-size:12px;margin:0 4px 4px 0;font-family:ui-monospace,monospace}
+.srcnote{font-size:11px;color:var(--muted);margin-top:10px}
+/* turns */
+.turn{margin:0 0 28px;scroll-margin-top:120px}
+.prompt{border-left:3px solid var(--user);padding:2px 0 2px 12px;margin-bottom:10px}
+.prompt .who{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--user);font-weight:700;display:flex;gap:8px}
+.prompt .who span:last-child{color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0;margin-left:auto}
+.prompt p{margin:2px 0 0;font-weight:500}
+.resp{padding-left:15px}
+.rmeta{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:11px;color:var(--muted);font-family:ui-monospace,monospace;margin-bottom:6px}
+.resp p{margin:0 0 10px}
+.resp ul{margin:0 0 10px;padding-left:20px}
+mark{background:var(--mark);color:inherit;border-radius:3px;padding:0 1px}
+code.i{background:var(--chip);border-radius:5px;padding:1px 5px;font-size:.9em}
+/* tool group + thinking */
+details.tools,details.think{border:1px solid var(--border);border-radius:10px;background:var(--card);margin:0 0 10px;font-size:13px}
+details.tools>summary,details.think>summary{cursor:pointer;padding:6px 10px;display:flex;gap:8px;align-items:center;color:var(--muted);list-style:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:"\25B8";font-size:11px;transition:transform .12s}
+details[open]>summary::before{transform:rotate(90deg)}
+.fail{color:var(--bad);font-weight:600}
+.okc{color:var(--ok)}
+.call{border-top:1px solid var(--border);padding:6px 10px;font-family:ui-monospace,monospace;font-size:12px}
+.call .h{display:flex;gap:8px;align-items:center;min-width:0}
+.call .h .n{font-weight:700}
+.call .h .p{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.call pre{margin:6px 0 0;white-space:pre-wrap;word-break:break-word;color:var(--muted)}
+.think .tb{border-top:1px solid var(--border);padding:8px 12px;color:var(--muted);font-style:italic}
+/* code */
+.code{border:1px solid var(--border);border-radius:10px;background:var(--code);margin:0 0 12px;overflow:hidden}
+.code .cb{display:flex;align-items:center;gap:8px;padding:3px 6px 3px 12px;font:11px ui-monospace,monospace;color:var(--muted);border-bottom:1px solid var(--border)}
+.code .cb .btn{margin-left:auto;padding:1px 8px}
+.code pre{margin:0;padding:10px 12px;overflow-x:auto;font:12.5px/1.55 ui-monospace,SFMono-Regular,monospace}
+.diffl{display:block;padding:0 12px;margin:0 -12px;white-space:pre}
+.diffl.a{background:var(--add)}.diffl.d{background:var(--del)}
+.more{display:block;width:100%;border:0;border-top:1px solid var(--border);background:transparent;color:var(--primary);padding:4px;font-size:12px;cursor:pointer}
+/* mobile outline sheet */
+.sheet{position:fixed;inset:auto 0 0 0;max-height:70vh;overflow:auto;background:var(--card);border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:12px 16px;box-shadow:0 -12px 32px -16px #0006;display:none;z-index:20}
+.sheet.open{display:block}
+.sheet a{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);color:var(--text);text-decoration:none}
+.sheet a b{color:var(--muted);min-width:22px}
+.ol-item{display:flex;gap:8px;padding:5px 8px;border-radius:8px;color:var(--text);text-decoration:none;font-size:13px;align-items:baseline}
+.ol-item b{color:var(--muted);min-width:20px;font-weight:600}
+.ol-item span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ol-item i{font-style:normal;color:var(--muted);font:11px ui-monospace,monospace}
+.ol-item.on{background:var(--primary-soft);font-weight:600}
+.ol-item.hot::after{content:"";width:6px;height:6px;border-radius:50%;background:var(--bad);align-self:center}
+@media(min-width:1024px){
+  .wrap{display:grid;grid-template-columns:260px minmax(0,780px);gap:32px;justify-content:center}
+  .outline{display:block;position:sticky;top:132px;align-self:start;max-height:calc(100vh - 150px);overflow:auto}
+  .jump{display:none}
+}
+.outline .lab{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600;padding:0 8px 4px}
+@media(max-width:639px){
+  .meta .opt{display:none}
+  .find{margin-left:0;flex:1}.find input{width:100%}
+  .acts .opt{display:none}
+}
+</style>
+</head>
+<body>
+<header class="hdr">
+  <div class="hdr-in">
+    <div class="crumb"><a href="#">Sessions</a> / lore / <span>Oct 14</span></div>
+    <div class="titlerow">
+      <h1>Fix N+1 query in session list endpoint</h1>
+      <div class="acts">
+        <button class="btn jump" type="button" id="jumpBtn">Prompts &#9662;</button>
+        <button class="btn primary" type="button">Resume</button>
+        <button class="btn opt" type="button">Copy link</button>
+        <button class="btn" type="button" aria-label="More actions">&hellip;</button>
+        <button class="btn" type="button" id="themeBtn" aria-label="Toggle theme">Theme</button>
+      </div>
+    </div>
+    <div class="meta">
+      <span><b>Claude Code</b> &middot; claude-sonnet-5-5</span>
+      <span class="opt">lore @ feat/197-phase2</span>
+      <span>Oct 14, 10:20&ndash;13:24 (3h 04m)</span>
+      <span><b>38</b> prompts &middot; 114 msgs &middot; <b>906k</b> tok &middot; 91 tool calls (<span class="fail">3 failed</span>)</span>
+    </div>
+    <div class="bar2">
+      <div class="seg" role="group" aria-label="Tool calls">
+        <button type="button" aria-pressed="false">Hide</button><button type="button" aria-pressed="true">Fold</button><button type="button" aria-pressed="false">Open</button>
+      </div>
+      <div class="seg" role="group" aria-label="Thinking">
+        <button type="button" aria-pressed="true">Think: fold</button><button type="button" aria-pressed="false">show</button>
+      </div>
+      <label class="find"><span aria-hidden="true">&#8981;</span><input id="findIn" type="search" placeholder="Find in session" aria-label="Find in session"><span id="findCnt" style="color:var(--muted)">1 / 3</span><kbd>/</kbd></label>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="outline" aria-label="Prompts in this session">
+    <div class="lab">Prompts &middot; 38</div>
+    <a class="ol-item on" href="#t1"><b>1</b><span>Fix N+1 query in session list endpoint</span><i>10:24</i></a>
+    <a class="ol-item" href="#t2"><b>2</b><span>ok implement the cache, keep CSP nonce wiring</span><i>10:27</i></a>
+    <a class="ol-item hot" href="#t3"><b>3</b><span>run the tests and show me the failures</span><i>10:30</i></a>
+    <a class="ol-item" href="#t4"><b>4</b><span>can you also add a regression test</span><i>10:37</i></a>
+    <a class="ol-item" href="#t5"><b>5</b><span>now explain the relevance floor</span><i>10:41</i></a>
+    <a class="ol-item" href="#t6"><b>6</b><span>make the title shorter</span><i>10:46</i></a>
+    <a class="ol-item" href="#t7"><b>7</b><span>commit this</span><i>10:53</i></a>
+    <div class="lab" style="margin-top:10px">Commits</div>
+    <a class="ol-item" href="#t7"><b>&#9679;</b><span>fix(web): cache sorted session ids</span><i>10:55</i></a>
+  </nav>
+
+  <main class="stream" id="stream">
+    <details class="sum" open>
+      <summary><span aria-hidden="true" style="color:var(--primary)">&#10022;</span> Summary <span class="sub" style="font-weight:400;font-size:12px;color:var(--muted)">generated 2026-10-14 &middot; local model</span></summary>
+      <div class="body">
+        <p style="margin:0">Removed the repeated index parse and per-request re-sort from the session list; the detail page now slices pairs before formatting. First page renders in about 40 ms on the 19 MB index.</p>
+        <div class="lab">Decisions</div>
+        <ul><li>Cache the sorted id tuple keyed by index mtime</li><li><code class="i">?live=1</code> stays uncached because live sessions change</li></ul>
+        <div class="lab">Open</div>
+        <ul><li>1 test still failing in <code class="i">test_session_pairs.py</code> (turn 3)</li></ul>
+        <div class="lab">Files touched</div>
+        <span class="pill">web.py</span><span class="pill">web_data.py</span><span class="pill">session_view_prep.py</span><span class="pill">+4</span>
+        <div class="srcnote">No summary yet? This card instead shows the first prompt, counts, tools and files, computed without a model, plus a Generate summary button.</div>
+      </div>
+    </details>
+
+    <section class="turn" id="t1" aria-label="Prompt 1">
+      <div class="prompt"><div class="who"><span>You &middot; 1</span><span>10:24</span></div><p>Fix N+1 query in session list endpoint. Please take a careful look at this.</p></div>
+      <div class="resp">
+        <div class="rmeta"><span>claude-sonnet-5-5</span><span>&uarr;3,884</span><span>&darr;1,557</span><span>14 s</span></div>
+        <details class="think"><summary>Thinking &middot; 6 lines</summary><div class="tb">Considering the cache invalidation edge cases before changing anything. The sorted ids depend on the filters, so the key must include the index mtime.</div></details>
+        <p>The root cause is a combination of three things. The index is parsed on <mark>every</mark> request, the list is re-sorted per request, and the detail view builds the whole pair list before slicing.</p>
+        <ul><li>cache the sorted id tuple keyed by index mtime</li><li>slice pairs before formatting</li><li>move the token backfill behind the stat-keyed cache</li></ul>
+        <div class="code">
+          <div class="cb"><span>python</span><span>7 lines</span><button class="btn" type="button">Copy</button></div>
+<pre><code>def recall(query: str, *, limit: int = 8, floor: float = 0.32):
+    kw = keyword_search(query, limit=limit * 4)
+    sem = semantic_search(query, limit=limit * 4)
+    fused = rrf([kw, sem], k=60)
+    return [m for m in fused if m.score &gt;= floor][:limit]</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section class="turn" id="t2" aria-label="Prompt 2">
+      <div class="prompt"><div class="who"><span>You &middot; 2</span><span>10:27</span></div><p>ok implement the cache, keep CSP nonce wiring</p></div>
+      <div class="resp">
+        <div class="rmeta"><span>claude-sonnet-5-5</span><span>&uarr;9,120</span><span>&darr;2,011</span><span>42 s</span></div>
+        <details class="tools">
+          <summary><span>5 tool calls</span><span>Read &times;2 &middot; Edit &times;2 &middot; Bash</span><span class="okc" style="margin-left:auto">all ok</span></summary>
+          <div class="call"><div class="h"><span class="n">Read</span><span class="p">lore/interfaces/web.py</span><span class="okc">ok</span></div></div>
+          <div class="call"><div class="h"><span class="n">Edit</span><span class="p">lore/interfaces/web.py</span><span class="okc">ok</span></div>
+<pre class="code" style="border:0;border-radius:6px;margin-top:6px;padding:6px 0;background:var(--code);color:var(--text)"><span class="diffl d">-    all_s = load_index().get("sessions", [])</span><span class="diffl a">+    ids = _filtered_sorted_session_ids(tool, tag, start, end, _index_mtime())</span></pre></div>
+          <div class="call"><div class="h"><span class="n">Bash</span><span class="p">pytest tests/test_web_sessions.py -q</span><span class="okc">ok &middot; 0.9 s</span></div></div>
+        </details>
+        <p>Done. The sorted id tuple is cached, and the nonce wiring is untouched.</p>
+      </div>
+    </section>
+
+    <section class="turn" id="t3" aria-label="Prompt 3">
+      <div class="prompt"><div class="who"><span>You &middot; 3</span><span>10:30</span></div><p>run the tests and show me the failures</p></div>
+      <div class="resp">
+        <div class="rmeta"><span>claude-sonnet-5-5</span><span>&uarr;14,534</span><span>&darr;650</span><span>8 s</span></div>
+        <details class="tools" open>
+          <summary><span>2 tool calls</span><span>Bash &times;2</span><span class="fail" style="margin-left:auto">1 failed</span></summary>
+          <div class="call"><div class="h"><span class="n">Bash</span><span class="p">pytest tests/ -q -x</span><span class="fail">exit 1 &middot; 1.4 s</span></div>
+<pre>..........F
+FAILED tests/test_session_pairs.py::test_visible_slice - AssertionError
+1 failed, 10 passed in 1.42s</pre></div>
+        </details>
+        <p>One test fails because it still expects the full pair list to be formatted. I will adjust the assertion to the visible slice.</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="sheet" id="sheet" role="dialog" aria-label="Prompts" aria-modal="true">
+  <div style="display:flex;justify-content:space-between;margin-bottom:6px"><b>Prompts &middot; 38</b><button class="btn" type="button" id="sheetClose">Close</button></div>
+  <a href="#t1"><b>1</b><span>Fix N+1 query in session list endpoint</span></a>
+  <a href="#t2"><b>2</b><span>ok implement the cache, keep CSP nonce wiring</span></a>
+  <a href="#t3"><b>3</b><span>run the tests and show me the failures</span></a>
+</div>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  document.getElementById('themeBtn').addEventListener('click', function () {
+    root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+  });
+  var sheet = document.getElementById('sheet');
+  document.getElementById('jumpBtn').addEventListener('click', function () { sheet.classList.add('open'); });
+  document.getElementById('sheetClose').addEventListener('click', function () { sheet.classList.remove('open'); });
+  sheet.addEventListener('click', function (e) { if (e.target.closest('a')) sheet.classList.remove('open'); });
+  document.querySelectorAll('.seg').forEach(function (seg) {
+    seg.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      seg.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    });
+  });
+  var hdr = document.querySelector('.hdr');
+  window.addEventListener('scroll', function () { hdr.classList.toggle('compact', window.scrollY > 120); }, { passive: true });
+  var turns = Array.prototype.slice.call(document.querySelectorAll('.turn'));
+  function go(d) {
+    var y = window.scrollY + 140, i = 0;
+    turns.forEach(function (t, k) { if (t.offsetTop <= y) i = k; });
+    var n = turns[Math.max(0, Math.min(turns.length - 1, i + d))];
+    n.scrollIntoView({ block: 'start' });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'j') go(1);
+    if (e.key === 'k') go(-1);
+    if (e.key === '/') { e.preventDefault(); document.getElementById('findIn').focus(); }
+    if (e.key === 'e') document.querySelectorAll('details.tools').forEach(function (d) { d.open = true; });
+    if (e.key === 'c') document.querySelectorAll('details.tools').forEach(function (d) { d.open = false; });
+  });
+})();
+</script>
+</body>
+</html>
