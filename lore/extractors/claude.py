@@ -79,6 +79,9 @@ class ClaudeCodeExtractor(BaseExtractor):
     def is_available(self) -> bool:
         return len(self.base_paths) > 0
 
+    def source_description(self) -> str:
+        return "~/.claude/projects/*/*.jsonl, ~/.claude/projects/*/*/subagents/*.jsonl"
+
     def _decode_project_name(self, encoded: str) -> str:
         """Decode project path from directory name."""
         if not encoded.startswith("-"):
@@ -184,10 +187,12 @@ class ClaudeCodeExtractor(BaseExtractor):
 
                 # Main sessions: <projectdir>/<sessionid>.jsonl
                 for jsonl_file in project_dir.glob("*.jsonl"):
+                    self._count("files_matched")
                     if self._source_unchanged(jsonl_file):
                         continue
                     try:
                         session = self._parse_session(jsonl_file, project_path)
+                        self._count("files_parsed")
 
                         if self.should_import_session(session):
                             self._add_or_replace_newer(seen, session)
@@ -201,6 +206,7 @@ class ClaudeCodeExtractor(BaseExtractor):
                 # would all be invisible — only the 46 direct-child files
                 # would show up while the 300+ subagent transcripts get lost.
                 for subagent_file in project_dir.glob("*/subagents/*.jsonl"):
+                    self._count("files_matched")
                     if self._source_unchanged(subagent_file):
                         continue
                     try:
@@ -210,6 +216,7 @@ class ClaudeCodeExtractor(BaseExtractor):
                             project_path,
                             parent_session_id=parent_session_id,
                         )
+                        self._count("files_parsed")
 
                         if self.should_import_session(session):
                             self._add_or_replace_newer(seen, session)
@@ -275,6 +282,8 @@ class ClaudeCodeExtractor(BaseExtractor):
 
                 if record_type == "summary":
                     summary = self._sanitize_summary(record.get("summary"))
+                elif record_type not in ("user", "assistant"):
+                    self._count("records_unknown")
                 elif record_type in ("user", "assistant"):
                     msg_data = record.get("message", {})
                     role = Role.USER if record_type == "user" else Role.ASSISTANT

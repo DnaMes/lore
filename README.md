@@ -103,6 +103,10 @@ pip install -e .
 # Check available AI tools on your system
 lore check
 
+# Run every available extractor without writing anything and report, per tool,
+# matched sources, parsed sessions, skips and unknown records
+lore check --deep
+
 # List recent sessions
 lore list --since 7d
 
@@ -145,6 +149,12 @@ lore threads
 # Generate derived rules (SpecStory-style)
 lore rules --limit 30
 ```
+
+`lore check --deep` reads every source of each available tool and prints how many
+sources matched, how many sessions were parsed, which were skipped and why, and how
+many records the parser did not recognise. It warns when a tool's data directory exists
+but no session comes out (a stale glob or a changed file format). It writes no archive
+or index. Plain `lore check` stays fast and also shows the counters of the last sync.
 
 ---
 

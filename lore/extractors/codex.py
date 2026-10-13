@@ -34,6 +34,9 @@ class CodexExtractor(BaseExtractor):
     def is_available(self) -> bool:
         return len(self.session_roots) > 0
 
+    def source_description(self) -> str:
+        return "~/.codex/sessions/*/*/*/rollout-*.jsonl"
+
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         if not self.is_available():
             return
@@ -49,8 +52,10 @@ class CodexExtractor(BaseExtractor):
                         if not day_dir.is_dir():
                             continue
                         for session_file in day_dir.glob("rollout-*.jsonl"):
+                            self._count("files_matched")
                             try:
                                 session = self._parse_session_file(session_file)
+                                self._count("files_parsed")
 
                                 if self.should_import_session(session):
                                     yield session
@@ -186,6 +191,10 @@ class CodexExtractor(BaseExtractor):
                                 message_id=payload.get("call_id"),
                             )
                         )
+                    else:
+                        self._count("records_unknown")
+                else:
+                    self._count("records_unknown")
 
         if created_at is None:
             created_at = datetime.fromtimestamp(path.stat().st_mtime)

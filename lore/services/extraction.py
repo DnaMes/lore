@@ -19,6 +19,7 @@ from lore.core.models import UnifiedSession
 from lore.exporters.index import IndexBuilder, _stat_mtime_ns
 from lore.extractors.base import BaseExtractor, stamp_parser_version
 from lore.extractors.factory import get_all_extractors
+from lore.services.discovery import record_discovery
 from lore.titles.generator import TitleGenerator, TitleStrategy
 
 logger = logging.getLogger(__name__)
@@ -218,6 +219,7 @@ def build_search_index(
     total = len(selected) or 1
     deleted = deleted_ids or set()
     refresh_count = 0
+    finished: list[BaseExtractor] = []
 
     import time as _time
 
@@ -324,6 +326,7 @@ def build_search_index(
                     ", ".join(f"{k}={v}" for k, v in sorted(skipped.items())),
                 )
                 errors.append({"extractor": tool_name, "skipped": skipped, "imported": imported})
+            finished.append(extractor)
 
         # An extractor can fail, be unavailable, or return only part of its
         # source. Preserve prior derived entries that were not observed in this
@@ -342,6 +345,7 @@ def build_search_index(
         reused_entries=reused_entries,
         reused_ids=reused_ids,
     )
+    record_discovery(output_dir, finished)
 
     if progress_callback:
         message = (

@@ -395,6 +395,13 @@ class OpenCodeExtractor(BaseExtractor):
         """Check if any OpenCode storage root is available."""
         return len(self.storage_roots) > 0 or len(self.sqlite_db_paths) > 0
 
+    def source_description(self) -> str:
+        return (
+            "~/.local/share/opencode/storage/session/**/ses_*.json, "
+            "~/.opencode/storage/session/**/ses_*.json, "
+            "~/.local/share/opencode/opencode.db and ~/.opencode/opencode.db (session table)"
+        )
+
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         """Extract all sessions from OpenCode storage roots.
 
@@ -429,13 +436,16 @@ class OpenCodeExtractor(BaseExtractor):
 
                 for session_file in session_path.rglob("ses_*.json"):
                     self.stats.sessions_found += 1
+                    self._count("files_matched")
                     try:
                         session_data = self._safe_load_json(session_file)
                         if not session_data:
+                            self._count("records_unknown")
                             continue
 
                         session_id = session_data.get("id")
                         if not session_id:
+                            self._count("records_unknown")
                             continue
 
                         time_data = session_data.get("time", {})
@@ -508,6 +518,8 @@ class OpenCodeExtractor(BaseExtractor):
                         pending.created_at,
                         pending.updated_at,
                     )
+                if session is not None:
+                    self._count("files_parsed")
                 if session is None or not self.should_import_session(session):
                     continue
 
@@ -545,8 +557,11 @@ class OpenCodeExtractor(BaseExtractor):
 
         for row in rows:
             self.stats.sessions_found += 1
+            # Database tool: files_matched counts the session rows considered.
+            self._count("files_matched")
             session_id = str(row["id"] or "")
             if not session_id:
+                self._count("records_unknown")
                 continue
 
             updated_raw = int(row["time_updated"] or 0)

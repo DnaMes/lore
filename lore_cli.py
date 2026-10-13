@@ -47,6 +47,7 @@ from lore.exporters.markdown import MarkdownExporter
 from lore.extractors.base import stamp_parser_version
 from lore.extractors.factory import get_all_extractors
 from lore.extractors.opencode import OpenCodeExtractor
+from lore.services.discovery import read_last_discovery, record_discovery
 from lore.utils.datetime import make_naive, parse_duration
 from lore.utils.git import get_git_info
 from lore.utils.paths import get_current_project, lore_home, make_thread_id
@@ -323,6 +324,7 @@ def cmd_export(args):
     )
     ignored_ids = index_builder._load_ignored() if incremental else set()
     reused_entries: list[dict] = []
+    finished_extractors: list = []
 
     def export_stream():
         """Export each matching session, then yield it — one at a time.
@@ -386,6 +388,7 @@ def cmd_export(args):
             if skipped_by_id is None:
                 skipped_by_id = _reusable_entries(extractor, prior_by_path, ignored_ids)
             reused_entries.extend(skipped_by_id.values())
+            finished_extractors.append(extractor)
 
     def all_sessions_stream():
         """Yield every session from every extractor for the unfiltered index."""
@@ -411,6 +414,7 @@ def cmd_export(args):
         print("\nBuilding index...")
         index_builder.build_index(all_sessions_stream(), merged_paths)
     print(f"Index saved to: {index_builder.index_path}")
+    record_discovery(output_dir, finished_extractors)
 
     unchanged = f" (+{len(reused_entries)} unchanged, not re-parsed)" if reused_entries else ""
     print(f"\nExported {exported} sessions{unchanged} to {output_dir}")
@@ -1411,13 +1415,66 @@ def cmd_watch(args):
             break
 
 
+def _format_skips(skips: dict) -> str:
+    return ", ".join(f"{reason}={n}" for reason, n in sorted(skips.items()))
+
+
+def _print_deep_report(extractor) -> bool:
+    """Run one extractor to completion, write nothing, print its counters.
+
+    Returns False when the extractor raised.
+    """
+    tool = extractor.tool.value
+    try:
+        sessions = sum(1 for _ in extractor.extract_sessions())
+    except Exception as exc:  # an extractor bug must not hide the other tools
+        print(f"  ERROR: {tool}: extraction failed ({type(exc).__name__})", file=sys.stderr)
+        return False
+    found = extractor.discovery
+    print(f"  Sources matched: {found['files_matched']}")
+    print(f"  Sessions parsed: {sessions}")
+    print(f"  Skipped: {_format_skips(extractor.skip_counts) or 'none'}")
+    print(f"  Unknown records: {found['records_unknown']}")
+    print(f"  Parsed files: {found['files_parsed']}")
+    if sessions == 0 and found["files_matched"] > 0:
+        print(
+            f"WARNING: {tool}: {found['files_matched']} source files matched "
+            f"{extractor.source_description()} but 0 sessions were produced "
+            "(stale glob or format change?)"
+        )
+    elif sessions == 0:
+        # An available tool has a data directory; no source matched the glob.
+        print(
+            f"WARNING: {tool}: 0 source files matched {extractor.source_description()} "
+            "although its data directory exists (stale glob or format change?)"
+        )
+    return True
+
+
+def _print_last_sync(last: dict) -> None:
+    print(
+        f"  Last sync {last.get('recorded_at', '?')}: "
+        f"{last.get('files_matched', 0)} sources matched, "
+        f"{last.get('files_parsed', 0)} files parsed, "
+        f"{last.get('sessions', 0)} sessions, "
+        f"{last.get('records_unknown', 0)} unknown records"
+        + (f", skipped {_format_skips(last['skip_counts'])}" if last.get("skip_counts") else "")
+    )
+
+
 def cmd_check(args):
-    """Check availability of AI tools."""
+    """Check availability of AI tools (``--deep``: run every extractor, write nothing)."""
+    deep = bool(getattr(args, "deep", False))
     print("Checking AI tools availability...")
     print("-" * 40)
 
     extractors = get_all_extractors()
     available_count = 0
+    failed = False
+    last_runs = {}
+    if not deep:
+        output_dir = getattr(args, "output_dir", None) or lore_home()
+        last_runs = read_last_discovery(Path(output_dir).expanduser())
 
     for extractor in extractors:
         available = extractor.is_available()
@@ -1433,9 +1490,15 @@ def cmd_check(args):
                 print(f"  Path: {base_path}")
             elif db_path:
                 print(f"  DB: {db_path}")
+            if deep:
+                failed = not _print_deep_report(extractor) or failed
+            elif extractor.tool.value in last_runs:
+                _print_last_sync(last_runs[extractor.tool.value])
 
     print("-" * 40)
     print(f"Summary: {available_count}/{len(extractors)} tools available.")
+    if failed:
+        sys.exit(1)
 
 
 def _run_export_html(args) -> None:
@@ -1623,7 +1686,13 @@ Examples:
     watch_parser.add_argument("--git", action="store_true", help="Auto-commit new exports to git")
 
     # check command
-    subparsers.add_parser("check", help="Check tool availability")
+    check_parser = subparsers.add_parser("check", help="Check tool availability")
+    check_parser.add_argument(
+        "--deep",
+        action="store_true",
+        help="Run every available extractor (writes nothing) and report matched sources, "
+        "sessions, skips and unknown records",
+    )
 
     # threads command
     subparsers.add_parser("threads", help="List threads")

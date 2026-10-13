@@ -38,6 +38,12 @@ class CursorExtractor(BaseExtractor):
     def is_available(self) -> bool:
         return len(self.db_paths) > 0
 
+    def source_description(self) -> str:
+        return (
+            "~/.config/Cursor/User/globalStorage/state.vscdb "
+            "(cursorDiskKV composerData:* rows and the sidebar chat data)"
+        )
+
     def _decode_blob(self, value: Any) -> str:
         """Try to decode a blob that might be hex or just string.
 
@@ -67,10 +73,13 @@ class CursorExtractor(BaseExtractor):
                         "SELECT key, value FROM cursorDiskKV WHERE key LIKE 'composerData:%'"
                     )
                     for key, value in cursor:
+                        # Database tool: files_matched counts the session rows considered.
+                        self._count("files_matched")
                         try:
                             decoded = self._decode_blob(value)
                             data = json.loads(decoded)
                             session = self._parse_composer(key.split(":")[-1], data, conn)
+                            self._count("files_parsed")
                             if (
                                 session
                                 and (session.messages or session.title)
@@ -79,6 +88,7 @@ class CursorExtractor(BaseExtractor):
                                 yield session
                         except (json.JSONDecodeError, KeyError) as e:
                             logger.debug(f"Failed to parse composer {key}: {e}")
+                            self._count("records_unknown")
                             continue
                 except sqlite3.Error as e:
                     logger.warning(f"Failed to query composerData: {e}")
@@ -93,11 +103,14 @@ class CursorExtractor(BaseExtractor):
                             data = json.loads(decoded)
                             if isinstance(data, dict) and "tabs" in data:
                                 for tab in data.get("tabs", []):
+                                    self._count("files_matched")
                                     session = self._parse_sidebar_tab(tab)
+                                    self._count("files_parsed")
                                     if session and self.should_import_session(session):
                                         yield session
                         except (json.JSONDecodeError, KeyError) as e:
                             logger.debug(f"Failed to parse sidebar chat: {e}")
+                            self._count("records_unknown")
                 except sqlite3.Error as e:
                     logger.warning(f"Failed to query sidebar chat: {e}")
 

@@ -34,14 +34,19 @@ class CopilotCLIExtractor(BaseExtractor):
     def is_available(self) -> bool:
         return len(self.session_state_dirs) > 0
 
+    def source_description(self) -> str:
+        return "~/.copilot/session-state/*.jsonl"
+
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         if not self.is_available():
             return
 
         for session_state_dir in self.session_state_dirs:
             for session_file in session_state_dir.glob("*.jsonl"):
+                self._count("files_matched")
                 try:
                     session = self._parse_session(session_file)
+                    self._count("files_parsed")
 
                     if self.should_import_session(session):
                         yield session
@@ -128,6 +133,9 @@ class CopilotCLIExtractor(BaseExtractor):
                                 tool_calls=tool_calls,
                             )
                         )
+
+                else:
+                    self._count("records_unknown")
 
         if created_at is None:
             created_at = datetime.fromtimestamp(path.stat().st_mtime)

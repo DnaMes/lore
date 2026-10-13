@@ -44,6 +44,9 @@ class AntigravityExtractor(BaseExtractor):
     def is_available(self) -> bool:
         return any((path / "brain").exists() for path in self.base_paths)
 
+    def source_description(self) -> str:
+        return "~/.gemini/antigravity/brain/*/task.md (+ walkthrough.md and *.metadata.json)"
+
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         if not self.is_available():
             return
@@ -56,6 +59,7 @@ class AntigravityExtractor(BaseExtractor):
                 if not session_dir.is_dir():
                     continue
 
+                self._count("files_matched")
                 try:
                     session = self._parse_session(session_dir)
                 except Exception as e:
@@ -68,6 +72,7 @@ class AntigravityExtractor(BaseExtractor):
                     # A brain dir with no task.md is not a conversation we can import.
                     self._record_skip("no_task_md")
                     continue
+                self._count("files_parsed")
                 if self.should_import_session(session):
                     yield session
 

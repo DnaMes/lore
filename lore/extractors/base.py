@@ -9,6 +9,8 @@ from ..core.models import Role, TitleSource, Tool, UnifiedSession
 
 logger = logging.getLogger(__name__)
 
+DISCOVERY_KEYS = ("files_matched", "files_parsed", "records_unknown")
+
 REEXTRACT_BUDGET_ENV = "LORE_PARSER_REEXTRACT_BUDGET"
 DEFAULT_REEXTRACT_BUDGET = 150
 
@@ -58,6 +60,8 @@ class BaseExtractor(ABC):
 
             @functools.wraps(original)
             def extract_sessions(self) -> Iterator[UnifiedSession]:
+                # Reset eagerly (generators run lazily) so a second run starts at zero.
+                self._reset_discovery()
                 # Call eagerly so errors raised at call time still surface there.
                 sessions = original(self)
                 return self._stamp_parser_version(sessions)
@@ -81,6 +85,7 @@ class BaseExtractor(ABC):
     def _stamp_parser_version(self, sessions: Iterable[UnifiedSession]) -> Iterator[UnifiedSession]:
         for session in sessions:
             stamp_parser_version(self, session)
+            self._sessions_yielded = getattr(self, "_sessions_yielded", 0) + 1
             yield session
 
     def _consume_reextract_budget(self, versions: dict[str, int]) -> bool:
@@ -134,6 +139,37 @@ class BaseExtractor(ABC):
 
     def _record_skip(self, reason: str) -> None:
         self.skip_counts[reason] = self.skip_counts.get(reason, 0) + 1
+
+    @property
+    def discovery(self) -> dict[str, int]:
+        """Per-run source telemetry, reset at the start of every ``extract_sessions()``.
+
+        ``files_matched``: candidate sources found (files, or database rows for
+        database-backed tools); ``files_parsed``: sources that were read without
+        error; ``records_unknown``: records the parser did not recognise. A tool
+        that is available yet reports ``files_matched == 0`` has a stale glob.
+        """
+        counts = getattr(self, "_discovery", None)
+        if counts is None:
+            counts = dict.fromkeys(DISCOVERY_KEYS, 0)
+            self._discovery = counts
+        return counts
+
+    @property
+    def sessions_yielded(self) -> int:
+        """Sessions the last ``extract_sessions()`` run produced."""
+        return getattr(self, "_sessions_yielded", 0)
+
+    def _count(self, key: str, n: int = 1) -> None:
+        self.discovery[key] = self.discovery.get(key, 0) + n
+
+    def _reset_discovery(self) -> None:
+        self._discovery = dict.fromkeys(DISCOVERY_KEYS, 0)
+        self._sessions_yielded = 0
+
+    def source_description(self) -> str:
+        """Human-readable globs/paths this extractor reads (``~`` for the home directory)."""
+        return type(self).__name__
 
     @abstractmethod
     def extract_sessions(self) -> Iterator[UnifiedSession]:

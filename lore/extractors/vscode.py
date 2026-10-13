@@ -42,6 +42,12 @@ class VSCodeCopilotExtractor(BaseExtractor):
     def is_available(self) -> bool:
         return len(self.workspace_roots) > 0
 
+    def source_description(self) -> str:
+        return (
+            "~/.config/Code/User/workspaceStorage/*/chatSessions/*.json, "
+            "~/.config/Code/User/workspaceStorage/*/chatSessions/*.jsonl"
+        )
+
     def _get_workspace_project(self, workspace_dir: Path) -> Optional[str]:
         """Try to get project path from workspace.json."""
         workspace_json = workspace_dir / "workspace.json"
@@ -74,6 +80,7 @@ class VSCodeCopilotExtractor(BaseExtractor):
                 for session_file in list(chat_sessions_dir.glob("*.json")) + list(
                     chat_sessions_dir.glob("*.jsonl")
                 ):
+                    self._count("files_matched")
                     try:
                         size = session_file.stat().st_size
                     except OSError:
@@ -91,6 +98,7 @@ class VSCodeCopilotExtractor(BaseExtractor):
                         continue
                     try:
                         session = self._parse_session(session_file, project_path)
+                        self._count("files_parsed")
 
                         if self.should_import_session(session):
                             yield session
@@ -158,6 +166,8 @@ class VSCodeCopilotExtractor(BaseExtractor):
 
             kind = entry.get("kind")
             v = entry.get("v")
+            if kind not in (0, 1, 2):
+                self._count("records_unknown")
 
             if kind == 0 and isinstance(v, dict):
                 # Session header
@@ -211,6 +221,8 @@ class VSCodeCopilotExtractor(BaseExtractor):
                     # thinking parts - skip (internal reasoning)
                     if part_kind == "thinking":
                         continue
+
+                    self._count("records_unknown")
 
         # Flush any remaining assistant content
         flush_assistant(current_req_ts)

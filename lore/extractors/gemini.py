@@ -137,6 +137,12 @@ class GeminiCLIExtractor(BaseExtractor):
     def tool(self) -> Tool:
         return Tool.GEMINI_CLI
 
+    def source_description(self) -> str:
+        return (
+            "~/.gemini/tmp/*/chats/session-*.jsonl, ~/.gemini/tmp/*/chats/session-*.json, "
+            "~/.gemini/tmp/*/chats/*/*.jsonl"
+        )
+
     def is_available(self) -> bool:
         return len(self.base_paths) > 0
 
@@ -199,8 +205,10 @@ class GeminiCLIExtractor(BaseExtractor):
         """Resolve project hash to path."""
         return self._hash_to_path.get(hash_val)
 
-    def _count(self, key: str) -> None:
+    def _count_record(self, key: str) -> None:
         self.record_counts[key] = self.record_counts.get(key, 0) + 1
+        if key == "unknown_records":
+            self._count("records_unknown")
 
     def _read_project_root(self, project_dir: Path) -> Optional[str]:
         """Read ``<slug>/.project_root`` (a plain absolute path)."""
@@ -247,9 +255,11 @@ class GeminiCLIExtractor(BaseExtractor):
         for pattern in ("session-*.jsonl", "session-*.json"):
             for path in sorted(chats_dir.glob(pattern)):
                 if self._is_plain_file(path):
+                    self._count("files_matched")
                     yield path, None
         for path in sorted(chats_dir.glob("*/*.jsonl")):
             if self._is_plain_file(path) and not path.parent.is_symlink():
+                self._count("files_matched")
                 yield path, path.parent.name
 
     @staticmethod
@@ -282,11 +292,12 @@ class GeminiCLIExtractor(BaseExtractor):
                         continue
                     try:
                         if session_file.stat().st_size > _MAX_FILE_BYTES:
-                            self._count("skipped_oversize")
+                            self._count_record("skipped_oversize")
                             continue
                         session = self._parse_session_file(
                             session_file, project_path, dir_hash, parent_session_id=parent_id
                         )
+                        self._count("files_parsed")
                         if self.should_import_session(session):
                             yield session
                     except (
@@ -311,11 +322,11 @@ class GeminiCLIExtractor(BaseExtractor):
         for item in targets:
             item_id = item.get("id")
             if not isinstance(item_id, str):
-                self._count("unknown_records")
+                self._count_record("unknown_records")
                 continue
             target = state.msgs.get(item_id)
             if target is None:
-                self._count("unmatched_ids")
+                self._count_record("unmatched_ids")
                 continue
             for key, value in item.items():
                 if key in _PATCH_CONTROL_KEYS:
@@ -363,18 +374,18 @@ class GeminiCLIExtractor(BaseExtractor):
         elif "$rewindTo" in rec:
             target = rec["$rewindTo"]
             if not isinstance(target, str):
-                self._count("unknown_records")
+                self._count_record("unknown_records")
             elif not state.rewind_to(target):
-                self._count("unmatched_ids")
+                self._count_record("unmatched_ids")
         elif "type" in rec and "id" in rec:
             if isinstance(rec["id"], str):
                 state.put(rec)
             else:
-                self._count("unknown_records")
+                self._count_record("unknown_records")
         elif "type" not in rec and _HEADER_KEYS & rec.keys():
             header.update(rec)
         else:
-            self._count("unknown_records")
+            self._count_record("unknown_records")
 
     def _replay_jsonl(self, path: Path) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
         header: Dict[str, Any] = {}
@@ -385,7 +396,7 @@ class GeminiCLIExtractor(BaseExtractor):
                 if not line:
                     break
                 if len(line) >= _MAX_LINE_CHARS and not line.endswith("\n"):
-                    self._count("malformed_lines")
+                    self._count_record("malformed_lines")
                     # Drop the rest of the over-long line chunk by chunk, never holding it.
                     while line and not line.endswith("\n"):
                         line = f.readline(_MAX_LINE_CHARS)
@@ -396,10 +407,10 @@ class GeminiCLIExtractor(BaseExtractor):
                 try:
                     rec = json.loads(line)
                 except (ValueError, RecursionError):
-                    self._count("malformed_lines")
+                    self._count_record("malformed_lines")
                     continue
                 if not isinstance(rec, dict):
-                    self._count("malformed_lines")
+                    self._count_record("malformed_lines")
                     continue
                 self._apply_record(rec, header, state)
         return header, state.ordered()
@@ -460,7 +471,7 @@ class GeminiCLIExtractor(BaseExtractor):
         elif msg_type in ("info", "error", "warning"):
             role = Role.INFO
         else:
-            self._count("unknown_records")
+            self._count_record("unknown_records")
             return None
 
         raw_thoughts = msg.get("thoughts")

@@ -71,11 +71,15 @@ class AiderExtractor(BaseExtractor):
     def is_available(self) -> bool:
         return len(self.history_files) > 0
 
+    def source_description(self) -> str:
+        return f"~/**/{HISTORY_FILENAME} (one file per project)"
+
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         if not self.is_available():
             return
 
         for history_file in self.history_files:
+            self._count("files_matched")
             try:
                 yield from self._parse_history_file(history_file)
             except Exception as exc:  # pragma: no cover - defensive
@@ -91,6 +95,7 @@ class AiderExtractor(BaseExtractor):
         except OSError as exc:
             logger.warning("Cannot read %s: %s", path, exc)
             return
+        self._count("files_parsed")
 
         # Split on session headers, keeping the header line with its block.
         current_started: Optional[str] = None

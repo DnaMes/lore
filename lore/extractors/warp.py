@@ -36,6 +36,9 @@ class WarpExtractor(BaseExtractor):
     def is_available(self) -> bool:
         return len(self.db_paths) > 0
 
+    def source_description(self) -> str:
+        return "~/.local/state/warp-terminal/warp.sqlite (ai_queries and agent_tasks tables)"
+
     def extract_sessions(self) -> Iterator[UnifiedSession]:
         if not self.is_available():
             return
@@ -80,7 +83,7 @@ class WarpExtractor(BaseExtractor):
                             elif isinstance(parsed, dict):
                                 input_data = parsed
                         except json.JSONDecodeError:
-                            pass
+                            self._count("records_unknown")
 
                     conversations[conv_id].append(
                         {
@@ -94,12 +97,15 @@ class WarpExtractor(BaseExtractor):
                 assistant_by_conversation = self._load_assistant_messages(conn)
 
                 for conv_id, queries in conversations.items():
+                    # Database tool: files_matched counts the conversations considered.
+                    self._count("files_matched")
                     try:
                         session = self._build_session(
                             conv_id,
                             queries,
                             assistant_by_conversation.get(conv_id, []),
                         )
+                        self._count("files_parsed")
                         if session.message_count > 0 and self.should_import_session(session):
                             yield session
                     except Exception as e:

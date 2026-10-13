@@ -68,7 +68,7 @@
 **Files:** `lore/extractors/base.py`, every extractor (counters only), `lore_cli.py` (`cmd_check`), `tests/test_discovery_telemetry.py`.
 **Interfaces:** `BaseExtractor.discovery: dict[str, int]` with keys `files_matched`, `files_parsed`, `records_unknown`; `skip_counts` stays as is. `lore check` (availability only, as today) gains `--deep`, which runs every extractor without writing the archive and prints per tool: sources found, sessions parsed, skipped by reason, unknown records, and a `WARNING` line when sources exist and sessions parsed is 0, naming the glob. The sync job records the same counters in `store_meta` so a normal `lore check` can show the last run.
 **Done when:** a fixture with a stale glob produces the warning; counts match the fixture.
-- [ ] done
+- [x] done
 
 ### B1.3 Origin policy and "show automated"
 **Files:** `lore/extractors/base.py` (`should_import_session`, `_effective_thresholds`), `lore/services/index.py`, `lore/interfaces/web.py` + templates, `lore_cli.py`, MCP `list_sessions`/`search_history`, `tests/test_origin_policy.py`.
