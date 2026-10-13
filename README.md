@@ -114,12 +114,16 @@ lore digest --since 2w --format markdown
 lore memory add --kind decision --title "Use Postgres 16" \
     --body "Standardise the stack on PG16" --tag db --tag infra
 lore memory search postgres
-lore memory search "database performance" --semantic   # ranks by meaning
+lore memory search "database performance"              # keywords + meaning when available
+lore memory search "database performance" --semantic   # meaning only, no relevance floor
+lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
 
 # Semantic memory search needs the optional embedding model:
 #   pip install -e ".[semantic]"
-# Without it, --semantic transparently falls back to keyword search.
+# Without it, search transparently stays keyword-only. In the default mode only
+# semantic matches with cosine similarity >= LORE_MEMORY_RECALL_MIN_SIMILARITY
+# (default 0.7, uncalibrated) are added.
 
 # Search across all sessions
 lore search "database migration"

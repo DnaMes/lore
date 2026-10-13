@@ -1129,7 +1129,7 @@ def cmd_memory(args):
             kind=args.kind,
             scope_project=args.project,
             limit=args.limit,
-            semantic=getattr(args, "semantic", False),
+            semantic=True if getattr(args, "semantic", False) else None,
         )
     else:  # pragma: no cover - argparse guards this
         print("Unknown memory action.", file=sys.stderr)
@@ -1547,7 +1547,8 @@ Examples:
     mem_search.add_argument(
         "--semantic",
         action="store_true",
-        help="rank by meaning (needs the 'semantic' extra; falls back to keywords)",
+        help="rank by meaning only (default: keywords plus meaning when the "
+        "'semantic' extra is installed)",
     )
 
     # watch command

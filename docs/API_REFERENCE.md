@@ -108,11 +108,19 @@ Output shape:
       "message_count": 2,
       "prompt_count": 1,
       "export_path": null,
-      "score": 0.42
+      "score": 0.42,
+      "snippet": "database is «locked» during export",
+      "source": "session"
     }
   ]
 }
 ```
+
+`snippet` is the matching passage with `«`/`»` around matched terms (null when
+unavailable); escape it before rendering. A query that is one double-quoted
+phrase (`"exact phrase"`) matches that phrase. A quoted single word is an exact
+token, so `"oauth"` no longer matches `OAuth2` (unquoted terms still prefix-match).
+The legacy fallback ignores phrase adjacency.
 
 ### `list_sessions`
 
@@ -204,6 +212,74 @@ Input:
   "thread_id": "thread-1"
 }
 ```
+
+### `memory_write`
+
+Record a durable memory. Input: `title` and `body` (required), `kind`
+(`fact|decision|todo|snippet|link|lesson|note`), `project`, `tool`, `tags`,
+`author`, `source_session` (session id the memory came from).
+
+### `memory_recall`
+
+Search the shared memory store.
+
+Input:
+
+```json
+{
+  "query": "database performance",
+  "kind": "decision",
+  "project": "/repo/demo",
+  "include_superseded": false,
+  "semantic": null,
+  "limit": 10
+}
+```
+
+`semantic` is a tri-state:
+
+- absent or `null` (auto): keyword search; when the optional `semantic` extra is
+  installed and a memory has a stored vector, memories similar in meaning are
+  fused in (reciprocal rank fusion). Memories without a vector are still found by
+  keyword. Only semantic candidates with cosine similarity at or above
+  `LORE_MEMORY_RECALL_MIN_SIMILARITY` (default `0.7`, a placeholder pending
+  calibration in #92; invalid values fall back to the default, range 0 to 1)
+  take part.
+- `false`: keyword search only; the embedding model is never loaded.
+- `true`: rank by embedding similarity with no floor; falls back to keywords when
+  the backend or stored vectors are missing.
+
+A query that is one double-quoted phrase matches that phrase (same rules as
+`search_history`).
+
+Output shape:
+
+```json
+{
+  "count": 1,
+  "memories": [
+    {
+      "id": 7,
+      "kind": "decision",
+      "title": "Use Postgres 16",
+      "body": "Standardise the stack on PG16",
+      "author": "agent",
+      "created": "2026-04-01T10:00:00+00:00",
+      "updated": "2026-04-01T10:00:00+00:00",
+      "scope_project": null,
+      "scope_tool": null,
+      "superseded_by": null,
+      "tags": ["db"],
+      "snippet": "Standardise the stack on «PG16»",
+      "source": "memory",
+      "sources": [{"session_id": "session-1", "note": "recorded from this session"}]
+    }
+  ]
+}
+```
+
+`snippet` is set for keyword hits only. `sources` lists the sessions the memory was
+recorded from (session ids only, empty when none); `source` is always `"memory"`.
 
 ## HTTP API
 

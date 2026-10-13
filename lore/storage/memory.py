@@ -19,13 +19,16 @@ from __future__ import annotations
 
 import json
 import logging
+import math
+import os
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .fts import SNIPPET_CLOSE, SNIPPET_OPEN, build_fts_query, snippet_to_text
+from .fusion import rrf_merge
 from .schema import open_v2_connection
 from .writer import v2_db_path
 
@@ -42,6 +45,29 @@ MAX_BODY_LEN = 64_000
 MAX_TAGS = 32
 MAX_TAG_LEN = 64
 MAX_AUTHOR_LEN = 64
+
+# Auto-mode recall (semantic=None) fuses only semantic candidates whose cosine
+# similarity reaches this floor; without one every query would be padded with
+# the nearest unrelated memories. The default is a PLACEHOLDER, to be calibrated
+# together with issue #92: a handful of short texts with bge-small-en-v1.5
+# (2026-10-13) gave about 0.76 for related and 0.45-0.62 for unrelated pairs.
+# Override with LORE_MEMORY_RECALL_MIN_SIMILARITY.
+RECALL_MIN_SIMILARITY_ENV = "LORE_MEMORY_RECALL_MIN_SIMILARITY"
+DEFAULT_RECALL_MIN_SIMILARITY = 0.7
+
+
+def recall_min_similarity() -> float:
+    """The auto-mode similarity floor: env value clamped to [0, 1], default if invalid."""
+    raw = os.environ.get(RECALL_MIN_SIMILARITY_ENV, "").strip()
+    if not raw:
+        return DEFAULT_RECALL_MIN_SIMILARITY
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_RECALL_MIN_SIMILARITY
+    if math.isnan(value):
+        return DEFAULT_RECALL_MIN_SIMILARITY
+    return min(1.0, max(0.0, value))
 
 
 @dataclass
@@ -61,6 +87,9 @@ class MemoryEntry:
     tags: List[str] = field(default_factory=list)
     # Matching passage with ``«``/``»`` marks; set only by the FTS recall path.
     snippet: Optional[str] = None
+    # Sessions this memory came from: ``[{"session_id", "note"}]``. ``message_id``
+    # is left out on purpose — ``messages.id`` changes on every full re-sync.
+    sources: List[Dict[str, str]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -77,6 +106,7 @@ class MemoryEntry:
             "tags": self.tags,
             "snippet": self.snippet,
             "source": "memory",
+            "sources": self.sources,
         }
 
 
@@ -231,6 +261,14 @@ def _load_tags(conn: sqlite3.Connection, memory_id: int) -> List[str]:
     return [r["tag"] for r in rows]
 
 
+def _load_sources(conn: sqlite3.Connection, memory_id: int) -> List[Dict[str, str]]:
+    rows = conn.execute(
+        "SELECT session_id, note FROM memory_sources WHERE memory_id = ? ORDER BY session_id",
+        (memory_id,),
+    ).fetchall()
+    return [{"session_id": r["session_id"], "note": r["note"] or ""} for r in rows]
+
+
 def _row_to_entry(conn: sqlite3.Connection, row: sqlite3.Row) -> MemoryEntry:
     return MemoryEntry(
         id=row["id"],
@@ -244,6 +282,7 @@ def _row_to_entry(conn: sqlite3.Connection, row: sqlite3.Row) -> MemoryEntry:
         scope_tool=row["scope_tool"],
         superseded_by=row["superseded_by"],
         tags=_load_tags(conn, row["id"]),
+        sources=_load_sources(conn, row["id"]),
     )
 
 
@@ -291,7 +330,7 @@ def list_memory(
         conn.close()
 
 
-def _semantic_recall(
+def _semantic_candidates(
     output_dir: Path,
     query: str,
     *,
@@ -299,11 +338,14 @@ def _semantic_recall(
     scope_project: Optional[str],
     include_superseded: bool,
     limit: int,
-) -> Optional[List[MemoryEntry]]:
+    min_similarity: Optional[float] = None,
+) -> Optional[List[Tuple[MemoryEntry, float]]]:
     """Rank memories by embedding cosine similarity to the query.
 
-    Returns None when semantic search is unavailable (no embedding backend,
-    or no embeddings stored yet) so the caller falls back to FTS.
+    Returns ``(entry, similarity)`` pairs, best first; candidates below
+    ``min_similarity`` (when given) are dropped. Returns None when semantic
+    search is unavailable (no embedding backend, or no embeddings stored yet)
+    so the caller falls back to FTS.
     """
     from .embeddings import cosine_similarity, embed_text, unpack_vector
 
@@ -332,60 +374,64 @@ def _semantic_recall(
             if not include_superseded and row["superseded_by"] is not None:
                 continue
             score = cosine_similarity(query_vec, unpack_vector(row["_vec"]))
+            if min_similarity is not None and score < min_similarity:
+                continue
             scored.append((score, row))
 
         scored.sort(key=lambda pair: pair[0], reverse=True)
-        return [_row_to_entry(conn, row) for _score, row in scored[:limit]]
+        return [(_row_to_entry(conn, row), score) for score, row in scored[:limit]]
     except sqlite3.Error:
         return None
     finally:
         conn.close()
 
 
-def recall_memory(
+def _semantic_recall(
     output_dir: Path,
     query: str,
     *,
-    kind: Optional[str] = None,
-    scope_project: Optional[str] = None,
-    include_superseded: bool = False,
-    limit: int = 10,
-    semantic: bool = False,
+    kind: Optional[str],
+    scope_project: Optional[str],
+    include_superseded: bool,
+    limit: int,
+) -> Optional[List[MemoryEntry]]:
+    """Entries of :func:`_semantic_candidates` without a similarity floor."""
+    pairs = _semantic_candidates(
+        output_dir,
+        query,
+        kind=kind,
+        scope_project=scope_project,
+        include_superseded=include_superseded,
+        limit=limit,
+    )
+    return None if pairs is None else [entry for entry, _score in pairs]
+
+
+def _has_stored_vectors(output_dir: Path) -> bool:
+    """True when the embedding backend is importable and a memory has a vector."""
+    from .embeddings import embeddings_available
+
+    if not embeddings_available():
+        return False
+    conn = _connect(output_dir)
+    try:
+        return conn.execute("SELECT 1 FROM memory_embeddings LIMIT 1").fetchone() is not None
+    except sqlite3.Error:
+        return False
+    finally:
+        conn.close()
+
+
+def _fts_recall(
+    output_dir: Path,
+    fts_query: str,
+    *,
+    kind: Optional[str],
+    scope_project: Optional[str],
+    include_superseded: bool,
+    limit: int,
 ) -> List[MemoryEntry]:
-    """Search recorded memory.
-
-    With ``semantic=True`` and the optional embedding backend installed,
-    memories are ranked by embedding similarity to the query — finding
-    thematically related entries, not just keyword matches. Otherwise (or
-    when no embeddings exist) this falls back to the shared ``search_index``
-    FTS table. An empty query always falls back to :func:`list_memory`.
-    """
-    fts_query = build_fts_query(query)
-    if fts_query is None:
-        return list_memory(
-            output_dir,
-            kind=kind,
-            scope_project=scope_project,
-            include_superseded=include_superseded,
-            limit=limit,
-        )
-
-    if semantic:
-        result = _semantic_recall(
-            output_dir,
-            query,
-            kind=kind,
-            scope_project=scope_project,
-            include_superseded=include_superseded,
-            limit=limit,
-        )
-        if result is not None:
-            return result
-        # else: fall through to FTS
-    # Terms are prefix-matched ("oauth" should also find "OAuth2"): FTS5's
-    # unicode61 tokenizer keeps digits in a token, so an exact match would
-    # miss them. A fully quoted query is one phrase (see build_fts_query).
-
+    """Keyword recall over the shared ``search_index`` table, best first."""
     conn = _connect(output_dir)
     try:
         rows = conn.execute(
@@ -421,6 +467,74 @@ def recall_memory(
         return []
     finally:
         conn.close()
+
+
+def recall_memory(
+    output_dir: Path,
+    query: str,
+    *,
+    kind: Optional[str] = None,
+    scope_project: Optional[str] = None,
+    include_superseded: bool = False,
+    limit: int = 10,
+    semantic: Optional[bool] = None,
+) -> List[MemoryEntry]:
+    """Search recorded memory.
+
+    ``semantic`` is a tri-state:
+
+    - ``None`` (auto): keyword search (only, for a quoted phrase); when the
+      optional embedding backend is
+      installed and a vector is stored, also semantic candidates at or above
+      :func:`recall_min_similarity`, fused with keyword hits by RRF. Memories
+      without a vector are still found through keywords.
+    - ``False``: keyword (FTS) search only; the embedder is never touched.
+    - ``True``: rank by embedding similarity without a floor, falling back to
+      FTS when the backend or stored vectors are missing.
+
+    An empty query always falls back to :func:`list_memory`.
+    """
+    fts_query = build_fts_query(query)
+    if fts_query is None:
+        return list_memory(
+            output_dir,
+            kind=kind,
+            scope_project=scope_project,
+            include_superseded=include_superseded,
+            limit=limit,
+        )
+
+    filters: Dict[str, Any] = {
+        "kind": kind,
+        "scope_project": scope_project,
+        "include_superseded": include_superseded,
+        "limit": limit,
+    }
+    if semantic:
+        result = _semantic_recall(output_dir, query, **filters)
+        if result is not None:
+            return result
+        # else: fall through to FTS
+
+    # Terms are prefix-matched ("oauth" should also find "OAuth2"): FTS5's
+    # unicode61 tokenizer keeps digits in a token, so an exact match would
+    # miss them. A fully quoted query is one phrase (see build_fts_query).
+    fts_entries = _fts_recall(output_dir, fts_query, **filters)
+    # A quoted phrase asks for that exact text: build_fts_query ends a phrase with
+    # '"' and every term query with '*'. Fusing similar-meaning memories would
+    # break that contract, so auto mode stays keyword-only for phrases.
+    if semantic is not None or fts_query.endswith('"') or not _has_stored_vectors(output_dir):
+        return fts_entries
+
+    pairs = _semantic_candidates(
+        output_dir, query, min_similarity=recall_min_similarity(), **filters
+    )
+    if not pairs:
+        return fts_entries
+    fts_results = [{"id": e.id, "entry": e, "score": 0.0} for e in fts_entries]
+    semantic_results = [{"id": e.id, "entry": e, "score": s} for e, s in pairs]
+    fused = rrf_merge(fts_results, semantic_results, key=lambda r: str(r["id"]), limit=limit)
+    return [r["entry"] for r in fused]
 
 
 def supersede_memory(

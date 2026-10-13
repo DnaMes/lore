@@ -207,10 +207,13 @@ def test_recall_memory_phrase_vs_terms(tmp_path):
     add_memory(tmp_path, "fact", "Adjacent", "remember the exact phrase always")
     add_memory(tmp_path, "fact", "Scattered", "an exact match of another phrase")
     assert [e.title for e in recall_memory(tmp_path, '"exact phrase"')] == ["Adjacent"]
-    assert {e.title for e in recall_memory(tmp_path, "exact phrase")} == {"Adjacent", "Scattered"}
+    assert {e.title for e in recall_memory(tmp_path, "exact phrase", semantic=False)} == {
+        "Adjacent",
+        "Scattered",
+    }
     add_memory(tmp_path, "fact", "Stray", "alpha beta gamma")
-    assert [e.title for e in recall_memory(tmp_path, 'alpha"beta')] == ["Stray"]
-    assert recall_memory(tmp_path, '"') == []
+    assert [e.title for e in recall_memory(tmp_path, 'alpha"beta', semantic=False)] == ["Stray"]
+    assert recall_memory(tmp_path, '"', semantic=False) == []
 
 
 # ---------------------------------------------------------------------------

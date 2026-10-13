@@ -37,6 +37,12 @@ lore knowledge --tool opencode
 lore knowledge --limit 20
 ```
 
+The conversation text of each session is sent to the configured provider (the
+provider is named before anything is sent). Results are stored per session in
+`session_knowledge`; sessions unchanged since the last run are skipped, and
+deleted sessions are excluded. `--tool` also scopes the printed output. The command
+exits 1 when every provider call fails.
+
 ### 3. `lore format` - Session Formatting
 
 Format sessions with AI-generated summaries and tags.

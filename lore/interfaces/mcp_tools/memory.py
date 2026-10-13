@@ -112,6 +112,7 @@ def register(server, deps: MCPToolDeps) -> None:
         except ValueError as exc:
             return str(exc)
 
+        semantic = args.get("semantic")
         entries = recall_memory(
             deps.server.output_dir,
             query,
@@ -119,7 +120,7 @@ def register(server, deps: MCPToolDeps) -> None:
             scope_project=scope_project,
             include_superseded=bool(args.get("include_superseded")),
             limit=limit,
-            semantic=bool(args.get("semantic")),
+            semantic=None if semantic is None else bool(semantic),
         )
         return deps.json_text(
             {
@@ -131,8 +132,10 @@ def register(server, deps: MCPToolDeps) -> None:
     server.register_tool(
         "memory_recall",
         "Search the shared cross-tool memory store for facts/decisions/lessons "
-        "recorded earlier — by you or by an agent in another tool. Set "
-        "semantic=true to rank by meaning rather than keywords.",
+        "recorded earlier — by you or by an agent in another tool. Matches "
+        "keywords and, when the embedding backend is installed, meaning; each "
+        "memory lists the sessions it came from. A query in double quotes is an "
+        "exact phrase. Set semantic=false for keywords only.",
         {
             "type": "object",
             "properties": {
@@ -142,8 +145,9 @@ def register(server, deps: MCPToolDeps) -> None:
                 "include_superseded": {"type": "boolean"},
                 "semantic": {
                     "type": "boolean",
-                    "description": "rank by embedding similarity (needs the "
-                    "'semantic' extra installed); falls back to keyword search",
+                    "description": "omit for auto (keywords plus meaning when the "
+                    "'semantic' extra is installed); false = keywords only; "
+                    "true = rank by embedding similarity, no relevance floor",
                 },
                 "limit": {"type": "integer"},
             },

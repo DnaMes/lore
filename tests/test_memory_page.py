@@ -54,13 +54,32 @@ def test_memory_page_kind_filter(client):
     assert "A decision entry" not in body
 
 
-def test_memory_page_keyword_search(client):
+def test_memory_page_keyword_search(client, monkeypatch):
+    import lore.storage.embeddings as emb
+
+    # Keyword behaviour only: with the real model installed, hybrid recall would
+    # also add semantically near memories (see test_memory_hybrid.py).
+    monkeypatch.setattr(emb, "embeddings_available", lambda: False)
     c, tmp_path = client
     add_memory(tmp_path, "fact", "Kubernetes notes", "ingress configuration")
     add_memory(tmp_path, "fact", "Database notes", "connection pooling")
     body = c.get("/memory?q=kubernetes").get_data(as_text=True)
     assert "Kubernetes notes" in body
     assert "Database notes" not in body
+
+
+def test_memory_page_semantic_checkbox_is_true_or_auto(client, monkeypatch):
+    seen = []
+
+    def fake_recall(output_dir, query, **kwargs):
+        seen.append(kwargs["semantic"])
+        return []
+
+    monkeypatch.setattr("lore.storage.recall_memory", fake_recall)
+    c, _tmp = client
+    c.get("/memory?q=x")
+    c.get("/memory?q=x&semantic=1")
+    assert seen == [None, True]
 
 
 def test_memory_page_rejects_invalid_kind(client):
