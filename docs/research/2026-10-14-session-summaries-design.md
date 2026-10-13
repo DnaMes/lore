@@ -1,4 +1,5 @@
-<!-- Research report, agent-generated on 2026-10-14 for issue #197 follow-up work.
+<!-- Note: in the implementation plan the summaries table is migration 18 (17 is the contract migration).
+     Research report, agent-generated on 2026-10-14 for issue #197 follow-up work.
      Facts marked NV / UNVERIFIED were not verified by the author. Star counts and
      dates are a snapshot. Local-machine observations describe one developer machine. -->
 

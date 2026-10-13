@@ -225,7 +225,7 @@ from stored usage with an offline price table. Both read-only.
   prompt or the stored output, an unchanged session makes zero provider calls,
   a growing session re-runs only its last chunk and the merge, tombstoned
   sessions are never sent and their rows are removed.
-- UI: no content clipped at 390 px, `data-session-id` valid JSON, delete only
+- UI: no content clipped at 390 px, `data-session-id` equals the session id exactly after HTML parsing, delete only
   behind a menu or selection, keyboard operable list and detail.
 - Full suite: no new failures against the measured baseline, ruff clean, mypy
   not above baseline.

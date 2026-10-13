@@ -16,23 +16,23 @@
 - Persistence decision: `messages` stays one row per turn. Tool calls and results stay inline in `content` in the existing `[Tool: ...]` text format (FTS and summaries read it); migration 17 adds `kind` (`text` | `injected_context` | `compaction_summary`), `parent_id`, `active`, `tool_events_json` (compact `[{name, status, duration_ms, is_error}]`, no arguments or results) and `reasoning` (thinking text, excluded from the FTS body). `UnifiedMessage.tool_calls`/`.reasoning` map onto these.
 - Reuse invalidation: `sessions.parser_version` (int, migration 17) and `BaseExtractor.PARSER_VERSION`; an indexed session whose stored parser version is lower than the extractor's is re-extracted even when the source mtime is unchanged. Every extractor task bumps its version.
 - Automated sessions (`origin` exec/cron/subagent) are excluded by default from `lore knowledge`, `lore improve` and `lore summarize` as well as from list/search; `--include-automated` widens them.
-- SQLite sources of other tools: copy the database and its `-wal`/`-shm` files into a scratch directory and open the copy; never open the original, even read-only (opening can create `-wal`/`-shm` next to it).
+- SQLite sources of other tools: copy the database and its `-wal`/`-shm` files into a scratch directory and open the copy; never open the original, even read-only (opening can create `-wal`/`-shm` next to it). A copy of a live database is not an atomic snapshot: accept a state that may lag the live one, retry once on a corruption error, never write, and delete the copy afterwards.
 - Extractors are read-only on user data; never log message content; never touch auth/creds/token files; open SQLite sources with `mode=ro`.
 - Tests: synthetic fixtures built from the documented schemas, under `tests/fixtures/<tool>/` or generated in `tmp_path`. No real home access, no network, no model download, providers faked.
 - Public repo: no personal paths, names, project slugs or secrets in code, fixtures, docs or commit messages.
-- Test command: `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest <paths> -p no:cacheprovider -q -o addopts=""`. Never run the CLI manually with that HOME; use `HOME=$(mktemp -d)`.
+- Test command: `HOME=$TEST_HOME <main-checkout>/.venv/bin/python -m pytest <paths> -p no:cacheprovider -q -o addopts=""` where `$TEST_HOME` is a scratch directory reserved for the suite. Never run the CLI manually with that HOME; use `HOME=$(mktemp -d)`.
 - Backward compatible: JSON keys and CLI flags additive; existing exports unchanged.
 
 ## Night-loop protocol (what each iteration does)
 
-0. **Never develop in the main checkout.** `lore-sync.timer` runs `lore_cli.py export --all` from `~/projects/ai-stack/lore` against the real archive every two hours, so whatever is checked out there runs unreviewed overnight. The main checkout stays on `main`. All work happens in a worktree: `git fetch github && git worktree add ~/.cache/lore-night/wt-<block> -b feat/197-<block> github/main`; run tests from inside the worktree with the main checkout's interpreter (`cd <worktree> && ~/projects/ai-stack/lore/.venv/bin/python -m pytest ...`, the working directory wins on `sys.path`). Remove the worktree when the block has shipped.
+0. **Never develop in the main checkout.** A user-level `lore-sync.timer` may run `lore_cli.py export --all` from the main checkout against the real archive every two hours, so whatever is checked out there runs unreviewed overnight. The main checkout stays on `main`. All work happens in a worktree: `git fetch github && git worktree add <cache>/lore-night/wt-<block> -b feat/197-<block> github/main`; run tests from inside the worktree with the main checkout's interpreter (`cd <worktree> && <main-checkout>/.venv/bin/python -m pytest ...`, the working directory wins on `sys.path`). Remove the worktree when the block has shipped.
 1. `git status` and `git log --oneline -5` in the worktree; find the first unchecked task below whose dependencies are checked. The committed docs under `docs/research/`, the spec and this plan are part of the program, not foreign work. If the worktree is dirty with something that is not from the current task, stop and report.
 2. Branch: one branch and worktree per block (`feat/197-<block>`), created from `github/main` on the first task of the block.
 3. Dispatch ONE `implementer` subagent with: the task text, the Global constraints, the paths to the spec and research docs, the verification commands, and "do not run git write commands; do not run the whole suite". Never run two implementers at once.
 4. Verify yourself: run the task's tests, ruff, mypy; read the diff; for tasks tagged **[R]** dispatch a read-only `code-reviewer` on the working tree (security, transactions, migrations, redaction, privacy) and fix every FIX before committing.
 5. Hand the explicit paths to `git-ops` for `commit+push` of the branch (never the gate for a single task).
 6. Tick the task's checkbox in this file in the same commit as the task, so a restart never repeats finished work.
-7. End of block: full suite once, record counts, `review-gate` through `git-ops` for the branch tip; on BLOCK fix and ship again, up to 4 rounds, then record in `docs/TODO.md` with a recommended decision and move on to the next independent block.
+7. Gate cadence: tasks are committed and pushed to the block branch without the gate; the gate runs once per block, on the branch tip, after the full suite (so reviewers see the block as a whole). End of block: full suite once, record counts, `review-gate` through `git-ops` for the branch tip; on BLOCK fix and ship again, up to 4 rounds, then record in `docs/TODO.md` with a recommended decision and move on to the next independent block.
 8. Stop conditions: the same failure survives 4 rounds; a task needs something outside the constraints (cloud call, deploy, data deletion, secret); free disk below 10 GB; the suite baseline gets worse for reasons outside the task. Record the reason in `docs/TODO.md` and stop the loop with a summary.
 9. Do not: touch branding, publish, deploy, change global agent configs or hooks, run `lore` against the real archive for writing, force-push, skip hooks.
 10. Resource rules: full suite at most once per block; delete scratch dirs you create. **Real-data counts** are taken with a small script under `/tmp` that instantiates the extractor and counts what `extract_sessions()` yields (nothing is written to the archive); `lore check --deep` and every other `lore` command run only with `HOME=$(mktemp -d)`, never against the real `~/.lore` (it would run migrations on the real archive).
@@ -101,7 +101,7 @@ Read `brain/<id>/.system_generated/logs/transcript_full.jsonl` (else `transcript
 - [ ] done
 
 ### B2.5 Hermes — dossier "Hermes"
-`~/.hermes/profiles/*/state.db` and `~/.hermes/state.db`: sessions + messages, skip `active=0`, `parent_session_id` relation, per-model usage, `origin` from `source`; work on a scratch copy of the database and its WAL/SHM files; a per-session fingerprint derived from `last_activity_at` is stored in the existing `source_mtime_ns` field, so the base contract does not change.
+`~/.hermes/profiles/*/state.db` and `~/.hermes/state.db`: sessions + messages, skip `active=0`, `parent_session_id` relation, per-model usage, `origin` from `source`; work on a scratch copy of the database and its WAL/SHM files; a per-session fingerprint derived from `last_activity_at` is stored in the existing `source_mtime_ns` field, so the base contract does not change. Invariant, with a test: the value changes whenever the session's content changes, and nothing but equality is ever done with it for this source.
 - [ ] done
 
 ### B2.6 Claude Code enrichment — dossier "Claude Code"
@@ -113,7 +113,7 @@ Thinking blocks, `message.model`, `ai-title`/`custom-title`, `isMeta`, `isCompac
 - [ ] done
 
 ### B2.7b Cursor IDE store enrichment
-Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` for timestamps and archive flags (scratch copy of `state.vscdb`); never persist `blobEncryptionKey` or other key fields.
+Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` for timestamps and archive flags (scratch copy of `state.vscdb`); never persist `blobEncryptionKey` or other key fields. A test asserts that no field whose name contains `key`, `secret`, `token` or `encryption` from composer data reaches the database or the index JSON.
 - [ ] done
 
 ### B2.8 Wave 2 (separate small tasks; fixtures from the documented schemas, flagged "not verified on real data" in the README row)
@@ -137,6 +137,10 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 **Done when:** tests prove no cache file is written for a transcript task and that `num_ctx` reaches the request.
 - [ ] done
 
+### B3.3 Redaction for exports and sharing
+`lore export --redact` (markdown/HTML/JSON) and every future share feature call `redact()`; plain exports stay unredacted by design because they are local files the user asked for, and the README says so.
+- [ ] done
+
 ## Block B4 — summaries (design: `docs/research/2026-10-14-session-summaries-design.md`)
 
 ### B4.1 Deterministic artifacts and compressor
@@ -144,7 +148,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 - [ ] done
 
 ### B4.2 Storage (migration 18) **[R]**
-`lore/storage/summaries.py` with `session_summaries` as in the design; `get_summary`, `save_summary` (only after validation), `delete_summaries_for_session`, `list_summaries`; tombstoned sessions never returned. Wire `delete_summaries_for_session` (and `session_knowledge` cleanup) into the same code path that records a deletion tombstone in the web, MCP and CLI, with a test per path.
+`lore/storage/summaries.py` with `session_summaries` as in the design; `get_summary`, `save_summary` (only after validation), `delete_summaries_for_session`, `list_summaries`; tombstoned sessions never returned. Wire `delete_summaries_for_session` (and `session_knowledge` cleanup) into the same code path that records a deletion tombstone in the web, MCP and CLI, with a test per path, plus a test that a tombstoned session's summary stays deleted after a re-sync (`_write_reused_entry` must not resurrect it).
 - [ ] done
 
 ### B4.3a Single-pass pipeline and validator **[R]**
@@ -166,7 +170,7 @@ Flags as in the design (`--session`, `--project`, `--since`, `--tool`, `--provid
 ## Block B5 — session view (order from the UX report, section 11)
 
 ### B5.1 Fixes and compact rows
-Compact two-line rows with tokens, duration, time and project chip; drop the per-row delete (menu only); remove the duplicated outline line; fix the 390 px clipping; snapshot tests updated only where the diff is the intended markup.
+Compact two-line rows (use a list/listitem structure with real links and buttons; the mock's `role=option` rows with interactive children are not a valid pattern) with tokens, duration, time and project chip; drop the per-row delete (menu only); remove the duplicated outline line; fix the 390 px clipping; snapshot tests updated only where the diff is the intended markup.
 - [ ] done
 
 ### B5.2 Code blocks, tool status, thinking
@@ -186,6 +190,7 @@ Consecutive tool calls grouped into one `<details>` with counts and status; merg
 - [ ] done
 
 ### B5.6 Mobile sheets and bulk select
+Port the mock's keyboard handlers with guards: ignore events with ctrl/meta/alt modifiers and targets that are inputs, textareas or contenteditable; carry the CSP nonce on any script/style block.
 Outline and filters as bottom sheets with focus trap; explicit select mode with bulk actions.
 - [ ] done
 
