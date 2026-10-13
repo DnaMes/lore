@@ -25,6 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .fts import build_fts_query
 from .schema import open_v2_connection
 from .writer import v2_db_path
 
@@ -355,8 +356,8 @@ def recall_memory(
     when no embeddings exist) this falls back to the shared ``search_index``
     FTS table. An empty query always falls back to :func:`list_memory`.
     """
-    terms = [t for t in (query or "").split() if t]
-    if not terms:
+    fts_query = build_fts_query(query)
+    if fts_query is None:
         return list_memory(
             output_dir,
             kind=kind,
@@ -377,10 +378,9 @@ def recall_memory(
         if result is not None:
             return result
         # else: fall through to FTS
-    # Prefix-match each term ("oauth" should also find "OAuth2"): FTS5's
+    # Terms are prefix-matched ("oauth" should also find "OAuth2"): FTS5's
     # unicode61 tokenizer keeps digits in a token, so an exact match would
-    # miss them. Double-quote to neutralise FTS operator characters.
-    fts_query = " ".join(f'"{t}"*' for t in terms)
+    # miss them. A fully quoted query is one phrase (see build_fts_query).
 
     conn = _connect(output_dir)
     try:

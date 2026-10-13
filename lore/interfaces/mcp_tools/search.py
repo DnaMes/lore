@@ -7,6 +7,7 @@ from datetime import datetime
 from ...utils.datetime import make_naive, parse_duration
 from ...utils.security import (
     validate_search_param,
+    validate_search_query,
     validate_session_id,
     validate_tool_name,
 )
@@ -27,7 +28,7 @@ def register(server, deps: MCPToolDeps) -> None:
         limit = deps.normalize_limit(args.get("limit"), default=10)
         scope = str(args.get("scope") or "all").strip().lower()
 
-        if not query or not validate_search_param(query):
+        if not query or not validate_search_query(query):
             return "Invalid search query parameter."
         if tool_filter and not validate_tool_name(tool_filter):
             return "Invalid tool parameter."

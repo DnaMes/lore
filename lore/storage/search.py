@@ -18,6 +18,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .fts import build_fts_query
 from .reader import _row_to_session_dict
 from .schema import open_connection
 from .writer import v2_db_path
@@ -73,11 +74,11 @@ def search_sessions(
     if not db.exists():
         return []
 
-    terms = [t for t in (query or "").split() if t]
-    if not terms:
+    fts_query = build_fts_query(query)
+    # Quotes only mark a phrase for FTS; the scoped LIKE helper needs bare terms.
+    terms = [t for t in (query or "").replace('"', " ").split() if t]
+    if fts_query is None or not terms:
         return []
-    # Prefix-match each term; double-quote to neutralise FTS operators.
-    fts_query = " ".join(f'"{t}"*' for t in terms)
 
     conn = open_connection(db)
     try:

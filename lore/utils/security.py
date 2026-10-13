@@ -263,3 +263,19 @@ def validate_search_param(param: str, max_length: int = 256) -> bool:
 
     forbidden_chars = [";", "|", "&", "\n", "\r", "\0", "<", ">", '"', "'"]
     return not any(char in param for char in forbidden_chars)
+
+
+def validate_search_query(query: str, max_length: int = 256) -> bool:
+    """Validate a free-text search query.
+
+    Same rules as :func:`validate_search_param`, except that a double quote is
+    allowed when the whole query is one quoted phrase: it starts and ends with
+    ``"``, has exactly two quotes and non-empty content between them (#197).
+    """
+    if len(query or "") > max_length:
+        return False
+
+    text = (query or "").strip()
+    if len(text) >= 2 and text.startswith('"') and text.endswith('"') and text.count('"') == 2:
+        return bool(text[1:-1].strip()) and validate_search_param(text[1:-1], max_length)
+    return validate_search_param(query, max_length)

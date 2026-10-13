@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from ...utils.security import (
     validate_search_param,
+    validate_search_query,
     validate_session_id,
     validate_tool_name,
 )
@@ -93,7 +94,7 @@ def register(server, deps: MCPToolDeps) -> None:
         from ...storage import MEMORY_KINDS, recall_memory
 
         query = str(args.get("query") or "").strip()
-        if query and not validate_search_param(query):
+        if query and not validate_search_query(query):
             return "Invalid search query."
 
         kind = args.get("kind")

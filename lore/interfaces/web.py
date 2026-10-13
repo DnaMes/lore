@@ -21,6 +21,7 @@ from lore.extractors.factory import get_all_extractors
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.utils.security import (
     validate_search_param,
+    validate_search_query,
     validate_session_id,
     validate_tool_name,
 )
@@ -1617,7 +1618,7 @@ def memory_page():
     kind = request.args.get("kind", "").strip() or None
     semantic = request.args.get("semantic", "") in ("1", "true", "on")
 
-    if query and not validate_search_param(query):
+    if query and not validate_search_query(query):
         return "Invalid search query", 400
     if kind and kind not in MEMORY_KINDS:
         return "Invalid kind", 400
@@ -1729,7 +1730,7 @@ def api_search():
     if len(q) < 2:
         return jsonify([])
 
-    if not validate_search_param(q):
+    if not validate_search_query(q):
         return jsonify({"error": "Invalid search query"}), 400
 
     tool = request.args.get("tool", "")
@@ -1761,7 +1762,7 @@ def api_v1_search():
     if len(q) < 2:
         return jsonify({"query": q, "count": 0, "results": []})
 
-    if not validate_search_param(q):
+    if not validate_search_query(q):
         return jsonify({"error": "Invalid search query"}), 400
 
     tool = request.args.get("tool", "")
@@ -1863,7 +1864,7 @@ def api_v1_sessions():
         return jsonify({"error": "Invalid thread_id parameter"}), 400
 
     q = request.args.get("q", "")
-    if q and not validate_search_param(q):
+    if q and not validate_search_query(q):
         return jsonify({"error": "Invalid search query"}), 400
 
     # Pagination: ?page=1&per_page=50 (preferred) or legacy ?limit= (still honoured
