@@ -295,6 +295,27 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_memory_status ON memory(status);
         """,
     ),
+    (
+        17,
+        "session origin/relations and message kind, tree, tool events, reasoning (#197)",
+        # origin: interactive | exec | cron | subagent | unknown. messages stay one
+        # row per turn; tool_events_json is a compact [{name,status,duration_ms,
+        # is_error}] (no arguments or results), reasoning is excluded from FTS.
+        """
+        ALTER TABLE sessions ADD COLUMN origin TEXT NOT NULL DEFAULT 'unknown';
+        ALTER TABLE sessions ADD COLUMN parent_session_id TEXT;
+        ALTER TABLE sessions ADD COLUMN relation TEXT;
+        ALTER TABLE sessions ADD COLUMN source_version TEXT;
+        ALTER TABLE sessions ADD COLUMN parser_version INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX IF NOT EXISTS idx_sessions_origin ON sessions(origin);
+        CREATE INDEX IF NOT EXISTS idx_sessions_parent ON sessions(parent_session_id);
+        ALTER TABLE messages ADD COLUMN kind TEXT NOT NULL DEFAULT 'text';
+        ALTER TABLE messages ADD COLUMN parent_id TEXT;
+        ALTER TABLE messages ADD COLUMN active INTEGER NOT NULL DEFAULT 1;
+        ALTER TABLE messages ADD COLUMN tool_events_json TEXT;
+        ALTER TABLE messages ADD COLUMN reasoning TEXT;
+        """,
+    ),
 ]
 
 

@@ -57,7 +57,7 @@
 **Files:** `lore/core/models.py`, `lore/storage/schema.py`, `lore/storage/writer.py`, `lore/storage/reader.py`, `tests/test_contract_fields.py`.
 **Interfaces:** `UnifiedSession.origin: str = "unknown"`, `.parent_session_id: Optional[str] = None`, `.relation: Optional[str] = None`, `.source_version: Optional[str] = None`, `.parser_version: int = 0`; `UnifiedMessage.kind: str = "text"`, `.parent_id: Optional[str] = None`, `.active: bool = True` (existing `tool_calls`/`reasoning` fields get persisted through `tool_events_json`/`reasoning`). Migration 17 adds nullable/defaulted columns on `sessions` and `messages` as in the persistence decision. Allowed values are constants in `lore/core/models.py`.
 **Done when:** a v16 DB with data opens at v17 unchanged; writer → reader round trip preserves every field including `reasoning` and `tool_events_json`; old extractors need no change; `load_session_messages_v2` returns the new fields; existing suites stay green.
-- [ ] done
+- [x] done
 
 ### B1.1b Index JSON, reuse paths and parser-version invalidation **[R]**
 **Files:** `lore/exporters/index.py`, `lore/storage/writer.py` (`_write_reused_entry`, `_refresh_complete_session`), `lore/extractors/base.py` (`PARSER_VERSION`, `_source_unchanged`), `tests/test_parser_version_reuse.py`.

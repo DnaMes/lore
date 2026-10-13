@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
-from ..core.models import UnifiedSession
+from ..core.models import MESSAGE_KINDS, ORIGINS, RELATIONS, UnifiedMessage, UnifiedSession
 from .schema import initialise
 from .session_vectors import _MAX_EMBED_CHARS, embed_sessions
 
@@ -45,6 +45,77 @@ def _session_metadata_json(session: UnifiedSession) -> Optional[str]:
     if session.title_source is not None:
         extras["title_source"] = getattr(session.title_source, "value", str(session.title_source))
     return json.dumps(extras, ensure_ascii=False) if extras else None
+
+
+_MAX_TOOL_EVENTS = 50
+_MAX_TOOL_NAME_CHARS = 80
+_MAX_REASONING_CHARS = 20_000
+# Total reasoning kept per session; later messages get it truncated or dropped.
+_MAX_SESSION_REASONING_CHARS = 200_000
+_ERROR_STATUSES = ("error", "failed", "failure")
+
+
+def _scrub(text: str) -> str:
+    """Replace lone surrogates (JS-truncated emoji) that SQLite cannot encode."""
+    return text.encode("utf-8", "replace").decode("utf-8")
+
+
+def _tool_events_json(message: UnifiedMessage) -> Optional[str]:
+    """Compact per-call summary: no arguments and no results are stored.
+
+    ``tool_events`` (already compact) wins; otherwise the structured
+    ``tool_calls`` are reduced.
+    """
+    source = message.tool_events or message.tool_calls or []
+    events = []
+    for call in source[:_MAX_TOOL_EVENTS]:
+        if not isinstance(call, dict):
+            continue
+        name = _scrub(str(call.get("tool") or call.get("name") or "tool"))
+        status = call.get("status")
+        duration = call.get("duration_ms")
+        events.append(
+            {
+                "name": name[:_MAX_TOOL_NAME_CHARS],
+                "status": _scrub(str(status)) if status is not None else None,
+                "duration_ms": duration if isinstance(duration, (int, float)) else None,
+                "is_error": bool(call.get("is_error"))
+                or str(status or "").lower() in _ERROR_STATUSES,
+            }
+        )
+    if len(source) > _MAX_TOOL_EVENTS:
+        events.append(
+            {
+                "name": "…",
+                "status": "truncated",
+                "duration_ms": None,
+                "is_error": False,
+                "dropped": len(source) - _MAX_TOOL_EVENTS,
+            }
+        )
+    return json.dumps(events) if events else None
+
+
+def _write_contract_columns(conn: sqlite3.Connection, session: UnifiedSession) -> None:
+    """Persist the migration-17 session columns, normalising unknown values."""
+    origin = session.origin if session.origin in ORIGINS else "unknown"
+    relation = session.relation if session.relation in RELATIONS else None
+    try:
+        parser_version = int(session.parser_version or 0)
+    except (TypeError, ValueError):
+        parser_version = 0
+    conn.execute(
+        "UPDATE sessions SET origin = ?, parent_session_id = ?, relation = ?, "
+        "source_version = ?, parser_version = ? WHERE id = ?",
+        (
+            origin,
+            session.parent_session_id or None,
+            relation,
+            session.source_version or None,
+            parser_version,
+            session.session_id,
+        ),
+    )
 
 
 def _source_mtime_ns(source_path: Optional[str]) -> Optional[int]:
@@ -279,15 +350,21 @@ def _write_full_session(
         ),
     )
 
+    _write_contract_columns(conn, session)
+
     body_parts = [title]
+    reasoning_budget = _MAX_SESSION_REASONING_CHARS
     for seq, message in enumerate(session.messages):
-        content = message.content or ""
+        content = _scrub(message.content or "")
+        reasoning = _scrub(message.reasoning or "")[: min(_MAX_REASONING_CHARS, reasoning_budget)]
+        reasoning_budget -= len(reasoning)
         role = getattr(message.role, "value", str(message.role))
         conn.execute(
             """
             INSERT INTO messages (
-                session_id, seq, role, content, timestamp, model, tokens_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                session_id, seq, role, content, timestamp, model, tokens_json,
+                kind, parent_id, active, tool_events_json, reasoning
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session.session_id,
@@ -297,6 +374,11 @@ def _write_full_session(
                 message.timestamp.isoformat() if message.timestamp else None,
                 message.model,
                 json.dumps(message.tokens) if message.tokens else None,
+                message.kind if message.kind in MESSAGE_KINDS else "text",
+                message.parent_id or None,
+                1 if message.active else 0,
+                _tool_events_json(message),
+                reasoning or None,
             ),
         )
         body_parts.append(content)
@@ -345,6 +427,9 @@ def _write_reused_full_session(
         1,
     )
     conn.execute(_SESSION_INSERT, values)
+    # This overwrites origin/parent/relation/parser_version with the freshly
+    # extracted values even though messages are reused (B1.1b revisits it).
+    _write_contract_columns(conn, session)
     body_parts = [title]
     body_parts.extend(
         content
@@ -461,7 +546,7 @@ class StreamingV2Writer:
         try:
             if self._begun:
                 self.conn.execute("ROLLBACK")
-        except sqlite3.OperationalError:
+        except sqlite3.Error:
             pass
         finally:
             self.conn.close()
@@ -506,7 +591,7 @@ def write_sessions(
         for session in sessions:
             writer.add_full(session)
         return writer.finalize()
-    except sqlite3.Error:
+    except Exception:  # noqa: BLE001 - abort the transaction and connection, then re-raise
         writer.abort()
         raise
 

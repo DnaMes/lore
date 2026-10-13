@@ -63,6 +63,12 @@ def normalize_tool_call(raw: Dict[str, Any]) -> Dict[str, Any]:
     return canonical
 
 
+# Closed value sets for the contract fields; storage normalises anything else.
+ORIGINS = ("interactive", "exec", "cron", "subagent", "unknown")
+RELATIONS = ("subagent", "fork", "continuation", "compaction")
+MESSAGE_KINDS = ("text", "injected_context", "compaction_summary")
+
+
 class Tool(Enum):
     CLAUDE_CODE = "claude-code"
     CURSOR = "cursor"
@@ -96,6 +102,12 @@ class UnifiedMessage:
     tokens: Optional[Dict[str, int]] = None
     tool_calls: List[Dict[str, Any]] = field(default_factory=list)
     reasoning: Optional[str] = None
+    kind: str = "text"  # one of MESSAGE_KINDS
+    parent_id: Optional[str] = None
+    active: bool = True
+    # Compact [{name,status,duration_ms,is_error}] read back from storage; never
+    # holds arguments or results, so renderers must not treat it as tool_calls.
+    tool_events: List[Dict[str, Any]] = field(default_factory=list)
 
 
 class TitleSource(Enum):
@@ -130,6 +142,11 @@ class UnifiedSession:
     generated_title: Optional[str] = None
     title_source: Optional[TitleSource] = None
     todos: List[Dict[str, Any]] = field(default_factory=list)
+    origin: str = "unknown"  # one of ORIGINS
+    parent_session_id: Optional[str] = None
+    relation: Optional[str] = None  # one of RELATIONS
+    source_version: Optional[str] = None
+    parser_version: int = 0
 
     @property
     def message_count(self) -> int:

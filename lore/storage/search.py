@@ -25,7 +25,7 @@ from .fts import (
     build_fts_query,
     phrase_of,
 )
-from .reader import _row_to_session_dict
+from .reader import _row_to_session_dict, session_contract_select
 from .schema import open_connection
 from .writer import v2_db_path
 
@@ -102,6 +102,7 @@ def search_sessions(
                    s.git_branch, s.git_commit, s.metadata_json,
                    s.messages_count, s.prompt_count, s.prompt_outline,
                    s.export_path, s.total_tokens,
+                   {session_contract_select(conn, "s")},
                    bm25(search_index) AS score,
                    snippet(search_index, {SEARCH_INDEX_BODY_COLUMN}, ?, ?, '…', 24) AS snippet
             FROM search_index
@@ -224,12 +225,13 @@ def semantic_search_sessions(
     conn = open_connection(db)
     try:
         rows = conn.execute(
-            """
+            f"""
             SELECT s.id, s.tool, s.project, s.thread_id, s.title,
                    s.created, s.updated, s.source_path, s.source_mtime_ns,
                    s.git_branch, s.git_commit, s.metadata_json,
                    s.messages_count, s.prompt_count, s.prompt_outline,
                    s.export_path, s.total_tokens,
+                   {session_contract_select(conn, "s")},
                    se.distance AS score
             FROM session_embeddings se
             JOIN sessions s ON s.id = se.session_id

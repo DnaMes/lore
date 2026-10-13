@@ -24,6 +24,23 @@ from .writer import v2_db_path
 
 # A v2 DB is only usable once the denormalised display columns exist (v6).
 _MIN_USABLE_VERSION = 6
+# Contract columns (origin, relation, kind, ...) arrive with migration 17; a
+# reader that opens an older store without migrating selects defaults instead.
+_CONTRACT_VERSION = 17
+_SESSION_CONTRACT_COLUMNS = (
+    "origin",
+    "parent_session_id",
+    "relation",
+    "source_version",
+    "parser_version",
+)
+_SESSION_CONTRACT_DEFAULTS = (
+    "'unknown' AS origin, NULL AS parent_session_id, NULL AS relation, "
+    "NULL AS source_version, 0 AS parser_version"
+)
+_MESSAGE_CONTRACT_DEFAULTS = (
+    "'text' AS kind, NULL AS parent_id, 1 AS active, NULL AS tool_events_json, NULL AS reasoning"
+)
 # store_meta.generated_at is written from migration 9 onward; below this a v2
 # store cannot be staleness-checked, so it is not considered usable.
 _MIN_STALENESS_VERSION = 9
@@ -82,6 +99,14 @@ def v2_is_available(output_dir: Path, compare_to: Optional[Path] = None) -> bool
         return False
 
 
+def session_contract_select(conn: sqlite3.Connection, alias: str = "") -> str:
+    """SELECT fragment for the migration-17 session columns (defaults on older stores)."""
+    if current_version(conn) < _CONTRACT_VERSION:
+        return _SESSION_CONTRACT_DEFAULTS
+    prefix = f"{alias}." if alias else ""
+    return ", ".join(f"{prefix}{col}" for col in _SESSION_CONTRACT_COLUMNS)
+
+
 def _row_to_session_dict(row: sqlite3.Row) -> Dict[str, Any]:
     """Map one v2 ``sessions`` row to a legacy index session dict."""
     metadata: Dict[str, Any] = {}
@@ -109,6 +134,11 @@ def _row_to_session_dict(row: sqlite3.Row) -> Dict[str, Any]:
         "source_path": row["source_path"],
         "source_mtime": row["source_mtime_ns"],
         "summary": metadata.get("summary"),
+        "origin": row["origin"] or "unknown",
+        "parent_session_id": row["parent_session_id"],
+        "relation": row["relation"],
+        "source_version": row["source_version"],
+        "parser_version": int(row["parser_version"] or 0),
     }
 
 
@@ -153,12 +183,14 @@ def load_index_v2(output_dir: Path) -> Dict[str, Any]:
     # could show a session row whose messages were just deleted (#40).
     conn = open_connection(db)
     try:
+        session_contract = session_contract_select(conn)
         rows = conn.execute(
-            """
+            f"""
             SELECT id, tool, project, thread_id, title, created, updated,
                    source_path, source_mtime_ns, git_branch, git_commit,
                    metadata_json, messages_count, prompt_count,
-                   prompt_outline, export_path, total_tokens
+                   prompt_outline, export_path, total_tokens,
+                   {session_contract}
             FROM sessions
             ORDER BY updated DESC
             """
@@ -176,13 +208,20 @@ def load_index_v2(output_dir: Path) -> Dict[str, Any]:
     }
 
 
-def load_session_messages_v2(output_dir: Path, session_id: str) -> Optional[list]:
+def load_session_messages_v2(
+    output_dir: Path, session_id: str, *, include_reasoning: bool = False
+) -> Optional[list]:
     """Load one session's messages from the v2 store, with per-message tokens/model.
 
     Returns a list of ``UnifiedMessage`` (ordered by seq) when the session has
     its message rows synced (``messages_synced = 1``), else ``None`` so callers
     fall back to the token-less export-markdown path. This is the path that lets
     the default served view carry token/model chips without ``?live=1`` (#62).
+
+    ``include_reasoning`` is opt-in: thinking text can be up to 20k characters per
+    message and must not reach exports or MCP responses by default, so ``reasoning``
+    is ``None`` unless a caller asks for it. Compact ``tool_events`` are always
+    loaded; they are small and carry names and outcomes only.
     """
     from ..core.models import Role, UnifiedMessage
 
@@ -197,9 +236,15 @@ def load_session_messages_v2(output_dir: Path, session_id: str) -> Optional[list
         ).fetchone()
         if not synced or not synced[0]:
             return None
+        if current_version(conn) >= _CONTRACT_VERSION:
+            reasoning_col = "reasoning" if include_reasoning else "NULL AS reasoning"
+            message_contract = f"kind, parent_id, active, tool_events_json, {reasoning_col}"
+        else:
+            message_contract = _MESSAGE_CONTRACT_DEFAULTS
         rows = conn.execute(
-            """
-            SELECT seq, role, content, timestamp, model, tokens_json
+            f"""
+            SELECT seq, role, content, timestamp, model, tokens_json,
+                   {message_contract}
             FROM messages
             WHERE session_id = ?
             ORDER BY seq
@@ -213,7 +258,19 @@ def load_session_messages_v2(output_dir: Path, session_id: str) -> Optional[list
         return None
 
     messages = []
-    for _seq, role, content, timestamp, model, tokens_json in rows:
+    for (
+        _seq,
+        role,
+        content,
+        timestamp,
+        model,
+        tokens_json,
+        kind,
+        parent_id,
+        active,
+        tool_events_json,
+        reasoning,
+    ) in rows:
         try:
             role_enum = Role(role)
         except ValueError:
@@ -230,6 +287,26 @@ def load_session_messages_v2(output_dir: Path, session_id: str) -> Optional[list
                 tokens = json.loads(tokens_json)
             except (ValueError, TypeError):
                 tokens = None
+        tool_events: list = []
+        if tool_events_json:
+            try:
+                events = json.loads(tool_events_json)
+            except (ValueError, TypeError):
+                events = []
+            if not isinstance(events, list):
+                events = []
+            for ev in events:
+                if not isinstance(ev, dict):
+                    continue
+                event = {
+                    "name": ev.get("name") or "tool",
+                    "status": ev.get("status"),
+                    "duration_ms": ev.get("duration_ms"),
+                    "is_error": bool(ev.get("is_error")),
+                }
+                if "dropped" in ev:
+                    event["dropped"] = ev["dropped"]
+                tool_events.append(event)
         messages.append(
             UnifiedMessage(
                 role=role_enum,
@@ -237,6 +314,11 @@ def load_session_messages_v2(output_dir: Path, session_id: str) -> Optional[list
                 timestamp=ts or datetime.fromtimestamp(0),
                 model=model,
                 tokens=tokens,
+                tool_events=tool_events,
+                reasoning=reasoning,
+                kind=kind or "text",
+                parent_id=parent_id,
+                active=bool(active),
             )
         )
     return messages
