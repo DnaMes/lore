@@ -43,7 +43,7 @@
 ### B0.1 Escape `data-session-id` correctly
 **Files:** `lore/templates/session.html` (and every template that puts `|tojson` inside an HTML attribute — `grep -rn "tojson" lore/templates`), `tests/test_session_page_attrs.py`.
 **Done when:** the attribute value equals the session id exactly after HTML parsing, for ids containing `"`, `'`, `<`, `&`; the page's tag UI JavaScript reads it as a plain string; a test parses the rendered HTML and compares.
-- [ ] done
+- [x] done
 
 ### B0.2 Repair the Gemini CLI extractor **[R]**
 **Files:** `lore/extractors/gemini.py`, `tests/test_gemini_extractor.py` (update what pins the old `.json` behaviour), new `tests/test_extractor_gemini_jsonl.py`, fixtures built in `tmp_path`.

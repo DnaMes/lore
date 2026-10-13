@@ -891,7 +891,7 @@
                 <a href="/thread/thread-1" class="pill bg-white border border-slate-200 text-slate-500 font-mono hover:text-slate-900 transition-colors">thread-1</a>
             </div>
             
-            <div id="session-tags" class="flex flex-wrap items-center gap-2 mt-3" data-session-id=""session-1"">
+            <div id="session-tags" class="flex flex-wrap items-center gap-2 mt-3" data-session-id="session-1">
                 <span id="tags-list" class="flex flex-wrap gap-2"></span>
                 <button type="button" id="add-tag-btn" data-action="prompt-add-tag" class="text-[11px] text-slate-500 hover:text-slate-900 border border-dashed border-slate-300 px-2 py-1 rounded-lg transition-all bg-white">+ tag</button>
             </div>
@@ -1143,7 +1143,7 @@ document.addEventListener('keydown', function(e) {
 (function () {
     const root = document.getElementById('session-tags');
     if (!root) return;
-    const sessionId = JSON.parse(root.getAttribute('data-session-id'));
+    const sessionId = root.dataset.sessionId || "";
     const list = document.getElementById('tags-list');
 
     // Built via DOM nodes (no innerHTML with data) so tag values can't inject markup.
