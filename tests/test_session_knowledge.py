@@ -383,6 +383,22 @@ def test_cmd_knowledge_excludes_deleted_sessions(tmp_path, use_provider):
     assert len(provider.prompts) == 2
 
 
+def test_cmd_knowledge_clears_stale_output_when_every_session_is_deleted(tmp_path, use_provider):
+    """The old file must not keep the text of sessions deleted since the last run."""
+    _build(tmp_path, _session("gone", "beta talk"))
+    use_provider(FakeProvider([_payload("Secret topic")]))
+    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    kb_path = tmp_path / "knowledge" / "knowledge_base.json"
+    assert "Secret topic" in kb_path.read_text()
+
+    (tmp_path / "deleted_sessions.json").write_text(json.dumps({"session_ids": ["gone"]}))
+    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+
+    kb = json.loads(kb_path.read_text())
+    assert kb["total_entries"] == 0
+    assert "Secret topic" not in kb_path.read_text()
+
+
 def test_cmd_knowledge_does_not_extract_deleted_session(tmp_path, use_provider):
     _build(tmp_path, _session("gone", "beta talk"))
     (tmp_path / "deleted_sessions.json").write_text(json.dumps({"session_ids": ["gone"]}))

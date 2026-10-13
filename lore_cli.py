@@ -768,12 +768,15 @@ def cmd_knowledge(args):
         print(f"Error: all {report.failed} extraction calls failed.", file=sys.stderr)
         return 1
 
+    output_file = Path(args.output) if args.output else extractor.output_dir / "knowledge_base.json"
     if not stored:
         print("No knowledge entries stored yet.")
+        # An earlier file would keep the text of sessions deleted since the last run.
+        if (extractor.output_dir / output_file.name).exists():
+            extractor.build_knowledge_base([], output_file.name)
         return 0
 
     entries = [KnowledgeEntry.from_dict(row["payload"]) for row in stored]
-    output_file = Path(args.output) if args.output else extractor.output_dir / "knowledge_base.json"
     extractor.build_knowledge_base(entries, output_file.name)
 
     if report.extracted == 0 and report.failed == 0:
