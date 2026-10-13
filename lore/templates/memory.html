@@ -54,6 +54,8 @@
                        without routing through nh3 sanitisation first. #}
                     <h2 class="text-sm font-semibold text-slate-900">{{ m.title }}</h2>
                     <p class="text-sm text-slate-600 mt-1.5 whitespace-pre-wrap">{{ m.body }}</p>
+                    {# snippet_html escapes first, then adds <mark>; see escape_snippet_html #}
+                    {% if m.snippet %}<p class="text-xs text-slate-500 mt-1.5 italic">{{ m.snippet|snippet_html }}</p>{% endif %}
                     <div class="flex flex-wrap gap-1.5 mt-3">
                         {% for tag in m.tags %}<span class="tag-chip text-[10px]">#{{ tag }}</span>{% endfor %}
                     </div>

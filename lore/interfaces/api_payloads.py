@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional
 
+from ..storage.fts import snippet_to_text
+
 
 def _isoformat(value: Any) -> Optional[str]:
     """Return a stable ISO-like string for datetime-ish values."""
@@ -29,6 +31,22 @@ def serialize_index_session_summary(session_meta: Dict[str, Any]) -> Dict[str, A
         "message_count": int(session_meta.get("messages") or 0),
         "prompt_count": int(session_meta.get("prompts") or 0),
         "export_path": session_meta.get("export_path"),
+    }
+
+
+def search_result_snippet(result: Dict[str, Any]) -> Optional[str]:
+    """Return a search result's snippet as text with ``«``/``»`` marks, or None."""
+    snippet = result.get("snippet")
+    return snippet_to_text(snippet) if snippet else None
+
+
+def serialize_search_result(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Serialize one ``search_index`` hit: session summary, score, snippet, source."""
+    return {
+        **serialize_index_session_summary(result["session"]),
+        "score": result.get("score"),
+        "snippet": search_result_snippet(result),
+        "source": "session",
     }
 
 

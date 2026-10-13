@@ -19,6 +19,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from lore.extractors.factory import get_all_extractors
 from lore.extractors.opencode import OpenCodeExtractor
+from lore.utils.formatting import escape_snippet_html
 from lore.utils.security import (
     validate_search_param,
     validate_search_query,
@@ -32,9 +33,11 @@ from ..services.cache import threadsafe_lru_cache
 from ..services.extraction import find_live_session
 from ..services.index import session_by_id_map
 from .api_payloads import (
+    search_result_snippet,
     serialize_index_session_summary,
     serialize_live_session,
     serialize_project,
+    serialize_search_result,
     serialize_thread_messages,
     serialize_thread_overview,
 )
@@ -386,6 +389,7 @@ def _template_env():
         autoescape=True,
     )
     env.filters["urlpath"] = lambda value: quote(str(value or ""), safe="")
+    env.filters["snippet_html"] = escape_snippet_html
     return env
 
 
@@ -1750,6 +1754,8 @@ def api_search():
                 "title": r["session"].get("title"),
                 "tool": r["session"].get("tool"),
                 "date": r["session"].get("created")[:10],
+                "snippet": search_result_snippet(r),
+                "source": "session",
             }
             for r in res
         ]
@@ -1800,13 +1806,7 @@ def api_v1_search():
             "project": project or None,
             "scope": scope,
             "count": len(results),
-            "results": [
-                {
-                    **serialize_index_session_summary(result["session"]),
-                    "score": result.get("score"),
-                }
-                for result in results
-            ],
+            "results": [serialize_search_result(result) for result in results],
         }
     )
 

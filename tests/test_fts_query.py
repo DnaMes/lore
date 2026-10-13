@@ -13,7 +13,7 @@ from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
 from lore.exporters.index import IndexBuilder
 from lore.interfaces import mcp, web
 from lore.storage import add_memory, recall_memory, search_sessions
-from lore.storage.fts import build_fts_query
+from lore.storage.fts import build_fts_query, phrase_of
 from lore.utils.security import validate_search_param, validate_search_query
 
 # ---------------------------------------------------------------------------
@@ -61,7 +61,21 @@ def test_validate_search_query_accepts(query):
 
 @pytest.mark.parametrize(
     "query",
-    ['"foo', 'foo"', 'a "b" c', '"a" "b"', '""', '"  "', "'x'", '"a"b"', "a;b", "x" * 257],
+    [
+        '"foo',
+        'foo"',
+        'a "b" c',
+        '"a" "b"',
+        '""',
+        '"  "',
+        "'x'",
+        '"a"b"',
+        "a;b",
+        "x" * 257,
+        '"foo"\n',
+        '\r"foo"',
+        '"foo\nbar"',
+    ],
 )
 def test_validate_search_query_rejects(query):
     assert not validate_search_query(query)
@@ -117,10 +131,76 @@ def test_search_sessions_phrase_with_scope(tmp_path):
     assert _ids(results) == {"adjacent"}
 
 
-@pytest.mark.parametrize("query", ['a"b', '"', '"foo', 'a "b" c'])
-def test_search_sessions_odd_quotes_do_not_raise(tmp_path, query):
-    IndexBuilder(tmp_path).build_index([_session("a", "hello world")], {})
-    assert search_sessions(tmp_path, query) == []
+def _chat(sid, *turns):
+    return UnifiedSession(
+        tool=Tool.CLAUDE_CODE,
+        session_id=sid,
+        created_at=datetime(2026, 1, 1),
+        last_updated=datetime(2026, 1, 2),
+        project_path="/p",
+        title="T",
+        messages=[
+            UnifiedMessage(role=role, content=text, timestamp=datetime(2026, 1, 1))
+            for role, text in turns
+        ],
+    )
+
+
+def test_scoped_phrase_requires_adjacency_inside_one_role_message(tmp_path):
+    """The phrase is in the assistant text; the user text only has the words apart."""
+    IndexBuilder(tmp_path).build_index(
+        [
+            _chat(
+                "assistant-has-it",
+                (Role.USER, "an exact match of some other phrase"),
+                (Role.ASSISTANT, "yes the exact phrase is documented"),
+            ),
+            _chat("user-has-it", (Role.USER, "what is the exact phrase here")),
+        ],
+        {},
+    )
+
+    results = search_sessions(tmp_path, '"exact phrase"', scope="user_only")
+
+    assert _ids(results) == {"user-has-it"}
+
+
+def test_scoped_like_wildcards_match_literally(tmp_path):
+    IndexBuilder(tmp_path).build_index(
+        [
+            _chat("literal", (Role.USER, "a 50% discount today")),
+            _chat("wildcard-victim", (Role.USER, "50 bucks only")),
+        ],
+        {},
+    )
+
+    results = search_sessions(tmp_path, "50%", scope="user_only")
+
+    assert _ids(results) == {"literal"}
+
+
+def test_nul_in_query_is_neutralised(tmp_path):
+    assert build_fts_query("a\x00b") == '"a"* "b"*'
+    IndexBuilder(tmp_path).build_index([_session("a", "alpha beta")], {})
+    assert _ids(search_sessions(tmp_path, "alpha\x00beta")) == {"a"}
+
+
+@pytest.mark.parametrize(
+    ("query", "phrase"),
+    [('"a b"', "a b"), ('  "a b"  ', "a b"), ("a b", None), ('""', None), ('"  "', None)],
+)
+def test_phrase_of(query, phrase):
+    assert phrase_of(query) == phrase
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [('a"b', {"a"}), ('"foo', {"a"}), ('a "b" c', {"a"}), ('"', set()), ('""', set())],
+)
+def test_search_sessions_odd_quotes_do_not_raise(tmp_path, query, expected):
+    """Stray quotes never raise; the terms they contain are still matched."""
+    IndexBuilder(tmp_path).build_index([_session("a", "foo a b c hello world")], {})
+    assert _ids(search_sessions(tmp_path, query)) == expected
 
 
 def test_recall_memory_phrase_vs_terms(tmp_path):
@@ -128,7 +208,9 @@ def test_recall_memory_phrase_vs_terms(tmp_path):
     add_memory(tmp_path, "fact", "Scattered", "an exact match of another phrase")
     assert [e.title for e in recall_memory(tmp_path, '"exact phrase"')] == ["Adjacent"]
     assert {e.title for e in recall_memory(tmp_path, "exact phrase")} == {"Adjacent", "Scattered"}
-    assert recall_memory(tmp_path, 'a"b') == []
+    add_memory(tmp_path, "fact", "Stray", "alpha beta gamma")
+    assert [e.title for e in recall_memory(tmp_path, 'alpha"beta')] == ["Stray"]
+    assert recall_memory(tmp_path, '"') == []
 
 
 # ---------------------------------------------------------------------------
@@ -165,7 +247,11 @@ def test_web_search_accepts_phrase_and_rejects_unbalanced(client, monkeypatch, r
 def test_web_memory_page_phrase_and_unbalanced(client, monkeypatch, tmp_path):
     monkeypatch.setattr(web, "INDEX_PATH", tmp_path / "index.json")
     add_memory(tmp_path, "fact", "Adjacent", "remember the exact phrase always")
-    assert client.get("/memory?q=%22exact+phrase%22").status_code == 200
+    add_memory(tmp_path, "fact", "Scattered", "an exact match of another phrase")
+    ok = client.get("/memory?q=%22exact+phrase%22")
+    assert ok.status_code == 200
+    html = ok.get_data(as_text=True)
+    assert "Adjacent" in html and "Scattered" not in html
     bad = client.get("/memory?q=%22unbalanced")
     assert bad.status_code == 400
 

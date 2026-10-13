@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .fts import build_fts_query
+from .fts import SNIPPET_CLOSE, SNIPPET_OPEN, build_fts_query, snippet_to_text
 from .schema import open_v2_connection
 from .writer import v2_db_path
 
@@ -59,6 +59,8 @@ class MemoryEntry:
     scope_tool: Optional[str] = None
     superseded_by: Optional[int] = None
     tags: List[str] = field(default_factory=list)
+    # Matching passage with ``«``/``»`` marks; set only by the FTS recall path.
+    snippet: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -73,6 +75,8 @@ class MemoryEntry:
             "scope_tool": self.scope_tool,
             "superseded_by": self.superseded_by,
             "tags": self.tags,
+            "snippet": self.snippet,
+            "source": "memory",
         }
 
 
@@ -386,7 +390,8 @@ def recall_memory(
     try:
         rows = conn.execute(
             """
-            SELECT m.*, bm25(search_index) AS score
+            SELECT m.*, bm25(search_index) AS score,
+                   snippet(search_index, 5, ?, ?, '…', 24) AS snippet
             FROM search_index
             JOIN memory m ON m.id = CAST(search_index.entity_id AS INTEGER)
             WHERE search_index MATCH ?
@@ -394,7 +399,7 @@ def recall_memory(
             ORDER BY score ASC
             LIMIT ?
             """,
-            (fts_query, max(1, limit) * 4),
+            (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, max(1, limit) * 4),
         ).fetchall()
 
         entries: List[MemoryEntry] = []
@@ -405,7 +410,10 @@ def recall_memory(
                 continue
             if not include_superseded and row["superseded_by"] is not None:
                 continue
-            entries.append(_row_to_entry(conn, row))
+            entry = _row_to_entry(conn, row)
+            if row["snippet"]:
+                entry.snippet = snippet_to_text(row["snippet"])
+            entries.append(entry)
             if len(entries) >= limit:
                 break
         return entries

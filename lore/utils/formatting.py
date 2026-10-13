@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
+from markupsafe import Markup, escape
+
 
 class CodeLanguage(Enum):
     """Supported programming languages for syntax highlighting."""
@@ -392,3 +394,14 @@ def format_tool_output(output: str, tool_name: str, max_lines: int = 50) -> str:
         Formatted output (possibly truncated)
     """
     return get_formatter().format_tool_output(output, tool_name, max_lines)
+
+
+def escape_snippet_html(text: str) -> Markup:
+    """Render a ``«``/``»``-marked snippet as safe HTML with ``<mark>`` highlights.
+
+    Escapes first, then substitutes the marks, so untrusted text can never add
+    markup of its own. ``snippet_to_text`` has already neutralised literal
+    ``«``/``»`` in the source text.
+    """
+    escaped = str(escape(text or ""))
+    return Markup(escaped.replace("«", "<mark>").replace("»", "</mark>"))

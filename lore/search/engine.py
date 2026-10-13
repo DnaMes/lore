@@ -32,7 +32,8 @@ class SearchEngine:
             results = self._search_sqlite(query, tool=tool, project=project)
             if results:
                 return results
-        query_words = query.lower().split()
+        # Quotes only mark a phrase for the v2 store; this legacy path matches words.
+        query_words = query.lower().replace('"', " ").split()
         results = []
 
         for session in self.index.get("sessions", []):
@@ -73,7 +74,9 @@ class SearchEngine:
         self, query: str, tool: Optional[str] = None, project: Optional[str] = None
     ) -> List[Dict]:
         tool = normalize_tool_name(tool) if tool else None
-        terms = [t for t in query.lower().split() if t]
+        # A quoted phrase reaches this fallback unchanged: drop the quotes so every
+        # term is a plain quoted FTS token (adjacency is not enforced on this path).
+        terms = [t for t in query.lower().replace('"', " ").split() if t]
         if not terms:
             return []
         fts_query = " ".join(f'"{t}"' for t in terms)

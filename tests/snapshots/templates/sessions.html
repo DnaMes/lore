@@ -1187,7 +1187,8 @@
                             const label = escapeHtml(s.title || s.id || 'Untitled Session');
                             const tool = escapeHtml(s.tool || 'unknown');
                             const date = escapeHtml(s.date || '');
-                            return `<a href="/session/${sid}" class="block p-3 rounded-lg hover:bg-slate-100 group"><div class="text-sm font-medium text-slate-900 group-hover:text-blue-600 transition-colors">${label}</div><div class="text-[10px] text-slate-500 mt-1">${tool} • ${date}</div></a>`;
+                            const snippet = s.snippet ? `<div class="text-xs text-slate-600 mt-1">${escapeHtml(s.snippet || '').replace(/«/g, '<mark>').replace(/»/g, '</mark>')}</div>` : '';
+                            return `<a href="/session/${sid}" class="block p-3 rounded-lg hover:bg-slate-100 group"><div class="text-sm font-medium text-slate-900 group-hover:text-blue-600 transition-colors">${label}</div>${snippet}<div class="text-[10px] text-slate-500 mt-1">${tool} • ${date}</div></a>`;
                         }).join('');
                     }).catch(() => {
                         searchResultsEl.innerHTML = '';

@@ -8,8 +8,8 @@ database — the two could disagree on which sessions exist and on titles.
 populated by `storage.writer` from the same data `load_index_v2` serves —
 so search and the session list are now consistent by construction.
 
-Returns the same ``[{"session": <dict>, "score": <float>}]`` shape the
-legacy ``SearchEngine.search`` produced, so callers need no changes.
+Returns the ``[{"session": <dict>, "score": <float>}]`` shape the legacy
+``SearchEngine.search`` produced, plus an optional ``snippet`` key.
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from .fts import build_fts_query
+from .fts import SNIPPET_CLOSE, SNIPPET_OPEN, build_fts_query, phrase_of
 from .reader import _row_to_session_dict
 from .schema import open_connection
 from .writer import v2_db_path
@@ -57,8 +57,10 @@ def search_sessions(
             requested role whose content matches every query term.
 
     Returns:
-        ``[{"session": <legacy session dict>, "score": <float>}]`` ordered
-        best-match-first. Empty list when the v2 store is absent, the query
+        ``[{"session": <legacy session dict>, "score": <float>, "snippet":
+        <str | None>}]`` ordered best-match-first. ``snippet`` is the matching
+        passage of the message text in sentinel form (see ``fts.SNIPPET_OPEN``);
+        convert it with ``fts.snippet_to_text`` before showing it. Empty list when the v2 store is absent, the query
         is too short, or the FTS expression is malformed.
 
     Raises:
@@ -75,8 +77,13 @@ def search_sessions(
         return []
 
     fts_query = build_fts_query(query)
-    # Quotes only mark a phrase for FTS; the scoped LIKE helper needs bare terms.
-    terms = [t for t in (query or "").replace('"', " ").split() if t]
+    # The scoped LIKE helper needs bare terms: a quoted phrase is ONE term (so the
+    # words must be adjacent inside one message), anything else is split on spaces.
+    phrase = phrase_of(query)
+    if phrase is not None:
+        terms = [" ".join(phrase.split())]
+    else:
+        terms = [t for t in (query or "").replace('"', " ").split() if t]
     if fts_query is None or not terms:
         return []
 
@@ -89,7 +96,8 @@ def search_sessions(
                    s.git_branch, s.git_commit, s.metadata_json,
                    s.messages_count, s.prompt_count, s.prompt_outline,
                    s.export_path, s.total_tokens,
-                   bm25(search_index) AS score
+                   bm25(search_index) AS score,
+                   snippet(search_index, 5, ?, ?, '…', 24) AS snippet
             FROM search_index
             JOIN sessions s ON s.id = search_index.entity_id
             WHERE search_index MATCH ?
@@ -97,7 +105,7 @@ def search_sessions(
             ORDER BY score ASC
             LIMIT ?
             """,
-            (fts_query, max(1, limit) * 4),
+            (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, max(1, limit) * 4),
         ).fetchall()
     except sqlite3.Error:
         return []
@@ -121,10 +129,17 @@ def search_sessions(
             continue
         if scoped_session_ids is not None and session.get("id") not in scoped_session_ids:
             continue
-        results.append({"session": session, "score": float(row["score"])})
+        results.append(
+            {"session": session, "score": float(row["score"]), "snippet": row["snippet"] or None}
+        )
         if len(results) >= limit:
             break
     return results
+
+
+def _escape_like(text: str) -> str:
+    """Escape LIKE wildcards so ``%``/``_`` in a term match literally (ESCAPE '\\')."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 def _sessions_matching_scope(
@@ -145,8 +160,8 @@ def _sessions_matching_scope(
 
     id_placeholders = ",".join("?" for _ in session_ids)
     role_placeholders = ",".join("?" for _ in roles)
-    term_clauses = " AND ".join("LOWER(content) LIKE ?" for _ in terms)
-    like_params = [f"%{t.lower()}%" for t in terms]
+    term_clauses = " AND ".join("LOWER(content) LIKE ? ESCAPE '\\'" for _ in terms)
+    like_params = [f"%{_escape_like(t.lower())}%" for t in terms]
 
     sql = (
         f"SELECT DISTINCT session_id FROM messages "

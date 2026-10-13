@@ -12,7 +12,7 @@ from ...utils.security import (
     validate_tool_name,
 )
 from ...utils.tooling import normalize_tool_name
-from ..api_payloads import serialize_index_session_summary
+from ..api_payloads import serialize_index_session_summary, serialize_search_result
 from .deps import MCPToolDeps
 
 
@@ -54,13 +54,7 @@ def register(server, deps: MCPToolDeps) -> None:
             "project": project_filter,
             "scope": scope,
             "count": len(results),
-            "results": [
-                {
-                    **serialize_index_session_summary(result["session"]),
-                    "score": result.get("score"),
-                }
-                for result in results
-            ],
+            "results": [serialize_search_result(result) for result in results],
         }
         return deps.json_text(payload)
 

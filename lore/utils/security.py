@@ -275,7 +275,8 @@ def validate_search_query(query: str, max_length: int = 256) -> bool:
     if len(query or "") > max_length:
         return False
 
-    text = (query or "").strip()
+    # Only plain spaces may surround the quotes; \n and \r must still be rejected.
+    text = (query or "").strip(" ")
     if len(text) >= 2 and text.startswith('"') and text.endswith('"') and text.count('"') == 2:
         return bool(text[1:-1].strip()) and validate_search_param(text[1:-1], max_length)
     return validate_search_param(query, max_length)
