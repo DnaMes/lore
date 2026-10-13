@@ -31,6 +31,11 @@ def serialize_index_session_summary(session_meta: Dict[str, Any]) -> Dict[str, A
         "message_count": int(session_meta.get("messages") or 0),
         "prompt_count": int(session_meta.get("prompts") or 0),
         "export_path": session_meta.get("export_path"),
+        "origin": session_meta.get("origin") or "unknown",
+        "parent_session_id": session_meta.get("parent_session_id"),
+        "relation": session_meta.get("relation"),
+        "source_version": session_meta.get("source_version"),
+        "parser_version": int(session_meta.get("parser_version") or 0),
     }
 
 
@@ -91,6 +96,11 @@ def serialize_live_session(
         "source_path": getattr(session, "source_path", None),
         "cli_version": getattr(session, "cli_version", None),
         "export_path": (session_meta or {}).get("export_path"),
+        "origin": getattr(session, "origin", None) or "unknown",
+        "parent_session_id": getattr(session, "parent_session_id", None),
+        "relation": getattr(session, "relation", None),
+        "source_version": getattr(session, "source_version", None),
+        "parser_version": int(getattr(session, "parser_version", 0) or 0),
         "live": True,
     }
     if include_messages:

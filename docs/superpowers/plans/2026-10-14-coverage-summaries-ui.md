@@ -62,7 +62,7 @@
 ### B1.1b Index JSON, reuse paths and parser-version invalidation **[R]**
 **Files:** `lore/exporters/index.py`, `lore/storage/writer.py` (`_write_reused_entry`, `_refresh_complete_session`), `lore/extractors/base.py` (`PARSER_VERSION`, `_source_unchanged`), `tests/test_parser_version_reuse.py`.
 **Done when:** new keys appear additively in the index JSON and in the web/MCP payloads; a session indexed with parser version 0 is re-extracted when the extractor declares version 1 although its source mtime is unchanged; an up-to-date session is reused without a parse; reused entries carry the new fields.
-- [ ] done
+- [x] done
 
 ### B1.2 Discovery telemetry and `lore check` warnings
 **Files:** `lore/extractors/base.py`, every extractor (counters only), `lore_cli.py` (`cmd_check`), `tests/test_discovery_telemetry.py`.

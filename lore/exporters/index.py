@@ -6,7 +6,7 @@ import sqlite3
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from ..core.models import UnifiedSession
 
@@ -381,6 +381,14 @@ class IndexBuilder:
             return set()
 
 
+_CONTRACT_ENTRY_DEFAULTS: Dict[str, Any] = {
+    "origin": "unknown",
+    "parent_session_id": None,
+    "relation": None,
+    "source_version": None,
+    "parser_version": 0,
+}
+
 _LEGACY_SESSION_INSERT = """
     INSERT OR REPLACE INTO sessions (
         id, tool, project, thread_id, title, created, updated,
@@ -491,6 +499,10 @@ class _MultiWriter:
         legacy_head = []
         fts_head = []
         for entry in entries:
+            # Entries from an index written before B1.1b lack the contract keys;
+            # fill only what is missing, never overwrite a stored value.
+            for key, default in _CONTRACT_ENTRY_DEFAULTS.items():
+                entry.setdefault(key, default)
             json_head.append(entry)
             for kw in entry.get("keywords") or []:
                 self.keyword_index.setdefault(kw, []).append(entry.get("id", ""))
@@ -573,6 +585,11 @@ class _MultiWriter:
                 "source_mtime": _stat_mtime_ns(session.source_path),
                 "keywords": keywords,
                 "search_text": search_text,
+                "origin": session.origin,
+                "parent_session_id": session.parent_session_id,
+                "relation": session.relation,
+                "source_version": session.source_version,
+                "parser_version": session.parser_version,
             }
         )
         for kw in keywords:

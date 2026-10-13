@@ -17,7 +17,7 @@ from typing import Callable, Iterable, Optional
 
 from lore.core.models import UnifiedSession
 from lore.exporters.index import IndexBuilder, _stat_mtime_ns
-from lore.extractors.base import BaseExtractor
+from lore.extractors.base import BaseExtractor, stamp_parser_version
 from lore.extractors.factory import get_all_extractors
 from lore.titles.generator import TitleGenerator, TitleStrategy
 
@@ -153,7 +153,9 @@ def build_index_if_missing(
         if not extractor.is_available():
             continue
         try:
-            sessions.extend(list(extractor.extract_sessions()))
+            for session in extractor.extract_sessions():
+                stamp_parser_version(extractor, session)
+                sessions.append(session)
         except Exception as exc:
             logger.debug(
                 "Extractor %s failed during build_index_if_missing: %s",
@@ -250,6 +252,7 @@ def build_search_index(
                 for session in extractor.extract_sessions():
                     if should_stop and should_stop():
                         raise ActionJobCancelledError("Cancelled by user")
+                    stamp_parser_version(extractor, session)
                     sess_count += 1
                     now = _time.monotonic()
                     if progress_callback and now - last_tick >= 1.0:
@@ -277,6 +280,9 @@ def build_search_index(
                                 and current_mtime is not None
                                 and prior_mtime == current_mtime
                                 and session.session_id not in reused_ids
+                                # An older parser version means the stored
+                                # entry lacks fields: refresh it (fresh wins).
+                                and int(prior.get("parser_version") or 0) >= session.parser_version
                             ):
                                 # Unchanged: its JSON/legacy entry is reused
                                 # verbatim from the prior dict; yield the full

@@ -18,7 +18,7 @@ import logging
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..core.models import MESSAGE_KINDS, ORIGINS, RELATIONS, UnifiedMessage, UnifiedSession
 from .schema import initialise
@@ -96,26 +96,69 @@ def _tool_events_json(message: UnifiedMessage) -> Optional[str]:
     return json.dumps(events) if events else None
 
 
-def _write_contract_columns(conn: sqlite3.Connection, session: UnifiedSession) -> None:
-    """Persist the migration-17 session columns, normalising unknown values."""
-    origin = session.origin if session.origin in ORIGINS else "unknown"
-    relation = session.relation if session.relation in RELATIONS else None
+def _contract_values(
+    origin: object, parent: object, relation: object, source_version: object, parser: object
+) -> Tuple[str, Optional[str], Optional[str], Optional[str], int]:
+    """Normalise the migration-17 session values (unknown enums become defaults)."""
     try:
-        parser_version = int(session.parser_version or 0)
+        parser_version = int(parser or 0)  # type: ignore[call-overload]
     except (TypeError, ValueError):
         parser_version = 0
+    return (
+        origin if isinstance(origin, str) and origin in ORIGINS else "unknown",
+        str(parent) if parent else None,
+        relation if isinstance(relation, str) and relation in RELATIONS else None,
+        str(source_version) if source_version else None,
+        parser_version,
+    )
+
+
+_CONTRACT_DEFAULTS: Tuple[Any, ...] = ("unknown", None, None, None, 0)
+
+
+def _store_contract_columns(
+    conn: sqlite3.Connection, session_id: str, values: Tuple[Any, ...]
+) -> None:
     conn.execute(
         "UPDATE sessions SET origin = ?, parent_session_id = ?, relation = ?, "
         "source_version = ?, parser_version = ? WHERE id = ?",
-        (
-            origin,
-            session.parent_session_id or None,
-            relation,
-            session.source_version or None,
-            parser_version,
-            session.session_id,
-        ),
+        (*values, session_id),
     )
+
+
+def _store_entry_contract_columns(conn: sqlite3.Connection, entry: Dict) -> None:
+    """Persist an index entry's contract fields without downgrading a stored row.
+
+    An entry from an older index carries defaults (version 0): it must not wipe
+    values a newer parse stored, so the update applies only while the stored
+    ``parser_version`` is not above the entry's.
+    """
+    values = _contract_values(
+        entry.get("origin"),
+        entry.get("parent_session_id"),
+        entry.get("relation"),
+        entry.get("source_version"),
+        entry.get("parser_version"),
+    )
+    if values == _CONTRACT_DEFAULTS:
+        return
+    conn.execute(
+        "UPDATE sessions SET origin = ?, parent_session_id = ?, relation = ?, "
+        "source_version = ?, parser_version = ? WHERE id = ? AND parser_version <= ?",
+        (*values, entry["id"], values[4]),
+    )
+
+
+def _write_contract_columns(conn: sqlite3.Connection, session: UnifiedSession) -> None:
+    """Persist the migration-17 session columns of a freshly extracted session."""
+    values = _contract_values(
+        session.origin,
+        session.parent_session_id,
+        session.relation,
+        session.source_version,
+        session.parser_version,
+    )
+    _store_contract_columns(conn, session.session_id, values)
 
 
 def _source_mtime_ns(source_path: Optional[str]) -> Optional[int]:
@@ -248,6 +291,8 @@ def _refresh_complete_session(
             session_id,
         ),
     )
+    # Heals a row still at the migration defaults when the entry carries a version.
+    _store_entry_contract_columns(conn, entry)
     if title != previous_title:
         _rebuild_session_fts(conn, session_id, entry.get("tool") or "", entry.get("project"), title)
 
@@ -296,6 +341,7 @@ def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
             int(existing[0]) if existing else 0,
         ),
     )
+    _store_entry_contract_columns(conn, entry)
     _replace_session_fts(
         conn,
         session_id,
@@ -399,10 +445,11 @@ def _write_reused_full_session(
 ) -> Tuple[bool, Tuple[str, Optional[str], Optional[int]]]:
     """Update reused metadata without rewriting messages when they are complete."""
     row = conn.execute(
-        "SELECT messages_synced FROM sessions WHERE id = ?", (session.session_id,)
+        "SELECT messages_synced, parser_version FROM sessions WHERE id = ?", (session.session_id,)
     ).fetchone()
     if not row or not row[0]:
         return False, _write_full_session(conn, session, title, session_extras)
+    stored_parser_version = int(row[1] or 0)
 
     source_mtime_ns = _source_mtime_ns(session.source_path)
     values = (
@@ -427,9 +474,11 @@ def _write_reused_full_session(
         1,
     )
     conn.execute(_SESSION_INSERT, values)
-    # This overwrites origin/parent/relation/parser_version with the freshly
-    # extracted values even though messages are reused (B1.1b revisits it).
-    _write_contract_columns(conn, session)
+    # Stored origin/parent/relation/source_version/parser_version survive a
+    # reuse; only a session parsed by a newer parser than the stored one
+    # replaces them (fresh wins on re-extraction).
+    if int(session.parser_version or 0) > stored_parser_version:
+        _write_contract_columns(conn, session)
     body_parts = [title]
     body_parts.extend(
         content

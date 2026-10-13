@@ -1,12 +1,40 @@
+import functools
 import logging
 import os
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Iterator, Optional
+from typing import Iterable, Iterator, Optional
 
 from ..core.models import Role, TitleSource, Tool, UnifiedSession
 
 logger = logging.getLogger(__name__)
+
+REEXTRACT_BUDGET_ENV = "LORE_PARSER_REEXTRACT_BUDGET"
+DEFAULT_REEXTRACT_BUDGET = 150
+
+
+def reextract_budget_from_env() -> Optional[int]:
+    """Version-stale sources one extractor may re-parse per run (``None`` = unlimited).
+
+    Unset, ``0`` and invalid values give the default; a negative value lifts the cap.
+    """
+    raw = os.environ.get(REEXTRACT_BUDGET_ENV, "").strip()
+    if not raw:
+        return DEFAULT_REEXTRACT_BUDGET
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("Ignoring invalid %s=%r", REEXTRACT_BUDGET_ENV, raw)
+        return DEFAULT_REEXTRACT_BUDGET
+    if value == 0:
+        return DEFAULT_REEXTRACT_BUDGET
+    return None if value < 0 else value
+
+
+def stamp_parser_version(extractor: object, session: UnifiedSession) -> None:
+    """Give a session that still has no parser version the extractor's own."""
+    if not session.parser_version:  # an explicit value is kept
+        session.parser_version = getattr(extractor, "PARSER_VERSION", 0)
 
 
 class BaseExtractor(ABC):
@@ -16,6 +44,73 @@ class BaseExtractor(ABC):
     MIN_MESSAGES = 1
     MIN_CONTENT_SIZE = 0
     MIN_USER_PROMPTS = 3
+
+    # Bump when the extractor starts producing fields it did not before. An
+    # indexed session stored with a lower version is parsed again even when its
+    # source file is unchanged (``_source_unchanged``).
+    PARSER_VERSION: int = 1
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        """Stamp ``PARSER_VERSION`` on every yielded session in one place."""
+        super().__init_subclass__(**kwargs)
+        original = cls.__dict__.get("extract_sessions")
+        if original is not None and not getattr(original, "_stamps_parser_version", False):
+
+            @functools.wraps(original)
+            def extract_sessions(self) -> Iterator[UnifiedSession]:
+                # Call eagerly so errors raised at call time still surface there.
+                sessions = original(self)
+                return self._stamp_parser_version(sessions)
+
+            extract_sessions._stamps_parser_version = True  # type: ignore[attr-defined]
+            cls.extract_sessions = extract_sessions  # type: ignore[method-assign]
+
+        finder = cls.__dict__.get("find_session_by_id")
+        if finder is not None and not getattr(finder, "_stamps_parser_version", False):
+
+            @functools.wraps(finder)
+            def find_session_by_id(self, session_id: str) -> Optional[UnifiedSession]:
+                session = finder(self, session_id)
+                if session is not None:
+                    stamp_parser_version(self, session)
+                return session
+
+            find_session_by_id._stamps_parser_version = True  # type: ignore[attr-defined]
+            cls.find_session_by_id = find_session_by_id  # type: ignore[method-assign]
+
+    def _stamp_parser_version(self, sessions: Iterable[UnifiedSession]) -> Iterator[UnifiedSession]:
+        for session in sessions:
+            stamp_parser_version(self, session)
+            yield session
+
+    def _consume_reextract_budget(self, versions: dict[str, int]) -> bool:
+        """Spend one unit of this run's version-stale re-parse budget.
+
+        The budget lives on the instance, so a new instance (a new run) starts
+        full. Once it is spent a stale source is reused with its old version, and
+        later runs keep draining the backlog.
+        """
+        state = self.__dict__.get("_reextract_state")
+        if state is None:
+            state = {"left": reextract_budget_from_env(), "used": 0, "logged": False}
+            self._reextract_state = state
+        if state["left"] is None:
+            return True
+        if state["left"] > 0:
+            state["left"] -= 1
+            state["used"] += 1
+            return True
+        if not state["logged"]:
+            state["logged"] = True
+            stale = sum(1 for v in versions.values() if v < self.PARSER_VERSION)
+            logger.info(
+                "%s: parser re-extract budget of %d spent; about %d version-stale sources "
+                "(counted across all tools) wait for later runs",
+                getattr(self, "tool", type(self).__name__),
+                state["used"],
+                max(0, stale - state["used"]),
+            )
+        return False
 
     @property
     @abstractmethod
@@ -63,6 +158,20 @@ class BaseExtractor(ABC):
         except OSError:
             return False
         if current != recorded:
+            return False
+        # Invariant: ``known_source_parser_versions[path]`` is the minimum
+        # ``parser_version`` among every session stored for that source, so one
+        # stale session of a multi-session source re-parses the whole source. A
+        # path missing from a supplied map counts as version 0 (indexed before
+        # migration 17). Callers that supply no map get mtime-only reuse. Such a
+        # source is re-parsed only while the per-run budget lasts; past it the
+        # source is reused and keeps its old stored version.
+        versions = getattr(self, "known_source_parser_versions", None)
+        if (
+            versions is not None
+            and versions.get(str(path), 0) < self.PARSER_VERSION
+            and self._consume_reextract_budget(versions)
+        ):
             return False
         skipped = getattr(self, "skipped_sources", None)
         if skipped is None:

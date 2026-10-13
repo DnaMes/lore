@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lore.core.models import Tool, UnifiedSession
 from lore.exporters.index import IndexBuilder
 from lore.exporters.markdown import MarkdownExporter
+from lore.extractors.base import stamp_parser_version
 from lore.extractors.factory import get_all_extractors
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.utils.datetime import make_naive, parse_duration
@@ -254,39 +255,46 @@ def _tag_git_info(session, cache: dict) -> None:
 
 def _incremental_baseline(
     index_path: Path, prior_sessions: list[dict]
-) -> tuple[dict[str, int], dict[str, dict]]:
-    """Map source path -> mtime_ns and -> entry for sources safe to skip.
+) -> tuple[dict[str, int], dict[str, list[dict]], dict[str, int]]:
+    """Map source path -> mtime_ns, -> entries and -> min parser version to skip.
 
     The index stamps ``source_mtime`` when it writes a row, which can be later
     than the moment the file was parsed. Only rows whose mtime is older than the
     previous run's ``generated_at`` (set before that scan started) are known to
     have been read completely; anything newer is parsed again. A missing or
     unreadable ``generated_at`` disables the shortcut.
+
+    A source may hold several sessions: all their entries are kept, and the
+    parser version is the minimum among them (an entry without one counts as 0).
     """
     try:
         with open(index_path, "r", encoding="utf-8") as f:
             generated_at = datetime.fromisoformat(json.load(f)["generated_at"])
         cutoff_ns = int(generated_at.timestamp() * 1_000_000_000)
     except (OSError, ValueError, KeyError, TypeError):
-        return {}, {}
+        return {}, {}, {}
     known: dict[str, int] = {}
-    by_path: dict[str, dict] = {}
+    by_path: dict[str, list[dict]] = {}
+    versions: dict[str, int] = {}
     for entry in prior_sessions:
         path, mtime = entry.get("source_path"), entry.get("source_mtime")
         if path and isinstance(mtime, int) and mtime < cutoff_ns:
             known[path] = mtime
-            by_path[path] = entry
-    return known, by_path
+            by_path.setdefault(path, []).append(entry)
+            version = entry.get("parser_version")
+            version = version if isinstance(version, int) else 0
+            versions[path] = min(versions.get(path, version), version)
+    return known, by_path, versions
 
 
 def _reusable_entries(extractor, prior_by_path: dict, ignored_ids: set) -> dict[str, dict]:
     """Prior index entries (by id) for the sources ``extractor`` skipped."""
     reusable: dict[str, dict] = {}
     for path in getattr(extractor, "skipped_sources", ()):
-        entry = prior_by_path.get(path)
-        session_id = entry.get("id") if entry else None
-        if session_id and session_id not in ignored_ids:
-            reusable[session_id] = entry
+        for entry in prior_by_path.get(path, ()):
+            session_id = entry.get("id")
+            if session_id and session_id not in ignored_ids:
+                reusable[session_id] = entry
     return reusable
 
 
@@ -310,8 +318,8 @@ def cmd_export(args):
     # reused. Only valid for an unfiltered run, because a filtered run rebuilds
     # the index from a separate full pass.
     incremental = not getattr(args, "full", False) and not tool_filter and not args.project
-    known_mtimes, prior_by_path = (
-        _incremental_baseline(index_path, prior_sessions) if incremental else ({}, {})
+    known_mtimes, prior_by_path, known_versions = (
+        _incremental_baseline(index_path, prior_sessions) if incremental else ({}, {}, {})
     )
     ignored_ids = index_builder._load_ignored() if incremental else set()
     reused_entries: list[dict] = []
@@ -334,10 +342,12 @@ def cmd_export(args):
             print(f"Extracting from {extractor.tool.value}...")
 
             extractor.known_source_mtimes = known_mtimes
+            extractor.known_source_parser_versions = known_versions
             extractor.skipped_sources = set()
             skipped_by_id: dict[str, dict] | None = None
 
             for session in extractor.extract_sessions():
+                stamp_parser_version(extractor, session)
                 # Filter by project
                 if args.project and session.project_path != args.project:
                     continue
@@ -383,6 +393,7 @@ def cmd_export(args):
             if not extractor.is_available():
                 continue
             for session in extractor.extract_sessions():
+                stamp_parser_version(extractor, session)
                 _tag_git_info(session, git_info_cache)
                 yield session
 

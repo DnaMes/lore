@@ -112,6 +112,10 @@ class _Replay:
 class GeminiCLIExtractor(BaseExtractor):
     """Extract chat history from Gemini CLI."""
 
+    # 2: the jsonl replay (B0.2) changed what sessions carry; version-1 rows
+    # were indexed from the old, mostly empty reader.
+    PARSER_VERSION = 2
+
     def __init__(self):
         self.base_path = Path.home() / ".gemini" / "tmp"
         self.base_paths = self._discover_base_paths()

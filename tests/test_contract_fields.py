@@ -443,7 +443,7 @@ def _reuse_full(tmp_path: Path, session: UnifiedSession) -> None:
 
 
 def test_reused_full_overwrites_contract_with_fresh_extraction(tmp_path):
-    """Pins current behaviour (B1.1b revisits it): the fresh extraction wins."""
+    """A newer parser version is a re-extraction: the fresh values win."""
     _write(tmp_path, _exec_session())
     fresh = _session("ex", [_msg(Role.USER, "ignored")], origin="cron", parser_version=5)
     _reuse_full(tmp_path, fresh)
@@ -455,11 +455,11 @@ def test_reused_full_overwrites_contract_with_fresh_extraction(tmp_path):
     ]
 
 
-def test_reused_full_with_default_origin_resets_to_unknown(tmp_path):
-    """Pins current behaviour: an extractor that sets nothing resets origin to unknown."""
+def test_reused_full_without_newer_parser_keeps_stored_contract(tmp_path):
+    """A reuse that is not a newer parse (B1.1b) never resets the stored contract."""
     _write(tmp_path, _exec_session())
     _reuse_full(tmp_path, _session("ex", [_msg(Role.USER, "ignored")]))
-    assert _stored_contract(tmp_path, "ex")[0] == "unknown"
+    assert _stored_contract(tmp_path, "ex")[:5] == _EXEC_CONTRACT[:5]
 
 
 def test_search_falls_back_on_unmigrated_store(tmp_path):
