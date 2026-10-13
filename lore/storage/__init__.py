@@ -19,6 +19,12 @@ from __future__ import annotations
 
 from .embeddings import embed_text, embeddings_available
 from .fusion import rrf_merge
+from .knowledge import (
+    get_session_knowledge,
+    list_session_knowledge,
+    prompt_fingerprint,
+    save_session_knowledge,
+)
 from .memory import (
     MEMORY_KINDS,
     MemoryEntry,
@@ -56,6 +62,7 @@ __all__ = [
     "embed_text",
     "embeddings_available",
     "get_memory",
+    "get_session_knowledge",
     "get_session_tags",
     "get_tags_for_sessions",
     "initialise",
@@ -63,12 +70,15 @@ __all__ = [
     "list_all_tags",
     "list_memory",
     "list_memory_sources",
+    "list_session_knowledge",
     "load_index_v2",
     "load_session_messages_v2",
     "open_connection",
+    "prompt_fingerprint",
     "recall_memory",
     "remove_session_tag",
     "rrf_merge",
+    "save_session_knowledge",
     "search_sessions",
     "semantic_search_sessions",
     "supersede_memory",

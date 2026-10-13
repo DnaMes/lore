@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import pty
+import sqlite3
 import subprocess
 import sys
 import time
@@ -683,6 +684,10 @@ def cmd_knowledge(args):
     """Extract knowledge from sessions using LLM."""
     from lore.llm import LLMConfig, get_provider
     from lore.llm.tasks import KnowledgeExtractor
+    from lore.llm.tasks.knowledge import KnowledgeEntry
+    from lore.services.index import load_deleted_session_ids
+    from lore.services.knowledge import run_extraction
+    from lore.storage import list_session_knowledge
 
     output_dir = Path(args.output_dir).expanduser()
     index_file = output_dir / "index.json"
@@ -694,11 +699,20 @@ def cmd_knowledge(args):
     with open(index_file, "r") as f:
         index = json.load(f)
 
-    sessions = [_index_entry_to_session(s) for s in index.get("sessions", [])]
+    # Deleted sessions must not be sent to a provider, and a stored extraction of one
+    # must not reappear in the knowledge base.
+    deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
+    sessions = [
+        s
+        for s in (_index_entry_to_session(e) for e in index.get("sessions", []))
+        if s.session_id not in deleted
+    ]
 
+    in_scope: set[str] | None = None
     if args.tool:
         tool = normalize_tool_name(args.tool) or args.tool
         sessions = [s for s in sessions if s.tool.value == tool]
+        in_scope = {s.session_id for s in sessions}
 
     sessions = sorted(sessions, key=lambda s: s.created_at, reverse=True)[: args.limit]
 
@@ -723,23 +737,50 @@ def cmd_knowledge(args):
         return 1
 
     extractor = KnowledgeExtractor(provider, output_dir / "knowledge")
-    entries = extractor.extract_from_sessions(sessions)
 
-    if not entries:
-        print("No knowledge entries extracted.")
+    # Conversation text leaves the machine for cloud providers: say so first.
+    print(
+        f"Sending conversation text of up to {len(sessions)} sessions to "
+        f"provider '{args.provider}', model '{config.model}'."
+    )
+
+    try:
+        # The provider is part of the cache key: the same model name on another
+        # provider is a different extraction.
+        report = run_extraction(output_dir, sessions, extractor, f"{args.provider}/{config.model}")
+        stored = [
+            row
+            for row in list_session_knowledge(output_dir)
+            if row["session_id"] not in deleted
+            and (in_scope is None or row["session_id"] in in_scope)
+        ]
+    except sqlite3.Error as e:
+        print(f"Error: Could not use the session store: {e}", file=sys.stderr)
         return 1
 
+    print(
+        f"Extracted {report.extracted}, unchanged {report.unchanged}, "
+        f"skipped (no synced messages) {report.skipped_no_messages}, failed {report.failed}"
+    )
+
+    if report.failed and not report.extracted:
+        # Every attempted call failed (outage, quota, bad key): scripts must see it.
+        print(f"Error: all {report.failed} extraction calls failed.", file=sys.stderr)
+        return 1
+
+    if not stored:
+        print("No knowledge entries stored yet.")
+        return 0
+
+    entries = [KnowledgeEntry.from_dict(row["payload"]) for row in stored]
     output_file = Path(args.output) if args.output else extractor.output_dir / "knowledge_base.json"
     extractor.build_knowledge_base(entries, output_file.name)
 
+    if report.extracted == 0 and report.failed == 0:
+        print("Nothing new to extract.")
     print(f"\nKnowledge base saved to: {output_file}")
-    print(f"Extracted {len(entries)} entries")
-
-    # Show sample
-    if entries:
-        print("\nSample entry:")
-        print(f"  Topic: {entries[0].topic}")
-        print(f"  Key points: {', '.join(entries[0].key_points[:3])}")
+    print(f"Total entries: {len(entries)}")
+    return 0
 
 
 def cmd_format(args):

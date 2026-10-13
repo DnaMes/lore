@@ -121,6 +121,7 @@ def test_expected_tables_exist(tmp_path):
         "memory_embeddings",
         "session_tags",
         "session_embedding_meta",
+        "session_knowledge",
     }
     tables = _tables(conn)
     # The vec0 session_embeddings table only exists when sqlite-vec loaded;

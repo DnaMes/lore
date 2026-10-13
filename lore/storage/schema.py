@@ -249,6 +249,25 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        14,
+        "persisted per-session knowledge extraction (#197)",
+        # One LLM extraction per session. `fingerprint` hashes the exact prompt
+        # input plus model and prompt version, so an unchanged session is
+        # skipped without a provider call. A row exists only after a parsed
+        # response. session_id is a LOOSE reference, NOT a foreign key, so the
+        # row survives a full session re-sync (which deletes and re-inserts).
+        """
+        CREATE TABLE IF NOT EXISTS session_knowledge (
+            session_id     TEXT PRIMARY KEY,
+            fingerprint    TEXT NOT NULL,
+            model          TEXT,
+            prompt_version INTEGER,
+            payload_json   TEXT NOT NULL,
+            created        TEXT
+        );
+        """,
+    ),
 ]
 
 

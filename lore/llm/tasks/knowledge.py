@@ -34,6 +34,29 @@ class KnowledgeEntry:
             "timestamp": self.timestamp.isoformat(),
         }
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "KnowledgeEntry":
+        """Rebuild an entry from :meth:`to_dict` output; missing keys take defaults."""
+        try:
+            timestamp = datetime.fromisoformat(str(data.get("timestamp")))
+        except ValueError:
+            timestamp = datetime.now()
+
+        def _strings(key: str) -> List[str]:
+            value = data.get(key)
+            return [str(i) for i in value] if isinstance(value, list) else []
+
+        return cls(
+            session_id=str(data.get("session_id", "")),
+            topic=str(data.get("topic") or "Unknown"),
+            key_points=_strings("key_points"),
+            code_snippets=_strings("code_snippets"),
+            decisions=_strings("decisions"),
+            tools_used=_strings("tools_used"),
+            project=data.get("project"),
+            timestamp=timestamp,
+        )
+
 
 class KnowledgeExtractor:
     def __init__(self, provider: LLMProvider, output_dir: Optional[Path] = None):
@@ -41,24 +64,19 @@ class KnowledgeExtractor:
         self.output_dir = output_dir or lore_home() / "knowledge"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def extract_from_session(
-        self,
-        session: "UnifiedSession",
-        max_messages: int = 20,
-    ) -> Optional[KnowledgeEntry]:
-        if not self.provider.is_available():
-            return None
+    @staticmethod
+    def conversation_text(session: "UnifiedSession", max_messages: int = 20) -> str:
+        """Return the exact conversation text placed in the extraction prompt."""
+        return "\n".join(
+            f"{msg.role.value.upper()}: {(msg.content or '')[:500]}"
+            for msg in session.messages[:max_messages]
+        )
 
-        messages = session.messages[:max_messages]
-        conversation = []
-        for msg in messages:
-            role = msg.role.value.upper()
-            content = (msg.content or "")[:500]
-            conversation.append(f"{role}: {content}")
-
-        conversation_text = "\n".join(conversation)
-
-        prompt = f"""Extract structured knowledge from this AI coding session.
+    @staticmethod
+    def build_prompt(session: "UnifiedSession", max_messages: int = 20) -> str:
+        """Return the full extraction prompt, the input a stored result is keyed on."""
+        conversation_text = KnowledgeExtractor.conversation_text(session, max_messages)
+        return f"""Extract structured knowledge from this AI coding session.
 
 Tool: {session.tool.value}
 Project: {session.project_path or "Unknown"}
@@ -83,6 +101,16 @@ Format as JSON:
   "tools_used": ["...", "..."]
 }}"""
 
+    def extract_from_session(
+        self,
+        session: "UnifiedSession",
+        max_messages: int = 20,
+    ) -> Optional[KnowledgeEntry]:
+        if not self.provider.is_available():
+            return None
+
+        prompt = self.build_prompt(session, max_messages)
+
         try:
             response = self.provider.generate(prompt, temperature=0.2)
             content = response.content.strip()
@@ -94,14 +122,27 @@ Format as JSON:
                     content = content[4:].strip()
 
             data = json.loads(content)
+            if not isinstance(data, dict):
+                return None
+            topic = data.get("topic", "Unknown")
+            fields = {
+                name: data.get(name) or []
+                for name in ("key_points", "code_snippets", "decisions", "tools_used")
+            }
+            # A malformed response must count as a failed call, never be persisted:
+            # a stored row with the wrong shape would break every later run.
+            if not isinstance(topic, str) or not all(
+                isinstance(v, list) and all(isinstance(i, str) for i in v) for v in fields.values()
+            ):
+                return None
 
             return KnowledgeEntry(
                 session_id=session.session_id,
-                topic=data.get("topic", "Unknown"),
-                key_points=data.get("key_points", []),
-                code_snippets=data.get("code_snippets", []),
-                decisions=data.get("decisions", []),
-                tools_used=data.get("tools_used", []),
+                topic=topic,
+                key_points=fields["key_points"],
+                code_snippets=fields["code_snippets"],
+                decisions=fields["decisions"],
+                tools_used=fields["tools_used"],
                 project=session.project_path,
             )
 
