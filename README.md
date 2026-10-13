@@ -119,6 +119,7 @@ lore memory search "database performance" --semantic   # meaning only, no releva
 lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
 lore memory rate 7 5                                    # rate a memory 1-5
+lore memory add --title "Use PG 17" --body "..." --supersedes 7   # replaces #7; near-duplicates are listed
 
 # Semantic memory search needs the optional embedding model:
 #   pip install -e ".[semantic]"

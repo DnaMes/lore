@@ -27,7 +27,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .feedback import feedback_influence, ranking_factor, weight_from_scores
+from .feedback import (
+    _check_id,
+    _id_in_range,
+    feedback_influence,
+    ranking_factor,
+    weight_from_scores,
+)
 from .fts import (
     SEARCH_INDEX_BODY_COLUMN,
     SNIPPET_CLOSE,
@@ -53,6 +59,11 @@ MAX_TAGS = 32
 MAX_TAG_LEN = 64
 MAX_AUTHOR_LEN = 64
 
+# Review status. Only ``confirmed`` memories are visible by default; ``rejected``
+# is reachable only through :func:`set_memory_status`, never at write time.
+MEMORY_STATUSES = ("candidate", "confirmed", "rejected")
+WRITABLE_STATUSES = ("candidate", "confirmed")
+
 # Auto-mode recall (semantic=None) fuses only semantic candidates whose cosine
 # similarity reaches this floor; without one every query would be padded with
 # the nearest unrelated memories. The default is a PLACEHOLDER, to be calibrated
@@ -63,18 +74,36 @@ RECALL_MIN_SIMILARITY_ENV = "LORE_MEMORY_RECALL_MIN_SIMILARITY"
 DEFAULT_RECALL_MIN_SIMILARITY = 0.7
 
 
-def recall_min_similarity() -> float:
-    """The auto-mode similarity floor: env value clamped to [0, 1], default if invalid."""
-    raw = os.environ.get(RECALL_MIN_SIMILARITY_ENV, "").strip()
+# Cosine similarity at or above which a new memory is reported as a near-duplicate
+# of an existing one (``find_similar_memories``). A DUPLICATE threshold, distinct
+# from the recall floor above and higher on purpose. The default is a PLACEHOLDER
+# pending calibration with issue #92. Override with LORE_SIMILARITY_THRESHOLD.
+SIMILARITY_THRESHOLD_ENV = "LORE_SIMILARITY_THRESHOLD"
+DEFAULT_SIMILARITY_THRESHOLD = 0.85
+
+
+def _unit_float_env(name: str, default: float) -> float:
+    """``name`` parsed as a float clamped to [0, 1]; ``default`` if unset or invalid."""
+    raw = os.environ.get(name, "").strip()
     if not raw:
-        return DEFAULT_RECALL_MIN_SIMILARITY
+        return default
     try:
         value = float(raw)
     except ValueError:
-        return DEFAULT_RECALL_MIN_SIMILARITY
+        return default
     if math.isnan(value):
-        return DEFAULT_RECALL_MIN_SIMILARITY
+        return default
     return min(1.0, max(0.0, value))
+
+
+def recall_min_similarity() -> float:
+    """The auto-mode similarity floor: env value clamped to [0, 1], default if invalid."""
+    return _unit_float_env(RECALL_MIN_SIMILARITY_ENV, DEFAULT_RECALL_MIN_SIMILARITY)
+
+
+def similarity_threshold() -> float:
+    """The near-duplicate threshold: env value clamped to [0, 1], default if invalid."""
+    return _unit_float_env(SIMILARITY_THRESHOLD_ENV, DEFAULT_SIMILARITY_THRESHOLD)
 
 
 @dataclass
@@ -100,6 +129,7 @@ class MemoryEntry:
     # Derived from memory_feedback ratings; 0.5 / 0 for an unrated memory.
     feedback_weight: float = 0.5
     feedback_count: int = 0
+    status: str = "confirmed"
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -119,6 +149,7 @@ class MemoryEntry:
             "sources": self.sources,
             "feedback_weight": self.feedback_weight,
             "feedback_count": self.feedback_count,
+            "status": self.status,
         }
 
 
@@ -145,8 +176,18 @@ def add_memory(
     tags: Optional[List[str]] = None,
     metadata: Optional[Dict[str, Any]] = None,
     source_session: Optional[str] = None,
+    status: str = "confirmed",
+    supersedes: Optional[int] = None,
 ) -> int:
     """Record a new memory and index it for search. Returns the new memory id.
+
+    ``supersedes`` points an older memory's ``superseded_by`` at the new row in the
+    same transaction as the insert. The target must exist, be confirmed, not yet
+    superseded and have the same ``scope_project``; a different ``kind`` is fine.
+    Any violation raises ``ValueError`` and nothing is written.
+
+    ``status`` is ``confirmed`` (default, visible) or ``candidate`` (hidden
+    until reviewed); ``rejected`` is only reachable via :func:`set_memory_status`.
 
     When ``source_session`` is given, a row is recorded in ``memory_sources``
     linking the memory to the session it was derived from — so the memory's
@@ -154,8 +195,15 @@ def add_memory(
 
     Raises:
         ValueError: if ``kind`` is unknown, ``title``/``body`` are empty, or
-            an input exceeds its size cap (#42).
+            an input exceeds its size cap (#42), or ``status`` is not writable,
+            or ``supersedes`` is not a valid id, or ``metadata`` is not JSON.
     """
+    if status not in WRITABLE_STATUSES:
+        raise ValueError(f"invalid memory status {status!r}; expected one of {WRITABLE_STATUSES}")
+    if supersedes is not None:
+        _check_id(supersedes, "supersedes")
+    if supersedes is not None and status != "confirmed":
+        raise ValueError("only a confirmed memory can supersede another")
     if kind not in MEMORY_KINDS:
         raise ValueError(f"unknown memory kind {kind!r}; expected one of {MEMORY_KINDS}")
     title = (title or "").strip()
@@ -178,16 +226,24 @@ def add_memory(
             raise ValueError(f"a tag exceeds {MAX_TAG_LEN} chars")
         tags = clean_tags
 
+    try:
+        metadata_json = json.dumps(metadata, ensure_ascii=False) if metadata else None
+    except (TypeError, ValueError) as exc:
+        raise ValueError("metadata must be JSON-serializable") from exc
+
     now = _now()
     conn = _connect(output_dir)
     try:
-        conn.execute("BEGIN")
+        # IMMEDIATE: take the write lock before validating the supersedes target.
+        conn.execute("BEGIN IMMEDIATE")
+        if supersedes is not None:
+            _check_supersedable(conn, supersedes, scope_project)
         cur = conn.execute(
             """
             INSERT INTO memory (
                 kind, title, body, scope_project, scope_tool, author,
-                created, updated, superseded_by, metadata_json
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                created, updated, superseded_by, metadata_json, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
             """,
             (
                 kind,
@@ -198,7 +254,8 @@ def add_memory(
                 author,
                 now,
                 now,
-                json.dumps(metadata, ensure_ascii=False) if metadata else None,
+                metadata_json,
+                status,
             ),
         )
         memory_id = int(cur.lastrowid or 0)
@@ -216,8 +273,20 @@ def add_memory(
             """,
             (str(memory_id), scope_tool or "", scope_project or "", title, body),
         )
+        if supersedes is not None:
+            conn.execute(
+                "UPDATE memory SET superseded_by = ?, updated = ? WHERE id = ?",
+                (memory_id, now, supersedes),
+            )
+        # Provenance (#33), in the same transaction: it commits or rolls back with the memory.
+        if source_session:
+            conn.execute(
+                "INSERT OR IGNORE INTO memory_sources (memory_id, session_id, message_id, note) "
+                "VALUES (?, ?, NULL, 'recorded from this session')",
+                (memory_id, source_session),
+            )
         conn.execute("COMMIT")
-    except sqlite3.Error:
+    except (sqlite3.Error, ValueError):
         try:
             conn.execute("ROLLBACK")
         except sqlite3.OperationalError:
@@ -226,18 +295,79 @@ def add_memory(
     finally:
         conn.close()
 
-    # Link the memory to its source session, if one was given (#33). This
-    # records provenance — done after the memory commits, best-effort.
-    if source_session:
-        link_memory_to_session(
-            output_dir, memory_id, source_session, note="recorded from this session"
-        )
-
     # Embed the memory for semantic recall — best-effort, in its own
     # connection. A missing embedding backend or an embedding failure must
     # never lose the memory, which is already committed above.
     _store_embedding(output_dir, memory_id, f"{title}\n{body}")
     return memory_id
+
+
+def _check_supersedable(
+    conn: sqlite3.Connection, target_id: int, scope_project: Optional[str]
+) -> None:
+    """Raise ``ValueError`` unless ``target_id`` may be superseded by a new memory."""
+    row = conn.execute(
+        "SELECT status, superseded_by, scope_project FROM memory WHERE id = ?", (target_id,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"memory {target_id} does not exist")
+    if row["status"] != "confirmed":
+        raise ValueError(f"memory {target_id} is {row['status']}, not confirmed")
+    if row["superseded_by"] is not None:
+        raise ValueError(f"memory {target_id} is already superseded by #{row['superseded_by']}")
+    if row["scope_project"] != scope_project:
+        raise ValueError(f"memory {target_id} has a different project scope")
+
+
+def find_similar_memories(
+    output_dir: Path,
+    text: str,
+    *,
+    scope_project: Optional[str],
+    limit: int = 3,
+    exclude_id: Optional[int] = None,
+) -> Optional[List[Dict[str, Any]]]:
+    """Active, confirmed memories in the same scope that nearly duplicate ``text``.
+
+    Returns ``[{"id", "title", "similarity"}]`` best first, at or above
+    :func:`similarity_threshold`, or None when no embedding backend is available.
+    Call it BEFORE inserting the new memory so it cannot match itself; pass the id
+    of a memory about to be superseded as ``exclude_id`` to leave it out.
+    """
+    from .embeddings import cosine_similarity, embed_text, unpack_vector
+
+    vector = embed_text(text)
+    if vector is None:
+        return None
+    threshold = similarity_threshold()
+    conn = _connect(output_dir)
+    try:
+        rows = conn.execute(
+            """
+            SELECT m.id, m.title, e.vector
+            FROM memory m
+            JOIN memory_embeddings e ON e.memory_id = m.id
+            WHERE m.superseded_by IS NULL AND m.status = 'confirmed'
+              AND m.scope_project IS ?
+            """,
+            (scope_project,),
+        ).fetchall()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+
+    scored = [
+        {
+            "id": int(r["id"]),
+            "title": r["title"],
+            "similarity": cosine_similarity(vector, unpack_vector(r["vector"])),
+        }
+        for r in rows
+    ]
+    hits = [h for h in scored if h["similarity"] >= threshold and h["id"] != exclude_id]
+    hits.sort(key=lambda h: h["similarity"], reverse=True)
+    return hits[: max(0, limit)]
 
 
 def _store_embedding(output_dir: Path, memory_id: int, text: str) -> None:
@@ -319,6 +449,7 @@ def _load_entries(conn: sqlite3.Connection, rows: List[sqlite3.Row]) -> List[Mem
                 sources=sources[row["id"]],
                 feedback_weight=weight,
                 feedback_count=count,
+                status=row["status"],
             )
         )
     return entries
@@ -326,6 +457,8 @@ def _load_entries(conn: sqlite3.Connection, rows: List[sqlite3.Row]) -> List[Mem
 
 def get_memory(output_dir: Path, memory_id: int) -> Optional[MemoryEntry]:
     """Return a single memory by id, or None if it does not exist."""
+    if not _id_in_range(memory_id):
+        return None
     conn = _connect(output_dir)
     try:
         row = conn.execute("SELECT * FROM memory WHERE id = ?", (memory_id,)).fetchone()
@@ -341,10 +474,17 @@ def list_memory(
     scope_project: Optional[str] = None,
     include_superseded: bool = False,
     limit: int = 50,
+    status: Optional[str] = "confirmed",
 ) -> List[MemoryEntry]:
-    """List memory entries, newest first, with optional filters."""
+    """List memory entries, newest first, with optional filters.
+
+    ``status`` defaults to confirmed memories only; ``None`` means any status.
+    """
     clauses: List[str] = []
     params: List[Any] = []
+    if status is not None:
+        clauses.append("status = ?")
+        params.append(status)
     if kind:
         clauses.append("kind = ?")
         params.append(kind)
@@ -376,6 +516,7 @@ def _semantic_candidates(
     scope_project: Optional[str],
     include_superseded: bool,
     limit: int,
+    status: Optional[str] = "confirmed",
     min_similarity: Optional[float] = None,
 ) -> Optional[List[Tuple[MemoryEntry, float]]]:
     """Rank memories by embedding cosine similarity to the query.
@@ -411,6 +552,8 @@ def _semantic_candidates(
                 continue
             if not include_superseded and row["superseded_by"] is not None:
                 continue
+            if status is not None and row["status"] != status:
+                continue
             score = cosine_similarity(query_vec, unpack_vector(row["_vec"]))
             if min_similarity is not None and score < min_similarity:
                 continue
@@ -434,6 +577,7 @@ def _semantic_recall(
     scope_project: Optional[str],
     include_superseded: bool,
     limit: int,
+    status: Optional[str],
 ) -> Optional[List[MemoryEntry]]:
     """Entries of :func:`_semantic_candidates` without a similarity floor."""
     pairs = _semantic_candidates(
@@ -443,6 +587,7 @@ def _semantic_recall(
         scope_project=scope_project,
         include_superseded=include_superseded,
         limit=limit,
+        status=status,
     )
     return None if pairs is None else [entry for entry, _score in pairs]
 
@@ -470,8 +615,13 @@ def _fts_recall(
     scope_project: Optional[str],
     include_superseded: bool,
     limit: int,
+    status: Optional[str],
 ) -> List[MemoryEntry]:
     """Keyword recall over the shared ``search_index`` table, best first."""
+    # Filtered in SQL (unlike kind/scope below) so candidates cannot crowd the
+    # over-fetch window out of confirmed hits.
+    status_clause = "AND m.status = ?" if status is not None else ""
+    status_params: Tuple[Any, ...] = (status,) if status is not None else ()
     conn = _connect(output_dir)
     try:
         rows = conn.execute(
@@ -482,10 +632,11 @@ def _fts_recall(
             JOIN memory m ON m.id = CAST(search_index.entity_id AS INTEGER)
             WHERE search_index MATCH ?
               AND search_index.entity_type = 'memory'
+              {status_clause}
             ORDER BY score ASC
             LIMIT ?
             """,
-            (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, max(1, limit) * 4),
+            (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, *status_params, max(1, limit) * 4),
         ).fetchall()
 
         kept: List[sqlite3.Row] = []
@@ -529,8 +680,11 @@ def recall_memory(
     include_superseded: bool = False,
     limit: int = 10,
     semantic: Optional[bool] = None,
+    status: Optional[str] = "confirmed",
 ) -> List[MemoryEntry]:
     """Search recorded memory; see :func:`_recall` for the retrieval modes.
+
+    ``status`` defaults to confirmed memories only; ``None`` means any status.
 
     Only when ``LORE_FEEDBACK_INFLUENCE`` is above 0 are the results reordered
     by their feedback weight (bounded to +-25%); otherwise the order is the
@@ -544,6 +698,7 @@ def recall_memory(
         include_superseded=include_superseded,
         limit=limit,
         semantic=semantic,
+        status=status,
     )
     influence = feedback_influence()
     if influence > 0 and len(entries) > 1:
@@ -560,6 +715,7 @@ def _recall(
     include_superseded: bool,
     limit: int,
     semantic: Optional[bool],
+    status: Optional[str],
 ) -> List[MemoryEntry]:
     """Search recorded memory.
 
@@ -584,6 +740,7 @@ def _recall(
             scope_project=scope_project,
             include_superseded=include_superseded,
             limit=limit,
+            status=status,
         )
 
     filters: Dict[str, Any] = {
@@ -591,6 +748,7 @@ def _recall(
         "scope_project": scope_project,
         "include_superseded": include_superseded,
         "limit": limit,
+        "status": status,
     }
     if semantic:
         result = _semantic_recall(output_dir, query, **filters)
@@ -632,16 +790,17 @@ def supersede_memory(
     """Replace a memory with an updated version, preserving the audit trail.
 
     Inserts a new memory (same kind/scope as the old one) and points the old
-    row's ``superseded_by`` at it. Returns the new memory id.
+    row's ``superseded_by`` at it in one transaction (see :func:`add_memory`).
+    Returns the new memory id.
 
     Raises:
-        ValueError: if ``old_id`` does not exist.
+        ValueError: if ``old_id`` does not exist, is not confirmed or is
+            already superseded.
     """
     old = get_memory(output_dir, old_id)
     if old is None:
         raise ValueError(f"memory {old_id} does not exist")
-
-    new_id = add_memory(
+    return add_memory(
         output_dir,
         kind=old.kind,
         title=title,
@@ -651,35 +810,38 @@ def supersede_memory(
         scope_tool=old.scope_tool,
         tags=tags if tags is not None else old.tags,
         metadata=metadata,
+        supersedes=old_id,
     )
 
-    # Point the old row at the new one. add_memory has already committed the
-    # new memory, so if this UPDATE fails we compensate by deleting the new
-    # memory — leaving the store as it was rather than with two unlinked,
-    # non-superseded memories.
-    update_ok = False
+
+def set_memory_status(output_dir: Path, memory_id: int, status: str) -> bool:
+    """Review a candidate: ``candidate -> confirmed`` or ``candidate -> rejected``.
+
+    Rejected rows are kept, never deleted. Returns True when the status changed
+    and False when the memory does not exist.
+
+    Raises:
+        ValueError: if ``status`` is not ``confirmed``/``rejected`` or the memory
+            is not currently a candidate.
+    """
+    if status not in ("confirmed", "rejected"):
+        raise ValueError(f"invalid target status {status!r}; expected 'confirmed' or 'rejected'")
+    if not _id_in_range(memory_id):
+        return False
     conn = _connect(output_dir)
     try:
-        conn.execute("BEGIN")
-        conn.execute(
-            "UPDATE memory SET superseded_by = ?, updated = ? WHERE id = ?",
-            (new_id, _now(), old_id),
+        cur = conn.execute(
+            "UPDATE memory SET status = ?, updated = ? WHERE id = ? AND status = 'candidate'",
+            (status, _now(), memory_id),
         )
-        conn.execute("COMMIT")
-        update_ok = True
-    except sqlite3.Error:
-        try:
-            conn.execute("ROLLBACK")
-        except sqlite3.OperationalError:
-            pass
-        raise
+        if cur.rowcount > 0:
+            return True
+        row = conn.execute("SELECT status FROM memory WHERE id = ?", (memory_id,)).fetchone()
+        if row is None:
+            return False
+        raise ValueError(f"memory {memory_id} is {row['status']}, only candidates can be reviewed")
     finally:
         conn.close()
-        if not update_ok:
-            # The superseded_by link failed — delete the orphan new memory
-            # so the store is unchanged rather than holding two unlinked rows.
-            delete_memory(output_dir, new_id)
-    return new_id
 
 
 def link_memory_to_session(
@@ -731,6 +893,8 @@ def list_memory_sources(output_dir: Path, memory_id: int) -> List[Dict[str, Any]
 
 def delete_memory(output_dir: Path, memory_id: int) -> bool:
     """Hard-delete a memory and its FTS/tag/source rows. Returns True if removed."""
+    if not _id_in_range(memory_id):
+        return False
     conn = _connect(output_dir)
     try:
         conn.execute("BEGIN")

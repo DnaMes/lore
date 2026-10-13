@@ -8,6 +8,8 @@ SQLite store's memory tables.
 
 from __future__ import annotations
 
+import sqlite3
+
 from ...utils.security import (
     validate_search_param,
     validate_search_query,
@@ -22,7 +24,7 @@ def register(server, deps: MCPToolDeps) -> None:
     """Register the shared-memory tool group on ``server``."""
 
     async def memory_write(args: dict) -> str:
-        from ...storage import MEMORY_KINDS, add_memory
+        from ...storage import MEMORY_KINDS, add_memory, find_similar_memories
 
         kind = str(args.get("kind") or "note").strip().lower()
         if kind not in MEMORY_KINDS:
@@ -47,7 +49,21 @@ def register(server, deps: MCPToolDeps) -> None:
         if source_session and not validate_session_id(str(source_session)):
             return "Invalid source_session parameter."
 
+        supersedes: int | None = None
+        if args.get("supersedes") is not None:
+            try:
+                supersedes = int(str(args["supersedes"]))
+            except ValueError:
+                return "'supersedes' must be an integer memory id."
+
         try:
+            # Before the insert, so the new memory cannot match itself.
+            similar = find_similar_memories(
+                deps.server.output_dir,
+                f"{title}\n{body}",
+                scope_project=scope_project,
+                exclude_id=supersedes,
+            )
             memory_id = add_memory(
                 deps.server.output_dir,
                 kind=kind,
@@ -58,15 +74,29 @@ def register(server, deps: MCPToolDeps) -> None:
                 scope_tool=scope_tool,
                 tags=[str(t) for t in tags] if tags else None,
                 source_session=str(source_session) if source_session else None,
+                supersedes=supersedes,
             )
         except ValueError as exc:
             return f"Could not write memory: {exc}"
-        return deps.json_text({"status": "stored", "memory_id": memory_id, "kind": kind})
+        except sqlite3.OperationalError:
+            return "Could not write memory: database is busy, try again"
+        result = {
+            "status": "stored",
+            "memory_id": memory_id,
+            "kind": kind,
+            "similar": similar or [],
+            "similar_available": similar is not None,
+        }
+        if supersedes is not None:
+            result["superseded"] = supersedes
+        return deps.json_text(result)
 
     server.register_tool(
         "memory_write",
         "Record a durable memory (fact, decision, lesson, snippet, …) into the "
-        "shared cross-tool knowledge store. Any AI tool can recall it later.",
+        "shared cross-tool knowledge store. Any AI tool can recall it later. The "
+        "response lists near-duplicate memories in 'similar'; pass 'supersedes' "
+        "with one of their ids to replace it.",
         {
             "type": "object",
             "properties": {
@@ -84,6 +114,11 @@ def register(server, deps: MCPToolDeps) -> None:
                     "type": "string",
                     "description": "optional id of the session this memory "
                     "came from — records the memory's provenance",
+                },
+                "supersedes": {
+                    "type": "integer",
+                    "description": "optional id of an active, confirmed memory in the "
+                    "same project scope that this one replaces",
                 },
             },
             "required": ["title", "body"],
@@ -171,9 +206,11 @@ def register(server, deps: MCPToolDeps) -> None:
         rater = str(args.get("rater") or "agent")
         try:
             record_feedback(deps.server.output_dir, memory_id, rater, score)
+            weight, count = feedback_weight(deps.server.output_dir, memory_id)
         except ValueError as exc:
             return f"Could not record feedback: {exc}"
-        weight, count = feedback_weight(deps.server.output_dir, memory_id)
+        except sqlite3.OperationalError:
+            return "Could not write memory: database is busy, try again"
         return deps.json_text({"status": "recorded", "weight": weight, "count": count})
 
     server.register_tool(

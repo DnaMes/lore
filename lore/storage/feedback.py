@@ -30,6 +30,20 @@ _PRIOR_VOTES = 3
 _NEUTRAL = 0.5
 
 
+# SQLite integers are signed 64-bit; a larger Python int raises OverflowError on bind.
+_MAX_ID = 2**63 - 1
+
+
+def _id_in_range(value: object) -> bool:
+    return isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= _MAX_ID
+
+
+def _check_id(value: object, name: str) -> None:
+    """Raise ``ValueError`` unless ``value`` is an int in 1..2**63-1."""
+    if not _id_in_range(value):
+        raise ValueError(f"{name} must be an integer from 1 to {_MAX_ID}")
+
+
 def weight_from_scores(scores: Iterable[int]) -> Tuple[float, int]:
     """Return ``(weight, count)`` for raw 1-5 scores; ``(0.5, 0)`` when empty."""
     normalised = [(s - 1) / 4 for s in scores]
@@ -70,6 +84,7 @@ def record_feedback(output_dir: Path, memory_id: int, rater: str, score: int) ->
         ValueError: if the score is not an integer 1-5, the rater is empty, over
             64 chars or holds control characters, or the memory does not exist.
     """
+    _check_id(memory_id, "memory_id")
     if isinstance(score, bool) or not isinstance(score, int) or not 1 <= score <= 5:
         raise ValueError("score must be an integer from 1 to 5")
     rater = (rater or "").strip()
@@ -106,6 +121,8 @@ def record_feedback(output_dir: Path, memory_id: int, rater: str, score: int) ->
 
 def feedback_weight(output_dir: Path, memory_id: int) -> Tuple[float, int]:
     """Return ``(weight, count)`` for a memory; ``(0.5, 0)`` when it has no ratings."""
+    if not _id_in_range(memory_id):
+        return weight_from_scores([])
     conn = _connect(output_dir)
     try:
         rows = conn.execute(

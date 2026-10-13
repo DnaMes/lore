@@ -21,7 +21,7 @@ from lore.services.knowledge import (
     ExtractionReport,
     run_extraction,
 )
-from lore.storage import add_memory, current_version, get_memory, open_connection
+from lore.storage import current_version, get_memory, initialise, open_connection
 from lore.storage.knowledge import (
     get_session_knowledge,
     list_session_knowledge,
@@ -147,9 +147,18 @@ def test_migration_14_from_v13(tmp_path):
     full = list(MIGRATIONS)
     MIGRATIONS[:] = [m for m in full if m[0] <= 13]
     try:
-        memory_id = add_memory(tmp_path, "note", "keep me", "body text")
+        conn = initialise(v2_db_path(tmp_path))
     finally:
         MIGRATIONS[:] = full
+    try:
+        # Raw insert: add_memory writes the status column of migration 16.
+        cur = conn.execute(
+            "INSERT INTO memory (kind, title, body, author, created, updated) "
+            "VALUES ('note', 'keep me', 'body text', 'human', 't', 't')"
+        )
+        memory_id = int(cur.lastrowid or 0)
+    finally:
+        conn.close()
     conn = open_connection(v2_db_path(tmp_path))
     try:
         assert current_version(conn) == 13

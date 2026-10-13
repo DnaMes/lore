@@ -217,7 +217,42 @@ Input:
 
 Record a durable memory. Input: `title` and `body` (required), `kind`
 (`fact|decision|todo|snippet|link|lesson|note`), `project`, `tool`, `tags`,
-`author`, `source_session` (session id the memory came from).
+`author`, `source_session` (session id the memory came from) and `supersedes`
+(integer id of the memory this one replaces).
+
+Output:
+
+```json
+{
+  "status": "stored",
+  "memory_id": 12,
+  "kind": "note",
+  "similar": [{"id": 7, "title": "Use Postgres 16", "similarity": 0.91}],
+  "similar_available": true,
+  "superseded": 7
+}
+```
+
+- `similar` lists up to 3 near-duplicates (active, `confirmed`, same `project`
+  scope, cosine similarity at or above `LORE_SIMILARITY_THRESHOLD`, default
+  `0.85`, a placeholder pending calibration in #92; invalid values fall back to
+  the default, range 0 to 1), computed before the new memory is stored. Nothing
+  is superseded automatically. Without the optional `semantic` extra `similar` is
+  `[]` and `similar_available` is `false`.
+- `superseded` is present only when `supersedes` was given. The new memory is
+  stored and the old one's `superseded_by` is set in one transaction. The target
+  must exist, be `confirmed`, not yet superseded and have the same `project`
+  scope (a different `kind` is allowed); otherwise nothing is written and the
+  tool returns an error string.
+
+#### Memory status
+
+A memory is `candidate`, `confirmed` or `rejected` (`status` key in every memory
+payload). Writes through `memory_write` and `lore memory add` are `confirmed`.
+Only `confirmed` memories are returned by `memory_recall`, `lore memory list` /
+`search` and the web `/memory` page; candidates are produced by later review
+workflows and change state only `candidate -> confirmed|rejected`. Rejected rows
+are kept.
 
 ### `memory_recall`
 
@@ -274,7 +309,8 @@ Output shape:
       "source": "memory",
       "sources": [{"session_id": "session-1", "note": "recorded from this session"}],
       "feedback_weight": 0.5,
-      "feedback_count": 0
+      "feedback_count": 0,
+      "status": "confirmed"
     }
   ]
 }

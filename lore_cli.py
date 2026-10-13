@@ -1095,6 +1095,7 @@ def cmd_memory(args):
         MEMORY_KINDS,
         add_memory,
         feedback_weight,
+        find_similar_memories,
         list_memory,
         recall_memory,
         record_feedback,
@@ -1106,10 +1107,13 @@ def cmd_memory(args):
     if action == "rate":
         try:
             record_feedback(output_dir, args.memory_id, args.rater, args.score)
+            weight, count = feedback_weight(output_dir, args.memory_id)
         except ValueError as exc:
             print(f"Could not rate memory: {exc}", file=sys.stderr)
             sys.exit(1)
-        weight, count = feedback_weight(output_dir, args.memory_id)
+        except sqlite3.OperationalError:
+            print("Could not write memory: database is busy, try again", file=sys.stderr)
+            sys.exit(1)
         print(f"Rated memory #{args.memory_id} {args.score}/5 (weight {weight:.2f}, n={count}).")
         return
 
@@ -1117,7 +1121,15 @@ def cmd_memory(args):
         if args.kind not in MEMORY_KINDS:
             print(f"Invalid kind. Expected one of: {', '.join(MEMORY_KINDS)}", file=sys.stderr)
             sys.exit(1)
+        supersedes = getattr(args, "supersedes", None)
         try:
+            # Before the insert, so the new memory cannot match itself.
+            similar = find_similar_memories(
+                output_dir,
+                f"{args.title}\n{args.body}",
+                scope_project=args.project,
+                exclude_id=supersedes,
+            )
             memory_id = add_memory(
                 output_dir,
                 kind=args.kind,
@@ -1127,11 +1139,18 @@ def cmd_memory(args):
                 scope_project=args.project,
                 tags=args.tag or None,
                 source_session=getattr(args, "from_session", None),
+                supersedes=supersedes,
             )
         except ValueError as exc:
             print(f"Could not add memory: {exc}", file=sys.stderr)
             sys.exit(1)
+        except sqlite3.OperationalError:
+            print("Could not write memory: database is busy, try again", file=sys.stderr)
+            sys.exit(1)
         print(f"Stored memory #{memory_id} ({args.kind}).")
+        if similar:
+            listed = ", ".join(f"#{m['id']} {m['title']} ({m['similarity']:.2f})" for m in similar)
+            print(f"Similar existing memories: {listed}")
         return
 
     if action == "list":
@@ -1551,6 +1570,12 @@ Examples:
     mem_add.add_argument("--tag", action="append", help="tag (repeatable: --tag db --tag infra)")
     mem_add.add_argument(
         "--from-session", help="id of the session this memory came from (provenance)"
+    )
+    mem_add.add_argument(
+        "--supersedes",
+        type=int,
+        metavar="ID",
+        help="id of an active, confirmed memory (same project) that this one replaces",
     )
 
     mem_list = memory_sub.add_parser("list", help="List recorded memories")

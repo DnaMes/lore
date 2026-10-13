@@ -19,7 +19,7 @@ from lore.storage import (
     recall_memory,
     record_feedback,
 )
-from lore.storage.schema import MIGRATIONS, current_version, open_connection
+from lore.storage.schema import MIGRATIONS, current_version, initialise, open_connection
 from lore.storage.writer import v2_db_path
 
 
@@ -40,9 +40,18 @@ def test_migration_15_from_v14_keeps_rows(tmp_path):
     full = list(MIGRATIONS)
     MIGRATIONS[:] = [m for m in full if m[0] <= 14]
     try:
-        memory_id = _mem(tmp_path, "keep me")
+        conn = initialise(v2_db_path(tmp_path))
     finally:
         MIGRATIONS[:] = full
+    try:
+        # Raw insert: add_memory writes the status column of migration 16.
+        cur = conn.execute(
+            "INSERT INTO memory (kind, title, body, author, created, updated) "
+            "VALUES ('note', 'keep me', 'alpha beta', 'human', 't', 't')"
+        )
+        memory_id = int(cur.lastrowid or 0)
+    finally:
+        conn.close()
     conn = open_connection(v2_db_path(tmp_path))
     try:
         assert current_version(conn) == 14
@@ -322,6 +331,31 @@ def test_recall_statement_count_is_constant(tmp_path, monkeypatch):
 
     listed = _statements_for(monkeypatch, lambda: list_memory(tmp_path, limit=20))
     assert listed == {"memory_tags": 1, "memory_sources": 1, "memory_feedback": 1}
+
+
+def test_chunked_loader_attaches_relations_to_the_right_entry(tmp_path, monkeypatch):
+    monkeypatch.setattr(memory_mod, "_IN_CHUNK", 2)
+    for i in range(5):
+        memory_id = add_memory(
+            tmp_path,
+            "note",
+            f"memory {i}",
+            f"alpha number {i}",
+            tags=[f"t{i}", "shared"],
+            source_session=f"session-{i}",
+        )
+        record_feedback(tmp_path, memory_id, "agent", i + 1)
+
+    entries = {e.title: e for e in list_memory(tmp_path, limit=10)}
+    assert len(entries) == 5
+    for i in range(5):
+        entry = entries[f"memory {i}"]
+        assert entry.tags == sorted([f"t{i}", "shared"])
+        assert entry.sources == [
+            {"session_id": f"session-{i}", "note": "recorded from this session"}
+        ]
+        assert entry.feedback_count == 1
+        assert entry.feedback_weight == pytest.approx((i / 4 + 1.5) / 4)
 
 
 def test_fts_overfetch_only_loads_kept_rows(tmp_path, monkeypatch):

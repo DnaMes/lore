@@ -284,6 +284,17 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        16,
+        "memory review status (#197)",
+        # candidate | confirmed | rejected. Existing rows and every human or
+        # agent write stay 'confirmed'; only confirmed memories are visible by
+        # default (lore.storage.memory).
+        """
+        ALTER TABLE memory ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed';
+        CREATE INDEX IF NOT EXISTS idx_memory_status ON memory(status);
+        """,
+    ),
 ]
 
 
