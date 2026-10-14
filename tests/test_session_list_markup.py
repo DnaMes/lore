@@ -88,6 +88,15 @@ class _ListRowParser(HTMLParser):
             self._in_menu = False
 
 
+def test_sessions_list_has_select_mode_and_filters_sheet(client):
+    html = client.get("/sessions").get_data(as_text=True)
+    assert 'id="selectModeToggle"' in html
+    assert 'aria-haspopup="dialog"' in html
+    assert "Filters ·" in html
+    assert html.count('<form method="get"') == 1
+    assert 'class="session-row-select"' in html
+
+
 def test_sessions_list_roles_and_row_links(client):
     html = client.get("/sessions").get_data(as_text=True)
     assert 'id="sessionRows"' in html and 'role="list"' in html
@@ -221,8 +230,9 @@ def test_negative_tokens_render_no_orphan_label(monkeypatch):
     assert ">tokens<" not in html.replace(" ", "")
 
 
-def test_filter_sheet_is_open_in_the_server_rendered_html(client):
+def test_filter_sheet_is_usable_without_js_and_has_mobile_trigger(client):
     html = client.get("/sessions").get_data(as_text=True)
 
-    assert re.search(r'<details class="filters-sheet"\s+open', html)
-    assert "matchMedia('(max-width: 1023px)')" in html
+    assert 'id="sessionsFiltersForm"' in html
+    assert 'id="filtersSheetTrigger"' in html
+    assert "js-filters-sheet" in html

@@ -18,6 +18,7 @@
             </div>
         </div>
         <div class="session-header-actions flex flex-wrap items-center gap-2 flex-shrink-0">
+            <button type="button" id="promptOutlineTrigger" class="outline-sheet-trigger lg:hidden" aria-haspopup="dialog" aria-expanded="false" aria-controls="promptOutlineSheet">Prompts ▾</button>
             <button type="button" data-action="resume-session" data-session-id="{{ session.session_id }}" class="session-header-primary">Resume</button>
             <details class="header-menu">
                 <summary class="header-menu-trigger" aria-label="More session actions">⋯</summary>
@@ -71,6 +72,33 @@
 <section class="max-w-[90rem] mx-auto px-6 pb-4">
     {% include "session_summary_card.html" %}
 </section>
+
+<div id="promptOutlineSheet" class="bottom-sheet-host outline-sheet-host" role="dialog" aria-modal="true" aria-label="Prompt outline" hidden>
+    <button type="button" class="bottom-sheet-backdrop" data-sheet-dismiss aria-label="Close prompt outline" tabindex="-1"></button>
+    <div class="bottom-sheet-panel">
+        <div class="bottom-sheet-handle" aria-hidden="true"></div>
+        <div class="bottom-sheet-head">
+            <span class="bottom-sheet-title">Prompts</span>
+            <button type="button" class="bottom-sheet-close" data-sheet-dismiss aria-label="Close prompt outline">×</button>
+        </div>
+        <nav aria-label="Prompt outline" class="outline-sheet-nav">
+            <ol class="toc-stepper toc-list space-y-0.5">
+                {% for item in toc_items %}
+                <li>
+                <a href="#msg-{{ item.index }}" class="toc-item outline-sheet-link" data-outline-nav title="{{ item.text }}">
+                    <span class="toc-badge">{{ loop.index }}</span>
+                    <span class="toc-item-text">{{ item.text }}</span>
+                    <span class="toc-item-meta">{{ item.time }}</span>
+                </a>
+                </li>
+                {% endfor %}
+                {% if toc_items|length == 0 %}
+                <li class="text-[11px] text-slate-500 px-3 py-2">No prompts detected.</li>
+                {% endif %}
+            </ol>
+        </nav>
+    </div>
+</div>
 
 <section class="max-w-[90rem] mx-auto px-6 pb-24">
     <div class="flex flex-col lg:flex-row w-full">
@@ -305,6 +333,51 @@ document.getElementById('resume-modal').addEventListener('click', function(e) {
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') { closeResumeModal(); }
 });
+
+(function () {
+    const dialog = document.getElementById('promptOutlineSheet');
+    const trigger = document.getElementById('promptOutlineTrigger');
+    if (!dialog || !trigger) return;
+    let trapRelease = null;
+
+    function closeOutline() {
+        if (dialog.hasAttribute('hidden')) return;
+        dialog.setAttribute('hidden', '');
+        dialog.classList.remove('is-open');
+        document.body.classList.remove('sheet-open');
+        trigger.setAttribute('aria-expanded', 'false');
+        if (trapRelease) { trapRelease(); trapRelease = null; }
+    }
+
+    function openOutline() {
+        dialog.removeAttribute('hidden');
+        dialog.classList.add('is-open');
+        document.body.classList.add('sheet-open');
+        trigger.setAttribute('aria-expanded', 'true');
+        const panel = dialog.querySelector('.bottom-sheet-panel') || dialog;
+        if (window.FocusTrap) {
+            if (trapRelease) trapRelease();
+            trapRelease = window.FocusTrap.activate(panel);
+        }
+    }
+
+    trigger.addEventListener('click', openOutline);
+    dialog.querySelectorAll('[data-sheet-dismiss]').forEach(function (btn) {
+        btn.addEventListener('click', closeOutline);
+    });
+    dialog.querySelectorAll('[data-outline-nav]').forEach(function (link) {
+        link.addEventListener('click', function () { closeOutline(); });
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) {
+            return;
+        }
+        if (e.key === 'Escape' && dialog.classList.contains('is-open')) closeOutline();
+    });
+})();
 
 // --- User tags / bookmarks (#56) ---
 (function () {

@@ -1,6 +1,7 @@
 
 {% macro render_row(s) %}
-<div class="compact-row session-row flex gap-2 group" role="listitem">
+<div class="compact-row session-row flex gap-2 group" role="listitem" data-session-id="{{ s.id }}">
+    <input type="checkbox" class="session-row-select" value="{{ s.id }}" aria-label="Select {{ s.display_title or s.title or s.id }}">
     <a href="/session/{{ s.id|urlpath }}?back={{ (back_to or '/sessions')|urlpath }}" class="session-row-link flex-1 min-w-0">
         <div class="session-row-line1 flex items-center gap-3 min-w-0">
             <div class="session-row-icon w-8 h-8 rounded-lg flex items-center justify-center text-sm border border-slate-200" style="color: {{ get_style(s.tool).color }}">

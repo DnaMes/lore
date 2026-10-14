@@ -199,7 +199,7 @@ Consecutive tool calls grouped into one `<details>` with counts and status; merg
 ### B5.6 Mobile sheets and bulk select
 Port the mock's keyboard handlers with guards: ignore events with ctrl/meta/alt modifiers and targets that are inputs, textareas or contenteditable; carry the CSP nonce on any script/style block.
 Outline and filters as bottom sheets with focus trap; explicit select mode with bulk actions.
-- [ ] done
+- [x] done
 
 ### B5.7a In-session find
 Find across all pages with highlight and n/N.

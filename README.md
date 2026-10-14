@@ -285,6 +285,9 @@ Browse your history at `http://localhost:5000`.
 - **Memory**: Browse, search (keyword or semantic), and manage shared agent memory.
 - **Rules**: Derived rules extracted from assistant responses.
 - **Export**: Save any session as a clean Markdown file.
+- **Select mode** (sessions list): toggle **Select**, then check rows or press `x` on the focused row to bulk **Delete…** or **Tag…** (in-page confirm, no native dialog).
+- **Mobile sheets**: **Filters** and **Prompts** open as bottom sheets below 1024px with focus trap; **Escape** closes an open sheet.
+- Keyboard handlers ignore modified keys and events from inputs, textareas, selects, or `contenteditable` fields.
 
 Plain `lore export` files are **unredacted** local archives by design — they stay on your machine
 with full fidelity for search and replay. When you need to share or publish, use

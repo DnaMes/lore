@@ -13,30 +13,41 @@
         </div>
     </div>
     {% set active_filters = (1 if tool else 0) + (1 if tag else 0) + (1 if start else 0) + (1 if end else 0) + (1 if include_automated else 0) %}
-    <form method="get" data-autosubmit="true" class="sessions-filters mb-4">
-        <details class="filters-sheet" open>
-            <summary class="filters-sheet-summary">Filters · {{ active_filters }}</summary>
-            <div class="filters-sheet-body grid grid-cols-1 gap-3">
-                <select name="tool" aria-label="Tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-                    <option value="">All Tools</option>
-                    {% for t in tools %}<option value="{{ t }}" {{ 'selected' if tool==t else '' }}>{{ get_style(t).name }}</option>{% endfor %}
-                </select>
-                <select name="tag" aria-label="Tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-                    <option value="">All Tags</option>
-                    {% for t in tags %}<option value="{{ t }}" {{ 'selected' if tag==t else '' }}>{{ t }}</option>{% endfor %}
-                </select>
-                <input type="date" name="start" aria-label="From date" data-auto-submit value="{{ start or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-                <input type="date" name="end" aria-label="To date" data-auto-submit value="{{ end or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-                <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
-                    <input type="checkbox" name="automated" value="1" data-auto-submit{{ ' checked' if include_automated else '' }} class="w-4 h-4">
-                    Automated
-                </label>
-                <input type="hidden" name="group" value="{{ group or 'day' }}">
-                <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
+    <div class="sessions-filters-host mb-4">
+        <button type="button" id="filtersSheetTrigger" class="filters-sheet-trigger lg:hidden" aria-haspopup="dialog" aria-expanded="false" aria-controls="filtersSheetDialog">Filters · {{ active_filters }}</button>
+        <div id="filtersSheetDialog" class="bottom-sheet-host filters-sheet-host" role="dialog" aria-modal="true" aria-label="Session filters">
+            <button type="button" class="bottom-sheet-backdrop" data-sheet-dismiss aria-label="Close filters" tabindex="-1"></button>
+            <div class="bottom-sheet-panel">
+                <div class="bottom-sheet-handle" aria-hidden="true"></div>
+                <div class="bottom-sheet-head">
+                    <span class="bottom-sheet-title">Filters</span>
+                    <button type="button" class="bottom-sheet-close" data-sheet-dismiss aria-label="Close filters">×</button>
+                </div>
+                <form method="get" data-autosubmit="true" class="sessions-filters" id="sessionsFiltersForm">
+                    <div class="filters-sheet-body grid grid-cols-1 gap-3">
+                        <select name="tool" aria-label="Tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                            <option value="">All Tools</option>
+                            {% for t in tools %}<option value="{{ t }}" {{ 'selected' if tool==t else '' }}>{{ get_style(t).name }}</option>{% endfor %}
+                        </select>
+                        <select name="tag" aria-label="Tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                            <option value="">All Tags</option>
+                            {% for t in tags %}<option value="{{ t }}" {{ 'selected' if tag==t else '' }}>{{ t }}</option>{% endfor %}
+                        </select>
+                        <input type="date" name="start" aria-label="From date" data-auto-submit value="{{ start or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                        <input type="date" name="end" aria-label="To date" data-auto-submit value="{{ end or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                        <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
+                            <input type="checkbox" name="automated" value="1" data-auto-submit{{ ' checked' if include_automated else '' }} class="w-4 h-4">
+                            Automated
+                        </label>
+                        <input type="hidden" name="group" value="{{ group or 'day' }}">
+                        <button type="submit" class="filters-apply-btn bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
+                    </div>
+                </form>
             </div>
-        </details>
-    </form>
+        </div>
+    </div>
     <nav class="session-list-toolbar" aria-label="Session list options">
+        <button type="button" id="selectModeToggle" class="select-mode-toggle" aria-pressed="false">Select</button>
         <div class="date-chip-row" aria-label="Date range">
             {% for chip in date_chips %}
             <a href="{{ sessions_query_url(start=chip.start, end=chip.end) }}"
@@ -70,17 +81,264 @@
     </div>
     {% endif %}
 </section>
+
+<div id="bulkBar" class="bulk-bar" hidden role="region" aria-label="Bulk actions">
+    <span id="bulkCount" class="bulk-bar-count">0 selected</span>
+    <button type="button" class="bulk-bar-btn" data-bulk-action="select-page">Select all on page</button>
+    <button type="button" class="bulk-bar-btn" data-bulk-action="clear">Clear</button>
+    <button type="button" class="bulk-bar-btn bulk-bar-danger" data-bulk-action="delete">Delete…</button>
+    <button type="button" class="bulk-bar-btn" data-bulk-action="tag">Tag…</button>
+</div>
+
+<form id="bulkDeleteForm" method="POST" action="/sessions/bulk-delete" hidden>
+    <input type="hidden" name="next" value="{{ back_to or '/sessions' }}">
+</form>
+<form id="bulkTagForm" method="POST" action="/sessions/bulk-tag" hidden>
+    <input type="hidden" name="next" value="{{ back_to or '/sessions' }}">
+    <input type="hidden" name="tag" value="">
+</form>
+
+<div id="bulkDeleteConfirm" class="bottom-sheet-host confirm-sheet-host" role="dialog" aria-modal="true" aria-labelledby="bulkDeleteConfirmTitle" hidden>
+    <button type="button" class="bottom-sheet-backdrop" data-sheet-dismiss aria-label="Cancel" tabindex="-1"></button>
+    <div class="bottom-sheet-panel confirm-sheet-panel">
+        <h2 id="bulkDeleteConfirmTitle" class="confirm-sheet-title">Delete selected sessions?</h2>
+        <p class="confirm-sheet-body">This removes exports and cannot be undone.</p>
+        <div class="confirm-sheet-actions">
+            <button type="button" class="bulk-bar-btn" data-sheet-dismiss>Cancel</button>
+            <button type="button" class="bulk-bar-btn bulk-bar-danger" id="bulkDeleteConfirmBtn">Delete</button>
+        </div>
+    </div>
+</div>
+
+<div id="bulkTagDialog" class="bottom-sheet-host confirm-sheet-host" role="dialog" aria-modal="true" aria-labelledby="bulkTagDialogTitle" hidden>
+    <button type="button" class="bottom-sheet-backdrop" data-sheet-dismiss aria-label="Cancel" tabindex="-1"></button>
+    <div class="bottom-sheet-panel confirm-sheet-panel">
+        <h2 id="bulkTagDialogTitle" class="confirm-sheet-title">Tag selected sessions</h2>
+        <label class="confirm-sheet-label" for="bulkTagInput">Tag name</label>
+        <input type="text" id="bulkTagInput" class="confirm-sheet-input" autocomplete="off">
+        <div class="confirm-sheet-actions">
+            <button type="button" class="bulk-bar-btn" data-sheet-dismiss>Cancel</button>
+            <button type="button" class="bulk-bar-btn" id="bulkTagApplyBtn">Apply tag</button>
+        </div>
+    </div>
+</div>
+
 <script nonce="{{ nonce }}">
 (function () {
-    // The filter sheet is rendered open (desktop shows it inline, and it works without
-    // JavaScript); on narrow screens with no active filter it starts folded.
-    const sheet = document.querySelector('details.filters-sheet');
-    const active = {{ active_filters }};
-    if (sheet && active === 0 && window.matchMedia('(max-width: 1023px)').matches) {
-        sheet.removeAttribute('open');
+    function keyGuard(e) {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return true;
+        const t = e.target;
+        if (!t || !t.tagName) return false;
+        const tag = t.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+        if (t.isContentEditable) return true;
+        return false;
     }
-})();
-(function () {
+
+    function openBottomSheet(dialog, trigger) {
+        if (!dialog) return null;
+        dialog.removeAttribute('hidden');
+        dialog.classList.add('is-open');
+        document.body.classList.add('sheet-open');
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        let release = null;
+        if (window.FocusTrap) {
+            const panel = dialog.querySelector('.bottom-sheet-panel') || dialog;
+            release = window.FocusTrap.activate(panel);
+        }
+        return release;
+    }
+
+    function closeBottomSheet(dialog, trigger, release) {
+        if (!dialog || dialog.hasAttribute('hidden')) return;
+        dialog.setAttribute('hidden', '');
+        dialog.classList.remove('is-open');
+        document.body.classList.remove('sheet-open');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        if (release) release();
+    }
+
+    const filtersDialog = document.getElementById('filtersSheetDialog');
+    const filtersTrigger = document.getElementById('filtersSheetTrigger');
+    let filtersTrapRelease = null;
+    document.body.classList.add('js-filters-sheet');
+    if (filtersDialog && window.matchMedia('(max-width: 1023px)').matches) {
+        filtersDialog.setAttribute('hidden', '');
+    }
+    if (filtersTrigger && filtersDialog) {
+        filtersTrigger.addEventListener('click', function () {
+            if (filtersTrapRelease) return;
+            filtersTrapRelease = openBottomSheet(filtersDialog, filtersTrigger);
+        });
+        filtersDialog.querySelectorAll('[data-sheet-dismiss]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                closeBottomSheet(filtersDialog, filtersTrigger, filtersTrapRelease);
+                filtersTrapRelease = null;
+            });
+        });
+    }
+
+    const selected = new Set();
+    const bulkBar = document.getElementById('bulkBar');
+    const bulkCount = document.getElementById('bulkCount');
+    const selectToggle = document.getElementById('selectModeToggle');
+    const rowsRoot = document.getElementById('sessionRows');
+
+    function syncBulkUi() {
+        if (!bulkCount || !bulkBar) return;
+        bulkCount.textContent = selected.size + ' selected';
+        bulkBar.hidden = !document.body.classList.contains('select-mode');
+    }
+
+    function setSelectMode(on) {
+        document.body.classList.toggle('select-mode', on);
+        if (selectToggle) selectToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (!on) {
+            selected.clear();
+            rowsRoot.querySelectorAll('.session-row-select').forEach(function (cb) {
+                cb.checked = false;
+            });
+        }
+        syncBulkUi();
+    }
+
+    if (selectToggle) {
+        selectToggle.addEventListener('click', function () {
+            setSelectMode(!document.body.classList.contains('select-mode'));
+        });
+    }
+
+    function bindRow(row) {
+        if (row.dataset.boundSelect) return;  // idempotent: rows are never bound twice
+        row.dataset.boundSelect = '1';
+        const cb = row.querySelector('.session-row-select');
+        const link = row.querySelector('.session-row-link');
+        if (!cb) return;
+        cb.addEventListener('change', function () {
+            const id = row.getAttribute('data-session-id') || cb.value;
+            if (cb.checked) selected.add(id);
+            else selected.delete(id);
+            syncBulkUi();
+        });
+        row.addEventListener('click', function (e) {
+            if (!document.body.classList.contains('select-mode')) return;
+            if (e.target.closest('details.row-menu') || e.target.closest('.session-row-select')) return;
+            cb.checked = !cb.checked;
+            cb.dispatchEvent(new Event('change', { bubbles: true }));
+            e.preventDefault();
+        });
+        if (link) {
+            link.addEventListener('click', function (e) {
+                if (document.body.classList.contains('select-mode')) e.preventDefault();
+            });
+        }
+    }
+
+    if (rowsRoot) {
+        rowsRoot.querySelectorAll('.session-row').forEach(bindRow);
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (keyGuard(e)) return;
+        if (e.key === 'Escape') {
+            if (filtersDialog && filtersDialog.classList.contains('is-open')) {
+                closeBottomSheet(filtersDialog, filtersTrigger, filtersTrapRelease);
+                filtersTrapRelease = null;
+            }
+            [bulkDeleteConfirm, bulkTagDialog].forEach(function (dialog) {
+                if (dialog && dialog.classList.contains('is-open')) closeBulkDialog(dialog);
+            });
+            return;
+        }
+        if (e.key !== 'x' || !document.body.classList.contains('select-mode')) return;
+        const row = document.activeElement && document.activeElement.closest('.session-row');
+        if (!row) return;
+        const cb = row.querySelector('.session-row-select');
+        if (!cb) return;
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    function appendIdsToForm(form) {
+        if (!form) return;
+        form.querySelectorAll('input[name="session_id"]').forEach(function (el) { el.remove(); });
+        selected.forEach(function (id) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'session_id';
+            input.value = id;
+            form.appendChild(input);
+        });
+    }
+
+    const bulkDeleteForm = document.getElementById('bulkDeleteForm');
+    const bulkTagForm = document.getElementById('bulkTagForm');
+    const bulkDeleteConfirm = document.getElementById('bulkDeleteConfirm');
+    const bulkTagDialog = document.getElementById('bulkTagDialog');
+    let bulkTrapRelease = null;
+
+    if (bulkBar) {
+        bulkBar.addEventListener('click', function (e) {
+            const btn = e.target.closest('[data-bulk-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-bulk-action');
+            if (action === 'select-page' && rowsRoot) {
+                rowsRoot.querySelectorAll('.session-row').forEach(function (row) {
+                    const cb = row.querySelector('.session-row-select');
+                    if (!cb) return;
+                    cb.checked = true;
+                    selected.add(row.getAttribute('data-session-id') || cb.value);
+                });
+                syncBulkUi();
+            } else if (action === 'clear') {
+                selected.clear();
+                rowsRoot.querySelectorAll('.session-row-select').forEach(function (cb) {
+                    cb.checked = false;
+                });
+                syncBulkUi();
+            } else if (action === 'delete' && selected.size) {
+                bulkTrapRelease = openBottomSheet(bulkDeleteConfirm, null);
+            } else if (action === 'tag' && selected.size) {
+                bulkTrapRelease = openBottomSheet(bulkTagDialog, null);
+                const input = document.getElementById('bulkTagInput');
+                if (input) input.focus();
+            }
+        });
+    }
+
+    function closeBulkDialog(dialog) {
+        closeBottomSheet(dialog, null, bulkTrapRelease);
+        bulkTrapRelease = null;
+    }
+
+    if (bulkDeleteConfirm) {
+        bulkDeleteConfirm.querySelectorAll('[data-sheet-dismiss]').forEach(function (btn) {
+            btn.addEventListener('click', function () { closeBulkDialog(bulkDeleteConfirm); });
+        });
+        const confirmBtn = document.getElementById('bulkDeleteConfirmBtn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function () {
+                appendIdsToForm(bulkDeleteForm);
+                bulkDeleteForm.submit();
+            });
+        }
+    }
+    if (bulkTagDialog) {
+        bulkTagDialog.querySelectorAll('[data-sheet-dismiss]').forEach(function (btn) {
+            btn.addEventListener('click', function () { closeBulkDialog(bulkTagDialog); });
+        });
+        const applyBtn = document.getElementById('bulkTagApplyBtn');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', function () {
+                const input = document.getElementById('bulkTagInput');
+                const tagField = bulkTagForm.querySelector('input[name="tag"]');
+                if (tagField && input) tagField.value = input.value.trim();
+                appendIdsToForm(bulkTagForm);
+                bulkTagForm.submit();
+            });
+        }
+    }
+
     const btn = document.getElementById('loadMoreSessions');
     const rows = document.getElementById('sessionRows');
     if (!btn || !rows) return;
@@ -104,6 +362,7 @@
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const html = await resp.text();
             rows.insertAdjacentHTML('beforeend', html);
+            rows.querySelectorAll('.session-row').forEach(bindRow);
             const markers = rows.querySelectorAll('[data-last-day]');
             const marker = markers.length ? markers[markers.length - 1] : null;
             if (marker && marker.getAttribute('data-last-day')) {

@@ -209,6 +209,14 @@ def test_folded_calls_do_not_borrow_the_next_calls_event():
     assert "failed" not in html  # the second Bash event must not label the Read call
 
 
+def test_detail_mobile_prompt_outline_sheet(detail_client):
+    html = detail_client.get(f"/session/{_SESSION_ID}?live=1").get_data(as_text=True)
+    assert 'id="promptOutlineTrigger"' in html
+    assert 'id="promptOutlineSheet"' in html
+    assert 'aria-label="Prompt outline"' in html
+    assert " hidden" in html or "hidden" in html.split("promptOutlineSheet", 1)[1][:80]
+
+
 def test_detail_header_resume_primary_and_menu(detail_client):
     html = detail_client.get(f"/session/{_SESSION_ID}?live=1").get_data(as_text=True)
     assert 'id="sessionHeader"' in html

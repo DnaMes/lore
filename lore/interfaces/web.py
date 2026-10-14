@@ -1819,6 +1819,53 @@ def api_all_tags():
     return jsonify({"tags": list_all_tags(OUTPUT_DIR)})
 
 
+BULK_SESSION_ACTION_LIMIT = 200
+
+
+def _unlink_session_export(session_meta: dict) -> None:
+    export_path_str = session_meta.get("export_path")
+    if not export_path_str:
+        return
+    export_path = resolve_export_path(export_path_str)
+    if export_path and export_path.exists():
+        try:
+            export_path.unlink()
+        except OSError:
+            pass
+
+
+def _tombstone_session(session_id: str) -> None:
+    remember_deleted_session_id(session_id)
+    clear_index_cache()
+
+
+def _redirect_after_mutation():
+    next_url = _sanitize_next_url(request.form.get("next", ""))
+    if not next_url:
+        referer = request.headers.get("Referer", "")
+        parsed = urlparse(referer)
+        if not parsed.netloc or parsed.netloc == request.host:
+            candidate = (parsed.path or "") + (("?" + parsed.query) if parsed.query else "")
+            next_url = _sanitize_next_url(candidate)
+    return redirect(next_url or "/sessions")
+
+
+def _validated_bulk_session_ids() -> tuple[Optional[list[str]], Optional[tuple[str, int]]]:
+    session_ids = request.form.getlist("session_id")
+    if not session_ids:
+        return None, ("No sessions selected", 400)
+    if len(session_ids) > BULK_SESSION_ACTION_LIMIT:
+        return None, ("Too many sessions", 400)
+    for session_id in session_ids:
+        if not validate_session_id(session_id):
+            return None, ("Invalid session ID", 400)
+    indexed = {str(s.get("id")) for s in load_index().get("sessions", [])}
+    for session_id in session_ids:
+        if session_id not in indexed:
+            return None, ("Invalid session ID", 400)
+    return session_ids, None
+
+
 @app.route("/session/<session_id>/delete", methods=["POST"])
 def session_delete(session_id):
     if (err := _check_local_origin()) is not None:
@@ -1834,30 +1881,48 @@ def session_delete(session_id):
     if not session_meta:
         return "Not found", 404
 
-    export_path_str = session_meta.get("export_path")
-    if export_path_str:
-        export_path = resolve_export_path(export_path_str)
-        if export_path and export_path.exists():
-            try:
-                export_path.unlink()
-            except OSError:
-                pass
+    _unlink_session_export(session_meta)
+    _tombstone_session(session_id)
+    return _redirect_after_mutation()
 
-    # Deletion is recorded as a tombstone — both the v2 reader and the JSON
-    # reader filter tombstoned ids out. No need to rewrite any index in
-    # place (the in-place index.json rewrite was dead code on the v2 path).
-    remember_deleted_session_id(session_id)
+
+@app.route("/sessions/bulk-delete", methods=["POST"])
+def sessions_bulk_delete():
+    if (err := _check_local_origin()) is not None:
+        return err
+    session_ids, err_body = _validated_bulk_session_ids()
+    if err_body is not None:
+        return err_body
+
+    sessions = load_index().get("sessions", [])
+    meta_by_id = {str(s.get("id")): s for s in sessions}
+    for session_id in session_ids or []:
+        _unlink_session_export(meta_by_id[session_id])
+        _tombstone_session(session_id)  # the same path as the single delete route
+    return _redirect_after_mutation()
+
+
+@app.route("/sessions/bulk-tag", methods=["POST"])
+def sessions_bulk_tag():
+    if (err := _check_local_origin()) is not None:
+        return err
+    session_ids, err_body = _validated_bulk_session_ids()
+    if err_body is not None:
+        return err_body
+
+    tag = (request.form.get("tag") or "").strip()
+    if not tag or not validate_search_param(tag):
+        return "Invalid tag", 400
+
+    from ..storage import add_session_tag
+
+    for session_id in session_ids or []:
+        try:
+            add_session_tag(OUTPUT_DIR, session_id, tag)
+        except ValueError:
+            return "Invalid tag", 400
     clear_index_cache()
-
-    next_url = _sanitize_next_url(request.form.get("next", ""))
-    if not next_url:
-        referer = request.headers.get("Referer", "")
-        parsed = urlparse(referer)
-        if not parsed.netloc or parsed.netloc == request.host:
-            candidate = (parsed.path or "") + (("?" + parsed.query) if parsed.query else "")
-            next_url = _sanitize_next_url(candidate)
-
-    return redirect(next_url or "/sessions")
+    return _redirect_after_mutation()
 
 
 @app.route("/threads")
