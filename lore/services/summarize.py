@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -54,6 +55,8 @@ SINGLE_PASS_MAX_TOKENS = 24_000
 MIN_COMPRESSED_CHARS = 1_500
 
 _OUTCOME_STATUSES = frozenset({"done", "partial", "abandoned", "unclear"})
+logger = logging.getLogger(__name__)
+
 _SUMMARY_KEYS = frozenset(
     {
         "one_liner",
@@ -68,6 +71,7 @@ _SUMMARY_KEYS = frozenset(
 )
 _ONE_LINER_MAX = 140
 _FIELD_MAX = 400
+_MERGE_PROMPT_CHARS_ESTIMATE = 12_000  # up to 8 chunk summaries as JSON + instructions
 _TRANSCRIPT_CLOSE_RE = re.compile(r"(?i)<\s*/\s*transcript\s*>")
 _LIST_MAX = 8
 
@@ -298,7 +302,7 @@ def validate_summary(
         for extra in set(outcome_raw) - {"status", "text", "cites"}:
             errors.append(f"outcome has unexpected field {str(extra)[:40]}")
         status = outcome_raw.get("status")
-        if status not in _OUTCOME_STATUSES:
+        if not isinstance(status, str) or status not in _OUTCOME_STATUSES:
             errors.append("outcome.status must be done|partial|abandoned|unclear")
         text = _check_string_field(errors, "outcome.text", outcome_raw.get("text"), _FIELD_MAX)
         cites_raw = outcome_raw.get("cites")
@@ -500,9 +504,13 @@ def is_summary_stale(output_dir: Path, session_id: str) -> Optional[bool]:
     return row.get("fingerprint") != expected
 
 
+_TRANSIENT_RE = re.compile(
+    r"(?i)\b429\b|\brate[ _-]?limit|\btoo many requests\b|\btime[ -]?out\b|\btimed out\b"
+)
+
+
 def _is_transient_provider_error(exc: BaseException) -> bool:
-    msg = str(exc).lower()
-    return any(tok in msg for tok in ("429", "rate", "timeout", "timed out"))
+    return bool(_TRANSIENT_RE.search(str(exc)))
 
 
 def _call_with_retries(
@@ -644,11 +652,13 @@ def _repair_once(
     forbidden_verbatim: Optional[str],
     budget: _CallBudget | _DualBudget,
     sleep: Callable[[float], None] = time.sleep,
-) -> tuple[Optional[dict[str, Any]], list[str], int]:
+) -> tuple[Optional[dict[str, Any]], list[str], int, int]:
+    """One repair call; returns (validated, errors, output_tokens, input_tokens_charged)."""
     repair = user + "\n\nValidation errors:\n" + "\n".join(verrs)
+    repair, _ = prepare_prompt(repair)  # model-supplied field names may echo secrets
     repair_tokens = estimate_tokens(len(repair) + len(system))
     if not budget.charge(repair_tokens):
-        return None, verrs, 0
+        return None, verrs, 0, 0
     validated, verrs2, out_tok = _call_and_validate(
         provider,
         repair,
@@ -657,7 +667,7 @@ def _repair_once(
         forbidden_verbatim=forbidden_verbatim,
         sleep=sleep,
     )
-    return validated, verrs2, out_tok
+    return validated, verrs2, out_tok, repair_tokens
 
 
 def _estimate_chunked_calls(
@@ -669,8 +679,10 @@ def _estimate_chunked_calls(
     prior_summary: Optional[str],
     open_threads_seed: Optional[str],
     artifacts_blob: str = "",
-) -> int:
+) -> tuple[int, int]:
+    """Return (provider calls still needed, estimated input tokens for them)."""
     calls = 0
+    tokens = 0
     prev_threads = open_threads_seed
     chunk_fps: list[str] = []
     for idx, blocks in enumerate(chunk_groups):
@@ -688,12 +700,48 @@ def _estimate_chunked_calls(
         row = get_summary(output_dir, "chunk", scope)
         if row is None or row.get("fingerprint") != fp:
             calls += 1
+            tokens += estimate_tokens(len(user) + len(_INSTRUCTIONS))
         elif row.get("payload"):
             prev_threads = build_open_threads(row["payload"])
     merge_fp = merge_fingerprint(chunk_fps, model_label, SUMMARY_PROMPT_VERSION, artifacts_blob)
     if not has_current_summary(output_dir, session_id, merge_fp):
         calls += 1
-    return calls
+        tokens += estimate_tokens(_MERGE_PROMPT_CHARS_ESTIMATE)
+    return calls, tokens
+
+
+def _cached_halves(
+    output_dir: Path,
+    session_id: str,
+    blocks: tuple[CompressedBlock, ...],
+    open_threads: Optional[str],
+    model_label: str,
+    system_unused: str = "",
+) -> Optional[list[tuple[dict[str, Any], str]]]:
+    """Return stored (payload, fingerprint) for both halves of ``blocks`` when all are current.
+
+    A chunk that needed the smaller-chunk retry is stored as two half ranges, so the full
+    range never has a row; without this lookup it would be re-summarised on every run.
+    """
+    half = halve_chunk_blocks(blocks, chunk_max_chars())
+    if half is None:
+        return None
+    parts: list[tuple[dict[str, Any], str]] = []
+    threads = open_threads
+    for part in half:
+        _, part_user = build_prompt(blocks_to_transcript(part), False, open_threads=threads)
+        part_user, _ = prepare_prompt(part_user)
+        fp = _chunk_row_fingerprint(part_user, model_label)
+        row = get_summary(
+            output_dir, "chunk", chunk_scope_key(session_id, part[0].first_seq, part[-1].last_seq)
+        )
+        payload = row.get("payload") if row else None
+        if row is None or row.get("fingerprint") != fp or not isinstance(payload, dict):
+            return None
+        clean = {k: payload[k] for k in _SUMMARY_KEYS if k in payload}
+        parts.append((clean, fp))
+        threads = build_open_threads(clean)
+    return parts
 
 
 def _process_chunked(
@@ -747,13 +795,27 @@ def _process_chunked(
         fp = _chunk_row_fingerprint(user, model_label)
         scope = chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq)
         row = get_summary(output_dir, "chunk", scope)
-        if not force and row is not None and row.get("fingerprint") == fp:
+        row_payload = row.get("payload") if row is not None else None
+        if (
+            not force
+            and row is not None
+            and row.get("fingerprint") == fp
+            and isinstance(row_payload, dict)
+        ):
             stats.reused_chunks += 1
-            payload = row["payload"]
-            chunk_summaries.append({k: payload[k] for k in _SUMMARY_KEYS if k in payload})
+            chunk_summaries.append({k: row_payload[k] for k in _SUMMARY_KEYS if k in row_payload})
             chunk_fps.append(fp)
             prev_threads = build_open_threads(chunk_summaries[-1])
             continue
+        if not force:
+            cached = _cached_halves(output_dir, session_id, blocks, prev_threads, model_label)
+            if cached is not None:
+                stats.reused_chunks += 1
+                for part_payload, part_fp in cached:
+                    chunk_summaries.append(part_payload)
+                    chunk_fps.append(part_fp)
+                prev_threads = build_open_threads(cached[-1][0])
+                continue
 
         call_tokens = estimate_tokens(len(user) + len(system))
         if budget.would_exceed(call_tokens):
@@ -774,7 +836,7 @@ def _process_chunked(
         stats.chunk_calls += 1
 
         if validated is None and verrs and verrs != ["provider error"]:
-            validated, verrs, out_tok = _repair_once(
+            validated, verrs, out_tok, repair_in = _repair_once(
                 provider,
                 user,
                 system,
@@ -784,6 +846,7 @@ def _process_chunked(
                 budget=budget,
                 sleep=sleep,
             )
+            input_tokens += repair_in
             output_tokens += out_tok
             stats.chunk_calls += 1
 
@@ -912,7 +975,7 @@ def _process_chunked(
     stats.merge_calls += 1
 
     if validated is None and verrs and verrs != ["provider error"]:
-        validated, verrs, out_tok = _repair_once(
+        validated, verrs, out_tok, repair_in = _repair_once(
             provider,
             merge_user,
             merge_system,
@@ -922,6 +985,7 @@ def _process_chunked(
             budget=budget,
             sleep=sleep,
         )
+        input_tokens += repair_in
         output_tokens += out_tok
         stats.merge_calls += 1
 
@@ -1045,11 +1109,7 @@ def _process_session(
     )
 
     if validated is None and verrs and verrs != ["provider error"]:
-        repair = user + "\n\nValidation errors:\n" + "\n".join(verrs)
-        repair_tokens = estimate_tokens(len(repair) + len(system))
-        if dual.would_exceed(repair_tokens):
-            return "invalid", redactions, input_tokens, out_tokens
-        validated, verrs, repair_out = _repair_once(
+        validated, verrs, repair_out, repair_in = _repair_once(
             provider,
             user,
             system,
@@ -1059,7 +1119,7 @@ def _process_session(
             budget=dual,
             sleep=sleep,
         )
-        input_tokens += repair_tokens
+        input_tokens += repair_in
         out_tokens += repair_out
 
     if validated is None and verrs == ["response is not valid JSON"]:
@@ -1107,6 +1167,7 @@ def summarize_session(
     max_session_tokens: int = MAX_SESSION_TOKENS,
 ) -> str:
     """Summarize one session; return the outcome name."""
+    transcript_safe(provider)
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
     outcome, _, _, _ = _process_session(
         provider,
@@ -1146,7 +1207,7 @@ def _session_plan(
     if estimate_tokens(transcript.char_count) > SINGLE_PASS_MAX_TOKENS:
         raw_groups = split_chunks(transcript, chunk_max_chars())
         selected, _, _ = sample_chunks(raw_groups)
-        calls = _estimate_chunked_calls(
+        calls, est = _estimate_chunked_calls(
             output_dir,
             session_id,
             selected,
@@ -1157,7 +1218,6 @@ def _session_plan(
                 _artifacts_payload(messages)[0], sort_keys=True, ensure_ascii=False
             ),
         )
-        est = calls * estimate_tokens(2000)
         if est > max_session_tokens:
             return "over_budget", est
         if not force and calls == 0:
@@ -1226,11 +1286,12 @@ def estimate_run(
         compressed_tokens = estimate_tokens(transcript.char_count) if transcript else 0
         chunks = 0
         expected_calls = 0
+        chunk_tokens = 0
         if status == "chunked" and transcript is not None:
             raw_groups = split_chunks(transcript, chunk_max_chars())
             selected, _, _ = sample_chunks(raw_groups)
             chunks = len(selected)
-            expected_calls = _estimate_chunked_calls(
+            expected_calls, chunk_tokens = _estimate_chunked_calls(
                 output_dir,
                 session_id,
                 selected,
@@ -1246,7 +1307,7 @@ def estimate_run(
             expected_calls = 1
         elif status == "unchanged":
             expected_calls = 0
-        input_tokens = expected_calls * estimate_tokens(2000) if expected_calls else est_in
+        input_tokens = chunk_tokens if status == "chunked" and expected_calls else est_in
         output_tokens = expected_calls * OUTPUT_TOKENS_PER_CALL_ESTIMATE
         if status == "skipped_small":
             mapped = "skipped_small"
@@ -1318,18 +1379,22 @@ def run_summaries(
         ):
             break
         run_stats = _SessionRunStats()
-        outcome, redactions, in_tok, out_tok = _process_session(
-            provider,
-            output_dir,
-            session_id,
-            model_label=model_label,
-            force=force,
-            deleted=deleted,
-            token_budget=None if max_input_tokens is None else max_input_tokens - input_budget,
-            max_session_tokens=max_session_tokens,
-            sleep=sleep,
-            stats=run_stats,
-        )
+        try:
+            outcome, redactions, in_tok, out_tok = _process_session(
+                provider,
+                output_dir,
+                session_id,
+                model_label=model_label,
+                force=force,
+                deleted=deleted,
+                token_budget=None if max_input_tokens is None else max_input_tokens - input_budget,
+                max_session_tokens=max_session_tokens,
+                sleep=sleep,
+                stats=run_stats,
+            )
+        except Exception as exc:  # noqa: BLE001 - one bad session must not abort the batch
+            logger.warning("Summary failed for %s: %s", session_id, type(exc).__name__)
+            outcome, redactions, in_tok, out_tok = "failed", 0, 0, 0
         report.chunk_calls += run_stats.chunk_calls
         report.merge_calls += run_stats.merge_calls
         report.reused_chunks += run_stats.reused_chunks

@@ -299,3 +299,72 @@ def test_merge_fingerprint_is_order_and_artifact_sensitive():
 
     assert merge_fingerprint(["a", "b"], "m", 1) != merge_fingerprint(["b", "a"], "m", 1)
     assert merge_fingerprint(["a"], "m", 1, "x") != merge_fingerprint(["a"], "m", 1, "y")
+
+
+def test_halved_chunk_is_reused_on_the_second_run(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
+    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
+    out = tmp_path / "out"
+    _build_store(out, _long_session("reuse", n_users=12))
+    bad = json.dumps({**_valid_summary(), "one_liner": "x" * 200})
+    first = AutoProvider([bad, bad])
+    assert summarize_session(first, out, "reuse", model_label=MODEL, sleep=lambda _s: None) == (
+        "written"
+    )
+
+    second = AutoProvider()
+    outcome = summarize_session(second, out, "reuse", model_label=MODEL, sleep=lambda _s: None)
+
+    assert outcome == "unchanged"
+    assert second.prompts == []
+
+
+def test_repair_input_tokens_are_reported_for_chunks(tmp_path: Path, chunk_limits: None):
+    out = tmp_path / "out"
+    _build_store(out, _long_session("repair", n_users=8))
+    bad = json.dumps({**_valid_summary(), "one_liner": "x" * 200})
+    provider = AutoProvider([bad])  # first chunk answer invalid, its repair succeeds
+    report = run_summaries(out, ["repair"], provider, MODEL, sleep=lambda _s: None)
+    plain = run_summaries(out, ["repair"], AutoProvider(), MODEL, force=True, sleep=lambda _s: None)
+    assert report.written == 1
+    assert report.input_tokens > plain.input_tokens  # the repair call is part of the usage
+
+
+def test_unhashable_outcome_status_is_a_validation_error_not_a_crash():
+    bad = _valid_summary()
+    bad["outcome"] = {**bad["outcome"], "status": ["done"]}
+    cleaned, errors = validate_summary(bad, allowed_seqs=frozenset({1, 2, 3}))
+    assert cleaned is None and errors
+
+
+def test_one_crashing_session_does_not_abort_the_batch(tmp_path: Path, monkeypatch):
+    import lore.services.summarize as sm
+
+    out = tmp_path / "out"
+    _build_store(out, _long_session("a", n_users=4), _long_session("b", n_users=4))
+    real = sm._process_session
+    calls: list[str] = []
+
+    def flaky(provider, output_dir, session_id, **kw):
+        calls.append(session_id)
+        if session_id == "a":
+            raise RuntimeError("boom")
+        return real(provider, output_dir, session_id, **kw)
+
+    monkeypatch.setattr(sm, "_process_session", flaky)
+    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
+    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
+    report = run_summaries(out, ["a", "b"], AutoProvider(), MODEL)
+
+    assert calls == ["a", "b"]
+    assert report.failed == 1 and report.written == 1
+
+
+def test_transient_error_detection_is_not_a_substring_match():
+    from lore.services.summarize import _is_transient_provider_error as transient
+
+    assert transient(RuntimeError("HTTP 429 Too Many Requests"))
+    assert transient(RuntimeError("rate limit exceeded"))
+    assert transient(RuntimeError("request timed out"))
+    assert not transient(RuntimeError("could not generate a response"))
+    assert not transient(RuntimeError("accurate migration failed"))
