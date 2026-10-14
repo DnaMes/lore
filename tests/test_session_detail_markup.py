@@ -209,6 +209,39 @@ def test_folded_calls_do_not_borrow_the_next_calls_event():
     assert "failed" not in html  # the second Bash event must not label the Read call
 
 
+def test_detail_header_resume_primary_and_menu(detail_client):
+    html = detail_client.get(f"/session/{_SESSION_ID}?live=1").get_data(as_text=True)
+    assert 'id="sessionHeader"' in html
+    assert 'class="session-header' in html
+    assert 'data-action="resume-session"' in html
+    assert re.search(
+        r'class="[^"]*session-header-primary[^"]*"[^>]*>Resume<',
+        html,
+    ) or re.search(r">Resume</button>", html)
+    assert '<details class="header-menu">' in html
+    menu_block = html.split('<details class="header-menu">', 1)[1].split("</details>", 1)[0]
+    assert "Copy Link" in menu_block or "copy-link" in menu_block
+    assert "Export MD" in menu_block or "/export/" in menu_block
+    assert "Dashboard" in menu_block or 'href="/"' in menu_block
+
+
+def test_detail_delete_form_in_header_menu(detail_client):
+    html = detail_client.get(f"/session/{_SESSION_ID}?live=1").get_data(as_text=True)
+    assert f'action="/session/{_SESSION_ID}/delete"' in html
+    assert "data-confirm=" in html
+    delete_idx = html.find("/delete")
+    assert delete_idx != -1
+    window = html[max(0, delete_idx - 800) : delete_idx + 200]
+    assert "header-menu" in window
+
+
+def test_detail_sticky_header_css_in_base():
+    base = Path(__file__).resolve().parents[1] / "lore" / "templates" / "base.html"
+    text = base.read_text(encoding="utf-8")
+    assert ".session-header" in text
+    assert "position: sticky" in text or "position:sticky" in text.replace(" ", "")
+
+
 def test_enhancer_reruns_on_appended_messages_and_checks_copy_result():
     from pathlib import Path
 
@@ -216,3 +249,14 @@ def test_enhancer_reruns_on_appended_messages_and_checks_copy_result():
     assert "addEventListener('lore:messages-appended', initCodeBlocks)" in source
     assert "if (document.execCommand('copy'))" in source
     assert "area.style." not in source
+
+
+def test_sticky_header_wrap_owns_the_sticky_position_and_compacts_on_scroll():
+    from pathlib import Path
+
+    base = Path("lore/templates/base.html").read_text(encoding="utf-8")
+    page = Path("lore/templates/session.html").read_text(encoding="utf-8")
+    assert ".session-header-wrap { position: sticky; top: 0;" in base
+    assert "session-header-sentinel" not in page
+    assert "addEventListener('scroll'" in page and "requestAnimationFrame" in page
+    assert "is-compact" in page

@@ -206,7 +206,7 @@
             font-variant-numeric: tabular-nums;
         }
         .session-row-meta { color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; font-size: 12px; row-gap: 2px; }
-        .session-row-meta > *:not(:last-child)::after { content: "\00b7"; margin: 0 7px; opacity: 0.55; }
+        .session-row-meta > *:not(:last-child)::after { content: "\00b7"; margin: 0 7px; opacity: 0.55; font-weight: 400; color: var(--muted); }
         .session-row-project { color: var(--text); font-weight: 600; }
         .session-row-automated { font-weight: 600; }
         .session-row-time-inline { display: none; font-variant-numeric: tabular-nums; }
@@ -220,6 +220,150 @@
         .session-list .session-row:hover { background: color-mix(in srgb, var(--card) 93%, var(--primary, #2563eb) 7%); transform: none; box-shadow: none; }
         .session-list .row-menu-trigger { border-color: transparent; background: transparent; width: 28px; height: 28px; }
         .session-list .row-menu-trigger:hover, .row-menu[open] .row-menu-trigger { border-color: var(--border); background: var(--card); }
+        .day-header {
+            position: sticky;
+            top: 0;
+            z-index: 4;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            background: color-mix(in srgb, var(--bg-alt) 92%, var(--card) 8%);
+            border-bottom: 1px solid var(--border);
+        }
+        .session-list .day-header + .session-row { border-top: 0; }
+        .session-list-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px 16px;
+            margin-bottom: 1rem;
+        }
+        .date-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+        .date-chip, .group-toggle-option {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid var(--border);
+            background: var(--card);
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 12px;
+            color: var(--muted);
+            text-decoration: none;
+            transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+        }
+        .date-chip:hover, .group-toggle-option:hover { color: var(--text); border-color: color-mix(in srgb, var(--border) 60%, var(--primary) 40%); }
+        .date-chip:focus-visible, .group-toggle-option:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+        .date-chip.is-active, .group-toggle-option.is-active {
+            background: color-mix(in srgb, var(--card) 70%, var(--primary) 30%);
+            border-color: color-mix(in srgb, var(--border) 50%, var(--primary) 50%);
+            color: var(--text);
+            font-weight: 600;
+        }
+        .group-toggle {
+            display: inline-flex;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--card);
+        }
+        .group-toggle .group-toggle-option { border: 0; border-radius: 0; }
+        .group-toggle .group-toggle-option + .group-toggle-option { border-left: 1px solid var(--border); }
+        /* Spacing is a margin (it scrolls away), so the stuck header sits flush at the top. */
+        .session-header-wrap { position: sticky; top: 0; z-index: 12; margin-top: 1.5rem; padding-top: 0; }
+        .session-header-icon { flex-shrink: 0; }
+        .session-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0; }
+        .session-rows-marker { display: none !important; }
+        .session-header { transition: padding 0.15s ease; }
+        .session-header-primary {
+            border: 1px solid color-mix(in srgb, var(--primary) 70%, var(--border) 30%);
+            background: var(--primary);
+            color: #ffffff;
+            border-radius: 10px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .session-header-primary:hover { filter: brightness(1.05); }
+        .session-header-primary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .header-menu { position: relative; }
+        .header-menu-trigger {
+            list-style: none;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--muted);
+            border-radius: 10px;
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            line-height: 1;
+            padding: 0;
+        }
+        .header-menu-trigger::-webkit-details-marker { display: none; }
+        .header-menu-trigger:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .header-menu-panel {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            min-width: 180px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            padding: 6px;
+            z-index: 40;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .header-menu-item, .header-menu-delete {
+            display: block;
+            width: 100%;
+            text-align: left;
+            border: 0;
+            background: transparent;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .header-menu-item:hover, .header-menu-delete:hover { background: var(--bg-alt); }
+        .header-menu-item:focus-visible, .header-menu-delete:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .header-menu-delete-form { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+        .header-menu-delete { color: #b91c1c; }
+        .session-header.is-compact {
+            padding-top: 8px;
+            padding-bottom: 8px;
+            min-height: 46px;
+            align-items: center;
+        }
+        .session-header.is-compact .session-header-meta,
+        .session-header.is-compact .session-header-thread,
+        .session-header.is-compact .session-header-tags { display: none; }
+        .session-header.is-compact .session-header-main { flex-wrap: nowrap; }
+        @media (max-width: 390px) {
+            .session-header-main { flex-direction: column; align-items: flex-start; }
+            .session-header-meta { width: 100%; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .session-header, .date-chip, .group-toggle-option { transition: none; }
+        }
         .session-row-outline { line-height: 1.35; }
         .tag-chip-automated { font-weight: 600; }
         .row-menu { position: relative; align-self: flex-start; }
@@ -963,7 +1107,7 @@
         </div>
     </div>
     
-    <form method="get" data-autosubmit="true" class="sessions-filters mb-8">
+    <form method="get" data-autosubmit="true" class="sessions-filters mb-4">
         <details class="filters-sheet">
             <summary class="filters-sheet-summary">Filters · 0</summary>
             <div class="filters-sheet-body grid grid-cols-1 lg:grid-cols-5 gap-3">
@@ -981,15 +1125,57 @@
                     <input type="checkbox" name="automated" value="1" data-auto-submit class="w-4 h-4">
                     Automated
                 </label>
+                <input type="hidden" name="group" value="day">
                 <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
             </div>
         </details>
     </form>
+    <nav class="session-list-toolbar" aria-label="Session list options">
+        <div class="date-chip-row" aria-label="Date range">
+            
+            <a href="/sessions?start=2026-10-14&amp;end=2026-10-14"
+               class="date-chip"
+               >Today</a>
+            
+            <a href="/sessions?start=2026-10-13&amp;end=2026-10-13"
+               class="date-chip"
+               >Yesterday</a>
+            
+            <a href="/sessions?start=2026-10-08&amp;end=2026-10-14"
+               class="date-chip"
+               >7 days</a>
+            
+            <a href="/sessions?start=2026-09-15&amp;end=2026-10-14"
+               class="date-chip"
+               >30 days</a>
+            
+            <a href="/sessions"
+               class="date-chip is-active"
+               aria-current="true">All</a>
+            
+        </div>
+        <div class="group-toggle" role="group" aria-label="List grouping">
+            <a href="/sessions?group=day"
+               class="group-toggle-option is-active"
+               aria-current="true">Group by day</a>
+            <a href="/sessions?group=flat"
+               class="group-toggle-option"
+               >Flat</a>
+        </div>
+    </nav>
     <div class="compact-list session-list" id="sessionRows" role="list"
          data-tool="" data-tag="" data-start=""
-         data-end="" data-back="/sessions"
+         data-end="" data-group="day"
+         data-last-day="2026-04-01" 
+         data-back="/sessions"
          data-per-page="50" data-pages="1">
         
+
+
+
+<div class="day-header" role="presentation">Apr 1 · 1</div>
+
+
 
 <div class="compact-row session-row flex gap-2 group" role="listitem">
     <a href="/session/session-1?back=%2Fsessions" class="session-row-link flex-1 min-w-0">
@@ -1031,6 +1217,11 @@
     </details>
 </div>
 
+
+
+
+<span class="session-rows-marker" hidden data-last-day="2026-04-01" aria-hidden="true"></span>
+
     </div>
     
 </section>
@@ -1060,11 +1251,18 @@
             end: rows.dataset.end || '',
         });
         if (rows.dataset.automated) params.set('automated', '1');
+        if (rows.dataset.group) params.set('group', rows.dataset.group);
+        if (rows.dataset.lastDay) params.set('after_day', rows.dataset.lastDay);
         try {
             const resp = await fetch('/sessions/rows?' + params.toString(), { credentials: 'same-origin' });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const html = await resp.text();
             rows.insertAdjacentHTML('beforeend', html);
+            const markers = rows.querySelectorAll('[data-last-day]');
+            const marker = markers.length ? markers[markers.length - 1] : null;
+            if (marker && marker.getAttribute('data-last-day')) {
+                rows.dataset.lastDay = marker.getAttribute('data-last-day');
+            }
             if (page + 1 > totalPages) {
                 btn.remove();
             } else {

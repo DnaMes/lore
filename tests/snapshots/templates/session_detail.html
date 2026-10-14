@@ -206,7 +206,7 @@
             font-variant-numeric: tabular-nums;
         }
         .session-row-meta { color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; font-size: 12px; row-gap: 2px; }
-        .session-row-meta > *:not(:last-child)::after { content: "\00b7"; margin: 0 7px; opacity: 0.55; }
+        .session-row-meta > *:not(:last-child)::after { content: "\00b7"; margin: 0 7px; opacity: 0.55; font-weight: 400; color: var(--muted); }
         .session-row-project { color: var(--text); font-weight: 600; }
         .session-row-automated { font-weight: 600; }
         .session-row-time-inline { display: none; font-variant-numeric: tabular-nums; }
@@ -220,6 +220,150 @@
         .session-list .session-row:hover { background: color-mix(in srgb, var(--card) 93%, var(--primary, #2563eb) 7%); transform: none; box-shadow: none; }
         .session-list .row-menu-trigger { border-color: transparent; background: transparent; width: 28px; height: 28px; }
         .session-list .row-menu-trigger:hover, .row-menu[open] .row-menu-trigger { border-color: var(--border); background: var(--card); }
+        .day-header {
+            position: sticky;
+            top: 0;
+            z-index: 4;
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 6px 12px;
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: var(--muted);
+            background: color-mix(in srgb, var(--bg-alt) 92%, var(--card) 8%);
+            border-bottom: 1px solid var(--border);
+        }
+        .session-list .day-header + .session-row { border-top: 0; }
+        .session-list-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px 16px;
+            margin-bottom: 1rem;
+        }
+        .date-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+        .date-chip, .group-toggle-option {
+            display: inline-flex;
+            align-items: center;
+            border: 1px solid var(--border);
+            background: var(--card);
+            border-radius: 999px;
+            padding: 4px 12px;
+            font-size: 12px;
+            color: var(--muted);
+            text-decoration: none;
+            transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+        }
+        .date-chip:hover, .group-toggle-option:hover { color: var(--text); border-color: color-mix(in srgb, var(--border) 60%, var(--primary) 40%); }
+        .date-chip:focus-visible, .group-toggle-option:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+        .date-chip.is-active, .group-toggle-option.is-active {
+            background: color-mix(in srgb, var(--card) 70%, var(--primary) 30%);
+            border-color: color-mix(in srgb, var(--border) 50%, var(--primary) 50%);
+            color: var(--text);
+            font-weight: 600;
+        }
+        .group-toggle {
+            display: inline-flex;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--card);
+        }
+        .group-toggle .group-toggle-option { border: 0; border-radius: 0; }
+        .group-toggle .group-toggle-option + .group-toggle-option { border-left: 1px solid var(--border); }
+        /* Spacing is a margin (it scrolls away), so the stuck header sits flush at the top. */
+        .session-header-wrap { position: sticky; top: 0; z-index: 12; margin-top: 1.5rem; padding-top: 0; }
+        .session-header-icon { flex-shrink: 0; }
+        .session-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0; }
+        .session-rows-marker { display: none !important; }
+        .session-header { transition: padding 0.15s ease; }
+        .session-header-primary {
+            border: 1px solid color-mix(in srgb, var(--primary) 70%, var(--border) 30%);
+            background: var(--primary);
+            color: #ffffff;
+            border-radius: 10px;
+            padding: 6px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .session-header-primary:hover { filter: brightness(1.05); }
+        .session-header-primary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .header-menu { position: relative; }
+        .header-menu-trigger {
+            list-style: none;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--muted);
+            border-radius: 10px;
+            width: 34px;
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            line-height: 1;
+            padding: 0;
+        }
+        .header-menu-trigger::-webkit-details-marker { display: none; }
+        .header-menu-trigger:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .header-menu-panel {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 6px);
+            min-width: 180px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            padding: 6px;
+            z-index: 40;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .header-menu-item, .header-menu-delete {
+            display: block;
+            width: 100%;
+            text-align: left;
+            border: 0;
+            background: transparent;
+            color: var(--text);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .header-menu-item:hover, .header-menu-delete:hover { background: var(--bg-alt); }
+        .header-menu-item:focus-visible, .header-menu-delete:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .header-menu-delete-form { border-top: 1px solid var(--border); margin-top: 4px; padding-top: 4px; }
+        .header-menu-delete { color: #b91c1c; }
+        .session-header.is-compact {
+            padding-top: 8px;
+            padding-bottom: 8px;
+            min-height: 46px;
+            align-items: center;
+        }
+        .session-header.is-compact .session-header-meta,
+        .session-header.is-compact .session-header-thread,
+        .session-header.is-compact .session-header-tags { display: none; }
+        .session-header.is-compact .session-header-main { flex-wrap: nowrap; }
+        @media (max-width: 390px) {
+            .session-header-main { flex-direction: column; align-items: flex-start; }
+            .session-header-meta { width: 100%; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .session-header, .date-chip, .group-toggle-option { transition: none; }
+        }
         .session-row-outline { line-height: 1.35; }
         .tag-chip-automated { font-weight: 600; }
         .row-menu { position: relative; align-self: flex-start; }
@@ -966,44 +1110,71 @@
             <div class="flex-1 min-h-0 overflow-y-auto">
                 
 <div data-transcript-view="1" hidden></div>
-<section class="max-w-[90rem] mx-auto px-6 pt-6 pb-4">
-    <div class="surface-card flex flex-wrap items-center justify-between gap-4 px-5 py-4 backdrop-blur-xl">
-        <div class="min-w-0">
-            <h1 class="session-headline truncate">Claude debugging session</h1>
-            <div class="session-meta mt-2">
-                <span>Apr 01</span>
-                <span class="session-meta-dot"></span>
-                <span>via Claude</span>
-                <span class="session-meta-dot"></span>
-                <span>1 prompts</span>
-                <span class="session-meta-dot"></span>
-                <span>demo</span>
-            </div>
-            
-            <div class="flex flex-wrap gap-2 mt-3">
-                <a href="/thread/thread-1" class="pill bg-white border border-slate-200 text-slate-500 font-mono hover:text-slate-900 transition-colors">thread-1</a>
-            </div>
-            
-            <div id="session-tags" class="flex flex-wrap items-center gap-2 mt-3" data-session-id="session-1">
-                <span id="tags-list" class="flex flex-wrap gap-2"></span>
-                <button type="button" id="add-tag-btn" data-action="prompt-add-tag" class="text-[11px] text-slate-500 hover:text-slate-900 border border-dashed border-slate-300 px-2 py-1 rounded-lg transition-all bg-white">+ tag</button>
+<section class="max-w-[90rem] mx-auto px-6 pb-4 session-header-wrap">
+    <div id="sessionHeader" class="session-header surface-card flex flex-wrap items-center justify-between gap-3 px-5 py-4 backdrop-blur-xl">
+        <div class="session-header-main min-w-0 flex-1 flex flex-wrap items-center gap-3">
+            <div class="session-header-icon w-9 h-9 rounded-lg flex items-center justify-center text-sm border border-slate-200 flex-shrink-0" style="color: #C084FC">C</div>
+            <div class="min-w-0 flex-1">
+                <h1 class="session-headline truncate">Claude debugging session</h1>
+                <div class="session-header-meta session-meta mt-1">
+                    <span>Apr 01, 10:00</span>
+                    <span class="session-meta-dot"></span>
+                    <span>1 prompts</span>
+                    <span class="session-meta-dot"></span>
+                    <span>demo</span>
+                </div>
             </div>
         </div>
-        <div class="flex flex-wrap items-center gap-2">
-            
-            <button type="button" data-action="copy-command" data-copy-text="ai-session switch gemini --thread-id thread-1" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Copy Continue</button>
-            
-            <button type="button" data-action="copy-link" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Copy Link</button>
-            <button type="button" data-action="resume-session" data-session-id="session-1" class="text-[11px] text-blue-600 hover:text-blue-900 border border-blue-200 px-3 py-1.5 rounded-xl transition-all bg-white">Resume</button>
-            <a href="/" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Dashboard</a>
-            <a href="/export/session-1" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">Export MD</a>
-            <form action="/session/session-1/delete" method="POST" data-confirm="Are you sure you want to delete this session? This action cannot be undone." style="display:inline;">
-                <input type="hidden" name="next" value="/sessions">
-                <button type="submit" class="text-[11px] text-red-600 hover:text-red-900 border border-red-200 px-3 py-1.5 rounded-xl transition-all bg-white">Delete</button>
-            </form>
+        <div class="session-header-actions flex flex-wrap items-center gap-2 flex-shrink-0">
+            <button type="button" data-action="resume-session" data-session-id="session-1" class="session-header-primary">Resume</button>
+            <details class="header-menu">
+                <summary class="header-menu-trigger" aria-label="More session actions">⋯</summary>
+                <div class="header-menu-panel">
+                    
+                    <button type="button" data-action="copy-command" data-copy-text="ai-session switch gemini --thread-id thread-1" class="header-menu-item">Copy Continue</button>
+                    
+                    <button type="button" data-action="copy-link" class="header-menu-item">Copy Link</button>
+                    <a href="/" class="header-menu-item">Dashboard</a>
+                    <a href="/export/session-1" class="header-menu-item">Export MD</a>
+                    <form action="/session/session-1/delete" method="POST" data-confirm="Are you sure you want to delete this session? This action cannot be undone." class="header-menu-delete-form">
+                        <input type="hidden" name="next" value="/sessions">
+                        <button type="submit" class="header-menu-delete">Delete</button>
+                    </form>
+                </div>
+            </details>
+        </div>
+        
+        <div class="session-header-thread flex flex-wrap gap-2 w-full">
+            <a href="/thread/thread-1" class="pill bg-white border border-slate-200 text-slate-500 font-mono hover:text-slate-900 transition-colors">thread-1</a>
+        </div>
+        
+        <div id="session-tags" class="session-header-tags flex flex-wrap items-center gap-2 w-full" data-session-id="session-1">
+            <span id="tags-list" class="flex flex-wrap gap-2"></span>
+            <button type="button" id="add-tag-btn" data-action="prompt-add-tag" class="text-[11px] text-slate-500 hover:text-slate-900 border border-dashed border-slate-300 px-2 py-1 rounded-lg transition-all bg-white">+ tag</button>
         </div>
     </div>
 </section>
+<script nonce="NONCE">
+(function () {
+    const header = document.getElementById('sessionHeader');
+    if (!header) return;
+    // The page scrolls inside #main-content > .overflow-y-auto, not the window.
+    const scroller = document.querySelector('#main-content > .overflow-y-auto') || window;
+    let ticking = false;
+    function offset() { return scroller === window ? window.scrollY : scroller.scrollTop; }
+    function update() {
+        ticking = false;
+        const y = offset();
+        // Hysteresis: compact past 48px, expand again only near the top (no flapping).
+        if (y > 48) header.classList.add('is-compact');
+        else if (y < 8) header.classList.remove('is-compact');
+    }
+    scroller.addEventListener('scroll', function () {
+        if (!ticking) { ticking = true; window.requestAnimationFrame(update); }
+    }, { passive: true });
+    update();
+})();
+</script>
 
 <section class="max-w-[90rem] mx-auto px-6 pb-24">
     <div class="flex flex-col lg:flex-row w-full">

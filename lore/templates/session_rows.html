@@ -1,5 +1,5 @@
 
-{% for s in sessions %}
+{% macro render_row(s) %}
 <div class="compact-row session-row flex gap-2 group" role="listitem">
     <a href="/session/{{ s.id|urlpath }}?back={{ (back_to or '/sessions')|urlpath }}" class="session-row-link flex-1 min-w-0">
         <div class="session-row-line1 flex items-center gap-3 min-w-0">
@@ -43,4 +43,15 @@
         </div>
     </details>
 </div>
+{% endmacro %}
+{% for group in day_groups %}
+{% if group.show_header %}
+<div class="day-header" role="presentation">{{ group.label }} · {{ group.count }}</div>
+{% endif %}
+{% for s in group.sessions %}
+{{ render_row(s) }}
 {% endfor %}
+{% endfor %}
+{% if last_day %}
+<span class="session-rows-marker" hidden data-last-day="{{ last_day }}" aria-hidden="true"></span>
+{% endif %}

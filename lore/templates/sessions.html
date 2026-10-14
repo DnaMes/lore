@@ -13,7 +13,7 @@
         </div>
     </div>
     {% set active_filters = (1 if tool else 0) + (1 if tag else 0) + (1 if start else 0) + (1 if end else 0) + (1 if include_automated else 0) %}
-    <form method="get" data-autosubmit="true" class="sessions-filters mb-8">
+    <form method="get" data-autosubmit="true" class="sessions-filters mb-4">
         <details class="filters-sheet">
             <summary class="filters-sheet-summary">Filters · {{ active_filters }}</summary>
             <div class="filters-sheet-body grid grid-cols-1 lg:grid-cols-5 gap-3">
@@ -31,13 +31,33 @@
                     <input type="checkbox" name="automated" value="1" data-auto-submit{{ ' checked' if include_automated else '' }} class="w-4 h-4">
                     Automated
                 </label>
+                <input type="hidden" name="group" value="{{ group or 'day' }}">
                 <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
             </div>
         </details>
     </form>
+    <nav class="session-list-toolbar" aria-label="Session list options">
+        <div class="date-chip-row" aria-label="Date range">
+            {% for chip in date_chips %}
+            <a href="{{ sessions_query_url(start=chip.start, end=chip.end) }}"
+               class="date-chip{{ ' is-active' if chip.active else '' }}"
+               {% if chip.active %}aria-current="true"{% endif %}>{{ chip.label }}</a>
+            {% endfor %}
+        </div>
+        <div class="group-toggle" role="group" aria-label="List grouping">
+            <a href="{{ sessions_query_url(group='day') }}"
+               class="group-toggle-option{{ ' is-active' if (group or 'day') == 'day' else '' }}"
+               {% if (group or 'day') == 'day' %}aria-current="true"{% endif %}>Group by day</a>
+            <a href="{{ sessions_query_url(group='flat') }}"
+               class="group-toggle-option{{ ' is-active' if group == 'flat' else '' }}"
+               {% if group == 'flat' %}aria-current="true"{% endif %}>Flat</a>
+        </div>
+    </nav>
     <div class="compact-list session-list" id="sessionRows" role="list"
          data-tool="{{ tool }}" data-tag="{{ tag }}" data-start="{{ start or '' }}"
-         data-end="{{ end or '' }}" {% if include_automated %}data-automated="1" {% endif %}data-back="{{ back_to or '/sessions' }}"
+         data-end="{{ end or '' }}" data-group="{{ group or 'day' }}"
+         {% if last_day %}data-last-day="{{ last_day }}" {% endif %}
+         {% if include_automated %}data-automated="1" {% endif %}data-back="{{ back_to or '/sessions' }}"
          data-per-page="{{ per_page }}" data-pages="{{ pages }}">
         {% include "session_rows.html" %}
     </div>
@@ -76,11 +96,18 @@
             end: rows.dataset.end || '',
         });
         if (rows.dataset.automated) params.set('automated', '1');
+        if (rows.dataset.group) params.set('group', rows.dataset.group);
+        if (rows.dataset.lastDay) params.set('after_day', rows.dataset.lastDay);
         try {
             const resp = await fetch('/sessions/rows?' + params.toString(), { credentials: 'same-origin' });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const html = await resp.text();
             rows.insertAdjacentHTML('beforeend', html);
+            const markers = rows.querySelectorAll('[data-last-day]');
+            const marker = markers.length ? markers[markers.length - 1] : null;
+            if (marker && marker.getAttribute('data-last-day')) {
+                rows.dataset.lastDay = marker.getAttribute('data-last-day');
+            }
             if (page + 1 > totalPages) {
                 btn.remove();
             } else {

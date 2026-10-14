@@ -7,8 +7,8 @@ for the web interface.
 import html
 import json
 import re
-from datetime import datetime
-from typing import Optional
+from datetime import date, datetime, timedelta
+from typing import Any, Optional
 
 import markdown
 import nh3
@@ -117,6 +117,126 @@ def format_session_row_time(
     else:
         label = f"{dt.strftime('%b')} {dt.day} {time_part}"
     return (label, dt.isoformat(timespec="minutes"))
+
+
+def session_day_iso(session: dict) -> Optional[str]:
+    """Local calendar day (YYYY-MM-DD) from ``updated`` or ``created``."""
+    dt = _parse_local_naive(session.get("updated") or session.get("created"))
+    if dt is None:
+        return None
+    return dt.date().isoformat()
+
+
+def format_day_header_label(day_key: str, now: Optional[datetime] = None) -> str:
+    """Human label for a day header (Today, Yesterday, weekday, or month date)."""
+    try:
+        day = date.fromisoformat(day_key)
+    except ValueError:
+        return day_key
+    ref = now or datetime.now()
+    if ref.tzinfo is not None:
+        ref = ref.replace(tzinfo=None)
+    ref_day = ref.date()
+    delta = (ref_day - day).days
+    if delta == 0:
+        return "Today"
+    if delta == 1:
+        return "Yesterday"
+    if 2 <= delta <= 7:
+        return f"{day.strftime('%A')}, {day.strftime('%b')} {day.day}"
+    if day.year != ref_day.year:
+        return f"{day.strftime('%b')} {day.day}, {day.year}"
+    return f"{day.strftime('%b')} {day.day}"
+
+
+def group_sessions_for_list(
+    sessions: list,
+    *,
+    group_mode: str = "day",
+    after_day: Optional[str] = None,
+    now: Optional[datetime] = None,
+) -> list[dict[str, Any]]:
+    """Group sessions by local day for list rendering."""
+    if group_mode == "flat":
+        return [
+            {
+                "day_key": None,
+                "label": "",
+                "count": len(sessions),
+                "sessions": list(sessions),
+                "show_header": False,
+            }
+        ]
+    ref = now or datetime.now()
+    if ref.tzinfo is not None:
+        ref = ref.replace(tzinfo=None)
+    groups: list[dict[str, Any]] = []
+    for session in sessions:
+        day_key = session_day_iso(session)
+        if not groups or groups[-1]["day_key"] != day_key:
+            label = format_day_header_label(day_key, ref) if day_key else "Unknown date"
+            groups.append(
+                {
+                    "day_key": day_key,
+                    "label": label,
+                    "sessions": [session],
+                }
+            )
+        else:
+            groups[-1]["sessions"].append(session)
+    for index, group in enumerate(groups):
+        group["count"] = len(group["sessions"])
+        skip = index == 0 and after_day and group.get("day_key") == after_day
+        group["show_header"] = not skip
+    return groups
+
+
+def session_date_range_chips(
+    *,
+    now: Optional[datetime] = None,
+    active_start: str = "",
+    active_end: str = "",
+) -> list[dict[str, Any]]:
+    """Preset date-range chips for the sessions list (start/end query params)."""
+    ref = now or datetime.now()
+    if ref.tzinfo is not None:
+        ref = ref.replace(tzinfo=None)
+    today = ref.date()
+    yesterday = today - timedelta(days=1)
+    week_start = today - timedelta(days=6)
+    month_start = today - timedelta(days=29)
+
+    def _active(start: Optional[date], end: Optional[date]) -> bool:
+        if start is None and end is None:
+            return not active_start and not active_end
+        if not active_start or not active_end:
+            return False
+        try:
+            s = date.fromisoformat(active_start)
+            e = date.fromisoformat(active_end)
+        except ValueError:
+            return False
+        return s == start and e == end
+
+    specs = [
+        ("today", "Today", today, today),
+        ("yesterday", "Yesterday", yesterday, yesterday),
+        ("7d", "7 days", week_start, today),
+        ("30d", "30 days", month_start, today),
+        ("all", "All", None, None),
+    ]
+    chips: list[dict[str, Any]] = []
+    for chip_id, label, start, end in specs:
+        chips.append(
+            {
+                "id": chip_id,
+                "label": label,
+                "start": start.isoformat() if start else "",
+                "end": end.isoformat() if end else "",
+                "active": _active(start, end),
+            }
+        )
+    return chips
 
 
 def session_row_tokens(entry: dict) -> Optional[int]:

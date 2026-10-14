@@ -96,8 +96,11 @@ from .web_formatting import (
     format_session_duration,
     format_session_row_time,
     format_tool_calls,
+    group_sessions_for_list,
     is_automated_origin,
     sanitize_rendered_html,
+    session_date_range_chips,
+    session_day_iso,
     session_row_tokens,
     should_show_prompt_outline,
 )
@@ -510,6 +513,7 @@ def render(tpl_name, **kwargs):
         is_automated_origin=is_automated_origin,
         session_row_tokens=session_row_tokens,
         should_show_prompt_outline=should_show_prompt_outline,
+        sessions_query_url=sessions_query_url,
         recent=recent,
         provider_tools=list(TOOL_STYLES.keys()),
         request=request if has_request_context() else None,
@@ -863,6 +867,53 @@ def dashboard():
 SESSIONS_PER_PAGE = 50
 
 
+def sessions_list_now() -> datetime:
+    """Injectable clock for session list day labels (tests)."""
+    return datetime.now()
+
+
+def _normalize_group_mode(value: str) -> str:
+    return "flat" if value == "flat" else "day"
+
+
+def sessions_query_url(**updates: str) -> str:
+    """Build a /sessions URL preserving current query params."""
+    if not has_request_context():
+        return "/sessions"
+    merged = {k: v for k, v in request.args.items() if k not in ("page", "after_day")}
+    for key, value in updates.items():
+        if value:
+            merged[key] = value
+        else:
+            merged.pop(key, None)
+    if not merged:
+        return "/sessions"
+    return "/sessions?" + urlencode(merged)
+
+
+def _sessions_list_back_path() -> str:
+    if not has_request_context():
+        return "/sessions"
+    return sessions_query_url()
+
+
+def _sessions_day_groups(
+    page_sessions: list,
+    group_mode: str,
+    after_day: str,
+) -> tuple[list[dict[str, Any]], str]:
+    now = sessions_list_now()
+    effective_after = after_day if group_mode == "day" else ""
+    day_groups = group_sessions_for_list(
+        page_sessions,
+        group_mode=group_mode,
+        after_day=effective_after or None,
+        now=now,
+    )
+    last_day = session_day_iso(page_sessions[-1]) if page_sessions else ""
+    return day_groups, last_day or ""
+
+
 def _index_mtime():
     """Return the current index mtime used to invalidate session-list caches."""
     try:
@@ -923,6 +974,7 @@ def sessions():
     tag = request.args.get("tag", "")
     start = request.args.get("start", "")
     end = request.args.get("end", "")
+    group = _normalize_group_mode(request.args.get("group", "day"))
 
     if tool and not validate_tool_name(tool):
         return "Invalid tool parameter", 400
@@ -935,6 +987,7 @@ def sessions():
     total = len(filtered)
     pages = max(1, math.ceil(total / SESSIONS_PER_PAGE))
     first_page = filtered[:SESSIONS_PER_PAGE]
+    day_groups, last_day = _sessions_day_groups(first_page, group, "")
 
     tags = compute_top_tags(_visible_index().get("sessions", []), limit=12)
     return render(
@@ -942,6 +995,12 @@ def sessions():
         automated_hidden=_filtered_automated_hidden(tool, tag, start, end),
         active="sessions",
         sessions=first_page,
+        day_groups=day_groups,
+        last_day=last_day,
+        group=group,
+        date_chips=session_date_range_chips(
+            now=sessions_list_now(), active_start=start, active_end=end
+        ),
         total=total,
         pages=pages,
         per_page=SESSIONS_PER_PAGE,
@@ -971,6 +1030,9 @@ def sessions_rows():
     if tag and not validate_search_param(tag):
         return "Invalid tag parameter", 400
 
+    group = _normalize_group_mode(request.args.get("group", "day"))
+    after_day = request.args.get("after_day", "").strip()
+
     try:
         page = int(request.args.get("page", "1"))
     except ValueError:
@@ -981,8 +1043,15 @@ def sessions_rows():
     filtered = _filtered_sorted_sessions(tool, tag, start, end)
     offset = (page - 1) * SESSIONS_PER_PAGE
     page_sessions = filtered[offset : offset + SESSIONS_PER_PAGE]
+    day_groups, last_day = _sessions_day_groups(page_sessions, group, after_day)
 
-    html = render("session_rows", sessions=page_sessions, back_to="/sessions")
+    html = render(
+        "session_rows",
+        sessions=page_sessions,
+        day_groups=day_groups,
+        last_day=last_day,
+        back_to=_sessions_list_back_path(),
+    )
     return Response(html, mimetype="text/html")
 
 
