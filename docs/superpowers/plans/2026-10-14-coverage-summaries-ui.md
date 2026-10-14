@@ -152,7 +152,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 
 ### B4.1 Deterministic artifacts and compressor
 `lore/services/summary_input.py`: `extract_artifacts(messages) -> Artifacts(files_read, files_modified, commands, errors)` and `compress(messages, version=1) -> CompressedTranscript` with the rules in the design (tool results head/tail, caps, collapse runs of tool-only messages, native compaction kept and flagged). Pure functions, fixtures with noisy tool output.
-- [ ] done
+- [x] done
 
 ### B4.2 Storage (migration 18) **[R]**
 `lore/storage/summaries.py` with `session_summaries` as in the design; `get_summary`, `save_summary` (only after validation), `delete_summaries_for_session`, `list_summaries`; tombstoned sessions never returned. Wire `delete_summaries_for_session` (and `session_knowledge` cleanup) into the same code path that records a deletion tombstone in the web, MCP and CLI, with a test per path, plus a test that a tombstoned session's summary stays deleted after a re-sync (`_write_reused_entry` must not resurrect it).
