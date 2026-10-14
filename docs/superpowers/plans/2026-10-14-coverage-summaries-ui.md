@@ -105,7 +105,7 @@ Read `brain/<id>/.system_generated/logs/transcript_full.jsonl` (else `transcript
 
 ### B2.4 Command Code — dossier "Command Code"
 `projects/<slug>/<uuid>.jsonl` (v3-style and flat variant), `.meta.json`, `.checkpoints.jsonl` for print-mode runs without a transcript (prompts from `prompt`); usage with `costUsd`; never read `auth.json`.
-- [ ] done
+- [x] done
 
 ### B2.5 Hermes — dossier "Hermes"
 `~/.hermes/profiles/*/state.db` and `~/.hermes/state.db`: sessions + messages, skip `active=0`, `parent_session_id` relation, per-model usage, `origin` from `source`; work on a scratch copy of the database and its WAL/SHM files; a per-session fingerprint derived from `last_activity_at` is stored in the existing `source_mtime_ns` field, so the base contract does not change. Invariant, with a test: the value changes whenever the session's content changes, and nothing but equality is ever done with it for this source.

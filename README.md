@@ -70,6 +70,7 @@ docker compose up -d
 | **Antigravity** | Varies | Experimental tool support |
 | **Aider** | `.aider.chat.history.md` per project | Markdown chat logs, discovered under your home dir |
 | **Pi** | `~/.pi/agent/sessions/` | JSONL v3 tree transcripts (also reads `~/.omp`, `~/.prime`) |
+| **Command Code** | `~/.commandcode/projects/` | v3 and flat JSONL transcripts, `.meta.json`, print-mode `.checkpoints.jsonl` |
 
 ---
 

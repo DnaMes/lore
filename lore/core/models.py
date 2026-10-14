@@ -84,6 +84,7 @@ class Tool(Enum):
     ANTIGRAVITY = "antigravity"
     AIDER = "aider"
     PI = "pi"
+    COMMAND_CODE = "command-code"
 
 
 class Role(Enum):

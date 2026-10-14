@@ -5,6 +5,7 @@ from .antigravity import AntigravityExtractor
 from .base import BaseExtractor
 from .claude import ClaudeCodeExtractor
 from .codex import CodexExtractor
+from .commandcode import CommandCodeExtractor
 from .copilot import CopilotCLIExtractor
 from .cursor import CursorExtractor
 from .gemini import GeminiCLIExtractor
@@ -27,4 +28,5 @@ def get_all_extractors() -> List[BaseExtractor]:
         AntigravityExtractor(),
         AiderExtractor(),
         PiExtractor(),
+        CommandCodeExtractor(),
     ]

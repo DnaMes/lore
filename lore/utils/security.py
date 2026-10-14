@@ -220,6 +220,7 @@ def validate_tool_name(tool: str) -> bool:
         "antigravity",
         "aider",
         "pi",
+        "command-code",
     ]
     return tool in valid_tools
 

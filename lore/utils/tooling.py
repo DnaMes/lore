@@ -12,6 +12,7 @@ CANONICAL_TOOLS = {
     "antigravity",
     "aider",
     "pi",
+    "command-code",
 }
 
 
@@ -32,6 +33,9 @@ TOOL_ALIASES = {
     "aider": "aider",
     "pi": "pi",
     "pi-coding-agent": "pi",
+    "command-code": "command-code",
+    "commandcode": "command-code",
+    "cmd": "command-code",
 }
 
 
