@@ -1,0 +1,310 @@
+{
+  "description": "Labelled pairs for calibrating LORE_MEMORY_RECALL_MIN_SIMILARITY (issue #199). Each pair is (stored memory, user query). 'related' pairs must stay above the recall floor, 'unrelated' pairs must fall below it. Written 2026-10-14; memory-style prose, English and German, deliberately including same-domain negatives (one label corrected 2026-10-14: sourdough hydration vs. water in bread dough is the same subject).",
+  "pairs": [
+    {
+      "memory": "Postgres connection pooling: use pgbouncer when a pool exceeds 50 connections; the default max_connections of 100 is not enough for our API pods.",
+      "query": "how do I pool postgres connections",
+      "label": "related"
+    },
+    {
+      "memory": "Decision: the Godot test runner stays on the TrueNAS VM. Wake it over Wake-on-LAN, never shut it down.",
+      "query": "wake on lan for the test host",
+      "label": "related"
+    },
+    {
+      "memory": "The login form validates the email address client-side before submit, and the server repeats the check.",
+      "query": "email validation on the login form",
+      "label": "related"
+    },
+    {
+      "memory": "SSH into the homelab uses the forced-command key from the inventory; plain password auth is disabled everywhere.",
+      "query": "how does ssh authentication work here",
+      "label": "related"
+    },
+    {
+      "memory": "Backup strategy: nightly restic to the NAS, 14 daily, 8 weekly, 4 monthly snapshots, repository encrypted.",
+      "query": "restic backup retention policy",
+      "label": "related"
+    },
+    {
+      "memory": "Deployments wait for the review gate: push a review/* ref, run both reviewers, fast-forward only when nobody blocks.",
+      "query": "when does a commit get merged to main",
+      "label": "related"
+    },
+    {
+      "memory": "Die Küche wird im November renoviert; der Elektriker braucht zwei Wochen Vorlauf für die Neuplanung der Steckdosen.",
+      "query": "wann wird die Küche renoviert",
+      "label": "related"
+    },
+    {
+      "memory": "Client-side routing uses hash URLs so the app works from file:// without a server rewrite rule.",
+      "query": "why hash based routing",
+      "label": "related"
+    },
+    {
+      "memory": "Python packaging: build with python -m build, publish with twine, and never upload secrets that ended up in the sdist.",
+      "query": "how do I release a python package",
+      "label": "related"
+    },
+    {
+      "memory": "The nightly job failed for three days because GNU timeout rejected the duration format 4h55m; use seconds instead.",
+      "query": "why did the nightly job hang",
+      "label": "related"
+    },
+    {
+      "memory": "Flask sessions break on restart unless FLASK_SECRET_KEY is set; in production it comes from the environment.",
+      "query": "flask session cookie lost after restart",
+      "label": "related"
+    },
+    {
+      "memory": "SQLite writes run in WAL mode with a 5000 ms busy timeout so the web UI can read while a sync writes.",
+      "query": "sqlite database is locked during sync",
+      "label": "related"
+    },
+    {
+      "memory": "Migration policy: never run a new migration against the live archive without a verified backup first.",
+      "query": "safe database migration procedure",
+      "label": "related"
+    },
+    {
+      "memory": "Der Rasen wird erst gemäht, wenn drei Tage ohne Regen vergangen sind; Mähhöhe 4 cm im Frühjahr.",
+      "query": "wann den rasen mähen",
+      "label": "related"
+    },
+    {
+      "memory": "TypeScript rule: use strict mode, unknown for parsed JSON, and type guards instead of any casts.",
+      "query": "how should parsed json be typed",
+      "label": "related"
+    },
+    {
+      "memory": "The extractor skips unchanged source files by mtime and parser version so a steady-state sync does not re-parse everything.",
+      "query": "incremental sync avoids reparsing files",
+      "label": "related"
+    },
+    {
+      "memory": "Rate limits for free models: 20 requests per minute and 50 per day below ten purchased credits.",
+      "query": "openrouter free tier request limits",
+      "label": "related"
+    },
+    {
+      "memory": "The web UI is served behind Traefik with a forwarded-for header that is only trusted when the proxy flag is set.",
+      "query": "trusted proxy configuration",
+      "label": "related"
+    },
+    {
+      "memory": "Docker images are pinned to a digest, run as a non-root user, and declare a healthcheck for production.",
+      "query": "dockerfile production hardening",
+      "label": "related"
+    },
+    {
+      "memory": "Memory recall is fused with keyword hits by reciprocal rank fusion; memories without a vector still surface through keywords.",
+      "query": "how are keyword and semantic results combined",
+      "label": "related"
+    },
+    {
+      "memory": "Commit messages follow Conventional Commits and always name the issue number in the subject or body.",
+      "query": "commit message conventions",
+      "label": "related"
+    },
+    {
+      "memory": "The garden irrigation runs at 06:00 for 20 minutes; in August it switches to every second day.",
+      "query": "wie lange bewässern",
+      "label": "related"
+    },
+    {
+      "memory": "CSP: script tags carry a per-response nonce, inline handlers are forbidden, and external origins are allow-listed.",
+      "query": "content security policy nonce setup",
+      "label": "related"
+    },
+    {
+      "memory": "Pruning keeps 200 sessions in the index; older ones are archived to cold storage and drop out of search.",
+      "query": "what happens to old sessions",
+      "label": "related"
+    },
+    {
+      "memory": "The bug was an off-by-one in the pagination cursor: the last row of a page was requested twice.",
+      "query": "why does the last row appear twice",
+      "label": "related"
+    },
+    {
+      "memory": "Pre-commit hooks run ruff format, ruff check and the unit tests; never skip them with --no-verify.",
+      "query": "what runs before every commit",
+      "label": "related"
+    },
+    {
+      "memory": "Für das Homeoffice brauche ich einen Monitor mit USB-C Power Delivery und mindestens 90 Watt.",
+      "query": "welcher monitor fürs homeoffice",
+      "label": "related"
+    },
+    {
+      "memory": "The queue worker exits with code 1 when any job failed, so systemd marks the unit as failed.",
+      "query": "worker exit code semantics",
+      "label": "related"
+    },
+    {
+      "memory": "Message permalinks load a bounded window from the messages table instead of materialising the whole session.",
+      "query": "how permalink loads messages",
+      "label": "related"
+    },
+    {
+      "memory": "Changelog entries are written per release from merged PR titles; unreleased changes stay in an Unreleased section.",
+      "query": "how is the changelog generated",
+      "label": "related"
+    },
+    {
+      "memory": "Sourdough hydration is 75% in winter, 70% in summer; the starter gets fed twice a day during the week.",
+      "query": "how much water in the bread dough",
+      "label": "related"
+    },
+    {
+      "memory": "Postgres connection pooling: use pgbouncer when a pool exceeds 50 connections.",
+      "query": "vacuum settings for large tables",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Decision: the Godot test runner stays on the TrueNAS VM.",
+      "query": "sql index bloat causes slow inserts",
+      "label": "unrelated"
+    },
+    {
+      "memory": "The login form validates the email address client-side before submit.",
+      "query": "mähen im sommer bei hitze",
+      "label": "unrelated"
+    },
+    {
+      "memory": "SSH into the homelab uses the forced-command key from the inventory.",
+      "query": "backen von mit Hefeteig",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Backup strategy: nightly restic to the NAS with 14 daily snapshots.",
+      "query": "how to style flexbox grid gaps",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Deployments wait for the review gate before merging.",
+      "query": "kühlschrank temperatur einstellen",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Die Küche wird im November renoviert.",
+      "query": "pytest fixture scoping rules",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Client-side routing uses hash URLs so the app works from file://.",
+      "query": "postgres vacuum settings",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Python packaging: build with python -m build and publish with twine.",
+      "query": "wie lange dauert braten im ofen",
+      "label": "unrelated"
+    },
+    {
+      "memory": "The nightly job failed because GNU timeout rejected 4h55m.",
+      "query": "css grid template columns",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Flask sessions break on restart unless FLASK_SECRET_KEY is set.",
+      "query": "how to make sourdough starter",
+      "label": "unrelated"
+    },
+    {
+      "memory": "SQLite writes run in WAL mode with a 5000 ms busy timeout.",
+      "query": "winterfütterung für vögel",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Migration policy: never run a migration without a verified backup.",
+      "query": "rezepte für apfelkuchen",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Der Rasen wird erst gemäht, wenn drei Tage ohne Regen vergangen sind.",
+      "query": "api rate limit headers",
+      "label": "unrelated"
+    },
+    {
+      "memory": "TypeScript rule: strict mode and type guards instead of any casts.",
+      "query": "sqlite wal checkpoint frequency",
+      "label": "unrelated"
+    },
+    {
+      "memory": "The extractor skips unchanged source files by mtime.",
+      "query": "wie lange dauert der urlaub",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Rate limits: 20 requests per minute for free models.",
+      "query": "rasen düngen anleitung",
+      "label": "unrelated"
+    },
+    {
+      "memory": "The web UI trusts forwarded headers only behind a configured proxy.",
+      "query": "brokkoli aus dem ofen",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Docker images are pinned to a digest and run non-root.",
+      "query": "sourdough hydration in winter",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Memory recall is fused with keyword hits by reciprocal rank fusion.",
+      "query": "winter tires pressure car",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Commit messages follow Conventional Commits with the issue number.",
+      "query": "how to prune apple trees",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Die Bewässerung läuft um 06:00 für 20 Minuten.",
+      "query": "flask secret key persistence",
+      "label": "unrelated"
+    },
+    {
+      "memory": "CSP uses a per-response nonce for every script tag.",
+      "query": "hefe teig aufgehen lassen",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Pruning keeps 200 sessions in the index.",
+      "query": "schneiden von hecken im herbst",
+      "label": "unrelated"
+    },
+    {
+      "memory": "The bug was an off-by-one in the pagination cursor.",
+      "query": "kartoffeln kochen zeit",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Pre-commit hooks run ruff format and the unit tests.",
+      "query": "wo wächst lavendel am besten",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Für das Homeoffice brauche ich einen Monitor mit USB-C Power Delivery.",
+      "query": "postgres pgbouncer transaction pooling",
+      "label": "unrelated"
+    },
+    {
+      "memory": "The queue worker exits with 1 when a job failed.",
+      "query": "kaffeebohnen rösten dauer",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Message permalinks load a bounded window from the messages table.",
+      "query": "wandfarbe kombinieren wohnzimmer",
+      "label": "unrelated"
+    },
+    {
+      "memory": "Changelog entries come from merged PR titles.",
+      "query": "veilchen im topf pflege",
+      "label": "unrelated"
+    }
+  ]
+}

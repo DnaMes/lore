@@ -142,7 +142,7 @@ lore memory add --title "Use PG 17" --body "..." --supersedes 7   # replaces #7;
 #   pip install -e ".[semantic]"
 # Without it, search transparently stays keyword-only. In the default mode only
 # semantic matches with cosine similarity >= LORE_MEMORY_RECALL_MIN_SIMILARITY
-# (default 0.7, uncalibrated) are added.
+# (default 0.6, calibrated 2026-10-14) are added.
 
 # Search across all sessions
 lore search "database migration"

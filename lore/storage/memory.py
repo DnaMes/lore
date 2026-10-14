@@ -66,12 +66,16 @@ WRITABLE_STATUSES = ("candidate", "confirmed")
 
 # Auto-mode recall (semantic=None) fuses only semantic candidates whose cosine
 # similarity reaches this floor; without one every query would be padded with
-# the nearest unrelated memories. The default is a PLACEHOLDER, to be calibrated
-# together with issue #92: a handful of short texts with bge-small-en-v1.5
-# (2026-10-13) gave about 0.76 for related and 0.45-0.62 for unrelated pairs.
-# Override with LORE_MEMORY_RECALL_MIN_SIMILARITY.
+# the nearest unrelated memories. Calibrated 2026-10-14 on 61 labelled pairs with
+# bge-small-en-v1.5: related median 0.739, unrelated max 0.582 — 0.60 keeps 94 %
+# of the related hits and drops every unrelated one (balanced accuracy 0.968,
+# tied for the sweep optimum), where the previous 0.7 kept only 77 % for no extra
+# protection. Distribution, reproduction command and the two known misses
+# (German query vs. English memory, keyword-poor paraphrase):
+# docs/research/2026-10-14-recall-floor-calibration.md. The session-level cutoff
+# of #92 is calibrated separately. Override with LORE_MEMORY_RECALL_MIN_SIMILARITY.
 RECALL_MIN_SIMILARITY_ENV = "LORE_MEMORY_RECALL_MIN_SIMILARITY"
-DEFAULT_RECALL_MIN_SIMILARITY = 0.7
+DEFAULT_RECALL_MIN_SIMILARITY = 0.6
 
 
 # Cosine similarity at or above which a new memory is reported as a near-duplicate

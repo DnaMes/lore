@@ -39,6 +39,17 @@ were not verified on real machines.
 tools. Licence notes: `basic-memory` is AGPL-3.0 and cass carries an additional
 clause, so take ideas, not code. See `docs/research/2026-10-14-oss-landscape.md`.
 
+### Semantic recall is English-only (bge-small-en-v1.5)
+
+The 2026-10-14 floor calibration (`docs/research/2026-10-14-recall-floor-calibration.md`)
+shows two misses no floor value can fix: a German query against an English memory scores 0.430
+(inside the unrelated range) and a keyword-poor paraphrase lands at 0.530. The keyword path covers
+the second one when the wording overlaps; neither is a tuning problem.
+
+**Recommended decision:** when #92 calibrates the session-level cutoff, evaluate a multilingual
+local model (bge-m3) against a German+English pair set in the same script and switch only if it
+beats bge-small on *both* languages. The local-only embedding policy stays either way.
+
 ### Review gate approves without seeing the diff (harness)
 
 `review-gate` approved every commit of the 2026-10-14 Wave-0/Track-L pass, but each reviewer

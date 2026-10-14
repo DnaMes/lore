@@ -152,7 +152,7 @@
 
 **Interfaces:**
 - `recall_memory(..., semantic: Optional[bool] = None)`: `None` = auto (hybrid when `embeddings_available()` and a stored vector exists), `False` = FTS only, `True` = today's behaviour. Hybrid uses `rrf_merge(fts_results, semantic_results, key=lambda r: str(r["id"]), limit=limit)` over `{"id": int, "entry": MemoryEntry, "score": float}` dicts.
-- Auto mode only fuses semantic candidates whose cosine similarity is at least `LORE_MEMORY_RECALL_MIN_SIMILARITY` (default `0.7`, uncalibrated; spec 1.5). `semantic=True` has no floor.
+- Auto mode only fuses semantic candidates whose cosine similarity is at least `LORE_MEMORY_RECALL_MIN_SIMILARITY` (default `0.6` since the 2026-10-14 calibration; spec 1.5). `semantic=True` has no floor.
 - `MemoryEntry.sources: List[Dict[str, str]]` = `[{"session_id": ..., "note": ...}]` from `memory_sources`; `message_id` is not exposed.
 
 - [ ] **Step 1: Write failing tests:** with a fake embedding backend (see `tests/test_storage_embeddings.py` for the monkeypatch pattern) a memory without a vector is still returned in auto mode; `semantic=False` never calls the embedder; entry from `add_memory(..., source_session="s1")` has `sources == [{"session_id": "s1", "note": "recorded from this session"}]`; MCP `memory_recall` without `semantic` returns the same shape as before plus `sources`.

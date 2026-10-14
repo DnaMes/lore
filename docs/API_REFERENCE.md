@@ -319,8 +319,9 @@ Input:
   installed and a memory has a stored vector, memories similar in meaning are
   fused in (reciprocal rank fusion). Memories without a vector are still found by
   keyword. Only semantic candidates with cosine similarity at or above
-  `LORE_MEMORY_RECALL_MIN_SIMILARITY` (default `0.7`, a placeholder pending
-  calibration in #92; invalid values fall back to the default, range 0 to 1)
+  `LORE_MEMORY_RECALL_MIN_SIMILARITY` (default `0.6`, calibrated on 61 labelled
+  pairs on 2026-10-14 — see `docs/research/2026-10-14-recall-floor-calibration.md`;
+  invalid values fall back to the default, range 0 to 1)
   take part.
 - `false`: keyword search only; the embedding model is never loaded.
 - `true`: rank by embedding similarity with no floor; falls back to keywords when
