@@ -26,6 +26,7 @@ from lore.utils.datetime import parse_duration
 from lore.utils.tooling import normalize_tool_name
 
 LOCAL_PROVIDERS = frozenset({"ollama"})
+PROVIDER_CHOICES = ("gemini", "ollama", "openrouter")
 _LOCAL_LLM_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 DEFAULT_SINCE_NO_SESSION = "30d"
 MCP_SUMMARIZE_PROVIDER = "ollama"
@@ -171,7 +172,13 @@ def build_mcp_summarize_provider():
 
 
 def default_model(provider: str) -> str:
-    return "gemini-2.0-flash" if provider == "gemini" else "llama3.2"
+    if provider == "gemini":
+        return "gemini-2.0-flash"
+    if provider == "openrouter":
+        from lore.llm.openrouter import DEFAULT_MODEL
+
+        return os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
+    return "llama3.2"
 
 
 def _estimate_totals(estimates: list[SessionEstimate]) -> dict[str, int]:

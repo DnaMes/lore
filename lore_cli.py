@@ -51,6 +51,7 @@ from lore.extractors.factory import get_all_extractors
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.services.discovery import read_last_discovery, record_discovery
 from lore.services.index import automated_hidden_line, filter_automated
+from lore.services.summarize_cli import PROVIDER_CHOICES, default_model
 from lore.utils.datetime import make_naive, parse_duration
 from lore.utils.git import get_git_info
 from lore.utils.paths import get_current_project, lore_home, make_thread_id
@@ -736,6 +737,22 @@ def cmd_reindex(args):
     print(f"SQLite: {output_dir / 'index.sqlite'}")
 
 
+def _cloud_optin_error(args) -> int | None:
+    """Exit code 2 when `openrouter` is chosen without --allow-cloud, else None.
+
+    Gemini stays the compat default for analyze/knowledge/format (it prints its provider
+    name instead); the newer hosted provider needs the explicit opt-in summarize uses.
+    """
+    if args.provider == "openrouter" and not getattr(args, "allow_cloud", False):
+        print(
+            "Error: provider 'openrouter' sends session text to the cloud. "
+            "Pass --allow-cloud to confirm.",
+            file=sys.stderr,
+        )
+        return 2
+    return None
+
+
 def cmd_analyze(args):
     """Generate AI-powered statistics and insights."""
     from lore.llm import LLMConfig, get_provider
@@ -760,11 +777,12 @@ def cmd_analyze(args):
 
     provider = None
     if not args.no_llm:
+        if (rc := _cloud_optin_error(args)) is not None:
+            return rc
         try:
             config = LLMConfig(
                 provider=args.provider,
-                model=args.model
-                or ("gemini-2.0-flash" if args.provider == "gemini" else "llama3.2"),
+                model=args.model or default_model(args.provider),
             )
             provider = get_provider(
                 provider=args.provider,
@@ -844,6 +862,8 @@ def cmd_improve(args):
 
 def cmd_knowledge(args):
     """Extract knowledge from sessions using LLM."""
+    if (rc := _cloud_optin_error(args)) is not None:
+        return rc
     from lore.llm import LLMConfig, get_provider
     from lore.llm.tasks import KnowledgeExtractor
     from lore.llm.tasks.knowledge import KnowledgeEntry
@@ -900,7 +920,7 @@ def cmd_knowledge(args):
     try:
         config = LLMConfig.for_transcripts(
             provider=args.provider,
-            model=args.model or ("gemini-2.0-flash" if args.provider == "gemini" else "llama3.2"),
+            model=args.model or default_model(args.provider),
         )
         provider = get_provider(
             provider=config.provider,
@@ -976,6 +996,8 @@ def cmd_knowledge(args):
 
 def cmd_format(args):
     """Format sessions with AI-generated summaries and tags."""
+    if (rc := _cloud_optin_error(args)) is not None:
+        return rc
     from lore.llm import LLMConfig, get_provider
     from lore.llm.tasks import SessionFormatter
 
@@ -1011,7 +1033,7 @@ def cmd_format(args):
     try:
         config = LLMConfig.for_transcripts(
             provider=args.provider,
-            model=args.model or ("gemini-2.0-flash" if args.provider == "gemini" else "llama3.2"),
+            model=args.model or default_model(args.provider),
         )
         provider = get_provider(
             provider=config.provider,
@@ -1967,11 +1989,16 @@ Examples:
     )
     analyze_parser.add_argument(
         "--provider",
-        choices=["gemini", "ollama"],
+        choices=PROVIDER_CHOICES,
         default="gemini",
         help="LLM provider to use (default: gemini)",
     )
-    analyze_parser.add_argument("--model", help="Model name (e.g., gemini-2.0-flash, llama3.2)")
+    analyze_parser.add_argument("--model", help="Model name (default depends on --provider)")
+    analyze_parser.add_argument(
+        "--allow-cloud",
+        action="store_true",
+        help="Allow the openrouter provider to receive session text",
+    )
     analyze_parser.add_argument(
         "--no-llm",
         action="store_true",
@@ -1989,11 +2016,16 @@ Examples:
     )
     knowledge_parser.add_argument(
         "--provider",
-        choices=["gemini", "ollama"],
+        choices=PROVIDER_CHOICES,
         default="gemini",
         help="LLM provider to use (default: gemini)",
     )
-    knowledge_parser.add_argument("--model", help="Model name (e.g., gemini-2.0-flash, llama3.2)")
+    knowledge_parser.add_argument("--model", help="Model name (default depends on --provider)")
+    knowledge_parser.add_argument(
+        "--allow-cloud",
+        action="store_true",
+        help="Allow the openrouter provider to receive session text",
+    )
     knowledge_parser.add_argument(
         "--limit",
         type=int,
@@ -2045,7 +2077,7 @@ Examples:
     )
     summarize_parser.add_argument(
         "--provider",
-        choices=["gemini", "ollama"],
+        choices=PROVIDER_CHOICES,
         default="ollama",
         help="LLM provider (default: ollama, local)",
     )
@@ -2099,11 +2131,16 @@ Examples:
     )
     format_parser.add_argument(
         "--provider",
-        choices=["gemini", "ollama"],
+        choices=PROVIDER_CHOICES,
         default="gemini",
         help="LLM provider to use (default: gemini)",
     )
-    format_parser.add_argument("--model", help="Model name (e.g., gemini-2.0-flash, llama3.2)")
+    format_parser.add_argument("--model", help="Model name (default depends on --provider)")
+    format_parser.add_argument(
+        "--allow-cloud",
+        action="store_true",
+        help="Allow the openrouter provider to receive session text",
+    )
     format_parser.add_argument("--session-id", help="Format specific session by ID")
     _add_automated_flag(format_parser)
     format_parser.add_argument("--tool", help="Format sessions from specific tool")

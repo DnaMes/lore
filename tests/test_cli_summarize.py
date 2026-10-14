@@ -165,6 +165,18 @@ def test_cloud_without_allow_cloud_exits_2(tmp_path: Path, use_provider):
     assert provider.prompts == []
 
 
+def test_openrouter_without_allow_cloud_exits_2(tmp_path: Path, use_provider):
+    store = tmp_path / "out"
+    _build_store(store, _rich_session())
+    provider = FakeProvider()
+    use_provider(provider)
+
+    rc = lore_cli.cmd_summarize(_args(store, provider="openrouter"))
+
+    assert rc == 2
+    assert provider.prompts == []
+
+
 def test_cloud_with_allow_cloud_runs(tmp_path: Path, use_provider):
     store = tmp_path / "out"
     secret_session = _rich_session()

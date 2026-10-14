@@ -162,6 +162,24 @@ gcloud auth application-default login
 lore analyze --provider ollama --model llama3.2
 ```
 
+### OpenRouter provider
+
+Cloud access to many models via [OpenRouter](https://openrouter.ai/). Set
+`OPENROUTER_API_KEY`. Optional overrides: `LORE_OPENROUTER_MODEL` (default
+`nvidia/nemotron-3-ultra-550b-a55b:free`), `LORE_OPENROUTER_BASE_URL` (default
+OpenRouter API v1).
+
+A faster free alternative is `nvidia/nemotron-3.5-lightning:free` — set
+`LORE_OPENROUTER_MODEL` or pass `--model` explicitly.
+
+**Privacy:** free OpenRouter endpoints may log prompts. Lore only sends archived
+transcript text to OpenRouter when you opt in with `--allow-cloud` (e.g. on
+`summarize`, `knowledge`, or `format`).
+
+```bash
+lore summarize --provider openrouter --allow-cloud
+```
+
 #### Method 2: OAuth2 (Google AI Pro Subscription)
 
 If you have a Google AI Pro subscription and OAuth tokens:

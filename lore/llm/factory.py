@@ -1,8 +1,10 @@
+import os
 from typing import Optional
 
 from .base import LLMConfig, LLMProvider
 from .gemini import GeminiProvider
 from .ollama import OllamaProvider
+from .openrouter import DEFAULT_MODEL, OpenRouterProvider
 
 
 def get_provider(
@@ -30,5 +32,15 @@ def get_provider(
         )
         return OllamaProvider(config)
 
+    elif provider == "openrouter":
+        default_model = os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
+        config = LLMConfig(
+            provider="openrouter",
+            model=model or default_model,
+            api_key=api_key,
+            **kwargs,
+        )
+        return OpenRouterProvider(config)
+
     else:
-        raise ValueError(f"Unknown provider: {provider}. Supported: gemini, ollama")
+        raise ValueError(f"Unknown provider: {provider}. Supported: gemini, ollama, openrouter")
