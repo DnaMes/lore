@@ -255,6 +255,8 @@ class LoadStats:
 class OpenCodeExtractor(BaseExtractor):
     """Extract chat history from OpenCode."""
 
+    PARSER_VERSION = 2
+
     # Sanity cap per tool output — only guards against pathological multi-MB dumps;
     # raised from 50k so normal tool results are kept in full, matching the claude
     # extractor's full-result behaviour (#54). When the cap does fire, the tool_call
@@ -399,7 +401,8 @@ class OpenCodeExtractor(BaseExtractor):
         return (
             "~/.local/share/opencode/storage/session/**/ses_*.json, "
             "~/.opencode/storage/session/**/ses_*.json, "
-            "~/.local/share/opencode/opencode.db and ~/.opencode/opencode.db (session table)"
+            "~/.local/share/opencode/opencode.db and ~/.opencode/opencode.db "
+            "(session / session_v2 and session_message tables)"
         )
 
     def extract_sessions(self) -> Iterator[UnifiedSession]:
@@ -482,6 +485,7 @@ class OpenCodeExtractor(BaseExtractor):
                     winners[pending.session_id] = pending
 
         # Pass 2: yield winners oldest-first, parsing one session at a time.
+        yielded_ids: set[str] = set()
         sqlite_conns: Dict[Path, sqlite3.Connection] = {}
         try:
             for pending in sorted(winners.values(), key=lambda p: p.created_at):
@@ -526,11 +530,23 @@ class OpenCodeExtractor(BaseExtractor):
                 if not self.force_full:
                     self._update_state_cache(pending.session_id, pending.updated_raw)
                 self.stats.sessions_loaded += 1
+                yielded_ids.add(pending.session_id)
                 yield session
         finally:
             for conn in sqlite_conns.values():
                 conn.close()
             self.session_path, self.message_path, self.part_path = original_paths
+
+        from .opencode_v2 import yield_opencode_v2_sessions
+
+        for db_path in self.sqlite_db_paths:
+            for session in yield_opencode_v2_sessions(self, db_path, yielded_ids):
+                if not self.force_full:
+                    updated_raw = int(session.last_updated.timestamp() * 1000)
+                    self._update_state_cache(session.session_id, updated_raw)
+                self.stats.sessions_loaded += 1
+                yielded_ids.add(session.session_id)
+                yield session
 
         if not self.force_full:
             # State updates happen during pass 2, so the cache is persisted

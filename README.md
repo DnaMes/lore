@@ -66,7 +66,7 @@ docker compose up -d
 | **Gemini CLI** | `~/.gemini/` | Set `GEMINI_PROJECT_ROOTS` for path resolution |
 | **Warp** | `~/.warp/` | AI session blocks from the Warp terminal |
 | **Codex** | `~/.codex/` | OpenAI Codex CLI sessions |
-| **OpenCode** | `~/.opencode/` | OpenCode agent sessions |
+| **OpenCode** | `~/.opencode/`, `opencode.db` | JSON storage plus SQLite `session` / `session_v2` (scratch copy) |
 | **Antigravity** | Varies | Experimental tool support |
 | **Aider** | `.aider.chat.history.md` per project | Markdown chat logs, discovered under your home dir |
 | **Pi** | `~/.pi/agent/sessions/` | JSONL v3 tree transcripts (also reads `~/.omp`, `~/.prime`) |
