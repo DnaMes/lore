@@ -91,9 +91,15 @@ from .web_formatting import (
     SANITIZE_ATTRS,
     SANITIZE_TAGS,
     SANITIZE_URL_SCHEMES,
+    format_compact_token_count,
     format_message_content,
+    format_session_duration,
+    format_session_row_time,
     format_tool_calls,
+    is_automated_origin,
     sanitize_rendered_html,
+    session_row_tokens,
+    should_show_prompt_outline,
 )
 from .web_helpers import (
     TOOL_STYLES,
@@ -498,6 +504,12 @@ def render(tpl_name, **kwargs):
     return env.get_template(f"{tpl_name}.html").render(
         get_style=get_style,
         project_label=project_label,
+        format_compact_token_count=format_compact_token_count,
+        format_session_duration=format_session_duration,
+        format_session_row_time=format_session_row_time,
+        is_automated_origin=is_automated_origin,
+        session_row_tokens=session_row_tokens,
+        should_show_prompt_outline=should_show_prompt_outline,
         recent=recent,
         provider_tools=list(TOOL_STYLES.keys()),
         request=request if has_request_context() else None,
