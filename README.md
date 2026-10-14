@@ -2,8 +2,6 @@
 
 Local-first **archive** and **shared memory** for AI coding sessions — extract, search, and export your work across Claude Code, Cursor, GitHub Copilot, Aider, OpenCode, and more.
 
-[![PyPI](https://img.shields.io/pypi/v/lore)](https://pypi.org/project/lore/)
-[![Python](https://img.shields.io/pypi/pyversions/lore)](https://pypi.org/project/lore/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Tests](https://github.com/DnaMes/lore/actions/workflows/tests.yml/badge.svg)](https://github.com/DnaMes/lore/actions/workflows/tests.yml)
 [![Security](https://github.com/DnaMes/lore/actions/workflows/security.yml/badge.svg)](https://github.com/DnaMes/lore/actions/workflows/security.yml)
@@ -23,7 +21,9 @@ The name carries both halves: *lore* is accumulated knowledge **and** history/ba
 ## Quickstart
 
 ```bash
-pip install lore
+git clone https://github.com/DnaMes/lore.git
+cd lore
+pip install -e .
 lore export --all   # index all sessions
 lore-web            # open browser at http://localhost:5000
 ```
@@ -102,11 +102,9 @@ On a session detail page, use **Find** (or press `/`) to search the full transcr
 
 ### Installation
 
-```bash
-# From PyPI (recommended)
-pip install lore
+Install from a clone:
 
-# Or from source
+```bash
 git clone https://github.com/DnaMes/lore.git
 cd lore
 pip install -e .
