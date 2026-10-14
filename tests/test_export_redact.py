@@ -272,3 +272,30 @@ def test_redact_session_redacts_exported_metadata_fields():
 
     assert _FAKE_OPENAI_KEY not in (redacted.project_path or "")
     assert session.project_path == f"/work/{_FAKE_OPENAI_KEY}/app"
+
+
+def test_structured_tool_data_is_redacted_by_field_name():
+    session = _secret_session("ses-redact-field")
+    session.messages[0].tool_calls = [
+        {"input": {"password": "hunter2!x", "user": "alice", "api_key": "plainvalue99"}}
+    ]
+    session.messages[0].tool_events = [{"name": "Bash", "token": "abc123def456"}]
+
+    redacted, count = redact_session(session)
+
+    dumped = json.dumps([redacted.messages[0].tool_calls, redacted.messages[0].tool_events])
+    assert "hunter2!x" not in dumped
+    assert "plainvalue99" not in dumped
+    assert "abc123def456" not in dumped
+    assert "alice" in dumped
+    assert count >= 3
+
+
+def test_list_values_inherit_the_secret_field_name():
+    session = _secret_session("ses-redact-list")
+    session.messages[0].tool_calls = [{"input": {"passwords": ["hunter2!x", "second-secret"]}}]
+    session.messages[0].tool_calls[0]["input"]["password"] = ["third-secret"]
+
+    redacted, _ = redact_session(session)
+
+    assert "third-secret" not in json.dumps(redacted.messages[0].tool_calls)

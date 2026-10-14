@@ -406,3 +406,13 @@ def test_non_string_inputs_never_raise():
 
     assert redact(Boom()).count == 0  # type: ignore[arg-type]
     assert redact(None).text == "None"  # type: ignore[arg-type]
+
+
+def test_redact_value_uses_the_field_name_as_context():
+    from lore.utils.redact import redact_value
+
+    assert redact_value("password", "hunter2!x").text == "[REDACTED:secret_assignment]"
+    assert redact_value("DB_PASSWORD", "x1y2z3w4").count == 1
+    assert redact_value("username", "alice").text == "alice"
+    assert redact_value("token", "${TOKEN}").count == 0
+    assert redact_value("note", "sk-" + "a" * 24).kinds == {"openai_key": 1}

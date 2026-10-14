@@ -8,7 +8,7 @@ from dataclasses import replace
 from typing import Any
 
 from ..core.models import UnifiedMessage, UnifiedSession
-from ..utils.redact import redact
+from ..utils.redact import redact, redact_value
 
 REDACTED_EXPORT_MARKER = ".redacted-export"
 _MAX_DEPTH = 5
@@ -18,9 +18,9 @@ _KEEP_FIELDS = frozenset(
 )
 
 
-def _redact_strings_in_obj(value: Any, depth: int = 0) -> tuple[Any, int]:
+def _redact_strings_in_obj(value: Any, depth: int = 0, key: Any = None) -> tuple[Any, int]:
     if isinstance(value, str):
-        result = redact(value)
+        result = redact_value(key, value) if key is not None else redact(value)
         return result.text, result.count
     if isinstance(value, (dict, list)) and depth >= _MAX_DEPTH:
         return "[REDACTED:too_deep]", 1  # fail closed instead of passing nested data through
@@ -28,7 +28,7 @@ def _redact_strings_in_obj(value: Any, depth: int = 0) -> tuple[Any, int]:
         total = 0
         out: dict[Any, Any] = {}
         for key, item in value.items():
-            new_item, count = _redact_strings_in_obj(item, depth + 1)
+            new_item, count = _redact_strings_in_obj(item, depth + 1, key)
             if isinstance(key, str):
                 key_result = redact(key)
                 key, count = key_result.text, count + key_result.count
@@ -39,7 +39,7 @@ def _redact_strings_in_obj(value: Any, depth: int = 0) -> tuple[Any, int]:
         total = 0
         out_list: list[Any] = []
         for item in value:
-            new_item, count = _redact_strings_in_obj(item, depth + 1)
+            new_item, count = _redact_strings_in_obj(item, depth + 1, key)
             out_list.append(new_item)
             total += count
         return out_list, total

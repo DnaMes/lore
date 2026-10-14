@@ -290,6 +290,21 @@ def redact(text: str) -> RedactionResult:
     return RedactionResult(current, sum(kinds.values()), kinds)
 
 
+_SECRET_KEY = re.compile(r"(?i)^" + _KEY_NAME + r"$")
+
+
+def redact_value(key: object, value: str) -> RedactionResult:
+    """Redact ``value`` of a structured field; the field name is context (``password`` etc.).
+
+    A string stored under a secret-like key is replaced as a whole unless it is a placeholder;
+    any other value goes through :func:`redact`.
+    """
+    if isinstance(key, str) and len(key) <= 120 and _SECRET_KEY.match(key):
+        if isinstance(value, str) and len(value) >= 4 and not _is_placeholder(value):
+            return RedactionResult(_marker("secret_assignment"), 1, {"secret_assignment": 1})
+    return redact(value)
+
+
 def redact_many(texts: Iterable[str]) -> tuple[list[str], int]:
     """Redact each string; return redacted texts and the total replacement count."""
     out: list[str] = []
