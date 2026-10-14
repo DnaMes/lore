@@ -60,8 +60,8 @@ def home(monkeypatch, tmp_path):
     return tmp_path
 
 
-def test_parser_version_is_two(home):
-    assert CodexExtractor.PARSER_VERSION == 2
+def test_parser_version_is_three(home):
+    assert CodexExtractor.PARSER_VERSION == 3
 
 
 def test_function_call_and_output_completed(home):

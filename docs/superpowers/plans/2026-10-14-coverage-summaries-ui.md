@@ -97,7 +97,7 @@ Map `session`, `message` (roles user/assistant/toolResult/system/bashExecution),
 
 ### B2.2b Codex origin and layout
 Subagent parent and `origin` from `session_meta.source`/`originator` (`exec` → exec), `archived_sessions/`, optional `.jsonl.zst` only if a zstd module imports, `state_5.sqlite` titles via a scratch copy.
-- [ ] done
+- [x] done
 
 ### B2.3 Antigravity from plaintext transcripts — dossier "Antigravity"
 Read `brain/<id>/.system_generated/logs/transcript_full.jsonl` (else `transcript.jsonl`) under `antigravity`, `antigravity-cli`, `antigravity-ide`; map `source` USER_EXPLICIT/MODEL/SYSTEM, `type`, `thinking`, `tool_calls`; titles and workspace from `conversation_summaries.db` (read-only). Do not decode `.pb`; keep the old `task.md` path as fallback.
