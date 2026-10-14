@@ -19,6 +19,7 @@
         </div>
         <div class="session-header-actions flex flex-wrap items-center gap-2 flex-shrink-0">
             <button type="button" id="promptOutlineTrigger" class="outline-sheet-trigger lg:hidden" aria-haspopup="dialog" aria-expanded="false" aria-controls="promptOutlineSheet">Prompts ▾</button>
+            <button type="button" id="sessionFindToggle" class="session-find-trigger" aria-expanded="false" aria-controls="sessionFindBar">Find</button>
             <button type="button" data-action="resume-session" data-session-id="{{ session.session_id }}" class="session-header-primary">Resume</button>
             <details class="header-menu">
                 <summary class="header-menu-trigger" aria-label="More session actions">⋯</summary>
@@ -41,6 +42,14 @@
             <a href="/thread/{{ session.thread_id|urlpath }}" class="pill bg-white border border-slate-200 text-slate-500 font-mono hover:text-slate-900 transition-colors">{{ session.thread_id[-10:] }}</a>
         </div>
         {% endif %}
+        <div id="sessionFindBar" class="session-find-bar" role="search" hidden>
+            <input type="search" id="sessionFindInput" class="session-find-input" autocomplete="off"
+                   aria-label="Find in this session" placeholder="Find in session…">
+            <button type="button" id="sessionFindPrev" class="session-find-nav" aria-label="Previous match">Prev</button>
+            <button type="button" id="sessionFindNext" class="session-find-nav" aria-label="Next match">Next</button>
+            <span id="sessionFindStatus" class="session-find-status" role="status" aria-live="polite"></span>
+            <button type="button" id="sessionFindClose" class="session-find-close" aria-label="Close find">×</button>
+        </div>
         <div id="session-tags" class="session-header-tags flex flex-wrap items-center gap-2 w-full" data-session-id="{{ session.session_id }}">
             <span id="tags-list" class="flex flex-wrap gap-2"></span>
             <button type="button" id="add-tag-btn" data-action="prompt-add-tag" class="text-[11px] text-slate-500 hover:text-slate-900 border border-dashed border-slate-300 px-2 py-1 rounded-lg transition-all bg-white">+ tag</button>
@@ -192,6 +201,250 @@
         } catch (err) {
             btn.disabled = false;
             btn.textContent = 'Load more messages (retry)';
+        }
+    });
+})();
+</script>
+
+<script nonce="{{ nonce }}">
+(function () {
+    const bar = document.getElementById('sessionFindBar');
+    const toggle = document.getElementById('sessionFindToggle');
+    const input = document.getElementById('sessionFindInput');
+    const prevBtn = document.getElementById('sessionFindPrev');
+    const nextBtn = document.getElementById('sessionFindNext');
+    const closeBtn = document.getElementById('sessionFindClose');
+    const statusEl = document.getElementById('sessionFindStatus');
+    const stream = document.getElementById('messageStream');
+    if (!bar || !toggle || !input || !stream) return;
+
+    const sessionId = stream.dataset.sessionId || '';
+    let debounceTimer = null;
+    let matches = [];
+    let currentIdx = -1;
+    let activeQuery = '';
+    let markNodes = [];
+
+    function thinkingShown() {
+        const mode = (document.body.dataset.thinking || 'fold').toLowerCase();
+        return mode === 'show';
+    }
+
+    function setStatus() {
+        if (!statusEl) return;
+        // The server caps the list: say so instead of presenting it as complete.
+        const more = (typeof truncatedHits !== 'undefined' && truncatedHits) ? '+ (first ' + matches.length + ')' : '';
+        if (!matches.length || currentIdx < 0) {
+            statusEl.textContent = matches.length ? '0 / ' + matches.length + more : '';
+            return;
+        }
+        statusEl.textContent = (currentIdx + 1) + ' / ' + matches.length + more;
+    }
+
+    function unwrapMarks() {
+        markNodes.forEach(function (mark) {
+            const parent = mark.parentNode;
+            if (!parent) return;
+            parent.replaceChild(document.createTextNode(mark.textContent || ''), mark);
+            parent.normalize();
+        });
+        markNodes = [];
+    }
+
+    function shouldSkipNode(node) {
+        let el = node.parentElement;
+        while (el) {
+            const tag = el.tagName;
+            if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'MARK') {
+                return true;
+            }
+            el = el.parentElement;
+        }
+        return false;
+    }
+
+    function applyFindHighlights(query) {
+        unwrapMarks();
+        if (!query) return;
+        const q = query;
+        const qLower = q.toLowerCase();
+        const roots = stream.querySelectorAll('.message-card .prose');
+        roots.forEach(function (root) {
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            const textNodes = [];
+            let n;
+            while ((n = walker.nextNode())) {
+                if (!shouldSkipNode(n)) textNodes.push(n);
+            }
+            textNodes.forEach(function (textNode) {
+                const text = textNode.nodeValue || '';
+                const lower = text.toLowerCase();
+                let start = 0;
+                let idx = lower.indexOf(qLower, start);
+                if (idx < 0) return;
+                const frag = document.createDocumentFragment();
+                while (idx >= 0) {
+                    if (idx > start) {
+                        frag.appendChild(document.createTextNode(text.slice(start, idx)));
+                    }
+                    const mark = document.createElement('mark');
+                    mark.className = 'find-hit';
+                    mark.appendChild(document.createTextNode(text.slice(idx, idx + q.length)));
+                    frag.appendChild(mark);
+                    markNodes.push(mark);
+                    start = idx + q.length;
+                    idx = lower.indexOf(qLower, start);
+                }
+                if (start < text.length) {
+                    frag.appendChild(document.createTextNode(text.slice(start)));
+                }
+                textNode.parentNode.replaceChild(frag, textNode);
+            });
+        });
+    }
+
+    function clearFindHighlights() {
+        unwrapMarks();
+        document.querySelectorAll('.find-hit-current').forEach(function (el) {
+            el.classList.remove('find-hit-current');
+        });
+    }
+
+    function setCurrentMark() {
+        document.querySelectorAll('.find-hit-current').forEach(function (el) {
+            el.classList.remove('find-hit-current');
+        });
+        if (currentIdx < 0 || !markNodes.length) return;
+        const target = markNodes[currentIdx];
+        if (target) {
+            target.classList.add('find-hit-current');
+            target.scrollIntoView({ block: 'center' });
+        }
+    }
+
+    async function ensureMatchVisible(match) {
+        const anchorId = 'msg-' + match.index;
+        if (typeof window.loreJumpToMessage === 'function') {
+            await window.loreJumpToMessage(anchorId);
+            return;
+        }
+        const el = document.getElementById(anchorId);
+        if (el) el.scrollIntoView({ block: 'start' });
+    }
+
+    async function goToMatch(idx) {
+        if (!matches.length) return;
+        currentIdx = ((idx % matches.length) + matches.length) % matches.length;
+        const match = matches[currentIdx];
+        await ensureMatchVisible(match);
+        applyFindHighlights(activeQuery);
+        setCurrentMark();
+        setStatus();
+    }
+
+    let requestSeq = 0;  // only the newest request may apply its response
+    let truncatedHits = false;
+
+    async function fetchMatches() {
+        const q = (input.value || '').trim();
+        const mySeq = ++requestSeq;
+        truncatedHits = false;
+        activeQuery = q;
+        matches = [];
+        currentIdx = -1;
+        clearFindHighlights();
+        if (q.length < 2) {
+            setStatus();
+            return;
+        }
+        const params = new URLSearchParams({ q: q });
+        if (thinkingShown()) params.set('include_reasoning', '1');
+        const live = new URLSearchParams(window.location.search).get('live');
+        if (live) params.set('live', live);
+        try {
+            const resp = await fetch(
+                '/api/session/' + encodeURIComponent(sessionId) + '/find?' + params.toString(),
+                { credentials: 'same-origin' }
+            );
+            if (!resp.ok) return;
+            const payload = await resp.json();
+            if (mySeq !== requestSeq || bar.hasAttribute('hidden')) return;  // stale or closed
+            matches = payload.matches || [];
+            truncatedHits = !!payload.truncated;
+            if (matches.length) await goToMatch(0);
+            else setStatus();
+            applyFindHighlights(activeQuery);
+            if (matches.length) setCurrentMark();
+        } catch (_) { /* non-critical */ }
+    }
+
+    function scheduleFetch() {
+        if (debounceTimer) window.clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(fetchMatches, 250);
+    }
+
+    function openBar() {
+        bar.removeAttribute('hidden');
+        toggle.setAttribute('aria-expanded', 'true');
+        input.focus();
+    }
+
+    function closeBar() {
+        requestSeq += 1;  // invalidate in-flight requests
+        bar.setAttribute('hidden', '');
+        toggle.setAttribute('aria-expanded', 'false');
+        input.value = '';
+        activeQuery = '';
+        matches = [];
+        currentIdx = -1;
+        clearFindHighlights();
+        setStatus();
+    }
+
+    toggle.addEventListener('click', function () {
+        if (bar.hasAttribute('hidden')) openBar();
+        else closeBar();
+    });
+    closeBtn.addEventListener('click', closeBar);
+    input.addEventListener('input', scheduleFetch);
+    prevBtn.addEventListener('click', function () { goToMatch(currentIdx - 1); });
+    nextBtn.addEventListener('click', function () { goToMatch(currentIdx + 1); });
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (e.shiftKey) goToMatch(currentIdx - 1);
+            else goToMatch(currentIdx + 1);
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            closeBar();
+        }
+    });
+    window.addEventListener('lore:messages-appended', function () {
+        if (activeQuery) {
+            applyFindHighlights(activeQuery);
+            setCurrentMark();
+        }
+    });
+    document.addEventListener('keydown', function (e) {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
+        const t = e.target;
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) {
+            return;
+        }
+        if (e.key === '/' && !bar.hasAttribute('hidden')) {
+            e.preventDefault();
+            input.focus();
+            return;
+        }
+        if (e.key === '/' && bar.hasAttribute('hidden')) {
+            e.preventDefault();
+            openBar();
+            return;
+        }
+        if (e.key === 'Escape' && !bar.hasAttribute('hidden')) {
+            e.preventDefault();
+            closeBar();
         }
     });
 })();
