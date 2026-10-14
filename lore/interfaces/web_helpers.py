@@ -15,6 +15,7 @@ TOOL_STYLES = {
     "aider": {"color": "#14B8A6", "icon": "Ai", "name": "Aider"},
     "pi": {"color": "#EC4899", "icon": "Pi", "name": "Pi"},
     "command-code": {"color": "#6366F1", "icon": "Cc", "name": "Command Code"},
+    "hermes": {"color": "#14B8A6", "icon": "He", "name": "Hermes"},
 }
 
 

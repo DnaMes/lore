@@ -9,6 +9,7 @@ from .commandcode import CommandCodeExtractor
 from .copilot import CopilotCLIExtractor
 from .cursor import CursorExtractor
 from .gemini import GeminiCLIExtractor
+from .hermes import HermesExtractor
 from .opencode import OpenCodeExtractor
 from .pi import PiExtractor
 from .vscode import VSCodeCopilotExtractor
@@ -29,4 +30,5 @@ def get_all_extractors() -> List[BaseExtractor]:
         AiderExtractor(),
         PiExtractor(),
         CommandCodeExtractor(),
+        HermesExtractor(),
     ]

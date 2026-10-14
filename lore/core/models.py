@@ -85,6 +85,7 @@ class Tool(Enum):
     AIDER = "aider"
     PI = "pi"
     COMMAND_CODE = "command-code"
+    HERMES = "hermes"
 
 
 class Role(Enum):
@@ -144,6 +145,8 @@ class UnifiedSession:
     git_branch: Optional[str] = None
     git_commit: Optional[str] = None
     source_path: Optional[str] = None
+    # When set, used instead of ``stat(source_path)`` for incremental reuse (SQLite rows).
+    source_mtime_ns: Optional[int] = None
     generated_title: Optional[str] = None
     title_source: Optional[TitleSource] = None
     todos: List[Dict[str, Any]] = field(default_factory=list)

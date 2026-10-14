@@ -13,6 +13,7 @@ CANONICAL_TOOLS = {
     "aider",
     "pi",
     "command-code",
+    "hermes",
 }
 
 
@@ -36,6 +37,8 @@ TOOL_ALIASES = {
     "command-code": "command-code",
     "commandcode": "command-code",
     "cmd": "command-code",
+    "hermes": "hermes",
+    "hermes-agent": "hermes",
 }
 
 

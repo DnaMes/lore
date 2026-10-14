@@ -221,6 +221,7 @@ def validate_tool_name(tool: str) -> bool:
         "aider",
         "pi",
         "command-code",
+        "hermes",
     ]
     return tool in valid_tools
 

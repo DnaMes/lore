@@ -19,6 +19,7 @@ from lore.extractors.commandcode import CommandCodeExtractor
 from lore.extractors.copilot import CopilotCLIExtractor
 from lore.extractors.cursor import CursorExtractor
 from lore.extractors.gemini import GeminiCLIExtractor
+from lore.extractors.hermes import HermesExtractor
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.extractors.pi import PiExtractor
 from lore.extractors.vscode import VSCodeCopilotExtractor
@@ -37,6 +38,7 @@ ALL_EXTRACTOR_CLASSES = [
     CopilotCLIExtractor,
     CursorExtractor,
     GeminiCLIExtractor,
+    HermesExtractor,
     OpenCodeExtractor,
     PiExtractor,
     VSCodeCopilotExtractor,

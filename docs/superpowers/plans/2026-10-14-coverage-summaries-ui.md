@@ -109,7 +109,7 @@ Read `brain/<id>/.system_generated/logs/transcript_full.jsonl` (else `transcript
 
 ### B2.5 Hermes — dossier "Hermes"
 `~/.hermes/profiles/*/state.db` and `~/.hermes/state.db`: sessions + messages, skip `active=0`, `parent_session_id` relation, per-model usage, `origin` from `source`; work on a scratch copy of the database and its WAL/SHM files; a per-session fingerprint derived from `last_activity_at` is stored in the existing `source_mtime_ns` field, so the base contract does not change. Invariant, with a test: the value changes whenever the session's content changes, and nothing but equality is ever done with it for this source.
-- [ ] done
+- [x] done
 
 ### B2.6 Claude Code enrichment — dossier "Claude Code"
 Thinking blocks, `message.model`, `ai-title`/`custom-title`, `isMeta`, `isCompactSummary` (kind `compaction_summary`), `system.compact_boundary`, `cost-state`, `isSidechain` + `agentId` relation, `tool-results/` sidecars when referenced.

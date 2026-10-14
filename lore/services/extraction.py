@@ -276,7 +276,11 @@ def build_search_index(
                         prior = existing_by_id.get(session.session_id)
                         if prior is not None:
                             prior_mtime = prior.get("source_mtime")
-                            current_mtime = _stat_mtime_ns(session.source_path)
+                            current_mtime = (
+                                session.source_mtime_ns
+                                if session.source_mtime_ns is not None
+                                else _stat_mtime_ns(session.source_path)
+                            )
                             if (
                                 prior_mtime is not None
                                 and current_mtime is not None

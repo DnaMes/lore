@@ -161,7 +161,9 @@ def _write_contract_columns(conn: sqlite3.Connection, session: UnifiedSession) -
     _store_contract_columns(conn, session.session_id, values)
 
 
-def _source_mtime_ns(source_path: Optional[str]) -> Optional[int]:
+def _source_mtime_ns(source_path: Optional[str], override: Optional[int] = None) -> Optional[int]:
+    if override is not None:
+        return override
     if not source_path:
         return None
     try:
@@ -365,7 +367,7 @@ def _write_full_session(
     path) and :class:`StreamingV2Writer` (streaming path) so both produce
     identical rows.
     """
-    source_mtime_ns = _source_mtime_ns(session.source_path)
+    source_mtime_ns = _source_mtime_ns(session.source_path, session.source_mtime_ns)
     conn.execute("DELETE FROM messages WHERE session_id = ?", (session.session_id,))
     conn.execute(
         "DELETE FROM search_index WHERE entity_type = 'session' AND entity_id = ?",
@@ -451,7 +453,7 @@ def _write_reused_full_session(
         return False, _write_full_session(conn, session, title, session_extras)
     stored_parser_version = int(row[1] or 0)
 
-    source_mtime_ns = _source_mtime_ns(session.source_path)
+    source_mtime_ns = _source_mtime_ns(session.source_path, session.source_mtime_ns)
     values = (
         session.session_id,
         session.tool.value,

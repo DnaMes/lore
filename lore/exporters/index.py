@@ -582,7 +582,11 @@ class _MultiWriter:
                 "git_branch": getattr(session, "git_branch", None),
                 "git_commit": getattr(session, "git_commit", None),
                 "source_path": session.source_path,
-                "source_mtime": _stat_mtime_ns(session.source_path),
+                "source_mtime": (
+                    session.source_mtime_ns
+                    if session.source_mtime_ns is not None
+                    else _stat_mtime_ns(session.source_path)
+                ),
                 "keywords": keywords,
                 "search_text": search_text,
                 "origin": session.origin,
