@@ -136,7 +136,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 **Files:** `lore/utils/redact.py`, `tests/test_redact.py`.
 **Interfaces:** `redact(text: str) -> RedactionResult` with `text: str`, `count: int`, `kinds: dict[str, int]`; patterns documented in the module docstring; idempotent; never raises; long input handled in linear time.
 **Done when:** fixtures with fake keys of each kind are replaced by `[REDACTED:<kind>]`; ordinary code, hashes shorter than 40 chars and UUIDs are not touched; a property-style test confirms `redact(redact(x)) == redact(x)`.
-- [ ] done
+- [x] done
 
 ### B3.2 Provider hardening **[R]**
 **Files:** `lore/llm/gemini.py`, `lore/llm/ollama.py`, `lore/llm/base.py`, `tests/test_llm_provider_privacy.py`.
