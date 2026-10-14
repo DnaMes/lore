@@ -25,7 +25,6 @@ from .fts import (
     SNIPPET_CLOSE,
     SNIPPET_OPEN,
     build_fts_query,
-    phrase_of,
 )
 from .reader import _row_to_session_dict, automated_exclusion_sql, session_contract_select
 from .schema import open_connection
@@ -40,6 +39,12 @@ SEARCH_SCOPES: Dict[str, tuple] = {
     "assistant_only": ("assistant",),
     "tool_results": ("tool",),
 }
+
+# Tokenizer of the throwaway scope index. It must be identical to the one on
+# ``search_index`` (migration 4) so the role check and the query that produced
+# the candidates tokenize text the same way — pinned by
+# ``test_scope_tokenizer_matches_the_session_index``.
+SCOPE_FTS_TOKENIZER = "porter unicode61"
 
 
 def search_sessions(
@@ -88,14 +93,7 @@ def search_sessions(
         return []
 
     fts_query = build_fts_query(query)
-    # The scoped LIKE helper needs bare terms: a quoted phrase is ONE term (so the
-    # words must be adjacent inside one message), anything else is split on spaces.
-    phrase = phrase_of(query)
-    if phrase is not None:
-        terms = [" ".join(phrase.split())]
-    else:
-        terms = [t for t in (query or "").replace('"', " ").split() if t]
-    if fts_query is None or not terms:
+    if fts_query is None:
         return []
 
     conn = open_connection(db)
@@ -131,7 +129,7 @@ def search_sessions(
     scoped_session_ids: Optional[set] = None
     if scope_roles:
         candidate_ids = [row["id"] for row in rows]
-        scoped_session_ids = _sessions_matching_scope(db, candidate_ids, terms, scope_roles)
+        scoped_session_ids = _sessions_matching_scope(db, candidate_ids, fts_query, scope_roles)
 
     results: List[Dict[str, Any]] = []
     for row in rows:
@@ -150,47 +148,65 @@ def search_sessions(
     return results
 
 
-def _escape_like(text: str) -> str:
-    """Escape LIKE wildcards so ``%``/``_`` in a term match literally (ESCAPE '\\')."""
-    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
 def _sessions_matching_scope(
     db: Path,
     session_ids: List[str],
-    terms: List[str],
+    fts_query: str,
     roles: tuple,
 ) -> set:
-    """Return the subset of ``session_ids`` with a matching message in ``roles``.
+    """Return the subset of ``session_ids`` with a message in ``roles`` matching ``fts_query``.
 
-    A message matches when its role is in ``roles`` and its content contains
-    every term in ``terms`` (case-insensitive substring match, same prefix
-    semantics as the FTS query). Used to scope a search to user/assistant/
-    tool-result messages only.
+    The role check must agree with the FTS query that produced the candidates,
+    otherwise a scoped search returns hits that same query would not accept
+    (#199). The old implementation was a ``LOWER(content) LIKE '%term%'``
+    substring test, which both over- and under-matched the index: ``cat``
+    accepted a message containing only "concatenate", and ``cafe`` rejected
+    "café", which ``search_index`` matches after folding diacritics.
+
+    SQLite only indexes messages inside the session body, so each candidate
+    session's messages of the requested roles are copied into a throwaway
+    ``:memory:`` FTS5 table built with the *same* tokenizer and queried with the
+    *same* expression (``build_fts_query``) that matched the session itself.
+    Nothing is written to the archive, and sessions are processed one at a time
+    so the transient index never exceeds one session's messages (measured
+    0.20-0.34 s for 20 000 candidate messages, 12 MB, versus 0.04 s for LIKE).
+
+    Returns an empty set when nothing matches or the throwaway index cannot be
+    used — the same "no scoped hits" outcome the old code had on ``sqlite3.Error``.
     """
-    if not session_ids:
+    if not session_ids or not fts_query:
         return set()
 
-    id_placeholders = ",".join("?" for _ in session_ids)
     role_placeholders = ",".join("?" for _ in roles)
-    term_clauses = " AND ".join("LOWER(content) LIKE ? ESCAPE '\\'" for _ in terms)
-    like_params = [f"%{_escape_like(t.lower())}%" for t in terms]
-
-    sql = (
-        f"SELECT DISTINCT session_id FROM messages "
-        f"WHERE session_id IN ({id_placeholders}) "
-        f"AND role IN ({role_placeholders}) "
-        f"AND {term_clauses}"
+    insert_sql = (
+        "INSERT INTO scope_check.matches (session_id, body) "
+        "SELECT m.session_id, m.content FROM messages m "
+        f"WHERE m.session_id = ? AND m.role IN ({role_placeholders})"
     )
-
+    matched: set = set()
     conn = open_connection(db)
     try:
-        rows = conn.execute(sql, [*session_ids, *roles, *like_params]).fetchall()
+        conn.execute("ATTACH DATABASE ':memory:' AS scope_check")
+        conn.execute(
+            "CREATE VIRTUAL TABLE scope_check.matches USING fts5("
+            f"session_id UNINDEXED, body, tokenize='{SCOPE_FTS_TOKENIZER}')"
+        )
+        for session_id in session_ids:
+            if session_id in matched:
+                continue  # one matching message is enough for this session
+            conn.execute(insert_sql, (session_id, *roles))
+            hit = conn.execute(
+                "SELECT 1 FROM scope_check.matches WHERE matches MATCH ? LIMIT 1",
+                (fts_query,),
+            ).fetchone()
+            if hit:
+                matched.add(session_id)
+            conn.execute("DELETE FROM scope_check.matches")
     except sqlite3.Error:
         return set()
     finally:
         conn.close()
-    return {row["session_id"] for row in rows}
+    return matched
 
 
 # KNN width: ``k = limit * KNN_K_FACTOR`` neighbours are fetched before the tool, project

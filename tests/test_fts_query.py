@@ -165,18 +165,31 @@ def test_scoped_phrase_requires_adjacency_inside_one_role_message(tmp_path):
     assert _ids(results) == {"user-has-it"}
 
 
-def test_scoped_like_wildcards_match_literally(tmp_path):
+def test_scoped_wildcard_characters_match_literally(tmp_path):
+    """``%`` is a word separator for FTS, never a LIKE wildcard (#199).
+
+    The role check runs the FTS engine now, so ``50%`` and ``50`` are the same
+    query: both match the messages holding the token ``50`` and neither matches
+    a message without it. What must never happen — a ``%`` matching unrelated
+    text — is pinned by ``unrelated`` staying out, and the scoped result must be
+    identical to the unscoped FTS result for role-matching content (the old
+    ``LIKE '%50\\%%'`` check dropped ``fifty-bucks``, which the query itself had
+    matched).
+    """
     IndexBuilder(tmp_path).build_index(
         [
             _chat("literal", (Role.USER, "a 50% discount today")),
-            _chat("wildcard-victim", (Role.USER, "50 bucks only")),
+            _chat("fifty-bucks", (Role.USER, "50 bucks only")),
+            _chat("unrelated", (Role.USER, "discount only")),
         ],
         {},
     )
 
-    results = search_sessions(tmp_path, "50%", scope="user_only")
-
-    assert _ids(results) == {"literal"}
+    scoped = _ids(search_sessions(tmp_path, "50%", scope="user_only"))
+    assert scoped == {"literal", "fifty-bucks"}
+    assert _ids(search_sessions(tmp_path, "50", scope="user_only")) == scoped
+    assert scoped == _ids(search_sessions(tmp_path, "50%"))
+    assert "unrelated" not in scoped
 
 
 def test_nul_in_query_is_neutralised(tmp_path):
