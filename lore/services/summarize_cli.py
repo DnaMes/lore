@@ -26,7 +26,7 @@ from lore.utils.datetime import parse_duration
 from lore.utils.tooling import normalize_tool_name
 
 LOCAL_PROVIDERS = frozenset({"ollama"})
-PROVIDER_CHOICES = ("gemini", "ollama", "openrouter")
+PROVIDER_CHOICES = ("gemini", "jev", "ollama", "openrouter")
 _LOCAL_LLM_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 DEFAULT_SINCE_NO_SESSION = "30d"
 MCP_SUMMARIZE_PROVIDER = "ollama"
@@ -178,6 +178,10 @@ def default_model(provider: str) -> str:
         from lore.llm.openrouter import DEFAULT_MODEL
 
         return os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
+    if provider == "jev":
+        from lore.llm.jev import DEFAULT_MODEL_LABEL
+
+        return DEFAULT_MODEL_LABEL
     return "llama3.2"
 
 

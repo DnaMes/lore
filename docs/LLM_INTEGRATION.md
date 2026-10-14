@@ -167,7 +167,8 @@ lore analyze --provider ollama --model llama3.2
 Cloud access to many models via [OpenRouter](https://openrouter.ai/). Set
 `OPENROUTER_API_KEY`. Optional overrides: `LORE_OPENROUTER_MODEL` (default
 `nvidia/nemotron-3-ultra-550b-a55b:free`), `LORE_OPENROUTER_BASE_URL` (default
-OpenRouter API v1).
+OpenRouter API v1). Custom base URLs must use `https://`; plain `http://` is
+accepted only for loopback hosts (local OpenAI-compatible servers).
 
 A faster free alternative is `nvidia/nemotron-3.5-lightning:free` — set
 `LORE_OPENROUTER_MODEL` or pass `--model` explicitly.
@@ -298,3 +299,27 @@ Cached non-transcript responses help:
 - Use `gemini-2.0-flash` (fast and cheap)
 - Cache is enabled by default
 - Limit sessions with `--limit` flag
+
+## Jev provider
+
+The **jev** provider sends prompts to the ai-stack **delegate** broker using only
+text-only lanes (`local`, `fastcheap`). Agentic lanes (`auto`, `bulk`, `explore`, …)
+are never used, because session transcripts are untrusted input.
+
+### Requirements
+
+- `delegate` on `PATH` (ai-stack harness)
+- For transcript-bearing commands (`lore summarize`, `lore knowledge`, …), pass
+  `--allow-cloud` (jev is classified as cloud for locality policy)
+- Optional: `LORE_JEV_LANES` — comma-separated lane order (default `local,fastcheap`)
+
+### Example
+
+```bash
+lore summarize --provider jev --allow-cloud --dry-run
+lore analyze --provider jev --allow-cloud --limit 5
+```
+
+System prompts are prefixed to stdin (`system`, blank line, user prompt). The broker
+timeout follows `DELEGATE_TIMEOUT_SECONDS` (default 300s) inside `delegate`; Lore’s
+`LLMConfig.timeout` wraps each lane attempt.

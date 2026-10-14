@@ -738,14 +738,14 @@ def cmd_reindex(args):
 
 
 def _cloud_optin_error(args) -> int | None:
-    """Exit code 2 when `openrouter` is chosen without --allow-cloud, else None.
+    """Exit code 2 when a cloud opt-in provider is chosen without --allow-cloud, else None.
 
     Gemini stays the compat default for analyze/knowledge/format (it prints its provider
-    name instead); the newer hosted provider needs the explicit opt-in summarize uses.
+    name instead); newer hosted providers need the explicit opt-in summarize uses.
     """
-    if args.provider == "openrouter" and not getattr(args, "allow_cloud", False):
+    if args.provider in ("openrouter", "jev") and not getattr(args, "allow_cloud", False):
         print(
-            "Error: provider 'openrouter' sends session text to the cloud. "
+            f"Error: provider '{args.provider}' sends session text to the cloud. "
             "Pass --allow-cloud to confirm.",
             file=sys.stderr,
         )

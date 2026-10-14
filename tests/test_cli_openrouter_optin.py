@@ -1,4 +1,4 @@
-"""openrouter needs --allow-cloud on analyze/knowledge/format, like summarize."""
+"""openrouter and jev need --allow-cloud on analyze/knowledge/format, like summarize."""
 
 from __future__ import annotations
 
@@ -29,13 +29,18 @@ def _args(tmp_path: Path, **overrides) -> Namespace:
 
 
 @pytest.mark.parametrize("command", ["cmd_analyze", "cmd_knowledge", "cmd_format"])
-def test_openrouter_without_allow_cloud_exits_2(command: str, tmp_path: Path, capsys) -> None:
+@pytest.mark.parametrize("provider", ["openrouter", "jev"])
+def test_cloud_optin_provider_without_allow_cloud_exits_2(
+    command: str, provider: str, tmp_path: Path, capsys
+) -> None:
     (tmp_path / "index.json").write_text(json.dumps({"sessions": []}))
 
-    rc = getattr(lore_cli, command)(_args(tmp_path))
+    rc = getattr(lore_cli, command)(_args(tmp_path, provider=provider))
 
     assert rc == 2
-    assert "--allow-cloud" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "--allow-cloud" in err
+    assert provider in err
 
 
 def test_gemini_and_explicit_opt_in_pass(tmp_path: Path) -> None:

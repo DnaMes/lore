@@ -3,6 +3,7 @@ from typing import Optional
 
 from .base import LLMConfig, LLMProvider
 from .gemini import GeminiProvider
+from .jev import DEFAULT_MODEL_LABEL, JevProvider
 from .ollama import OllamaProvider
 from .openrouter import DEFAULT_MODEL, OpenRouterProvider
 
@@ -42,5 +43,15 @@ def get_provider(
         )
         return OpenRouterProvider(config)
 
+    elif provider == "jev":
+        config = LLMConfig(
+            provider="jev",
+            model=model or DEFAULT_MODEL_LABEL,
+            **kwargs,
+        )
+        return JevProvider(config)
+
     else:
-        raise ValueError(f"Unknown provider: {provider}. Supported: gemini, ollama, openrouter")
+        raise ValueError(
+            f"Unknown provider: {provider}. Supported: gemini, jev, ollama, openrouter"
+        )
