@@ -206,10 +206,10 @@ Find across all pages with highlight and n/N.
 - [x] done
 
 ### B5.7b Peek pane (≥1280 px)
-- [ ] done
+- [x] done
 
 ### B5.7c Keyboard shortcuts (`j k e c / ?`)
-- [ ] done
+- [x] done
 
 ## Block B6 — remaining #197
 

@@ -220,6 +220,61 @@
         .session-list .session-row:hover { background: color-mix(in srgb, var(--card) 93%, var(--primary, #2563eb) 7%); transform: none; box-shadow: none; }
         .session-list .row-menu-trigger { border-color: transparent; background: transparent; width: 28px; height: 28px; }
         .session-list .row-menu-trigger:hover, .row-menu[open] .row-menu-trigger { border-color: var(--border); background: var(--card); }
+        .sessions-page-layout { display: block; }
+        .session-peek-pane { display: none; }
+        .peek-live-title {
+            position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+            overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+        }
+        .peek-hide-btn {
+            font-size: 11px; color: var(--muted); border: 0; background: transparent;
+            cursor: pointer; padding: 0 0 8px; text-decoration: underline;
+        }
+        .peek-hide-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .peek-placeholder { font-size: 13px; color: var(--muted); margin: 0; }
+        .peek-meta { font-size: 11px; color: var(--muted); margin: 0 0 6px; }
+        .peek-title { font-size: 15px; font-weight: 650; margin: 0 0 10px; line-height: 1.3; }
+        .peek-summary-oneliner { font-size: 13px; margin: 0 0 12px; }
+        .peek-pane-inner { display: block; }
+        .session-peek-body { display: block; }
+        .peek-glance { display: block; }
+        .peek-glance-stats { margin: 0; padding-left: 18px; font-size: 13px; }
+        .peek-summary-star { margin-right: 4px; }
+        .peek-glance-prompt { font-size: 13px; margin: 0 0 8px; color: var(--text); }
+        .peek-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        .peek-open-link {
+            font-size: 12px; font-weight: 600; color: var(--primary); text-decoration: none;
+            border: 1px solid var(--border); border-radius: 10px; padding: 6px 12px;
+        }
+        .peek-resume-btn {
+            font-size: 12px; border: 1px solid var(--border); border-radius: 10px;
+            padding: 6px 12px; background: var(--card); color: var(--text); cursor: pointer;
+        }
+        .shortcuts-help-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 8px 0 12px; }
+        .shortcuts-help-table td { padding: 4px 8px 4px 0; vertical-align: top; }
+        .shortcuts-help-table td:first-child { font-family: "Source Code Pro", "SF Mono", Menlo, monospace; white-space: nowrap; color: var(--muted); }
+        @media (min-width: 1280px) {
+            .sessions-page-layout {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) min(340px, 32vw);
+                gap: 16px;
+                align-items: start;
+            }
+            .sessions-list-column { max-width: none; width: 100%; }
+            .session-peek-pane {
+                display: block;
+                position: sticky;
+                top: 12px;
+                align-self: start;
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                background: var(--card);
+                padding: 14px;
+                max-height: calc(100vh - 24px);
+                overflow-y: auto;
+            }
+            body.session-peek-off .session-peek-pane { display: none; }
+        }
         .day-header {
             position: sticky;
             top: 0;
@@ -1485,6 +1540,34 @@
             </div>
         </main>
     </div>
+    <div id="shortcutsHelpDialog" class="bottom-sheet-host confirm-sheet-host" role="dialog" aria-modal="true" aria-labelledby="shortcutsHelpTitle" hidden>
+        <button type="button" class="bottom-sheet-backdrop" data-shortcuts-dismiss aria-label="Close shortcuts help" tabindex="-1"></button>
+        <div class="bottom-sheet-panel confirm-sheet-panel">
+            <h2 id="shortcutsHelpTitle" class="confirm-sheet-title">Keyboard shortcuts</h2>
+            <table class="shortcuts-help-table">
+                <tbody data-shortcuts-list hidden>
+                    <tr><td>j / k</td><td>Move focus between sessions</td></tr>
+                    <tr><td>Enter</td><td>Open focused session</td></tr>
+                    <tr><td>/</td><td>Focus tool filter (desktop)</td></tr>
+                    <tr><td>x</td><td>Toggle selection (select mode)</td></tr>
+                    <tr><td>?</td><td>Show this help</td></tr>
+                </tbody>
+                <tbody data-shortcuts-detail hidden>
+                    <tr><td>j / k</td><td>Jump to next / previous prompt</td></tr>
+                    <tr><td>e / c</td><td>Expand / collapse all tool groups</td></tr>
+                    <tr><td>/</td><td>Find in session</td></tr>
+                    <tr><td>?</td><td>Show this help</td></tr>
+                </tbody>
+            </table>
+            <label class="confirm-sheet-label" for="shortcutsDisableToggle">
+                <input type="checkbox" id="shortcutsDisableToggle"> Disable shortcuts
+            </label>
+            <div class="confirm-sheet-actions">
+                <button type="button" class="bulk-bar-btn" data-shortcuts-dismiss>Close</button>
+            </div>
+        </div>
+    </div>
+
     <div id="confirmDialog" class="bottom-sheet-host confirm-sheet-host" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" hidden>
         <button type="button" class="bottom-sheet-backdrop" data-confirm-dismiss aria-label="Cancel" tabindex="-1"></button>
         <div class="bottom-sheet-panel confirm-sheet-panel">
@@ -1695,6 +1778,122 @@
 
             return { activate: activate };
         })();
+
+        const LORE_KEYS_STORAGE = 'lore.keys.v1';
+        const LORE_PEEK_STORAGE = 'lore.peek.v1';
+        function loreNormalizeOnOff(raw) {
+            return raw === 'off' ? 'off' : 'on';
+        }
+        function loreKeysEnabled() {
+            try {
+                return loreNormalizeOnOff(localStorage.getItem(LORE_KEYS_STORAGE)) !== 'off';
+            } catch (_) {
+                return true;
+            }
+        }
+        window.loreKeysEnabled = loreKeysEnabled;
+        window.loreKeyGuard = function loreKeyGuard(e) {
+            if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return true;
+            const t = e.target;
+            if (!t || !t.tagName) return false;
+            const tag = t.tagName.toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+            if (t.isContentEditable) return true;
+            if (e.key !== 'Escape' && document.querySelector('[aria-modal="true"].is-open')) return true;
+            return false;
+        };
+
+        let shortcutsTrapRelease = null;
+        function syncShortcutsHelpRows() {
+            const page = document.body.dataset.shortcutsPage || '';
+            const listRows = document.querySelector('[data-shortcuts-list]');
+            const detailRows = document.querySelector('[data-shortcuts-detail]');
+            if (listRows) listRows.hidden = page !== 'list';
+            if (detailRows) detailRows.hidden = page !== 'detail';
+        }
+        function closeShortcutsHelp() {
+            const dialog = document.getElementById('shortcutsHelpDialog');
+            if (!dialog || dialog.hasAttribute('hidden')) return;
+            dialog.setAttribute('hidden', '');
+            dialog.classList.remove('is-open');
+            if (shortcutsTrapRelease) { shortcutsTrapRelease(); shortcutsTrapRelease = null; }
+        }
+        function openShortcutsHelp() {
+            const dialog = document.getElementById('shortcutsHelpDialog');
+            if (!dialog) return;
+            syncShortcutsHelpRows();
+            dialog.removeAttribute('hidden');
+            dialog.classList.add('is-open');
+            const panel = dialog.querySelector('.bottom-sheet-panel') || dialog;
+            if (window.FocusTrap) {
+                if (shortcutsTrapRelease) shortcutsTrapRelease();
+                shortcutsTrapRelease = window.FocusTrap.activate(panel);
+            }
+            const toggle = document.getElementById('shortcutsDisableToggle');
+            if (toggle) toggle.checked = !loreKeysEnabled();
+        }
+        window.openShortcutsHelp = openShortcutsHelp;
+        (function initShortcutsHelp() {
+            const dialog = document.getElementById('shortcutsHelpDialog');
+            if (!dialog) return;
+            syncShortcutsHelpRows();
+            dialog.querySelectorAll('[data-shortcuts-dismiss]').forEach(function (btn) {
+                btn.addEventListener('click', closeShortcutsHelp);
+            });
+            const toggle = document.getElementById('shortcutsDisableToggle');
+            if (toggle) {
+                toggle.addEventListener('change', function () {
+                    try {
+                        localStorage.setItem(LORE_KEYS_STORAGE, toggle.checked ? 'off' : 'on');
+                    } catch (_) {}
+                });
+            }
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && dialog.classList.contains('is-open')) {
+                    e.preventDefault();
+                    closeShortcutsHelp();
+                }
+            });
+        })();
+
+        document.addEventListener('keydown', function (e) {
+            if (!loreKeysEnabled() || window.loreKeyGuard(e)) return;
+            if (document.body.dataset.shortcutsPage !== 'detail') return;
+            if (e.key === '?') {
+                e.preventDefault();
+                openShortcutsHelp();
+                return;
+            }
+            if (e.key === 'e') {
+                e.preventDefault();
+                if (typeof expandAllToolDetails === 'function') expandAllToolDetails();
+                return;
+            }
+            if (e.key === 'c') {
+                e.preventDefault();
+                if (typeof collapseAllToolDetails === 'function') collapseAllToolDetails();
+                return;
+            }
+            if (e.key !== 'j' && e.key !== 'k') return;
+            const anchors = Array.from(document.querySelectorAll('[id^="msg-"]'));
+            if (!anchors.length) return;
+            e.preventDefault();
+            const ids = anchors.map(function (el) { return el.id; });
+            const hash = (window.location.hash || '').replace(/^#/, '');
+            // No known position yet: j lands on the first prompt, k stays on it.
+            let idx = hash ? ids.indexOf(hash) : -1;
+            if (e.key === 'j') idx = Math.min(ids.length - 1, idx + 1);
+            else idx = Math.max(0, idx < 0 ? 0 : idx - 1);
+            const target = document.getElementById(ids[idx]);
+            if (!target) return;
+            target.scrollIntoView({ block: 'nearest' });
+            if (window.history && window.history.replaceState) {
+                const url = window.location.pathname + window.location.search + '#' + ids[idx];
+                window.history.replaceState(null, '', url);
+            } else {
+                window.location.hash = ids[idx];
+            }
+        });
 
         let searchTrapRelease = null;
         function openSearch() {
@@ -2448,7 +2647,22 @@
                         if (typeof copyLink === 'function') copyLink(window.location.href);
                         break;
                     case 'resume-session':
-                        if (typeof resumeSession === 'function' && d.sessionId) resumeSession(d.sessionId);
+                        if (typeof resumeSession === 'function' && d.sessionId) {
+                            resumeSession(d.sessionId);
+                        } else if (d.sessionId) {
+                            fetch('/api/sessions/' + encodeURIComponent(d.sessionId) + '/resume', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                credentials: 'same-origin',
+                            })
+                                .then(function (res) { return res.json(); })
+                                .then(function (data) {
+                                    if (data && data.supported && data.command) {
+                                        navigator.clipboard.writeText(String(data.command).trim());
+                                    }
+                                })
+                                .catch(function () {});
+                        }
                         break;
                     case 'close-resume-modal':
                         if (typeof closeResumeModal === 'function') closeResumeModal();

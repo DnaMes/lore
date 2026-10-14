@@ -1,0 +1,23 @@
+<div class="peek-pane-inner">
+    <p class="peek-meta">{{ meta_line }}</p>
+    <h2 class="peek-title">{{ title }}</h2>
+    {% if summary_mode == 'ai' %}
+    <p class="peek-summary-oneliner"><span class="peek-summary-star" aria-hidden="true">✦</span> {{ summary_one_liner }}</p>
+    {% else %}
+    <div class="peek-glance">
+        {% if glance.first_prompt %}
+        <p class="peek-glance-prompt">{{ glance.first_prompt }}</p>
+        {% endif %}
+        <ul class="peek-glance-stats summary-glance-stats">
+            <li>{{ glance.prompts }} prompts</li>
+            <li>{{ glance.tool_calls }} tool calls</li>
+            {% if glance.failed_tool_calls %}<li>{{ glance.failed_tool_calls }} failed tool calls</li>{% endif %}
+            {% if glance.duration %}<li>{{ glance.duration }}</li>{% endif %}
+        </ul>
+    </div>
+    {% endif %}
+    <div class="peek-actions">
+        <a class="peek-open-link" href="/session/{{ session_id|urlpath }}">Open</a>
+        <button type="button" class="peek-resume-btn" data-action="resume-session" data-session-id="{{ session_id }}">Copy resume command</button>
+    </div>
+</div>
