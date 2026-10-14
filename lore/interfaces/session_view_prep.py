@@ -117,10 +117,10 @@ def render_message_body(
         prose_source = strip_tool_blocks(content)
         if prose_source:
             prose_html = format_message_content_fn(prose_source)
-        tools_html = format_tool_calls_fn(
-            fold_tool_bursts(message.tool_calls),
-            getattr(message, "tool_events", None),
-        )
+        calls = fold_tool_bursts(message.tool_calls)
+        events = getattr(message, "tool_events", None)
+        # Two-argument call only when events exist: one-argument formatters keep working.
+        tools_html = format_tool_calls_fn(calls, events) if events else format_tool_calls_fn(calls)
         return "\n".join(part for part in (prose_html, tools_html) if part)
 
     if content:

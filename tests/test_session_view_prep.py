@@ -10,9 +10,10 @@ from lore.interfaces.session_view_prep import (
 
 
 class _Msg:
-    def __init__(self, content="", tool_calls=None):
+    def __init__(self, content="", tool_calls=None, tool_events=None):
         self.content = content
         self.tool_calls = tool_calls or []
+        self.tool_events = tool_events or []
 
 
 def _fmt_content(s):
@@ -145,3 +146,28 @@ def test_burst_count_renders_as_multiplier():
     calls = [{"tool": "read", "input": {"f": "a"}, "output": "x"}] * 3
     out = format_tool_calls(fold_tool_bursts(calls))
     assert "×3" in out
+
+
+def test_tool_events_are_passed_to_two_argument_formatters_only_when_present():
+    seen: list[tuple] = []
+
+    def fmt(calls, events=None):
+        seen.append((len(calls), events))
+        return "<TOOLS/>"
+
+    with_events = _Msg(
+        content="x",
+        tool_calls=[{"name": "Read", "input": {}}],
+        tool_events=[{"name": "Read", "status": "completed"}],
+    )
+    without_events = _Msg(content="x", tool_calls=[{"name": "Read", "input": {}}])
+
+    render_message_body(
+        with_events, format_message_content_fn=_fmt_content, format_tool_calls_fn=fmt
+    )
+    render_message_body(
+        without_events, format_message_content_fn=_fmt_content, format_tool_calls_fn=fmt
+    )
+
+    assert seen[0][1] == [{"name": "Read", "status": "completed"}]
+    assert seen[1][1] is None
