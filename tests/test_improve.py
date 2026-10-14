@@ -305,7 +305,10 @@ def test_injection_summary_stays_candidate(tmp_path, monkeypatch):
     )
     _save_summary_row(tmp_path, SID, payload)
     run_improve(tmp_path, provider_name=None, model=None, limit=5, stages=["from_summaries"])
-    assert all(c.status == "candidate" for c in list_memory(tmp_path, status="candidate", limit=5))
+    candidates = list_memory(tmp_path, status="candidate", limit=5)
+    assert any("ignore previous instructions" in c.body for c in candidates)
+    assert all(c.status == "candidate" for c in candidates)
+    assert list_memory(tmp_path, status="confirmed", limit=5) == []
 
 
 def test_dry_run_writes_nothing(tmp_path, monkeypatch):

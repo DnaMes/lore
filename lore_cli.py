@@ -883,7 +883,17 @@ def cmd_knowledge(args):
 
     in_scope: set[str] | None = None
     if args.tool:
-        in_scope = {s.session_id for s in sessions}
+        # Every session of the tool, not just the --limit newest: stored rows of older
+        # sessions of this tool stay in the report.
+        in_scope = {
+            s.session_id
+            for s in sessions_for_extraction(
+                output_dir,
+                limit=10**9,
+                include_automated=include_automated,
+                tool=args.tool,
+            )
+        }
 
     print(f"Extracting knowledge from {len(sessions)} sessions...")
 

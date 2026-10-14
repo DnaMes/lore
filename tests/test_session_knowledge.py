@@ -465,3 +465,21 @@ def test_cmd_knowledge_session_without_messages_exits_zero(tmp_path, use_provide
 
     assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
     assert provider.prompts == []
+
+
+def test_cmd_knowledge_tool_scope_ignores_the_limit(tmp_path, use_provider):
+    # --limit bounds what is sent to the provider, not which stored rows are reported.
+    old = _session("claude-old", "alpha talk")
+    new = _session("claude-new", "beta talk")
+    new.created_at = datetime(2026, 2, 1)
+    _build(tmp_path, old, new)
+    use_provider(FakeProvider([_payload("Alpha"), _payload("Beta")]))
+    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+
+    args = _args(tmp_path)
+    args.tool = "claude-code"
+    args.limit = 1
+    assert lore_cli.cmd_knowledge(args) == 0
+
+    kb = json.loads((tmp_path / "knowledge" / "knowledge_base.json").read_text())
+    assert {e["session_id"] for e in kb["entries"]} == {"claude-old", "claude-new"}
