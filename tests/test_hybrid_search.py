@@ -136,3 +136,91 @@ def test_hybrid_not_applied_to_scoped_search(tmp_path, monkeypatch):
     index_path = _build(tmp_path, [_session("a", body="scoped body text")])
     search_index(index_path, "scoped", deleted=set(), limit=5, scope="user_only")
     assert called["n"] == 0
+
+
+# ---------------------------------------------------------------------------
+# distance cutoff (#92)
+# ---------------------------------------------------------------------------
+
+_DISTANCE_SQL = (
+    "SELECT id, tool, project, thread_id, title, created, updated, messages_count, "
+    "prompt_count, total_tokens, prompt_outline, export_path, git_branch, git_commit, "
+    "source_path, source_mtime_ns, metadata_json, origin, parent_session_id, relation, "
+    "source_version, parser_version, ? AS score FROM sessions WHERE id = ?"
+)
+
+
+def _rows_with_distances(tmp_path, distances):
+    """Real ``sessions`` rows carrying a chosen vec distance in ``score``."""
+    from lore.storage.schema import open_connection
+
+    conn = open_connection(v2_db_path(tmp_path))
+    try:
+        return [
+            conn.execute(_DISTANCE_SQL, (distance, session_id)).fetchone()
+            for session_id, distance in distances.items()
+        ]
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, 0.88),
+        ("", 0.88),
+        ("banana", 0.88),
+        ("nan", 0.88),
+        ("0.5", 0.5),
+        ("0", None),  # explicit off switch
+        ("-1", None),
+    ],
+)
+def test_semantic_max_distance_env_parsing(monkeypatch, raw, expected):
+    from lore.storage.search import semantic_max_distance
+
+    if raw is None:
+        monkeypatch.delenv("LORE_SEMANTIC_MAX_DISTANCE", raising=False)
+    else:
+        monkeypatch.setenv("LORE_SEMANTIC_MAX_DISTANCE", raw)
+    assert semantic_max_distance() == expected
+
+
+def test_semantic_cutoff_drops_far_neighbours(tmp_path):
+    from lore.storage.search import _filter_semantic_rows
+
+    _build(tmp_path, [_session("near"), _session("far")])
+    rows = _rows_with_distances(tmp_path, {"near": 0.70, "far": 1.10})
+
+    results = _filter_semantic_rows(rows, None, None, 10, False, max_distance=0.88)
+
+    assert [r["session"]["id"] for r in results] == ["near"]
+
+
+def test_semantic_cutoff_keeps_everything_when_disabled(tmp_path):
+    from lore.storage.search import _filter_semantic_rows
+
+    _build(tmp_path, [_session("near"), _session("far")])
+    rows = _rows_with_distances(tmp_path, {"near": 0.70, "far": 1.10})
+
+    results = _filter_semantic_rows(rows, None, None, 10, False, max_distance=None)
+
+    assert {r["session"]["id"] for r in results} == {"near", "far"}
+
+
+def test_semantic_search_sessions_applies_the_configured_cutoff(tmp_path, monkeypatch):
+    """The cutoff runs before RRF fusion — the vector pass itself must drop far hits (#92)."""
+    from lore.storage.search import _filter_semantic_rows  # noqa: F401 - documents the path
+
+    _build(tmp_path, [_session("near"), _session("far")])
+    rows = _rows_with_distances(tmp_path, {"near": 0.70, "far": 1.10})
+    monkeypatch.setattr("lore.storage.embeddings.sqlite_vec_available", lambda: True)
+    monkeypatch.setattr("lore.storage.embeddings.embed_text", lambda _t: [0.0, 0.0, 0.0, 0.0])
+    monkeypatch.setattr("lore.storage.search._knn_rows", lambda _conn, _packed, _k: rows)
+
+    hits = semantic_search_sessions(tmp_path, "anything")
+    assert [h["session"]["id"] for h in hits] == ["near"]
+
+    monkeypatch.setenv("LORE_SEMANTIC_MAX_DISTANCE", "1.5")
+    hits = semantic_search_sessions(tmp_path, "anything")
+    assert {h["session"]["id"] for h in hits} == {"near", "far"}

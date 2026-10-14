@@ -14,6 +14,8 @@ Returns the ``[{"session": <dict>, "score": <float>}]`` shape the legacy
 
 from __future__ import annotations
 
+import math
+import os
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -217,6 +219,39 @@ KNN_K_FACTOR = 4
 KNN_K_RETRY_FACTOR = 8
 KNN_K_MAX = 1024
 
+# Distance cutoff for vector neighbours, applied before RRF fusion (#92). sqlite-vec's
+# default metric on ``session_embeddings`` is L2 over unit-normalised bge-small vectors
+# (``distance = sqrt(2 - 2*cosine)``), so smaller is closer and 0 is identical.
+#
+# 0.88 is measured, not invented: on the labelled set in
+# docs/research/2026-10-14-semantic-cutoff-labelled-pairs.json the related distances run
+# 0.610-0.794 (p95 0.777) and the unrelated ones 0.980-1.104 (p05 0.986), so the cutoff
+# sits at the midpoint of related-p95 / unrelated-p05 (0.881 -> 0.88) and on that set
+# keeps 14/14 related while dropping 14/14 unrelated. Reproduce with
+# ``python tools/calibrate_semantic_cutoff.py``.
+SEMANTIC_MAX_DISTANCE_ENV = "LORE_SEMANTIC_MAX_DISTANCE"
+DEFAULT_SEMANTIC_MAX_DISTANCE = 0.88
+
+
+def semantic_max_distance() -> Optional[float]:
+    """Vec distance above which a neighbour is dropped; ``None`` means no cutoff.
+
+    Env ``LORE_SEMANTIC_MAX_DISTANCE`` overrides the calibrated default; a value
+    of ``0`` (or negative) disables the cutoff entirely, an unparsable or NaN
+    value falls back to the default. Never raised on: a bad value must not
+    break search (#92).
+    """
+    raw = os.environ.get(SEMANTIC_MAX_DISTANCE_ENV, "").strip()
+    if not raw:
+        return DEFAULT_SEMANTIC_MAX_DISTANCE
+    try:
+        value = float(raw)
+    except ValueError:
+        return DEFAULT_SEMANTIC_MAX_DISTANCE
+    if math.isnan(value):
+        return DEFAULT_SEMANTIC_MAX_DISTANCE
+    return None if value <= 0 else value
+
 
 def _knn_rows(conn: sqlite3.Connection, packed: bytes, k: int) -> List[sqlite3.Row]:
     return conn.execute(
@@ -244,9 +279,13 @@ def _filter_semantic_rows(
     project: Optional[str],
     limit: int,
     include_automated: bool,
+    *,
+    max_distance: Optional[float],
 ) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     for row in rows:
+        if max_distance is not None and float(row["score"]) > max_distance:
+            continue  # too far away to mean anything (#92) — dropped before fusion
         session = _row_to_session_dict(row)
         if not include_automated and session.get("origin") in AUTOMATED_ORIGINS:
             continue
@@ -281,6 +320,10 @@ def semantic_search_sessions(
     embedding backend is unavailable, the query is empty, or it can't be
     embedded. Callers then rely on FTS alone. ``scope`` is intentionally not
     supported: vectors are per-session, so role scoping has no vector analogue.
+
+    Neighbours farther away than :func:`semantic_max_distance` are dropped
+    here, *before* RRF fusion (#92), so padding sessions never enter the fused
+    ranking. Set ``LORE_SEMANTIC_MAX_DISTANCE=0`` to turn the cutoff off.
     """
     from .embeddings import embed_text, pack_vector, sqlite_vec_available
 
@@ -299,16 +342,21 @@ def semantic_search_sessions(
     conn = open_connection(db)
     try:
         packed = pack_vector(vector)
+        cutoff = semantic_max_distance()
         k = max(1, limit) * KNN_K_FACTOR
         rows = _knn_rows(conn, packed, k)
-        results = _filter_semantic_rows(rows, tool, project, limit, include_automated)
+        results = _filter_semantic_rows(
+            rows, tool, project, limit, include_automated, max_distance=cutoff
+        )
         # The filters run after the KNN cut-off, so a neighbourhood made of automated
         # (or other filtered-out) sessions can leave fewer than ``limit`` hits. Ask once
         # more with a wider k, only when the first pass was full (more neighbours exist).
         if len(results) < limit and len(rows) >= k and k < KNN_K_MAX:
             wider = min(k * KNN_K_RETRY_FACTOR, KNN_K_MAX)
             rows = _knn_rows(conn, packed, wider)
-            results = _filter_semantic_rows(rows, tool, project, limit, include_automated)
+            results = _filter_semantic_rows(
+                rows, tool, project, limit, include_automated, max_distance=cutoff
+            )
     except sqlite3.Error:
         # No vec table (e.g. extension absent) or a malformed query — FTS covers it.
         return []

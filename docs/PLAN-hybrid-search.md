@@ -21,6 +21,7 @@ sessions have no vector path at all.
 | Granularity | **Per-session** (1 vector) — Phase 1 | ~1513 vectors, tiny (~2 MB), fast build; message-level deferred |
 | Fusion | **RRF** `Σ 1/(k+rank)`, k=60 | Robust, no score normalization, no α-tuning |
 | Model | `BAAI/bge-small-en-v1.5` (reuse memory's) | Already installed, 384-dim, CPU-only |
+| Distance cutoff | Drop vec hits with **L2 distance > 0.88** before fusion (`LORE_SEMANTIC_MAX_DISTANCE`) | Measured on a labelled pair set, see [Distance cutoff](#distance-cutoff-92) |
 | Fallback | Missing sqlite-vec **or** fastembed → FTS-only, no error | Same pattern as `embeddings_available()` |
 
 ## Non-goals (Phase 1)
@@ -89,6 +90,42 @@ search path (services/index.py::search_index):
 **Known limitation (Phase-2):** semantic KNN has no distance cutoff, so a hybrid query
 with zero keyword matches still returns nearest neighbours. Acceptable for Phase 1;
 a relevance threshold on vector distance is the fix.
+
+## Distance cutoff (#92)
+
+Neighbours whose distance is too large are padding, not matches: RRF would happily rank a
+session that has nothing to do with the query. `semantic_search_sessions` therefore drops every
+hit with `distance > semantic_max_distance()` **before** the results reach `rrf_merge`.
+
+The metric is sqlite-vec's default on `session_embeddings` (vec0, no `distance_metric`): **L2
+over unit-normalised vectors**, i.e. `distance = sqrt(2 - 2 * cosine)` — 0 means identical,
+`sqrt(2)` ≈ 1.414 means orthogonal.
+
+Measured 2026-10-14 on `docs/research/2026-10-14-semantic-cutoff-labelled-pairs.json`
+(28 labelled session-body/query pairs, real bge-small, vector norm mean 1.0000):
+
+| label | n | min | median | p95 / p05 | max |
+| --- | --- | --- | --- | --- | --- |
+| related (L2, lower = closer) | 14 | 0.610 | 0.690 | 0.777 (p95) | 0.794 |
+| unrelated (L2) | 14 | 0.980 | 1.023 | 0.986 (p05) | 1.104 |
+
+The groups are separated (related max 0.794 < unrelated min 0.980), and **0.88** is the
+midpoint of related-p95 (0.777) and unrelated-p05 (0.986) → 0.881, rounded to 0.88. On this set
+it keeps 14/14 related and drops 14/14 unrelated, with margin on both sides. Reproduce:
+
+```bash
+python tools/calibrate_semantic_cutoff.py        # distribution + recommended cutoff
+python tools/calibrate_semantic_cutoff.py --json # machine-readable
+```
+
+| Variable | Effect |
+| --- | --- |
+| `LORE_SEMANTIC_MAX_DISTANCE=0.5` | stricter cutoff (only close neighbours) |
+| `LORE_SEMANTIC_MAX_DISTANCE=0` | disable the cutoff entirely (everything KNN returns is fused) |
+| unset or unparsable | the calibrated default `0.88` — a bad value never breaks search |
+
+Keyword hits are never cut by this (FTS has its own ranking); the cutoff only stops the vector
+pass from *adding* sessions the keyword pass would not have surfaced.
 
 ## Risks / watch-items
 

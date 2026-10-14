@@ -1155,7 +1155,11 @@ def test_semantic_search_widens_k_when_the_neighbourhood_is_automated(tmp_path, 
             return struct.pack(f"<{EMBEDDING_DIM}f", *values)
 
         rows = [(s.session_id, pack(1.0, 0.01 * i)) for i, s in enumerate(automated)]
-        rows += [("human-a", pack(0.0, 1.0)), ("human-b", pack(0.0, 1.1))]
+        # Human neighbours must be *farther* than the automated ones (0.00-0.09) so the
+        # widening matters, but still inside the calibrated distance cutoff (0.88): these
+        # sit at 0.706 and 0.837. Vectors orthogonal to the query (0.0, 1.0) would be at
+        # 1.414 and get dropped before fusion (#92), which is not what this test is about.
+        rows += [("human-a", pack(0.75, 0.66)), ("human-b", pack(0.65, 0.76))]
         for session_id, vec in rows:
             conn.execute(
                 "INSERT INTO session_embeddings(session_id, model, embedding) VALUES (?, ?, ?)",
