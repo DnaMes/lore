@@ -17,6 +17,8 @@ CANONICAL_TOOLS = {
     "cline",
     "roo-code",
     "kilo-code",
+    "goose",
+    "crush",
 }
 
 
@@ -50,6 +52,11 @@ TOOL_ALIASES = {
     "kilo": "kilo-code",
     "kilo-code": "kilo-code",
     "kilocode": "kilo-code",
+    "goose": "goose",
+    "goose-cli": "goose",
+    "block-goose": "goose",
+    "crush": "crush",
+    "charm-crush": "crush",
 }
 
 

@@ -8,8 +8,10 @@ from .cline import ClineExtractor, KiloCodeExtractor, RooCodeExtractor
 from .codex import CodexExtractor
 from .commandcode import CommandCodeExtractor
 from .copilot import CopilotCLIExtractor
+from .crush import CrushExtractor
 from .cursor import CursorExtractor
 from .gemini import GeminiCLIExtractor
+from .goose import GooseExtractor
 from .hermes import HermesExtractor
 from .opencode import OpenCodeExtractor
 from .pi import PiExtractor
@@ -35,4 +37,6 @@ def get_all_extractors() -> List[BaseExtractor]:
         ClineExtractor(),
         RooCodeExtractor(),
         KiloCodeExtractor(),
+        GooseExtractor(),
+        CrushExtractor(),
     ]

@@ -89,6 +89,8 @@ class Tool(Enum):
     CLINE = "cline"
     ROO_CODE = "roo-code"
     KILO_CODE = "kilo-code"
+    GOOSE = "goose"
+    CRUSH = "crush"
 
 
 class Role(Enum):

@@ -19,6 +19,8 @@ TOOL_STYLES = {
     "cline": {"color": "#F59E0B", "icon": "Cl", "name": "Cline"},
     "roo-code": {"color": "#8B5CF6", "icon": "Ro", "name": "Roo Code"},
     "kilo-code": {"color": "#10B981", "icon": "Ki", "name": "Kilo Code"},
+    "goose": {"color": "#EAB308", "icon": "Go", "name": "Goose"},
+    "crush": {"color": "#F472B6", "icon": "Cr", "name": "Crush"},
 }
 
 

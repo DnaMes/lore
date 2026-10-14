@@ -18,8 +18,10 @@ from lore.extractors.cline import ClineExtractor, KiloCodeExtractor, RooCodeExtr
 from lore.extractors.codex import CodexExtractor
 from lore.extractors.commandcode import CommandCodeExtractor
 from lore.extractors.copilot import CopilotCLIExtractor
+from lore.extractors.crush import CrushExtractor
 from lore.extractors.cursor import CursorExtractor
 from lore.extractors.gemini import GeminiCLIExtractor
+from lore.extractors.goose import GooseExtractor
 from lore.extractors.hermes import HermesExtractor
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.extractors.pi import PiExtractor
@@ -42,6 +44,8 @@ ALL_EXTRACTOR_CLASSES = [
     GeminiCLIExtractor,
     HermesExtractor,
     KiloCodeExtractor,
+    GooseExtractor,
+    CrushExtractor,
     OpenCodeExtractor,
     PiExtractor,
     RooCodeExtractor,

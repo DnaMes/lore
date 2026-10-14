@@ -75,6 +75,8 @@ docker compose up -d
 | **Cline** | VS Code `globalStorage/saoudrizwan.claude-dev/tasks/`, `~/.cline/data/sessions/` | Fixtures from the documented schema, not verified on real data |
 | **Roo Code** | VS Code `globalStorage/rooveterinaryinc.roo-cline/tasks/` | Fixtures from the documented schema, not verified on real data |
 | **Kilo Code** | VS Code `globalStorage/kilocode.kilo-code/tasks/` | Fixtures from the documented schema, not verified on real data |
+| **Goose** | `~/.local/share/goose/sessions/sessions.db` (and alternate roots) | Fixtures from the upstream schema, not verified on real data |
+| **Crush** | `~/.local/share/crush/projects.json` → `crush.db` | Fixtures from the upstream schema, not verified on real data |
 
 ---
 

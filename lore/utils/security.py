@@ -225,6 +225,8 @@ def validate_tool_name(tool: str) -> bool:
         "cline",
         "roo-code",
         "kilo-code",
+        "goose",
+        "crush",
     ]
     return tool in valid_tools
 
