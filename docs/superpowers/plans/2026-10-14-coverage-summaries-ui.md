@@ -190,7 +190,7 @@ Day headers (with the pagination hand-off so a header is not repeated), date chi
 
 ### B5.4 Summary card and list line (after B4.4)
 Detail card from `session_summaries` when present, deterministic "at a glance" otherwise. The Generate button works only with a local provider configured through `LORE_SUMMARY_PROVIDER`/`LORE_SUMMARY_MODEL`; without it the button is disabled and shows the equivalent `lore summarize` command. Cloud providers are never reachable from the web. ✦ one-liner under the title only when a summary exists.
-- [ ] done
+- [x] done
 
 ### B5.5 Tool-group folding and merged toggles
 Consecutive tool calls grouped into one `<details>` with counts and status; merge the five view toggles into Tools [hide|fold|open], Thinking [fold|show], Density.

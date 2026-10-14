@@ -36,11 +36,13 @@ from ..services.index import (
     automated_hidden_line,
     filter_automated_payload,
     is_automated,
+    load_deleted_session_ids,
     parse_bool_flag,
     session_by_id_map,
     thread_hidden_count,
     thread_sessions,
 )
+from ..services.summarize_cli import web_summarize_enabled
 from .api_payloads import (
     search_result_snippet,
     serialize_index_session_summary,
@@ -126,6 +128,15 @@ from .web_jobs import (
     _set_reload_job,
     _start_audit_job,
     _start_reload_job,
+    _start_session_summary_job,
+)
+from .web_summary import (
+    api_session_summary_payload,
+    build_summary_card_context,
+    session_summary_lines,
+)
+from .web_summary import (
+    cite_href as summary_cite_href,
 )
 from .web_utils import (
     METRICS,
@@ -489,6 +500,30 @@ def render(tpl_name, **kwargs):
             ) or request.path.startswith("/thread/")
         else:
             kwargs["show_session_controls"] = tpl_name in ("session", "thread_detail")
+    if tpl_name == "session" and "summary_mode" not in kwargs:
+        session_obj = kwargs.get("session")
+        session_id = None
+        if isinstance(session_obj, dict):
+            session_id = session_obj.get("session_id") or session_obj.get("id")
+        elif session_obj is not None:
+            session_id = getattr(session_obj, "session_id", None)
+        if session_id:
+            pairs = kwargs.get("visible_pairs")
+            if pairs is None:
+                if isinstance(session_obj, dict):
+                    pairs = session_obj.get("pairs") or []
+                elif session_obj is not None:
+                    pairs = getattr(session_obj, "pairs", []) or []
+            deleted_ids = load_deleted_session_ids(DELETED_SESSIONS_PATH)
+            kwargs.update(
+                build_summary_card_context(
+                    OUTPUT_DIR,
+                    str(session_id),
+                    session_obj,
+                    pairs or [],
+                    session_deleted=str(session_id) in deleted_ids,
+                )
+            )
     from lore import __version__
 
     include_automated = _include_automated()
@@ -514,6 +549,7 @@ def render(tpl_name, **kwargs):
         session_row_tokens=session_row_tokens,
         should_show_prompt_outline=should_show_prompt_outline,
         sessions_query_url=sessions_query_url,
+        summary_cite_href=summary_cite_href,
         recent=recent,
         provider_tools=list(TOOL_STYLES.keys()),
         request=request if has_request_context() else None,
@@ -988,6 +1024,11 @@ def sessions():
     pages = max(1, math.ceil(total / SESSIONS_PER_PAGE))
     first_page = filtered[:SESSIONS_PER_PAGE]
     day_groups, last_day = _sessions_day_groups(first_page, group, "")
+    summary_lines = session_summary_lines(
+        OUTPUT_DIR,
+        [s.get("id") for s in first_page],
+        {str(s.get("id")): s.get("updated") or s.get("created") for s in first_page},
+    )
 
     tags = compute_top_tags(_visible_index().get("sessions", []), limit=12)
     return render(
@@ -1011,6 +1052,7 @@ def sessions():
         start=start,
         end=end,
         back_to=(request.full_path[:-1] if request.full_path.endswith("?") else request.full_path),
+        summary_lines=summary_lines,
         title="Sessions",
     )
 
@@ -1044,6 +1086,11 @@ def sessions_rows():
     offset = (page - 1) * SESSIONS_PER_PAGE
     page_sessions = filtered[offset : offset + SESSIONS_PER_PAGE]
     day_groups, last_day = _sessions_day_groups(page_sessions, group, after_day)
+    summary_lines = session_summary_lines(
+        OUTPUT_DIR,
+        [s.get("id") for s in page_sessions],
+        {str(s.get("id")): s.get("updated") or s.get("created") for s in page_sessions},
+    )
 
     html = render(
         "session_rows",
@@ -1051,6 +1098,7 @@ def sessions_rows():
         day_groups=day_groups,
         last_day=last_day,
         back_to=_sessions_list_back_path(),
+        summary_lines=summary_lines,
     )
     return Response(html, mimetype="text/html")
 
@@ -1569,6 +1617,14 @@ def session_detail(session_id):
         total_pairs = len(pairs)
         message_pages = max(1, math.ceil(total_pairs / MESSAGES_PER_PAGE))
         visible_pairs = pairs[:MESSAGES_PER_PAGE]
+        deleted_ids = load_deleted_session_ids(DELETED_SESSIONS_PATH)
+        summary_ctx = build_summary_card_context(
+            OUTPUT_DIR,
+            session_id,
+            session_obj,
+            visible_pairs,
+            session_deleted=session_id in deleted_ids,
+        )
         return render(
             "session",
             active="sessions",
@@ -1581,6 +1637,7 @@ def session_detail(session_id):
             title=session_obj.title or clean_title,
             toc_items=toc,
             back_target=back_target,
+            **summary_ctx,
         )
 
     # No paginatable conversation — fall back to raw markdown or a summary card.
@@ -1591,6 +1648,71 @@ def session_detail(session_id):
             logger.debug("Failed to render export markdown for session %s: %s", session_id, exc)
 
     return _render_summary()
+
+
+_SUMMARY_FORBIDDEN_PARAMS = frozenset({"provider", "model", "base_url", "base-url"})
+
+
+def _reject_summary_provider_params() -> Optional[tuple]:
+    """Web summary routes never accept provider/model/base-url overrides."""
+    for key in _SUMMARY_FORBIDDEN_PARAMS:
+        if (request.args.get(key) or "").strip():
+            return jsonify({"error": f"Parameter '{key}' is not allowed"}), 400
+    payload = request.get_json(silent=True)
+    if isinstance(payload, dict):
+        for key in _SUMMARY_FORBIDDEN_PARAMS:
+            if key in payload and payload.get(key) not in (None, ""):
+                return jsonify({"error": f"Parameter '{key}' is not allowed"}), 400
+    return None
+
+
+@app.route("/api/session/<session_id>/summary")
+def api_session_summary(session_id):
+    if not validate_session_id(session_id):
+        return jsonify({"error": "Invalid session ID"}), 400
+    deleted = load_deleted_session_ids(DELETED_SESSIONS_PATH)
+    if session_id in deleted:
+        return jsonify({"error": "Not found"}), 404
+    if not _index_session_meta(session_id):
+        return jsonify({"error": "Not found"}), 404
+    body = api_session_summary_payload(OUTPUT_DIR, session_id)
+    if body is None:
+        return jsonify(
+            {
+                "session_id": session_id,
+                "status": "missing",
+                "stale": None,
+                "summary": None,
+                "model": None,
+                "created": None,
+                "prompt_version": None,
+                "truncated": None,
+                "chunks": None,
+            }
+        )
+    return jsonify(body)
+
+
+@app.route("/session/<session_id>/summary", methods=["POST"])
+def session_summary_generate(session_id):
+    if (err := _check_local_origin()) is not None:
+        return err
+    if (param_err := _reject_summary_provider_params()) is not None:
+        return param_err
+    if not validate_session_id(session_id):
+        return jsonify({"error": "Invalid session ID"}), 400
+    deleted = load_deleted_session_ids(DELETED_SESSIONS_PATH)
+    if session_id in deleted:
+        return jsonify({"error": "Session is deleted"}), 404
+    if not _index_session_meta(session_id):
+        return jsonify({"error": "Not found"}), 404
+    if not web_summarize_enabled():
+        return jsonify({"error": "Local summary provider is not configured"}), 403
+    job_id = _start_session_summary_job(session_id)
+    return (
+        jsonify({"status": "accepted", "job_id": job_id, "session_id": session_id}),
+        202,
+    )
 
 
 @app.route("/api/sessions/<session_id>/resume", methods=["POST"])

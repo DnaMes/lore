@@ -134,6 +134,27 @@ def check_mcp_summarize_locality() -> str | None:
     return None
 
 
+def web_summarize_enabled() -> bool:
+    """True when the web UI may offer local session summary generation."""
+    provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip().lower()
+    if provider != MCP_SUMMARIZE_PROVIDER:
+        return False
+    if provider_locality(MCP_SUMMARIZE_PROVIDER) != "local":
+        return False
+    return check_mcp_summarize_locality() is None
+
+
+def web_summarize_disabled_reason() -> str:
+    """Short user-facing hint when :func:`web_summarize_enabled` is false."""
+    provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip().lower()
+    if provider != MCP_SUMMARIZE_PROVIDER:
+        return "No local provider configured: set LORE_SUMMARY_PROVIDER=ollama"
+    if provider_locality(MCP_SUMMARIZE_PROVIDER) != "local":
+        return "Ollama endpoint must be loopback (check OLLAMA_HOST)"
+    err = check_mcp_summarize_locality()
+    return err or "Local summarize provider is not available"
+
+
 def build_mcp_summarize_provider():
     """Construct a transcript-safe local provider for MCP ``summarize_session``."""
     from lore.llm import LLMConfig, get_provider

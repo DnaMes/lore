@@ -58,7 +58,7 @@ _SUMMARY_FIELDS = (
 )
 
 
-def _sanitize_summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
+def sanitize_summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """Allow-list the stored payload: summary fields plus artifact paths and counts only.
 
     Commands and error excerpts are transcript-derived text and are never returned here.
@@ -76,6 +76,9 @@ def _sanitize_summary_payload(payload: dict[str, Any]) -> dict[str, Any]:
             out[f"{key}_count"] = len(items) if isinstance(items, list) else 0
         cleaned["artifacts"] = out
     return cleaned
+
+
+_sanitize_summary_payload = sanitize_summary_payload
 
 
 def register(server, deps: MCPToolDeps) -> None:
@@ -132,7 +135,7 @@ def register(server, deps: MCPToolDeps) -> None:
             )
 
         payload = row.get("payload") or {}
-        summary_body = _sanitize_summary_payload(payload) if isinstance(payload, dict) else None
+        summary_body = sanitize_summary_payload(payload) if isinstance(payload, dict) else None
         truncated = payload.get("truncated") if isinstance(payload, dict) else None
         chunks = payload.get("chunks") if isinstance(payload, dict) else None
         return deps.json_text(

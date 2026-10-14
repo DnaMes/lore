@@ -24,6 +24,12 @@ formatters escape their inputs and the caller runs nh3 over the composed page).
 from __future__ import annotations
 
 import re
+from collections import Counter
+from typing import Any
+
+_AT_A_GLANCE_PROMPT_MAX = 240
+
+_AT_A_GLANCE_PROMPT_MAX = 240
 
 # Matches the "[Tool: Name] ...args... [Tool Result] ...output..." blocks the
 # extractor inlines into content. Used to strip them from prose so we don't show
@@ -121,3 +127,99 @@ def render_message_body(
         return format_message_content_fn(content)
 
     return ""
+
+
+def _clamp_glance_text(text: str, limit: int = _AT_A_GLANCE_PROMPT_MAX) -> str:
+    cleaned = re.sub(r"\s+", " ", (text or "").strip())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 1].rstrip() + "…"
+
+
+def _duration_label(session) -> str | None:
+    created = getattr(session, "created_at", None)
+    updated = getattr(session, "last_updated", None)
+    if not created or not updated:
+        return None
+    seconds = int((updated - created).total_seconds())
+    if seconds < 0:
+        return None
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, secs = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m" if secs == 0 else f"{minutes}m {secs}s"
+    hours, minutes = divmod(minutes, 60)
+    if hours < 24:
+        return f"{hours}h {minutes}m" if minutes else f"{hours}h"
+    days, hours = divmod(hours, 24)
+    return f"{days}d {hours}h" if hours else f"{days}d"
+
+
+def at_a_glance(session) -> dict[str, Any]:
+    """Deterministic session stats for the summary card when no AI summary exists."""
+    from lore.core.models import Role
+    from lore.services.summary_input import extract_artifacts, from_unified
+
+    messages = list(getattr(session, "messages", None) or [])
+    first_prompt = ""
+    for message in messages:
+        role = getattr(message, "role", None)
+        if role == Role.USER or getattr(role, "value", None) == "user":
+            first_prompt = _clamp_glance_text(getattr(message, "content", "") or "")
+            break
+
+    tool_calls = 0
+    failed_tool_calls = 0
+    tool_names: Counter[str] = Counter()
+    for message in messages:
+        for raw in getattr(message, "tool_calls", None) or []:
+            if not isinstance(raw, dict):
+                continue
+            tool_calls += 1
+            name = str(raw.get("tool") or "tool")
+            tool_names[name] += 1
+            status = str(raw.get("status") or "").lower()
+            if status in {"failed", "error"} or raw.get("is_error"):
+                failed_tool_calls += 1
+
+    files_touched: list[str] = []
+    seen: set[str] = set()
+    for message in messages:
+        for raw in getattr(message, "tool_calls", None) or []:
+            if not isinstance(raw, dict):
+                continue
+            inp = raw.get("input")
+            if not isinstance(inp, dict):
+                continue
+            for key in ("path", "file_path", "file"):
+                path = inp.get(key)
+                if isinstance(path, str) and path and path not in seen:
+                    seen.add(path)
+                    files_touched.append(path)
+                    if len(files_touched) >= 8:
+                        break
+            if len(files_touched) >= 8:
+                break
+        if len(files_touched) >= 8:
+            break
+    if len(files_touched) < 8 and messages:
+        artifacts = extract_artifacts(from_unified(messages))
+        for path in (*artifacts.files_modified, *artifacts.files_read):
+            if path in seen:
+                continue
+            seen.add(path)
+            files_touched.append(path)
+            if len(files_touched) >= 8:
+                break
+
+    prompts = int(getattr(session, "prompt_count", 0) or 0)
+    return {
+        "first_prompt": first_prompt,
+        "prompts": prompts,
+        "tool_calls": tool_calls,
+        "failed_tool_calls": failed_tool_calls,
+        "tools_used": tool_names.most_common(6),
+        "files_touched": files_touched,
+        "duration": _duration_label(session),
+    }

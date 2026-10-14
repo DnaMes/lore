@@ -1,0 +1,122 @@
+<details id="sessionSummaryCard" class="summary-card surface-card" open
+         data-session-id="{{ session.session_id }}">
+    <summary class="summary-card-head">
+        <span class="summary-card-title">
+            {% if summary_mode == 'ai' %}AI summary{% else %}At a glance{% endif %}
+        </span>
+        {% if summary_mode == 'ai' %}
+        <span class="summary-card-meta">
+            {{ summary_generated_with }}{% if summary_created %} · {{ summary_created }}{% endif %}
+        </span>
+        {% endif %}
+        {% if summary_stale %}
+        <span class="summary-stale-badge" title="Session changed since this summary">STALE</span>
+        <span class="summary-stale-text">Session changed since this summary</span>
+        {% endif %}
+        <span class="summary-card-actions">
+            <button type="button"
+                    class="summary-generate-btn"
+                    data-action="generate-session-summary"
+                    data-session-id="{{ session.session_id }}"
+                    {% if not summary_generate_enabled %}disabled aria-disabled="true"{% endif %}>
+                Generate
+            </button>
+        </span>
+    </summary>
+    <div class="summary-card-body" id="sessionSummaryBody">
+        {% if summary_mode == 'ai' %}
+        <p class="summary-headline">{{ summary_one_liner }}</p>
+        {% set goal = summary_body.goal if summary_body else none %}
+        {% if goal and goal.text %}
+        <div class="summary-label">Goal</div>
+        <p class="summary-text">{{ goal.text }}
+            {% for cite in goal.cites or [] %}
+            {% set href = summary_cite_href(cite, summary_anchors) %}
+            {% if href %}<a class="summary-cite" href="{{ href }}">#{{ cite }}</a>{% else %}<span class="summary-cite-plain">#{{ cite }}</span>{% endif %}
+            {% endfor %}
+        </p>
+        {% endif %}
+        {% set outcome = summary_body.outcome if summary_body else none %}
+        {% if outcome and outcome.text %}
+        <div class="summary-label">Outcome</div>
+        <p class="summary-text">
+            <span class="summary-outcome-status">{{ outcome.status }}</span>
+            {{ outcome.text }}
+            {% for cite in outcome.cites or [] %}
+            {% set href = summary_cite_href(cite, summary_anchors) %}
+            {% if href %}<a class="summary-cite" href="{{ href }}">#{{ cite }}</a>{% else %}<span class="summary-cite-plain">#{{ cite }}</span>{% endif %}
+            {% endfor %}
+        </p>
+        {% endif %}
+        {% if summary_body and summary_body.decisions %}
+        <div class="summary-label">Decisions</div>
+        <ul class="summary-list">
+            {% for item in summary_body.decisions %}
+            <li>{{ item.text }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if summary_body and summary_body.open_questions %}
+        <div class="summary-label">Open questions</div>
+        <ul class="summary-list">
+            {% for item in summary_body.open_questions %}
+            <li>{{ item.text }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if summary_body and summary_body.next_steps %}
+        <div class="summary-label">Next steps</div>
+        <ul class="summary-list">
+            {% for item in summary_body.next_steps %}
+            <li>{{ item.text }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if summary_body and summary_body.topics %}
+        <div class="summary-label">Topics</div>
+        <div class="summary-topics">
+            {% for topic in summary_body.topics %}
+            <span class="summary-topic-chip">{{ topic }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if summary_chunk_note %}
+        <p class="summary-chunk-note">{{ summary_chunk_note }}</p>
+        {% endif %}
+        {% else %}
+        {% set glance = summary_glance %}
+        {% if glance.first_prompt %}
+        <p class="summary-glance-prompt">{{ glance.first_prompt }}</p>
+        {% endif %}
+        <ul class="summary-glance-stats">
+            <li>{{ glance.prompts }} prompts</li>
+            <li>{{ glance.tool_calls }} tool calls</li>
+            {% if glance.failed_tool_calls %}<li>{{ glance.failed_tool_calls }} failed tool calls</li>{% endif %}
+            {% if glance.duration %}<li>{{ glance.duration }}</li>{% endif %}
+        </ul>
+        {% if glance.tools_used %}
+        <div class="summary-label">Tools used</div>
+        <ul class="summary-list summary-tools-list">
+            {% for name, count in glance.tools_used %}
+            <li>{{ name }} ({{ count }})</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if glance.files_touched %}
+        <div class="summary-label">Files touched</div>
+        <ul class="summary-list summary-files-list">
+            {% for path in glance.files_touched %}
+            <li>{{ path }}</li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% endif %}
+        {% if not summary_generate_enabled %}
+        <p class="summary-cli-hint">
+            <code class="summary-cli-command">{{ summary_cli_command }}</code>
+        </p>
+        <p class="summary-cli-reason">{{ summary_generate_reason }}</p>
+        {% endif %}
+        <p class="summary-job-status" id="summaryJobStatus" hidden aria-live="polite"></p>
+    </div>
+</details>

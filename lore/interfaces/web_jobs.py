@@ -315,6 +315,124 @@ def _start_audit_job(scope: str, provider: Optional[str]) -> str:
     return job_id
 
 
+def _running_summary_job_for_session(session_id: str) -> Optional[str]:
+    with RELOAD_JOBS_LOCK:
+        for job_id, state in RELOAD_JOBS.items():
+            if (
+                state.get("kind") == "session_summary"
+                and state.get("session_id") == session_id
+                and str(state.get("status") or "") == "running"
+            ):
+                return job_id
+    return None
+
+
+def _start_session_summary_job(session_id: str) -> str:
+    """Start a background job that generates one session summary (local provider only).
+
+    The "already running?" check and the insert happen under one lock hold, so two
+    overlapping requests can never start two jobs for the same session.
+    """
+    job_id = f"summary-{uuid.uuid4().hex[:12]}"
+    now_epoch = time.time()
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    with RELOAD_JOBS_LOCK:
+        for other_id, state in RELOAD_JOBS.items():
+            if (
+                state.get("kind") == "session_summary"
+                and state.get("session_id") == session_id
+                and str(state.get("status") or "") == "running"
+            ):
+                return other_id
+        _prune_reload_jobs_locked(now_epoch=now_epoch)
+        RELOAD_JOBS[job_id] = {
+            "job_id": job_id,
+            "kind": "session_summary",
+            "session_id": session_id,
+            "status": "running",
+            "progress": 0,
+            "message": "Queued",
+            "started_epoch": now_epoch,
+            "updated_epoch": now_epoch,
+            "started_at": now,
+            "updated_at": now,
+            "cancel_requested": False,
+        }
+
+    _metrics_inc("summary_jobs_started")
+
+    def run() -> None:
+        from lore.services.summarize import summarize_session as run_summarize_session
+        from lore.services.summarize_cli import build_mcp_summarize_provider, web_summarize_enabled
+
+        from .web_data import OUTPUT_DIR
+
+        try:
+
+            def progress_callback(progress: int, message: str) -> None:
+                _assert_job_active(job_id)
+                _set_reload_job(job_id, progress=max(0, min(100, int(progress))), message=message)
+
+            def should_stop() -> bool:
+                _assert_job_active(job_id)
+                return False
+
+            progress_callback(5, "Preparing local provider")
+            if not web_summarize_enabled():
+                raise ValueError("Local summary provider is not configured")
+            provider, model_label = build_mcp_summarize_provider()
+            progress_callback(15, "Summarizing session")
+            outcome = run_summarize_session(
+                provider,
+                OUTPUT_DIR,
+                session_id,
+                model_label=model_label,
+                force=True,
+            )
+            if should_stop():
+                return
+            _set_reload_job(
+                job_id,
+                status="done",
+                progress=100,
+                message="Completed",
+                result={"outcome": outcome, "session_id": session_id},
+            )
+            _record_job_outcome("session_summary", "completed", now_epoch)
+        except ActionJobCancelledError:
+            _metrics_inc("action_jobs_cancelled")
+            _record_job_outcome("session_summary", "cancelled", now_epoch)
+            _set_reload_job(
+                job_id,
+                status="cancelled",
+                message="Cancelled by user",
+                error="cancelled",
+            )
+        except ActionJobTimeoutError as exc:
+            _metrics_inc("action_jobs_timed_out")
+            _record_job_outcome("session_summary", "failed", now_epoch)
+            _set_reload_job(
+                job_id,
+                status="error",
+                message=str(exc),
+                error="timeout",
+            )
+        except Exception as exc:
+            _record_job_outcome("session_summary", "failed", now_epoch)
+            # Clients get a fixed message: exception text may carry paths or prompt text.
+            logger.warning("Summary job failed for %s: %s", session_id, type(exc).__name__)
+            _set_reload_job(
+                job_id,
+                status="error",
+                message="Summary could not be generated",
+                error="summary_failed",
+            )
+
+    worker = threading.Thread(target=run, daemon=True)
+    worker.start()
+    return job_id
+
+
 __all__ = [
     "RELOAD_JOBS",
     "RELOAD_JOBS_LOCK",
@@ -330,4 +448,6 @@ __all__ = [
     "_start_reload_job",
     "_run_audit",
     "_start_audit_job",
+    "_running_summary_job_for_session",
+    "_start_session_summary_job",
 ]

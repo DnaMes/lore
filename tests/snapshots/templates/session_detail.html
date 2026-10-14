@@ -284,6 +284,22 @@
         .session-header-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-shrink: 0; }
         .session-rows-marker { display: none !important; }
         .session-header { transition: padding 0.15s ease; }
+        /* Detail header on narrow screens: icon + title on one row, actions below; compact = one row. */
+        .session-header-main { flex-wrap: nowrap; }
+        .session-header-main > .min-w-0 { min-width: 0; }
+        @media (max-width: 640px) {
+            .session-header-main { flex: 1 1 100%; }
+            .session-header .session-headline {
+                white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical; overflow: hidden;
+            }
+            .session-header-actions { width: 100%; }
+            .session-header.is-compact .session-header-main { flex: 1 1 0; }
+            .session-header.is-compact .session-header-actions { width: auto; margin-left: auto; }
+            .session-header.is-compact .session-headline {
+                display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden;
+            }
+        }
         .session-header-primary {
             border: 1px solid color-mix(in srgb, var(--primary) 70%, var(--border) 30%);
             background: var(--primary);
@@ -358,13 +374,115 @@
         .session-header.is-compact .session-header-tags { display: none; }
         .session-header.is-compact .session-header-main { flex-wrap: nowrap; }
         @media (max-width: 390px) {
-            .session-header-main { flex-direction: column; align-items: flex-start; }
             .session-header-meta { width: 100%; }
         }
         @media (prefers-reduced-motion: reduce) {
             .session-header, .date-chip, .group-toggle-option { transition: none; }
         }
         .session-row-outline { line-height: 1.35; }
+        .session-row-title-wrap { min-width: 0; }
+        .session-row-summary-line {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            margin-top: 2px;
+            min-width: 0;
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.35;
+        }
+        .session-row-summary-text {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .session-row-summary-star { flex-shrink: 0; }
+        .session-row-summary-ai {
+            flex-shrink: 0;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            opacity: 0.85;
+        }
+        .summary-card { margin-bottom: 16px; border-radius: 16px; overflow: hidden; }
+        .summary-card-head {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px 12px;
+            padding: 12px 16px;
+            cursor: pointer;
+            list-style: none;
+            font-weight: 600;
+        }
+        .summary-card-head::-webkit-details-marker { display: none; }
+        .summary-card-title { font-size: 13px; }
+        .summary-card-meta { font-size: 11px; color: var(--muted); font-weight: 400; }
+        .summary-card-actions { margin-left: auto; }
+        .summary-card-body { padding: 0 16px 14px; font-size: 14px; }
+        .summary-headline { font-size: 15px; font-weight: 600; margin: 0 0 10px; line-height: 1.45; }
+        .summary-label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--muted);
+            font-weight: 600;
+            margin: 10px 0 4px;
+        }
+        .summary-list { margin: 0; padding-left: 18px; }
+        .summary-tools-list, .summary-files-list { font-size: 12px; color: var(--muted); }
+        .summary-topics { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+        .summary-text { margin: 0 0 8px; line-height: 1.45; }
+        .summary-outcome-status { font-weight: 700; margin-right: 6px; text-transform: capitalize; }
+        .summary-topic-chip {
+            display: inline-block;
+            border: 1px solid var(--border);
+            background: color-mix(in srgb, var(--card) 88%, var(--muted) 12%);
+            border-radius: 999px;
+            padding: 2px 8px;
+            font-size: 11px;
+            margin: 0 4px 4px 0;
+        }
+        .summary-cite { margin-left: 4px; font-size: 11px; }
+        .summary-cite-plain { margin-left: 4px; font-size: 11px; color: var(--muted); }
+        .summary-stale-badge {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1px 6px;
+        }
+        .summary-stale-text { font-size: 11px; color: var(--muted); font-weight: 400; }
+        .summary-chunk-note { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+        .summary-glance-prompt { margin: 0 0 8px; line-height: 1.45; }
+        .summary-glance-stats { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0 0 8px; padding: 0; list-style: none; color: var(--muted); font-size: 12px; }
+        .summary-generate-btn {
+            border: 1px solid var(--border);
+            background: var(--card);
+            border-radius: 8px;
+            padding: 4px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .summary-generate-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .summary-generate-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .summary-cli-hint { margin: 10px 0 4px; font-size: 12px; }
+        .summary-cli-command { font-family: ui-monospace, monospace; font-size: 11px; }
+        .summary-cli-reason { margin: 0; font-size: 11px; color: var(--muted); }
+        .summary-job-status { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+        @media (prefers-reduced-motion: reduce) {
+            .summary-generate-btn { transition: none; }
+        }
+        @media (max-width: 390px) {
+            .summary-card-head { padding: 10px 12px; }
+            .summary-card-body { padding: 0 12px 12px; }
+            .session-row-summary-line { max-width: 100%; }
+        }
         .tag-chip-automated { font-weight: 600; }
         .row-menu { position: relative; align-self: flex-start; }
         .row-menu-trigger {
@@ -1176,6 +1294,51 @@
 })();
 </script>
 
+<section class="max-w-[90rem] mx-auto px-6 pb-4">
+    <details id="sessionSummaryCard" class="summary-card surface-card" open
+         data-session-id="session-1">
+    <summary class="summary-card-head">
+        <span class="summary-card-title">
+            At a glance
+        </span>
+        
+        
+        <span class="summary-card-actions">
+            <button type="button"
+                    class="summary-generate-btn"
+                    data-action="generate-session-summary"
+                    data-session-id="session-1"
+                    disabled aria-disabled="true">
+                Generate
+            </button>
+        </span>
+    </summary>
+    <div class="summary-card-body" id="sessionSummaryBody">
+        
+        
+        
+        <p class="summary-glance-prompt">Find the sqlite issue</p>
+        
+        <ul class="summary-glance-stats">
+            <li>1 prompts</li>
+            <li>0 tool calls</li>
+            
+            <li>5m</li>
+        </ul>
+        
+        
+        
+        
+        <p class="summary-cli-hint">
+            <code class="summary-cli-command">lore summarize --session session-1</code>
+        </p>
+        <p class="summary-cli-reason">No local provider configured: set LORE_SUMMARY_PROVIDER=ollama</p>
+        
+        <p class="summary-job-status" id="summaryJobStatus" hidden aria-live="polite"></p>
+    </div>
+</details>
+</section>
+
 <section class="max-w-[90rem] mx-auto px-6 pb-24">
     <div class="flex flex-col lg:flex-row w-full">
     <aside class="hidden lg:block lg:flex-grow lg:flex-shrink-[100] lg:basis-[550px] lg:min-w-[350px] lg:max-w-[550px] lg:pr-6">
@@ -1310,6 +1473,52 @@
         }
     });
 })();
+</script>
+
+<script nonce="NONCE">
+window.generateSessionSummary = async function (btn) {
+    const card = document.getElementById('sessionSummaryCard');
+    const statusEl = document.getElementById('summaryJobStatus');
+    const sessionId = (btn && btn.dataset.sessionId) || (card && card.dataset.sessionId) || '';
+    if (!sessionId || !btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.setAttribute('aria-disabled', 'true');
+    if (statusEl) {
+        statusEl.hidden = false;
+        statusEl.textContent = 'Starting summary…';
+    }
+    try {
+        const resp = await fetch('/session/' + encodeURIComponent(sessionId) + '/summary', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        const payload = await resp.json();
+        if (!resp.ok) throw new Error(payload.error || 'Summary request failed');
+        const jobId = payload.job_id;
+        if (!jobId) throw new Error('Missing job id');
+        const poll = typeof pollActionJob === 'function' ? pollActionJob : null;
+        if (!poll) throw new Error('Job polling unavailable');
+        await poll({
+            jobId: jobId,
+            statusPath: '/api/reload-status',
+            onProgress: function (state) {
+                if (statusEl && state && state.message) statusEl.textContent = state.message;
+            },
+        });
+        const summaryResp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/summary', {
+            credentials: 'same-origin',
+        });
+        if (summaryResp.ok) {
+            window.location.reload();
+        }
+    } catch (err) {
+        if (statusEl) statusEl.textContent = String(err.message || err);
+        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
+    }
+};
 </script>
 
 <!-- Resume session modal -->
@@ -2346,6 +2555,11 @@ document.addEventListener('keydown', function(e) {
                         break;
                     case 'prompt-add-tag':
                         if (typeof window.promptAddTag === 'function') window.promptAddTag();
+                        break;
+                    case 'generate-session-summary':
+                        if (typeof window.generateSessionSummary === 'function') {
+                            window.generateSessionSummary(el);
+                        }
                         break;
                     default:
                         break;

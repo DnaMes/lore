@@ -68,6 +68,10 @@
 })();
 </script>
 
+<section class="max-w-[90rem] mx-auto px-6 pb-4">
+    {% include "session_summary_card.html" %}
+</section>
+
 <section class="max-w-[90rem] mx-auto px-6 pb-24">
     <div class="flex flex-col lg:flex-row w-full">
     <aside class="hidden lg:block lg:flex-grow lg:flex-shrink-[100] lg:basis-[550px] lg:min-w-[350px] lg:max-w-[550px] lg:pr-6">
@@ -163,6 +167,52 @@
         }
     });
 })();
+</script>
+
+<script nonce="{{ nonce }}">
+window.generateSessionSummary = async function (btn) {
+    const card = document.getElementById('sessionSummaryCard');
+    const statusEl = document.getElementById('summaryJobStatus');
+    const sessionId = (btn && btn.dataset.sessionId) || (card && card.dataset.sessionId) || '';
+    if (!sessionId || !btn || btn.disabled) return;
+    btn.disabled = true;
+    btn.setAttribute('aria-disabled', 'true');
+    if (statusEl) {
+        statusEl.hidden = false;
+        statusEl.textContent = 'Starting summary…';
+    }
+    try {
+        const resp = await fetch('/session/' + encodeURIComponent(sessionId) + '/summary', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        const payload = await resp.json();
+        if (!resp.ok) throw new Error(payload.error || 'Summary request failed');
+        const jobId = payload.job_id;
+        if (!jobId) throw new Error('Missing job id');
+        const poll = typeof pollActionJob === 'function' ? pollActionJob : null;
+        if (!poll) throw new Error('Job polling unavailable');
+        await poll({
+            jobId: jobId,
+            statusPath: '/api/reload-status',
+            onProgress: function (state) {
+                if (statusEl && state && state.message) statusEl.textContent = state.message;
+            },
+        });
+        const summaryResp = await fetch('/api/session/' + encodeURIComponent(sessionId) + '/summary', {
+            credentials: 'same-origin',
+        });
+        if (summaryResp.ok) {
+            window.location.reload();
+        }
+    } catch (err) {
+        if (statusEl) statusEl.textContent = String(err.message || err);
+        btn.disabled = false;
+        btn.removeAttribute('aria-disabled');
+    }
+};
 </script>
 
 <!-- Resume session modal -->
