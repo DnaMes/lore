@@ -248,13 +248,13 @@ def test_skipped_small(store: Path):
 
 
 def test_needs_chunking_no_provider(store: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setattr(
-        "lore.services.summarize.SINGLE_PASS_MAX_TOKENS",
-        10,
-    )
-    provider = FakeProvider()
-    assert summarize_session(provider, store, "rich", model_label=MODEL) == "needs_chunking"
-    assert provider.prompts == []
+    from tests.test_summarize_chunking import AutoProvider
+
+    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 10)
+    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 50)
+    provider = AutoProvider()
+    assert summarize_session(provider, store, "rich", model_label=MODEL) == "written"
+    assert provider.prompts
 
 
 def test_provider_exception_failed_preserves_old_row(store: Path):

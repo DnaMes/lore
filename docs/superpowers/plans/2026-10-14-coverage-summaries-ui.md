@@ -164,7 +164,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 
 ### B4.3b Chunking, merge, repair and budgets **[R]**
 Chunks cut at user messages and never inside a call/result pair, merge call, one repair retry then a smaller chunk size, max 8 chunks with sampling and `truncated`, budget caps and dry-run estimate, a growing session re-runs only its last chunk and the merge; native compaction reuse.
-- [ ] done
+- [x] done
 
 ### B4.4 CLI `lore summarize`
 Flags as in the design (`--session`, `--project`, `--since`, `--tool`, `--provider`, `--model`, `--allow-cloud`, `--dry-run`, `--force`, `--max-sessions`, `--max-input-tokens`, `--level`, `--json`); provider announced before any send; exit 1 when every attempted call failed.

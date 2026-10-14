@@ -4,16 +4,18 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from ..core.models import AUTOMATED_ORIGINS
 from ..llm.base import LLMProvider, prepare_prompt, transcript_safe
 from ..storage.reader import load_session_messages_v2
 from ..storage.schema import open_connection
 from ..storage.summaries import (
+    get_summary,
     has_current_summary,
     save_summary,
     summary_fingerprint,
@@ -21,13 +23,30 @@ from ..storage.summaries import (
 from ..storage.writer import v2_db_path
 from ..utils.redact import redact
 from .index import load_deleted_session_ids
+from .summarize_chunks import (
+    MAX_SESSION_TOKENS,
+    OUTPUT_TOKENS_PER_CALL_ESTIMATE,
+    blocks_to_transcript,
+    build_merge_user_prompt,
+    build_open_threads,
+    chunk_fingerprint,
+    chunk_max_chars,
+    chunk_scope_key,
+    halve_chunk_blocks,
+    merge_fingerprint,
+    merge_system_prompt,
+    sample_chunks,
+    validate_merged_cites_in_chunks,
+)
 from .summary_input import (
     COMPRESSOR_VERSION,
+    CompressedBlock,
     CompressedTranscript,
     compress,
     estimate_tokens,
     extract_artifacts,
     from_unified,
+    split_chunks,
 )
 
 SUMMARY_PROMPT_VERSION = 1
@@ -87,6 +106,11 @@ class SummarizeReport:
     redactions: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
+    over_budget: int = 0
+    chunk_calls: int = 0
+    merge_calls: int = 0
+    reused_chunks: int = 0
+    truncated_sessions: int = 0
 
     @property
     def attempted(self) -> int:
@@ -97,7 +121,26 @@ class SummarizeReport:
         return self.attempted > 0 and self.written == 0 and self.unchanged == 0
 
 
-def build_prompt(transcript: CompressedTranscript, native_summary: bool) -> tuple[str, str]:
+@dataclass(frozen=True)
+class SessionEstimate:
+    """Dry-run estimate for one session."""
+
+    session_id: str
+    compressed_tokens: int
+    chunks: int
+    expected_calls: int
+    input_tokens: int
+    output_tokens: int
+    status: str
+
+
+def build_prompt(
+    transcript: CompressedTranscript,
+    native_summary: bool,
+    *,
+    prior_summary: Optional[str] = None,
+    open_threads: Optional[str] = None,
+) -> tuple[str, str]:
     """Return (system, user) prompts for a compressed transcript."""
     system = _INSTRUCTIONS
     native_note = ""
@@ -108,7 +151,17 @@ def build_prompt(transcript: CompressedTranscript, native_summary: bool) -> tupl
             "cite them only with those seq numbers.\n"
         )
     body = _TRANSCRIPT_CLOSE_RE.sub("<\\/transcript>", transcript.text)  # data cannot end itself
-    user = f"<transcript>\n{body}\n</transcript>\n{native_note}{_SCHEMA_LINE}\n{_INSTRUCTIONS}"
+    prefix = ""
+    if prior_summary:
+        safe_prior = _TRANSCRIPT_CLOSE_RE.sub("<\\/transcript>", prior_summary)
+        prefix = f"PRIOR SUMMARY (written by the tool):\n{safe_prior}\n\n"
+    threads = ""
+    if open_threads:
+        threads = f"PREVIOUS OPEN THREADS: {open_threads}\n"
+    user = (
+        f"{prefix}{threads}<transcript>\n{body}\n</transcript>\n"
+        f"{native_note}{_SCHEMA_LINE}\n{_INSTRUCTIONS}"
+    )
     return system, user
 
 
@@ -178,8 +231,45 @@ def _validate_claim_list(
     return out
 
 
+def _collect_output_strings(summary: dict[str, Any]) -> list[str]:
+    out: list[str] = []
+    for key in ("one_liner",):
+        v = summary.get(key)
+        if isinstance(v, str):
+            out.append(v)
+    for key in ("goal", "outcome"):
+        v = summary.get(key)
+        if isinstance(v, dict) and isinstance(v.get("text"), str):
+            out.append(v["text"])
+    for key in ("decisions", "open_questions", "next_steps", "topics"):
+        v = summary.get(key)
+        if isinstance(v, list):
+            for item in v:
+                if isinstance(item, dict) and isinstance(item.get("text"), str):
+                    out.append(item["text"])
+                elif isinstance(item, str):
+                    out.append(item)
+    return out
+
+
+def _verbatim_native_errors(texts: list[str], native_text: str) -> list[str]:
+    if len(native_text) < 60:
+        return []
+    errors: list[str] = []
+    for t in texts:
+        for i in range(len(native_text) - 59):
+            frag = native_text[i : i + 60]
+            if frag in t:
+                errors.append("output copies native summary text verbatim")
+                return errors
+    return errors
+
+
 def validate_summary(
-    raw: object, *, allowed_seqs: frozenset[int]
+    raw: object,
+    *,
+    allowed_seqs: frozenset[int],
+    forbidden_verbatim: Optional[str] = None,
 ) -> tuple[Optional[dict[str, Any]], list[str]]:
     """Validate provider JSON; return (clean_dict, errors)."""
     errors: list[str] = []
@@ -260,10 +350,7 @@ def validate_summary(
         else:
             confidence = conf
 
-    if errors:
-        return None, errors
-
-    return {
+    result = {
         "one_liner": one_liner,
         "goal": goal,
         "outcome": outcome,
@@ -272,7 +359,13 @@ def validate_summary(
         "next_steps": next_steps,
         "topics": topics,
         "confidence": confidence,
-    }, []
+    }
+    if forbidden_verbatim:
+        errors.extend(_verbatim_native_errors(_collect_output_strings(result), forbidden_verbatim))
+    if errors:
+        return None, errors
+
+    return result, []
 
 
 def _extract_json_object(text: str) -> Optional[str]:
@@ -343,12 +436,473 @@ def _fingerprint(user_prompt: str, artifacts: dict[str, Any], model_label: str) 
     return summary_fingerprint(material, model_label, SUMMARY_PROMPT_VERSION, COMPRESSOR_VERSION)
 
 
+def _chunk_row_fingerprint(user_prompt: str, model_label: str) -> str:
+    return chunk_fingerprint(user_prompt, model_label, SUMMARY_PROMPT_VERSION, COMPRESSOR_VERSION)
+
+
+def _is_transient_provider_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(tok in msg for tok in ("429", "rate", "timeout", "timed out"))
+
+
+def _call_with_retries(
+    call: Callable[[], Any],
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+    max_retries: int = 2,
+) -> Any:
+    delays = (5.0, 20.0)
+    attempt = 0
+    while True:
+        try:
+            return call()
+        except Exception as exc:
+            if not _is_transient_provider_error(exc) or attempt >= max_retries:
+                raise
+            sleep(delays[min(attempt, len(delays) - 1)])
+            attempt += 1
+
+
+def _last_native_compaction(messages: list) -> tuple[Optional[int], Optional[str]]:
+    native_seq: Optional[int] = None
+    native_text: Optional[str] = None
+    for idx, msg in enumerate(messages):
+        kind = getattr(msg, "kind", "text")
+        if kind == "compaction_summary":
+            native_seq = idx + 1
+            content = getattr(msg, "content", "")
+            native_text = content if isinstance(content, str) else ""
+    return native_seq, native_text
+
+
+@dataclass
+class _CallBudget:
+    remaining: Optional[int]
+
+    def charge(self, tokens: int) -> bool:
+        if self.remaining is None:
+            return True
+        if tokens > self.remaining:
+            return False
+        self.remaining -= tokens
+        return True
+
+    def would_exceed(self, tokens: int) -> bool:
+        if self.remaining is None:
+            return False
+        return tokens > self.remaining
+
+
+class _DualBudget:
+    """Charges the run-level and the per-session token caps together."""
+
+    def __init__(self, run: "_CallBudget", session_cap: int) -> None:
+        self._run = run
+        self._session = _CallBudget(session_cap)
+
+    def would_exceed(self, tokens: int) -> bool:
+        return self._run.would_exceed(tokens) or self._session.would_exceed(tokens)
+
+    def charge(self, tokens: int) -> bool:
+        if self.would_exceed(tokens):
+            return False
+        return self._run.charge(tokens) and self._session.charge(tokens)
+
+
+@dataclass
+class _SessionRunStats:
+    chunk_calls: int = 0
+    merge_calls: int = 0
+    reused_chunks: int = 0
+    truncated: bool = False
+
+
 def _compressor_payload(transcript: CompressedTranscript) -> dict[str, Any]:
     return {
         "char_count": transcript.char_count,
         "elided_seqs": len(transcript.elided_seqs),
         "native_summary_seqs": list(transcript.native_summary_seqs),
     }
+
+
+def _provider_call(
+    provider: LLMProvider,
+    prompt_user: str,
+    system: str,
+    *,
+    sleep: Callable[[float], None] = time.sleep,
+) -> tuple[Optional[str], Optional[str], int]:
+    """Return (content, error_tag, output_tokens). error_tag is 'provider error' on failure."""
+    try:
+        response = _call_with_retries(
+            lambda: provider.generate(
+                prompt_user,
+                system_prompt=system,
+                temperature=0.1,
+                max_tokens=1500,
+            ),
+            sleep=sleep,
+        )
+    except Exception:
+        return None, "provider error", 0
+    return response.content, None, int(response.tokens_used or 0)
+
+
+def _call_and_validate(
+    provider: LLMProvider,
+    prompt_user: str,
+    system: str,
+    *,
+    allowed_seqs: frozenset[int],
+    forbidden_verbatim: Optional[str] = None,
+    sleep: Callable[[float], None] = time.sleep,
+) -> tuple[Optional[dict[str, Any]], list[str], int]:
+    content, err, out_tok = _provider_call(provider, prompt_user, system, sleep=sleep)
+    if err:
+        return None, [err], 0
+    parsed = _parse_provider_json(content or "")
+    if parsed is None:
+        return None, ["response is not valid JSON"], out_tok
+    if isinstance(parsed, dict):
+        for drop_key in ("files", "commands", "files_read", "files_modified"):
+            parsed.pop(drop_key, None)
+    validated, verrs = validate_summary(
+        parsed,
+        allowed_seqs=allowed_seqs,
+        forbidden_verbatim=forbidden_verbatim,
+    )
+    return validated, verrs, out_tok
+
+
+def _repair_once(
+    provider: LLMProvider,
+    user: str,
+    system: str,
+    verrs: list[str],
+    *,
+    allowed_seqs: frozenset[int],
+    forbidden_verbatim: Optional[str],
+    budget: _CallBudget | _DualBudget,
+    sleep: Callable[[float], None] = time.sleep,
+) -> tuple[Optional[dict[str, Any]], list[str], int]:
+    repair = user + "\n\nValidation errors:\n" + "\n".join(verrs)
+    repair_tokens = estimate_tokens(len(repair) + len(system))
+    if not budget.charge(repair_tokens):
+        return None, verrs, 0
+    validated, verrs2, out_tok = _call_and_validate(
+        provider,
+        repair,
+        system,
+        allowed_seqs=allowed_seqs,
+        forbidden_verbatim=forbidden_verbatim,
+        sleep=sleep,
+    )
+    return validated, verrs2, out_tok
+
+
+def _estimate_chunked_calls(
+    output_dir: Path,
+    session_id: str,
+    chunk_groups: list[tuple[CompressedBlock, ...]],
+    *,
+    model_label: str,
+    prior_summary: Optional[str],
+    open_threads_seed: Optional[str],
+    artifacts_blob: str = "",
+) -> int:
+    calls = 0
+    prev_threads = open_threads_seed
+    chunk_fps: list[str] = []
+    for idx, blocks in enumerate(chunk_groups):
+        tr = blocks_to_transcript(blocks)
+        _, user = build_prompt(
+            tr,
+            False,
+            prior_summary=prior_summary if idx == 0 else None,
+            open_threads=prev_threads,
+        )
+        user, _ = prepare_prompt(user)
+        fp = _chunk_row_fingerprint(user, model_label)
+        chunk_fps.append(fp)
+        scope = chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq)
+        row = get_summary(output_dir, "chunk", scope)
+        if row is None or row.get("fingerprint") != fp:
+            calls += 1
+        elif row.get("payload"):
+            prev_threads = build_open_threads(row["payload"])
+    merge_fp = merge_fingerprint(chunk_fps, model_label, SUMMARY_PROMPT_VERSION, artifacts_blob)
+    if not has_current_summary(output_dir, session_id, merge_fp):
+        calls += 1
+    return calls
+
+
+def _process_chunked(
+    provider: LLMProvider,
+    output_dir: Path,
+    session_id: str,
+    messages: list,
+    summary_msgs: list,
+    transcript: CompressedTranscript,
+    *,
+    model_label: str,
+    force: bool,
+    prior_summary: Optional[str],
+    native_seq: Optional[int],
+    budget: _CallBudget,
+    max_session_tokens: int,
+    stats: _SessionRunStats,
+    sleep: Callable[[float], None] = time.sleep,
+) -> tuple[str, int, int, int]:
+    raw_groups = split_chunks(transcript, chunk_max_chars())
+    selected, truncated, sampled_indices = sample_chunks(raw_groups)
+    stats.truncated = truncated
+    worst_calls = len(selected) + 1
+    if worst_calls * estimate_tokens(2000) > max_session_tokens:
+        return "over_budget", 0, 0, 0
+
+    artifacts, artifact_redactions = _artifacts_payload(messages)
+    artifacts_blob = json.dumps(artifacts, sort_keys=True, ensure_ascii=False)
+    budget = _DualBudget(budget, max_session_tokens)  # type: ignore[assignment]
+    redactions = artifact_redactions
+    chunk_summaries: list[dict[str, Any]] = []
+    chunk_fps: list[str] = []
+    input_tokens = 0
+    output_tokens = 0
+    prev_threads: Optional[str] = None
+    forbidden = prior_summary
+
+    for idx, blocks in enumerate(selected):
+        tr = blocks_to_transcript(blocks)
+        allowed = tr.seqs
+        if native_seq is not None:
+            allowed = frozenset(set(allowed) | {native_seq})
+        system, user = build_prompt(
+            tr,
+            False,
+            prior_summary=prior_summary if idx == 0 else None,
+            open_threads=prev_threads,
+        )
+        user, chunk_red = prepare_prompt(user)
+        redactions += chunk_red
+        fp = _chunk_row_fingerprint(user, model_label)
+        scope = chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq)
+        row = get_summary(output_dir, "chunk", scope)
+        if not force and row is not None and row.get("fingerprint") == fp:
+            stats.reused_chunks += 1
+            payload = row["payload"]
+            chunk_summaries.append({k: payload[k] for k in _SUMMARY_KEYS if k in payload})
+            chunk_fps.append(fp)
+            prev_threads = build_open_threads(chunk_summaries[-1])
+            continue
+
+        call_tokens = estimate_tokens(len(user) + len(system))
+        if budget.would_exceed(call_tokens):
+            return "failed", redactions, input_tokens, output_tokens
+        if not budget.charge(call_tokens):
+            return "failed", redactions, input_tokens, output_tokens
+
+        validated, verrs, out_tok = _call_and_validate(
+            provider,
+            user,
+            system,
+            allowed_seqs=allowed,
+            forbidden_verbatim=forbidden,
+            sleep=sleep,
+        )
+        input_tokens += call_tokens
+        output_tokens += out_tok
+        stats.chunk_calls += 1
+
+        if validated is None and verrs and verrs != ["provider error"]:
+            validated, verrs, out_tok = _repair_once(
+                provider,
+                user,
+                system,
+                verrs,
+                allowed_seqs=allowed,
+                forbidden_verbatim=forbidden,
+                budget=budget,
+                sleep=sleep,
+            )
+            output_tokens += out_tok
+            stats.chunk_calls += 1
+
+        if validated is None and verrs not in (["provider error"],):
+            half = halve_chunk_blocks(blocks, chunk_max_chars())
+            if half is not None:
+                # One retry with smaller chunks: BOTH halves are summarised and stored so
+                # the merge sees the whole original span.
+                part_results: list[
+                    tuple[dict[str, Any], str, str, tuple[CompressedBlock, ...]]
+                ] = []
+                part_threads = prev_threads
+                failed_part = False
+                for part in half:
+                    part_tr = blocks_to_transcript(part)
+                    part_allowed = part_tr.seqs
+                    if native_seq is not None:
+                        part_allowed = frozenset(set(part_allowed) | {native_seq})
+                    _, part_user = build_prompt(part_tr, False, open_threads=part_threads)
+                    part_user, part_red = prepare_prompt(part_user)
+                    redactions += part_red
+                    part_tokens = estimate_tokens(len(part_user) + len(system))
+                    if not budget.charge(part_tokens):
+                        return "invalid", redactions, input_tokens, output_tokens
+                    part_val, part_errs, part_out = _call_and_validate(
+                        provider,
+                        part_user,
+                        system,
+                        allowed_seqs=part_allowed,
+                        forbidden_verbatim=forbidden,
+                        sleep=sleep,
+                    )
+                    input_tokens += part_tokens
+                    output_tokens += part_out
+                    stats.chunk_calls += 1
+                    if part_val is None:
+                        failed_part = True
+                        verrs = part_errs
+                        break
+                    part_results.append(
+                        (part_val, part_user, _chunk_row_fingerprint(part_user, model_label), part)
+                    )
+                    part_threads = build_open_threads(part_val)
+                if failed_part:
+                    if verrs == ["provider error"]:
+                        return "failed", redactions, input_tokens, output_tokens
+                    return "invalid", redactions, input_tokens, output_tokens
+                for part_val, _part_user, part_fp, part_blocks in part_results:
+                    save_summary(
+                        output_dir,
+                        level="chunk",
+                        scope_key=chunk_scope_key(
+                            session_id, part_blocks[0].first_seq, part_blocks[-1].last_seq
+                        ),
+                        session_id=session_id,
+                        fingerprint=part_fp,
+                        model=model_label,
+                        prompt_version=SUMMARY_PROMPT_VERSION,
+                        compressor_version=COMPRESSOR_VERSION,
+                        payload={**part_val},
+                        input_tokens=None,
+                        output_tokens=None,
+                    )
+                    chunk_summaries.append(part_val)
+                    chunk_fps.append(part_fp)
+                prev_threads = build_open_threads(part_results[-1][0])
+                continue
+
+        if verrs == ["provider error"]:
+            return "failed", redactions, input_tokens, output_tokens
+        if validated is None:
+            return "invalid", redactions, input_tokens, output_tokens
+
+        chunk_payload = {**validated}
+        save_summary(
+            output_dir,
+            level="chunk",
+            scope_key=scope,
+            session_id=session_id,
+            fingerprint=fp,
+            model=model_label,
+            prompt_version=SUMMARY_PROMPT_VERSION,
+            compressor_version=COMPRESSOR_VERSION,
+            payload=chunk_payload,
+            input_tokens=call_tokens,
+            output_tokens=out_tok,
+        )
+        chunk_summaries.append(validated)
+        chunk_fps.append(fp)
+        prev_threads = build_open_threads(validated)
+
+    merge_fp = merge_fingerprint(chunk_fps, model_label, SUMMARY_PROMPT_VERSION, artifacts_blob)
+    session_scope = f"session:{session_id}"
+    if (
+        not force
+        and stats.reused_chunks == len(selected)
+        and has_current_summary(output_dir, session_id, merge_fp)
+    ):
+        return "unchanged", redactions, input_tokens, output_tokens
+
+    union_seqs: set[int] = set()
+    for blocks in selected:
+        union_seqs.update(blocks_to_transcript(blocks).seqs)
+    if native_seq is not None:
+        union_seqs.add(native_seq)
+    allowed_union = frozenset(union_seqs)
+
+    merge_user = build_merge_user_prompt(chunk_summaries, _SCHEMA_LINE)
+    merge_user, merge_red = prepare_prompt(merge_user)
+    redactions += merge_red
+    merge_system = merge_system_prompt()
+    merge_tokens = estimate_tokens(len(merge_user) + len(merge_system))
+    if budget.would_exceed(merge_tokens) or not budget.charge(merge_tokens):
+        return "failed", redactions, input_tokens, output_tokens
+
+    validated, verrs, out_tok = _call_and_validate(
+        provider,
+        merge_user,
+        merge_system,
+        allowed_seqs=allowed_union,
+        forbidden_verbatim=forbidden,
+        sleep=sleep,
+    )
+    input_tokens += merge_tokens
+    output_tokens += out_tok
+    stats.merge_calls += 1
+
+    if validated is None and verrs and verrs != ["provider error"]:
+        validated, verrs, out_tok = _repair_once(
+            provider,
+            merge_user,
+            merge_system,
+            verrs,
+            allowed_seqs=allowed_union,
+            forbidden_verbatim=forbidden,
+            budget=budget,
+            sleep=sleep,
+        )
+        output_tokens += out_tok
+        stats.merge_calls += 1
+
+    if verrs == ["provider error"]:
+        return "failed", redactions, input_tokens, output_tokens
+    if validated is None:
+        return "invalid", redactions, input_tokens, output_tokens
+
+    merge_cite_errs = validate_merged_cites_in_chunks(validated, chunk_summaries)
+    if merge_cite_errs:
+        return "invalid", redactions, input_tokens, output_tokens
+
+    payload = {
+        **validated,
+        "artifacts": artifacts,
+        "compressor": _compressor_payload(transcript),
+        "truncated": truncated,
+        "chunks": len(selected),
+        "sampled_chunks": sampled_indices if truncated else None,
+        "redactions": redactions,
+        "generated_with": model_label,
+    }
+    if native_seq is not None:
+        payload["native_summary_seq"] = native_seq
+    if payload.get("sampled_chunks") is None:
+        payload.pop("sampled_chunks", None)
+
+    save_summary(
+        output_dir,
+        level="session",
+        scope_key=session_scope,
+        session_id=session_id,
+        fingerprint=merge_fp,
+        model=model_label,
+        prompt_version=SUMMARY_PROMPT_VERSION,
+        compressor_version=COMPRESSOR_VERSION,
+        payload=payload,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+    )
+    return "written", redactions, input_tokens, output_tokens
 
 
 def _process_session(
@@ -360,8 +914,14 @@ def _process_session(
     force: bool,
     deleted: set[str],
     token_budget: Optional[int] = None,
+    max_session_tokens: int = MAX_SESSION_TOKENS,
+    sleep: Callable[[float], None] = time.sleep,
+    stats: Optional[_SessionRunStats] = None,
 ) -> tuple[str, int, int, int]:
     """Return (outcome, redactions, input_tokens, output_tokens)."""
+    run_stats = stats or _SessionRunStats()
+    budget = _CallBudget(token_budget)
+
     if session_id in deleted:
         return "skipped_deleted", 0, 0, 0
 
@@ -369,15 +929,36 @@ def _process_session(
     if not messages:
         return "skipped_no_messages", 0, 0, 0
 
+    native_seq, prior_summary = _last_native_compaction(messages)
     summary_msgs = from_unified(messages)
+    if native_seq is not None:
+        summary_msgs = [m for m in summary_msgs if m.seq > native_seq]
+
     transcript = compress(summary_msgs)
     if transcript.char_count < MIN_COMPRESSED_CHARS:
         return "skipped_small", 0, 0, 0
-    if estimate_tokens(transcript.char_count) > SINGLE_PASS_MAX_TOKENS:
-        return "needs_chunking", 0, 0, 0
+
+    needs_chunk = estimate_tokens(transcript.char_count) > SINGLE_PASS_MAX_TOKENS
+    if needs_chunk:
+        return _process_chunked(
+            provider,
+            output_dir,
+            session_id,
+            messages,
+            summary_msgs,
+            transcript,
+            model_label=model_label,
+            force=force,
+            prior_summary=prior_summary,
+            native_seq=native_seq,
+            budget=budget,
+            max_session_tokens=max_session_tokens,
+            stats=run_stats,
+            sleep=sleep,
+        )
 
     native = bool(transcript.native_summary_seqs)
-    system, user = build_prompt(transcript, native)
+    system, user = build_prompt(transcript, native, prior_summary=prior_summary)
     user, redactions = prepare_prompt(user)
     artifacts, artifact_redactions = _artifacts_payload(messages)
     redactions += artifact_redactions
@@ -385,40 +966,42 @@ def _process_session(
     if not force and has_current_summary(output_dir, session_id, fingerprint):
         return "unchanged", 0, 0, 0
 
-    input_tokens = estimate_tokens(len(user) + len(system))
+    call_tokens = estimate_tokens(len(user) + len(system))
     allowed_seqs = transcript.seqs
+    if native_seq is not None:
+        allowed_seqs = frozenset(set(allowed_seqs) | {native_seq})
 
-    def _call_and_validate(prompt_user: str) -> tuple[Optional[dict], list[str], int]:
-        try:
-            # Single boundary: provider failures become outcome "failed".
-            response = provider.generate(
-                prompt_user,
-                system_prompt=system,
-                temperature=0.1,
-                max_tokens=1500,
-            )
-        except Exception:
-            return None, ["provider error"], 0
-        out_tok = int(response.tokens_used or 0)
-        parsed = _parse_provider_json(response.content)
-        if parsed is None:
-            return None, ["response is not valid JSON"], out_tok
-        if isinstance(parsed, dict):
-            for drop_key in ("files", "commands", "files_read", "files_modified"):
-                parsed.pop(drop_key, None)
-        validated, verrs = validate_summary(parsed, allowed_seqs=allowed_seqs)
-        return validated, verrs, out_tok
+    dual = _DualBudget(budget, max_session_tokens)
+    if not dual.charge(call_tokens):
+        return "over_budget", 0, 0, 0
+    input_tokens = call_tokens
+    validated, verrs, out_tokens = _call_and_validate(
+        provider,
+        user,
+        system,
+        allowed_seqs=allowed_seqs,
+        forbidden_verbatim=prior_summary,
+        sleep=sleep,
+    )
 
-    validated, verrs, out_tokens = _call_and_validate(user)
     if validated is None and verrs and verrs != ["provider error"]:
         repair = user + "\n\nValidation errors:\n" + "\n".join(verrs)
         repair_tokens = estimate_tokens(len(repair) + len(system))
-        if token_budget is not None and input_tokens + repair_tokens > token_budget:
-            return "invalid", redactions, input_tokens, out_tokens  # repair would break the cap
+        if dual.would_exceed(repair_tokens):
+            return "invalid", redactions, input_tokens, out_tokens
+        validated, verrs, repair_out = _repair_once(
+            provider,
+            user,
+            system,
+            verrs,
+            allowed_seqs=allowed_seqs,
+            forbidden_verbatim=prior_summary,
+            budget=dual,
+            sleep=sleep,
+        )
         input_tokens += repair_tokens
-        validated, verrs2, repair_out = _call_and_validate(repair)
         out_tokens += repair_out
-        verrs = verrs2
+
     if validated is None and verrs == ["response is not valid JSON"]:
         return "failed", redactions, input_tokens, out_tokens
     if verrs == ["provider error"]:
@@ -434,6 +1017,8 @@ def _process_session(
         "redactions": redactions,
         "generated_with": model_label,
     }
+    if native_seq is not None:
+        payload["native_summary_seq"] = native_seq
     save_summary(
         output_dir,
         level="session",
@@ -458,6 +1043,8 @@ def summarize_session(
     model_label: str,
     force: bool = False,
     now: Optional[datetime] = None,
+    sleep: Callable[[float], None] = time.sleep,
+    max_session_tokens: int = MAX_SESSION_TOKENS,
 ) -> str:
     """Summarize one session; return the outcome name."""
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
@@ -468,8 +1055,65 @@ def summarize_session(
         model_label=model_label,
         force=force,
         deleted=deleted,
+        max_session_tokens=max_session_tokens,
+        sleep=sleep,
     )
     return outcome
+
+
+def _session_plan(
+    output_dir: Path,
+    session_id: str,
+    deleted: set[str],
+    *,
+    model_label: str,
+    force: bool,
+    max_session_tokens: int = MAX_SESSION_TOKENS,
+) -> tuple[str, int]:
+    """Return (status, estimated_input_tokens for next work). status is unchanged|skipped_*|over_budget|..."""
+    if session_id in deleted:
+        return "deleted", 0
+    messages = load_session_messages_v2(output_dir, session_id)
+    if not messages:
+        return "no_messages", 0
+    native_seq, prior_summary = _last_native_compaction(messages)
+    summary_msgs = from_unified(messages)
+    if native_seq is not None:
+        summary_msgs = [m for m in summary_msgs if m.seq > native_seq]
+    transcript = compress(summary_msgs)
+    if transcript.char_count < MIN_COMPRESSED_CHARS:
+        return "skipped_small", 0
+    if estimate_tokens(transcript.char_count) > SINGLE_PASS_MAX_TOKENS:
+        raw_groups = split_chunks(transcript, chunk_max_chars())
+        selected, _, _ = sample_chunks(raw_groups)
+        calls = _estimate_chunked_calls(
+            output_dir,
+            session_id,
+            selected,
+            model_label=model_label,
+            prior_summary=prior_summary,
+            open_threads_seed=None,
+            artifacts_blob=json.dumps(
+                _artifacts_payload(messages)[0], sort_keys=True, ensure_ascii=False
+            ),
+        )
+        est = calls * estimate_tokens(2000)
+        if est > max_session_tokens:
+            return "over_budget", est
+        if not force and calls == 0:
+            return "unchanged", 0
+        return "chunked", est
+    system, user = build_prompt(
+        transcript,
+        bool(transcript.native_summary_seqs),
+        prior_summary=prior_summary,
+    )
+    user, _ = prepare_prompt(user)
+    artifacts, _ = _artifacts_payload(messages)
+    fingerprint = _fingerprint(user, artifacts, model_label)
+    if not force and has_current_summary(output_dir, session_id, fingerprint):
+        return "unchanged", 0
+    return "single", estimate_tokens(len(user) + len(system))
 
 
 def _provider_send_plan(
@@ -481,23 +1125,91 @@ def _provider_send_plan(
     force: bool,
 ) -> tuple[bool, Optional[int]]:
     """Return (will_call_provider, estimated_input_tokens)."""
-    if session_id in deleted:
-        return False, None
-    messages = load_session_messages_v2(output_dir, session_id)
-    if not messages:
-        return False, None
-    transcript = compress(from_unified(messages))
-    if transcript.char_count < MIN_COMPRESSED_CHARS:
-        return False, None
-    if estimate_tokens(transcript.char_count) > SINGLE_PASS_MAX_TOKENS:
-        return False, None
-    system, user = build_prompt(transcript, bool(transcript.native_summary_seqs))
-    user, _ = prepare_prompt(user)
-    artifacts, _ = _artifacts_payload(messages)
-    fingerprint = _fingerprint(user, artifacts, model_label)
-    if not force and has_current_summary(output_dir, session_id, fingerprint):
-        return False, None
-    return True, estimate_tokens(len(user) + len(system))
+    status, est = _session_plan(
+        output_dir, session_id, deleted, model_label=model_label, force=force
+    )
+    if status in ("unchanged", "skipped_small", "deleted", "no_messages", "over_budget"):
+        return False, None if status == "unchanged" else est
+    return True, est
+
+
+def estimate_run(
+    output_dir: Path,
+    session_ids: list[str],
+    *,
+    max_sessions: Optional[int] = None,
+    model_label: str = "estimate/local",
+    max_session_tokens: int = MAX_SESSION_TOKENS,
+) -> list[SessionEstimate]:
+    """Dry-run token and call estimates without provider I/O or writes."""
+    deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
+    out: list[SessionEstimate] = []
+    for session_id in session_ids:
+        if max_sessions is not None and len(out) >= max_sessions:
+            break
+        status, est_in = _session_plan(
+            output_dir,
+            session_id,
+            deleted,
+            model_label=model_label,
+            force=False,
+            max_session_tokens=max_session_tokens,
+        )
+        messages = load_session_messages_v2(output_dir, session_id)
+        native_seq, prior_for_estimate = (
+            _last_native_compaction(messages) if messages else (None, None)
+        )
+        summary_msgs = from_unified(messages) if messages else []
+        if native_seq is not None:
+            summary_msgs = [m for m in summary_msgs if m.seq > native_seq]
+        transcript = compress(summary_msgs) if summary_msgs else None
+        compressed_tokens = estimate_tokens(transcript.char_count) if transcript else 0
+        chunks = 0
+        expected_calls = 0
+        if status == "chunked" and transcript is not None:
+            raw_groups = split_chunks(transcript, chunk_max_chars())
+            selected, _, _ = sample_chunks(raw_groups)
+            chunks = len(selected)
+            expected_calls = _estimate_chunked_calls(
+                output_dir,
+                session_id,
+                selected,
+                model_label=model_label,
+                prior_summary=prior_for_estimate,
+                open_threads_seed=None,
+                artifacts_blob=json.dumps(
+                    _artifacts_payload(messages or [])[0], sort_keys=True, ensure_ascii=False
+                ),
+            )
+        elif status == "single":
+            chunks = 1
+            expected_calls = 1
+        elif status == "unchanged":
+            expected_calls = 0
+        input_tokens = expected_calls * estimate_tokens(2000) if expected_calls else est_in
+        output_tokens = expected_calls * OUTPUT_TOKENS_PER_CALL_ESTIMATE
+        if status == "skipped_small":
+            mapped = "skipped_small"
+        elif status == "deleted":
+            mapped = "deleted"
+        elif status == "no_messages":
+            mapped = "no_messages"
+        elif status == "over_budget":
+            mapped = "over_budget"
+        else:
+            mapped = status
+        out.append(
+            SessionEstimate(
+                session_id=session_id,
+                compressed_tokens=compressed_tokens,
+                chunks=chunks,
+                expected_calls=expected_calls,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                status=mapped,
+            )
+        )
+    return out
 
 
 def run_summaries(
@@ -509,6 +1221,8 @@ def run_summaries(
     force: bool = False,
     max_sessions: Optional[int] = None,
     max_input_tokens: Optional[int] = None,
+    max_session_tokens: int = MAX_SESSION_TOKENS,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> SummarizeReport:
     """Run summarization for ``session_ids`` in order."""
     transcript_safe(provider)
@@ -523,13 +1237,27 @@ def run_summaries(
         will_send, est = _provider_send_plan(
             output_dir, session_id, deleted, model_label=model_label, force=force
         )
+        plan_status, _ = _session_plan(
+            output_dir,
+            session_id,
+            deleted,
+            model_label=model_label,
+            force=force,
+            max_session_tokens=max_session_tokens,
+        )
+        if plan_status == "over_budget":
+            report.over_budget += 1
+            continue
         if (
             will_send
+            and not force
+            and plan_status == "single"
             and est is not None
             and max_input_tokens is not None
             and input_budget + est > max_input_tokens
         ):
             break
+        run_stats = _SessionRunStats()
         outcome, redactions, in_tok, out_tok = _process_session(
             provider,
             output_dir,
@@ -538,7 +1266,15 @@ def run_summaries(
             force=force,
             deleted=deleted,
             token_budget=None if max_input_tokens is None else max_input_tokens - input_budget,
+            max_session_tokens=max_session_tokens,
+            sleep=sleep,
+            stats=run_stats,
         )
+        report.chunk_calls += run_stats.chunk_calls
+        report.merge_calls += run_stats.merge_calls
+        report.reused_chunks += run_stats.reused_chunks
+        if run_stats.truncated:
+            report.truncated_sessions += 1
         if outcome in ("written", "invalid", "failed"):
             attempted += 1
             input_budget += in_tok
@@ -553,8 +1289,8 @@ def run_summaries(
             report.skipped_no_messages += 1
         elif outcome == "skipped_deleted":
             report.skipped_deleted += 1
-        elif outcome == "needs_chunking":
-            report.needs_chunking += 1
+        elif outcome == "over_budget":
+            report.over_budget += 1
 
         if outcome == "written":
             report.written += 1
