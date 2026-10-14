@@ -221,8 +221,8 @@ def test_negative_tokens_render_no_orphan_label(monkeypatch):
     assert ">tokens<" not in html.replace(" ", "")
 
 
-def test_filter_sheet_is_opened_on_desktop_widths(client):
+def test_filter_sheet_is_open_in_the_server_rendered_html(client):
     html = client.get("/sessions").get_data(as_text=True)
 
-    assert "matchMedia('(min-width: 1024px)')" in html
-    assert "sheet.setAttribute('open', '')" in html
+    assert re.search(r'<details class="filters-sheet"\s+open', html)
+    assert "matchMedia('(max-width: 1023px)')" in html

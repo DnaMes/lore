@@ -251,6 +251,19 @@ def test_enhancer_reruns_on_appended_messages_and_checks_copy_result():
     assert "area.style." not in source
 
 
+def test_session_view_merged_controls_in_base_template():
+    base = Path("lore/templates/base.html").read_text(encoding="utf-8")
+    assert 'role="group"' in base and "set-view-tools" in base
+    for old_id in (
+        "cleanToggle",
+        "ultraCleanToggle",
+        "readabilityToggle",
+        "presenterToggle",
+        "densityToggle",
+    ):
+        assert old_id not in base
+
+
 def test_sticky_header_wrap_owns_the_sticky_position_and_compacts_on_scroll():
     from pathlib import Path
 

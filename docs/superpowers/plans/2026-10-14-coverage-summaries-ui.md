@@ -194,7 +194,7 @@ Detail card from `session_summaries` when present, deterministic "at a glance" o
 
 ### B5.5 Tool-group folding and merged toggles
 Consecutive tool calls grouped into one `<details>` with counts and status; merge the five view toggles into Tools [hide|fold|open], Thinking [fold|show], Density.
-- [ ] done
+- [x] done
 
 ### B5.6 Mobile sheets and bulk select
 Port the mock's keyboard handlers with guards: ignore events with ctrl/meta/alt modifiers and targets that are inputs, textareas or contenteditable; carry the CSP nonce on any script/style block.

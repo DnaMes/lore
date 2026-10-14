@@ -212,11 +212,8 @@ def test_render_session_includes_formatting_toggles(monkeypatch):
         title="Test Session",
     )
 
-    # Formatting buttons SHOULD be present in session view
-    assert 'id="cleanToggle"' in page
-    assert 'id="readabilityToggle"' in page
-    assert 'id="ultraCleanToggle"' in page
-    assert 'id="presenterToggle"' in page
-    assert 'id="densityToggle"' in page
-    assert "toggleCleanMode()" in page
-    assert "toggleReadability()" in page
+    assert 'data-action="set-view-tools"' in page
+    assert 'data-action="set-view-thinking"' in page
+    assert 'data-action="set-view-density"' in page
+    assert "lore.view.v2" in page
+    assert 'data-tools="fold"' in page

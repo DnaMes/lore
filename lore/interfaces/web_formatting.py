@@ -454,24 +454,115 @@ def _tool_event_for_call(
     return None
 
 
+def _tool_group_label(raw_tool: str) -> str:
+    from lore.utils.text_processing import _normalize_tool_name
+
+    base = str(raw_tool).split(" ×", 1)[0]
+    return _normalize_tool_name(base).title()
+
+
+def _tool_group_name_line(entries: list[tuple[str, int]]) -> str:
+    """First-appearance tool labels with optional ×N counts; at most five then +K more."""
+    parts: list[str] = []
+    extra_names = 0
+    for index, (label, count) in enumerate(entries):
+        if index >= 5:
+            extra_names += 1
+            continue
+        safe = html.escape(label)
+        parts.append(f"{safe}×{count}" if count > 1 else safe)
+    if extra_names:
+        parts.append(f"+{extra_names} more")
+    return " · ".join(parts)
+
+
+def _tool_group_status_html(
+    failed_count: int, duration_ms: int | None, all_confirmed_ok: bool = True
+) -> str:
+    from lore.utils.text_processing import format_duration_ms
+
+    if failed_count:
+        return (
+            '<span class="tool-group-status tool-group-status-fail">'
+            '<span class="tool-status-icon" aria-hidden="true">✗</span> '
+            f"{html.escape(str(failed_count))} failed</span>"
+        )
+    duration_label = format_duration_ms(duration_ms) if duration_ms is not None else None
+    duration_bit = (
+        f'<span class="action-meta">{html.escape(duration_label)}</span>' if duration_label else ""
+    )
+    if not all_confirmed_ok:  # no failure seen, but not every call reported success
+        return '<span class="tool-group-status tool-group-status-neutral">status unknown</span>' + (
+            duration_bit
+        )
+    return (
+        '<span class="tool-group-status tool-group-status-ok">'
+        '<span class="tool-status-icon" aria-hidden="true">✓</span> all ok</span>' + duration_bit
+    )
+
+
+def _wrap_tool_group(
+    inner_html: str,
+    *,
+    total_calls: int,
+    name_entries: list[tuple[str, int]],
+    failed_count: int,
+    duration_ms: int | None,
+    all_confirmed_ok: bool = True,
+) -> str:
+    open_attr = " open" if failed_count else ""
+    default_open = ' data-default-open="1"' if failed_count else ""
+    names = _tool_group_name_line(name_entries)
+    status = _tool_group_status_html(failed_count, duration_ms, all_confirmed_ok)
+    return (
+        f'<details class="tool-group"{open_attr}{default_open}>'
+        '<summary class="tool-group-summary">'
+        f'<span class="tool-group-count">{total_calls} tool calls</span>'
+        f'<span class="tool-group-names"> · {names}</span>'
+        f"{status}"
+        "</summary>"
+        f'<div class="tool-group-body">{inner_html}</div>'
+        "</details>"
+    )
+
+
 def format_tool_calls(tool_calls, tool_events=None):
-    """Format tool calls for display."""
-    from lore.utils.text_processing import format_tool_display, format_tool_result
+    """Format tool calls for display, grouping consecutive calls when there are two or more."""
+    from lore.utils.text_processing import (
+        _canonical_tool_status,
+        format_duration_ms,
+        format_tool_display,
+        format_tool_result,
+    )
 
     if not tool_calls:
         return ""
     from lore.core.models import normalize_tool_call
 
-    blocks = []
     events = tool_events or []
     aligned = len(events) == len(tool_calls)
+    rendered: list[str] = []
+    name_entries: list[tuple[str, int]] = []
+    total_calls = 0
+    failed_count = 0
+    ok_count = 0
+    duration_sum = 0
+    all_durations_known = True
+
     for idx, raw_tc in enumerate(tool_calls):
         tc = normalize_tool_call(raw_tc)
         tool_name = str(tc["tool"])
-        # Identical consecutive calls are folded upstream (#83); show the count.
         burst = raw_tc.get("_burst_count", 1) if isinstance(raw_tc, dict) else 1
+        total_calls += burst
+        label = _tool_group_label(tool_name)
+        if name_entries and name_entries[-1][0] == label:
+            name_entries[-1] = (label, name_entries[-1][1] + burst)
+        else:
+            name_entries.append((label, burst))
+
+        display_name = tool_name
         if burst > 1:
-            tool_name = f"{tool_name} ×{burst}"
+            display_name = f"{tool_name} ×{burst}"
         tool_input = tc["input"]
         if isinstance(tool_input, (dict, list)):
             tool_args = json.dumps(tool_input, indent=2, ensure_ascii=False)
@@ -485,24 +576,34 @@ def format_tool_calls(tool_calls, tool_events=None):
         status = tc.get("status")
         if status is None and ev:
             status = ev.get("status")
-        is_error = bool(ev.get("is_error")) if ev else False
+        is_error = bool(tc.get("is_error")) or bool(ev and ev.get("is_error"))
         exit_code = tc.get("exit_code")
         if exit_code is None and ev:
             exit_code = ev.get("exit_code")
 
-        blocks.append(
+        status_word = _canonical_tool_status(status, is_error=is_error)
+        if status_word == "failed":
+            failed_count += burst
+        elif status_word == "ok":
+            ok_count += burst
+
+        if duration_ms is None or format_duration_ms(duration_ms) is None:
+            all_durations_known = False
+        else:
+            duration_sum += int(duration_ms) * burst
+
+        parts = [
             format_tool_display(
-                tool_name,
+                display_name,
                 tool_args,
                 status=status,
                 duration_ms=duration_ms,
                 is_error=is_error,
             )
-        )
-
+        ]
         tool_output = tc["output"]
         if isinstance(tool_output, str) and tool_output.strip():
-            blocks.append(
+            parts.append(
                 format_tool_result(
                     tool_output,
                     status=status,
@@ -511,7 +612,20 @@ def format_tool_calls(tool_calls, tool_events=None):
                     is_error=is_error,
                 )
             )
-    return "\n".join(blocks)
+        rendered.append("\n".join(parts))
+
+    body = "\n".join(rendered)
+    if len(tool_calls) < 2:
+        return body
+    group_duration = duration_sum if all_durations_known else None
+    return _wrap_tool_group(
+        body,
+        total_calls=total_calls,
+        name_entries=name_entries,
+        failed_count=failed_count,
+        duration_ms=group_duration if all_durations_known else None,
+        all_confirmed_ok=ok_count >= total_calls,
+    )
 
 
 __all__ = [
