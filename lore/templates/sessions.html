@@ -1,7 +1,8 @@
 
 {% extends "base.html" %}
 {% block content %}
-<section class="max-w-5xl mx-auto px-8 py-10">
+<div class="sessions-page-layout">
+<section class="sessions-list-column max-w-5xl mx-auto px-8 py-10">
     <div class="flex flex-wrap justify-between items-center mb-8 gap-4">
         <div>
             <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Archive</div>
@@ -81,6 +82,14 @@
     </div>
     {% endif %}
 </section>
+<aside id="sessionPeekPane" class="session-peek-pane" role="complementary" aria-label="Session preview" tabindex="-1">
+    <div id="sessionPeekLive" class="peek-live-title" aria-live="polite"></div>
+    <button type="button" id="sessionPeekHide" class="peek-hide-btn">Hide preview</button>
+    <div id="sessionPeekBody" class="session-peek-body">
+        <p class="peek-placeholder">Focus a session to preview</p>
+    </div>
+</aside>
+</div>
 
 <div id="bulkBar" class="bulk-bar" hidden role="region" aria-label="Bulk actions">
     <span id="bulkCount" class="bulk-bar-count">0 selected</span>
@@ -125,16 +134,6 @@
 
 <script nonce="{{ nonce }}">
 (function () {
-    function keyGuard(e) {
-        if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return true;
-        const t = e.target;
-        if (!t || !t.tagName) return false;
-        const tag = t.tagName.toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
-        if (t.isContentEditable) return true;
-        return false;
-    }
-
     function openBottomSheet(dialog, trigger) {
         if (!dialog) return null;
         dialog.removeAttribute('hidden');
@@ -239,7 +238,37 @@
     }
 
     document.addEventListener('keydown', function (e) {
-        if (keyGuard(e)) return;
+        if (typeof window.loreKeysEnabled === 'function' && !window.loreKeysEnabled()) return;
+        if (typeof window.loreKeyGuard === 'function' && window.loreKeyGuard(e)) return;
+        if (e.key === '?') {
+            e.preventDefault();
+            if (typeof openShortcutsHelp === 'function') openShortcutsHelp();
+            return;
+        }
+        if (e.key === '/' && window.matchMedia('(min-width: 1024px)').matches) {
+            const toolSelect = document.querySelector('#sessionsFiltersForm select[name="tool"]');
+            if (toolSelect) {
+                e.preventDefault();
+                toolSelect.focus();
+            }
+            return;
+        }
+        if (e.key === 'j' || e.key === 'k') {
+            if (!rowsRoot) return;
+            const links = Array.from(rowsRoot.querySelectorAll('.session-row-link'));
+            if (!links.length) return;
+            e.preventDefault();
+            const active = document.activeElement;
+            let idx = links.indexOf(active);
+            if (idx < 0) idx = e.key === 'k' ? links.length : -1;
+            idx = e.key === 'j' ? Math.min(links.length - 1, idx + 1) : Math.max(0, idx - 1);
+            const link = links[idx];
+            if (link) {
+                link.focus({ preventScroll: false });
+                link.scrollIntoView({ block: 'nearest' });
+            }
+            return;
+        }
         if (e.key === 'Escape') {
             if (filtersDialog && filtersDialog.classList.contains('is-open')) {
                 closeBottomSheet(filtersDialog, filtersTrigger, filtersTrapRelease);
@@ -380,6 +409,93 @@
             btn.textContent = 'Load more (retry)';
         }
     });
+
+    (function initSessionPeek() {
+        const pane = document.getElementById('sessionPeekPane');
+        const bodyEl = document.getElementById('sessionPeekBody');
+        const liveEl = document.getElementById('sessionPeekLive');
+        const hideBtn = document.getElementById('sessionPeekHide');
+        if (!pane || !bodyEl || !rowsRoot) return;
+        const wide = window.matchMedia('(min-width: 1280px)');
+        if (!wide.matches) return;
+
+        const LORE_PEEK_STORAGE = 'lore.peek.v1';
+        function peekEnabled() {
+            try {
+                const raw = localStorage.getItem(LORE_PEEK_STORAGE);
+                return raw !== 'off';
+            } catch (_) {
+                return true;
+            }
+        }
+        function applyPeekVisibility() {
+            document.body.classList.toggle('session-peek-off', !peekEnabled());
+        }
+        applyPeekVisibility();
+        if (hideBtn) {
+            hideBtn.addEventListener('click', function () {
+                try { localStorage.setItem(LORE_PEEK_STORAGE, 'off'); } catch (_) {}
+                applyPeekVisibility();
+            });
+        }
+
+        let seq = 0;
+        let hoverTimer = null;
+        const paneId = pane.id;
+
+        function rowFromTarget(target) {
+            if (!target || !target.closest) return null;
+            if (target.closest('details.row-menu')) return null;
+            const row = target.closest('.session-row');
+            return row || null;
+        }
+
+        function loadPeek(sessionId) {
+            if (!sessionId || document.body.classList.contains('select-mode')) return;
+            const mySeq = ++seq;
+            fetch('/sessions/' + encodeURIComponent(sessionId) + '/peek', { credentials: 'same-origin' })
+                .then(function (resp) {
+                    if (!resp.ok) throw new Error('peek failed');
+                    return resp.text();
+                })
+                .then(function (html) {
+                    if (mySeq !== seq) return;
+                    bodyEl.innerHTML = html;
+                    const titleEl = bodyEl.querySelector('.peek-title');
+                    if (liveEl && titleEl) liveEl.textContent = titleEl.textContent || '';
+                })
+                .catch(function () {});
+        }
+
+        function setDescribedBy(link) {
+            rowsRoot.querySelectorAll('.session-row-link').forEach(function (el) {
+                el.removeAttribute('aria-describedby');
+            });
+            if (link) link.setAttribute('aria-describedby', paneId);
+        }
+
+        rowsRoot.addEventListener('focusin', function (e) {
+            if (!wide.matches || !peekEnabled()) return;
+            const row = rowFromTarget(e.target);
+            if (!row) return;
+            const link = row.querySelector('.session-row-link');
+            setDescribedBy(link);
+            const id = row.getAttribute('data-session-id');
+            loadPeek(id);
+        });
+        rowsRoot.addEventListener('mouseenter', function (e) {
+            if (!wide.matches || !peekEnabled() || document.body.classList.contains('select-mode')) return;
+            const row = rowFromTarget(e.target);
+            if (!row) return;
+            clearTimeout(hoverTimer);
+            hoverTimer = setTimeout(function () {
+                loadPeek(row.getAttribute('data-session-id'));
+            }, 150);
+        }, true);
+        rowsRoot.addEventListener('mouseleave', function () {
+            clearTimeout(hoverTimer);
+        }, true);
+    })();
 })();
 </script>
 {% endblock %}

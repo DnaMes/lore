@@ -130,6 +130,7 @@ from .web_jobs import (
     _start_reload_job,
     _start_session_summary_job,
 )
+from .web_peek import build_peek_context
 from .web_summary import (
     api_session_summary_payload,
     build_summary_card_context,
@@ -538,6 +539,10 @@ def render(tpl_name, **kwargs):
     kwargs.setdefault("include_automated", include_automated)
     kwargs.setdefault("automated_hidden_line", hidden_line)
     kwargs.setdefault("automated_show_url", show_url)
+    if "shortcuts_page" not in kwargs:
+        shortcuts_pages = {"sessions": "list", "session": "detail"}
+        if tpl_name in shortcuts_pages:
+            kwargs["shortcuts_page"] = shortcuts_pages[tpl_name]
 
     return env.get_template(f"{tpl_name}.html").render(
         get_style=get_style,
@@ -650,9 +655,15 @@ def add_security_headers(response):
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["X-AI-History-Revision"] = _current_revision()
     response.headers["X-Request-ID"] = getattr(g, "request_id", "")
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
-    response.headers["Pragma"] = "no-cache"
-    response.headers["Expires"] = "0"
+    peek_max_age = getattr(g, "peek_cache_max_age", None)
+    if peek_max_age is not None:
+        response.headers["Cache-Control"] = f"private, max-age={int(peek_max_age)}"
+        response.headers.pop("Pragma", None)
+        response.headers.pop("Expires", None)
+    else:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
 
     if _rate_limit_enabled() and _should_rate_limit(request.path):
         response.headers["X-RateLimit-Limit"] = str(getattr(g, "rate_limit_limit", 0) or 0)
@@ -1101,6 +1112,50 @@ def sessions_rows():
         summary_lines=summary_lines,
     )
     return Response(html, mimetype="text/html")
+
+
+def _peek_cache_bucket(session_id: str) -> str:
+    meta = _index_session_meta(session_id) or {}
+    from lore.storage.summaries import get_summary
+
+    row = get_summary(OUTPUT_DIR, "session", f"session:{session_id}")
+    summary_stamp = str((row or {}).get("created") or "")
+    return ":".join(
+        [
+            str(_index_mtime()),
+            str(meta.get("updated") or meta.get("created") or ""),
+            str(meta.get("display_title") or meta.get("title") or ""),
+            summary_stamp,
+        ]
+    )
+
+
+@threadsafe_lru_cache(maxsize=128)
+def _session_peek_html_cached(session_id: str, _index_bucket: str) -> str:
+    meta = _index_session_meta(session_id)
+    if not meta:
+        return ""
+    resolved = _enriched_session_for_detail(session_id, force_live=False)
+    session_obj = resolved[0] if resolved else None
+    ctx = build_peek_context(OUTPUT_DIR, session_id, meta, session_obj)
+    return render("session_peek", **ctx)
+
+
+@app.route("/sessions/<session_id>/peek")
+def session_peek(session_id):
+    """Read-only HTML preview fragment for the sessions list peek pane."""
+    if not validate_session_id(session_id):
+        return "Invalid session ID", 400
+    deleted = load_deleted_session_ids(DELETED_SESSIONS_PATH)
+    if session_id in deleted:
+        return "Not found", 404
+    if not _index_session_meta(session_id):
+        return "Not found", 404
+    html_fragment = _session_peek_html_cached(session_id, _peek_cache_bucket(session_id))
+    if not html_fragment:
+        return "Not found", 404
+    g.peek_cache_max_age = 30
+    return Response(html_fragment, mimetype="text/html")
 
 
 @app.route("/projects")

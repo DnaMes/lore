@@ -442,11 +442,8 @@
         }
     });
     document.addEventListener('keydown', function (e) {
-        if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
-        const t = e.target;
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) {
-            return;
-        }
+        if (typeof window.loreKeysEnabled === 'function' && !window.loreKeysEnabled()) return;
+        if (typeof window.loreKeyGuard === 'function' && window.loreKeyGuard(e)) return;
         if (e.key === '/' && !bar.hasAttribute('hidden')) {
             e.preventDefault();
             input.focus();
@@ -638,11 +635,7 @@ document.addEventListener('keydown', function(e) {
     });
 
     document.addEventListener('keydown', function (e) {
-        if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return;
-        const t = e.target;
-        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) {
-            return;
-        }
+        if (typeof window.loreKeyGuard === 'function' && window.loreKeyGuard(e)) return;
         if (e.key === 'Escape' && dialog.classList.contains('is-open')) closeOutline();
     });
 })();
