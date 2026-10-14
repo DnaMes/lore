@@ -1,5 +1,48 @@
 # HANDOFF — Lore
 
+## Current checkpoint — 2026-10-14 (backlog prompt: Wave 1 complete)
+
+Continued `docs/NEXT-SESSION-issue-backlog.md` in the same session: Wave 1 of the issue backlog.
+Every unit below is committed, `review-gate` APPROVE, on remote `main` (tip `f3a65bc` before the
+docs close-out).
+
+- **Closed with evidence comments:** #199 (all seven follow-ups: FTS-true scoped role check,
+  filtered + bounded vector scan, failure-bucket report, explicit commit, validator edges, recall
+  floor calibrated to **0.6** on 61 labelled pairs), #193 (`LORE_PUBLIC_ORIGINS` + forwarded-header
+  validation, 25 new tests), #92 (semantic distance cutoff **0.88**, percentile-derived, before RRF
+  fusion). Open count 49 → **46**.
+- **#185 closed** — titles route through the explicitly selected provider (`local` default,
+  `gemini-cli` only when chosen), never switch provider on failure, and record
+  provider/model/prompt-version/excerpt/status in an owner-only cache. Deliberate privacy change: a
+  SMART/AUTO run no longer sends excerpts to the Gemini CLI just because it is installed.
+- **#176 left OPEN on purpose** (implementation shipped in `3a204dd`): one exported idempotent code
+  enhancer (`window.loreEnhanceCodeBlocks`) used by the lazy loader, exact `el.textContent` clipboard
+  payload, snapshots regenerated. Remaining: the browser-level clipboard/keyboard proof, NOT
+  VERIFIED until Wave 7 / #194.
+- **#112 (data-loss risk) done and committed** (`c0b1271`): `build_search_index` hands the
+  extractors source fingerprints (mtime + minimum parser version; an ambiguous mtime forces a
+  re-parse) so an unchanged source is skipped *before* it is opened. A skipped session keeps its
+  prior JSON entry, its v2 message rows and its FTS row; a deleted source keeps its entry without a
+  tombstone; `incremental=False` never skips. Six tests in `tests/test_incremental_source_skip.py`.
+- **Full suite: 2753 passed, 25 skipped, 0 failed** (19m44s; slowed by the concurrent A/B), ruff
+  clean.
+
+A/B method (`/tmp/lore_ab.py`, `/tmp/lore_ab_b.py`): both arms start from an identical copy of the
+live archive (`index.json` + `index_v2.sqlite` via `copy_sqlite_with_sidecars`); `~/.lore` itself is
+only read. Arm A = `incremental=True` (skip active) over all tools: `elapsed=2839.2s, sessions=5850,
+messages=685183, errors=0`. Arm B = `incremental=False` re-parsing **claude-code** (3193 sessions,
+the largest skip beneficiary): identical id set, 3192/3193 identical message counts — the single
+difference is session `539ee2ae…`, whose id exists in two project copies (`-p15` and `-gdrive`)
+that were both being appended during the window (mtimes 18:20:42 and 18:21:21), so the extractor's
+newest-copy rule picked a different winner per run; the later one (2142 messages) is exactly what
+the live archive holds. All other A-vs-B differences (126 ids, 15 counts) sit in tools B did not
+re-parse and compare the two copies against each other — the live archive itself changed between
+the 18:12 and 20:45 copies. Fingerprints check out on the real archive: 397 of 400 sampled
+`index.json` entries carry exactly the on-disk `st_mtime_ns`, 3 sources are gone.
+
+Next: finish the A/B, close #112 with its equality output, then Wave 2 (#172 → #173 → #174 → #171
+→ #175, sequential) and Track L steps 4-5 only after 2.3.
+
 ## Current checkpoint — 2026-10-14 (backlog prompt Wave 0 + Track L: 5 issues closed, 8 commits pushed)
 
 Ran `docs/NEXT-SESSION-issue-backlog.md` from a fresh session: Wave 0 (hygiene) plus Track L

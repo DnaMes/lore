@@ -38,7 +38,23 @@ file runs (20 passed each) and a clean `session_summaries` table in the shared t
 **Full suite after Wave 0 + Track L: 2676 passed, 25 skipped, 0 failed (442 s), ruff clean.**
 All commits passed `review-gate` (APPROVE) and are on remote `main`.
 
-Still to do: Waves 1-7 and Track L steps 4-8 (steps 4+5 only after Wave 2.3).
+### Wave 1 — updated 2026-10-14 (same session)
+
+| Item | Issue | State | Commit |
+| ---- | ----- | ----- | ------ |
+| 1.1 | #199 | closed — all seven follow-ups (FTS-true role check, filtered+bounded vector scan, failure buckets, explicit commit, validator edges incl. relaxed apostrophes, recall floor **0.6**) | `4dd4fa0` `540ab30` `aea6b15` `ceb11e6` `c426357` |
+| 1.2 | #193 | closed — `LORE_PUBLIC_ORIGINS` honoured only with `TRUSTED_PROXY`, malformed `X-Forwarded-*` → 400, 25 tests | `d5918d3` |
+| 1.3 | #92 | closed — distance cutoff **0.88** (related-p95 / unrelated-p05 midpoint) before RRF fusion, `LORE_SEMANTIC_MAX_DISTANCE`, `tools/calibrate_semantic_cutoff.py` | `a781f75` |
+| 1.4 | #176 | **left open** — implementation shipped, browser clipboard proof belongs to #194 (Wave 7) | `3a204dd` |
+| 1.5 | #112 | closed — pre-parse source skip wired into `build_search_index`; A/B on archive copies equal (3193 claude-code sessions, 3192/3193 counts identical, the one difference is source drift) | `c0b1271` |
+| 1.6 | #185 | closed — explicit title provider, no provider switch, full record in an owner-only cache | `f3a65bc` |
+
+Wave-1 full suite: **2753 passed, 25 skipped, 0 failed** (19m44s, concurrent with the A/B), ruff
+clean. Open issues: 54 → **45** (Wave 0 closed 5, Wave 1 closed 5 more: #199, #193, #92, #185,
+#112; #176 left open with a checklist).
+
+Still to do: Waves 2-7 and Track L steps 4-8 (steps 4+5 only after Wave 2.3); #176 needs its
+browser-level clipboard proof (Wave 7 / #194).
 
 ---
 

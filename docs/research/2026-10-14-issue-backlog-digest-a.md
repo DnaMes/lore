@@ -33,7 +33,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `grep -n "index.json\|index.sqlite" lore/exporters/index.py` (still written; `~/.lore` still holds all three files).
 
 ### #92 Hybrid search: add a distance cutoff to semantic results (Phase 2)
-- STATUS: OPEN
+- STATUS: CLOSED 2026-10-14 (commit `a781f75`). `_filter_semantic_rows` drops neighbours with `distance > semantic_max_distance()` before RRF fusion; the default 0.88 is the midpoint of related-p95 (0.777) / unrelated-p05 (0.986) measured on 28 labelled pairs with the real model (L2 over unit-normalised bge-small, norm 1.0000): keeps 14/14 related, drops 14/14 unrelated. `LORE_SEMANTIC_MAX_DISTANCE` overrides, `0` disables, unparsable falls back. Tool `tools/calibrate_semantic_cutoff.py`, note in `docs/PLAN-hybrid-search.md`. Was OPEN
 - SCOPE: Drop vec hits whose `distance` exceeds a calibrated threshold in `semantic_search_sessions`, optionally via `LORE_SEMANTIC_MAX_DISTANCE`.
 - ACCEPTANCE: [ ] max-distance cutoff before RRF fusion; [ ] calibrated on the real bge-small distance distribution (percentile, not a constant); [ ] optional env override.
 - FILES: `lore/storage/search.py` (`semantic_search_sessions` 247-316, `_knn_rows` 205-225), `lore/storage/fusion.py`, `docs/PLAN-hybrid-search.md`
@@ -42,7 +42,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests -p no:cacheprovider -q -o addopts= -k "semantic or hybrid"` after adding a cutoff test (no `max_distance`/env exists today).
 
 ### #112 Incremental sync still fully parses unchanged session files before mtime check
-- STATUS: PARTIAL — v2 upsert foundation (commit `fe1ca50`) and extractor-level `_source_unchanged` now exist, but the path named in the issue (`build_search_index`) never populates `known_source_mtimes`.
+- STATUS: CLOSED 2026-10-14 (commit `c0b1271`). `build_search_index` derives source fingerprints from the prior index entries (`_source_fingerprints`: path → mtime_ns, minimum parser_version per path, ambiguous mtimes force a re-parse) and hands them to every extractor, which skips the file before `open()` through the existing `BaseExtractor._source_unchanged`; `incremental=False` clears the maps. A skipped session keeps its prior JSON entry, its v2 message rows and its FTS row; a deleted source keeps its entry without a tombstone. Six tests in `tests/test_incremental_source_skip.py`. A/B on copies of the real archive (live `~/.lore` read-only): warm run 47 min vs full re-parse, identical id sets for the re-parsed tool (3193 claude-code sessions), 3192/3193 identical message counts — the single difference is a session whose id exists in two project copies that were both appended during the window (newest-copy rule, matching the live archive). Was PARTIAL
 - SCOPE: Wire `known_source_mtimes`/`known_source_parser_versions` into `build_search_index` so its extractors skip unchanged files before `open()`.
 - ACCEPTANCE: [x] `StreamingV2Writer.begin()` no longer full-replaces (now `BEGIN` + per-session upsert, `lore/storage/writer.py:544`); [x] extractors support pre-parse mtime skip (`lore/extractors/base.py:183`, `lore/extractors/claude.py:216`); [ ] the search-index/extraction path sets `known_source_mtimes`.
 - FILES: `lore/services/extraction.py` (`build_search_index` 152-356; only post-parse check at 276-298), `lore/extractors/base.py`, `lore/extractors/claude.py`, `lore/storage/writer.py`, `lore_cli.py:429-430` (export path already sets it)
@@ -78,7 +78,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `LORE_UID=$(id -u) LORE_GID=$(id -g) docker compose up -d && curl -fsS http://127.0.0.1:5000/api/health` on a host without `traefik_local` (currently fails on the external network).
 
 ### #193 Archive #43: Validate legitimate same-origin requests behind supported proxies
-- STATUS: PARTIAL — `ProxyFix` and `_check_local_origin` exist, but proxy host/scheme/port config and the mixed/spoofed-header test matrix are missing.
+- STATUS: CLOSED 2026-10-14 (commit `d5918d3`). `LORE_PUBLIC_ORIGINS` (comma list of `scheme://host[:port]`) is parsed/normalised by `web_utils.parse_origin`/`normalize_origin` and honoured only with `TRUSTED_PROXY`; scheme and port are part of the comparison, malformed entries are dropped with a warning. While the flag is set, malformed `X-Forwarded-Proto/-Host/-For` on state-changing routes is `400` before the origin check; without it the headers are never parsed and the rate limiter's IP is untouched. `tests/test_proxy_origin.py` (25 tests: direct/trusted/untrusted/mixed), `docs/DEPLOYMENT.md` "Behind a reverse proxy". Was PARTIAL
 - SCOPE: Trust forwarded headers only under explicit config; accept configured public scheme/host/port and reject unrelated/malformed/spoofed ones on state-changing routes.
 - ACCEPTANCE: [x] `X-Forwarded-*` only when `TRUSTED_PROXY` set (`web.py:220`, `web_utils.py:78-87`); [ ] configured public scheme/host/port honored (incl. non-default ports/TLS); [ ] unrelated/malformed/spoofed rejected consistently; [ ] tests for direct/trusted/untrusted/mixed.
 - FILES: `lore/interfaces/web.py:215-220,255-269`, `lore/interfaces/web_utils.py:76-90`, `tests/` (no proxy test found)
@@ -125,7 +125,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests/test_cli_dispatch.py -p no:cacheprovider -q -o addopts=` after adding an `exit_code` test.
 
 ### #199 Follow-ups from the phase 1 review gate (#197)
-- STATUS: PARTIAL — bullets 1, 2 done; 3, 4, 5, 6, 8 open; 7, 9 partial.
+- STATUS: CLOSED 2026-10-14 (commits `4dd4fa0`, `540ab30`, `aea6b15`, `ceb11e6`, `c426357`). Scoped role check runs the FTS engine (throwaway `:memory:` FTS5 with `SCOPE_FTS_TOKENIZER`) instead of `LIKE %term%`; `_has_stored_vectors` takes the query's filters; the Python vector scan is bounded (`LORE_MEMORY_VECTOR_SCAN_LIMIT`, default 20000, filters pushed into SQL); `ExtractionReport` splits provider-unavailable/provider-error/unparsable and exit 1 prints the breakdown; `save_session_knowledge` commits explicitly; validator tests pin tab/newline edges and allow apostrophes in queries; the recall floor is calibrated to **0.6** on 61 labelled pairs (`tools/calibrate_recall_floor.py`, `docs/research/2026-10-14-recall-floor-calibration.md`). Proof: `pytest -k "memory or snippet or fts_query or scope"` → 328 passed. Was PARTIAL
 - SCOPE: Work the nine independent bullets, starting with the scoped-search role check (returns wrong hits).
 - ACCEPTANCE: [x] batch-load tags/sources/feedback in `_load_entries` (`memory.py:434-486`), incl. the `limit*4` over-fetch; [x] `snippet(...)` uses one shared constant (`SEARCH_INDEX_BODY_COLUMN`, `memory.py:661`, `search.py:113`); [ ] scoped-search role check uses FTS token/phrase rules, not `LIKE %term%` (`search.py:158-190`); [ ] `_has_stored_vectors` restricted to the query's kind/project filters (`memory.py:626`); [ ] cap/vec0 table for the full Python memory-vector scan (`memory.py:542-597` — `min_similarity` added, scan still unbounded); [ ] split `ExtractionReport.failed` into provider-unavailable vs unparsable (`knowledge.py:108,144`; `llm/tasks/knowledge.py`); [~] edge-case tests: `a;b`, `"foo\n"`, `"\r..."`, `"foo\nbar"` covered (`tests/test_fts_query.py:63-90`), leading tab and `don't` not explicitly covered; [ ] explicit commit in `save_session_knowledge` (relies on autocommit `open_v2_connection`, `schema.py:357`); [~] 0.7 floor still a documented PLACEHOLDER (`memory.py:69-74`).
 - FILES: `lore/storage/memory.py`, `lore/storage/search.py`, `lore/storage/knowledge.py`, `lore/storage/schema.py`, `lore/services/knowledge.py`, `tests/test_fts_query.py`
@@ -137,20 +137,20 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 
 | # | STATUS | SIZE | RISK | one-line scope |
 |---|--------|------|------|----------------|
-| 29 | OPEN | L | none | Add `--transport streamable-http` MCP transport + docs |
-| 33 | PARTIAL | L | none | Decide repo/naming split; broaden extractor spectrum |
-| 48 | OPEN | L | format-compat | Execute JSON-retirement exit criteria, stop writing JSON/sqlite |
-| 92 | OPEN | M | none | Calibrated max-distance cutoff in `semantic_search_sessions` |
-| 112 | PARTIAL | M | data-loss | Wire `known_source_mtimes` into `build_search_index` for pre-parse skip |
+| 29 | DEFERRED | L | none | Add `--transport streamable-http` MCP transport + docs |
+| 33 | CLOSED 2026-10-14 | L | none | Decide repo/naming split; broaden extractor spectrum |
+| 48 | DEFERRED | L | format-compat | Execute JSON-retirement exit criteria, stop writing JSON/sqlite |
+| 92 | CLOSED 2026-10-14 | M | none | Calibrated max-distance cutoff in `semantic_search_sessions` |
+| 112 | CLOSED 2026-10-14 | M | data-loss | Wire `known_source_mtimes` into `build_search_index` for pre-parse skip |
 | 119 | PARTIAL | L | none | Blueprint-split `web.py` below ~800 lines |
 | 191 | OPEN | M | migration | Correct distribution name + install docs (`lore-archive`) |
 | 192 | OPEN | M | none | Portable compose without private DNS/external networks |
-| 193 | PARTIAL | M | privacy | Configured-proxy same-origin validation + test matrix |
+| 193 | CLOSED 2026-10-14 | M | privacy | Configured-proxy same-origin validation + test matrix |
 | 194 | OPEN | L | none | Repeatable browser interaction fixture + release checklist |
-| 196 | OPEN | S | none | README install-from-clone + clean-venv entry-point test |
+| 196 | CLOSED 2026-10-14 | S | none | README install-from-clone + clean-venv entry-point test |
 | 197 | PARTIAL | L | privacy | Finish review queue (3.3) and `lore context` (phase 4) |
-| 198 | PARTIAL | S | none | Bug false at HEAD; add exit-code regression test |
-| 199 | PARTIAL | M | none | Fix scoped role check, vector scan cap, explicit commit, etc. |
+| 198 | CLOSED 2026-10-14 | S | none | Bug false at HEAD; add exit-code regression test |
+| 199 | CLOSED 2026-10-14 | M | none | Fix scoped role check, vector scan cap, explicit commit, etc. |
 
 ## NOT VERIFIED
 - PyPI availability of `lore` / `lore-archive` (no web access; requires a fresh index check at release).
