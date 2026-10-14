@@ -168,7 +168,7 @@ Chunks cut at user messages and never inside a call/result pair, merge call, one
 
 ### B4.4 CLI `lore summarize`
 Flags as in the design (`--session`, `--project`, `--since`, `--tool`, `--provider`, `--model`, `--allow-cloud`, `--dry-run`, `--force`, `--max-sessions`, `--max-input-tokens`, `--level`, `--json`); provider announced before any send; exit 1 when every attempted call failed.
-- [ ] done
+- [x] done
 
 ### B4.5 MCP tools and docs **[R]**
 `get_session_summary` (read-only, staleness), `summarize_session` gated by `LORE_MCP_ALLOW_SUMMARIZE=1` and local-only providers; `docs/API_REFERENCE.md`, README section.

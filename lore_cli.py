@@ -25,6 +25,7 @@ Usage:
     lore sync TOOL [--session-id ID] [--project PATH]
     lore run TOOL [-- ARGS...]
     lore threads
+    lore summarize [--session ID] [--since 30d] [--provider ollama] [--dry-run]
 """
 
 import argparse
@@ -795,6 +796,13 @@ def cmd_analyze(args):
         print("\nAI Insights:")
         for key, value in stats["insights"].items():
             print(f"  {key}: {value}")
+
+
+def cmd_summarize(args):
+    """Generate AI session summaries (local-first; cloud requires --allow-cloud)."""
+    from lore.services.summarize_cli import run_summarize_command
+
+    return run_summarize_command(args)
 
 
 def cmd_knowledge(args):
@@ -1671,6 +1679,7 @@ COMMANDS = {
     "reindex": cmd_reindex,
     "analyze": cmd_analyze,
     "knowledge": cmd_knowledge,
+    "summarize": cmd_summarize,
     "format": cmd_format,
 }
 
@@ -1946,6 +1955,66 @@ Examples:
         help="Output file (default: ~/.lore/knowledge/knowledge_base.json)",
     )
     _add_automated_flag(knowledge_parser)
+
+    summarize_parser = subparsers.add_parser(
+        "summarize", help="Generate AI session summaries for archived sessions"
+    )
+    summarize_parser.add_argument("--session", help="Session ID (full or unique prefix)")
+    summarize_parser.add_argument("--project", help="Only sessions for this project path")
+    summarize_parser.add_argument("--tool", help="Only sessions from this tool")
+    summarize_parser.add_argument(
+        "--since",
+        help="Only sessions active since this duration (default 30d when --session is omitted)",
+    )
+    summarize_parser.add_argument(
+        "--provider",
+        choices=["gemini", "ollama"],
+        default="ollama",
+        help="LLM provider (default: ollama, local)",
+    )
+    summarize_parser.add_argument("--model", help="Model name (default depends on --provider)")
+    summarize_parser.add_argument(
+        "--allow-cloud",
+        action="store_true",
+        help="Allow cloud providers to receive transcript text",
+    )
+    summarize_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Estimate tokens and calls without contacting a provider",
+    )
+    summarize_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-summarize even when the fingerprint is unchanged",
+    )
+    summarize_parser.add_argument(
+        "--max-sessions",
+        type=int,
+        help="Maximum number of sessions to consider",
+    )
+    summarize_parser.add_argument(
+        "--max-input-tokens",
+        type=int,
+        help="Stop after this many estimated input tokens (real run)",
+    )
+    summarize_parser.add_argument(
+        "--max-session-tokens",
+        type=int,
+        help="Skip sessions whose compressed transcript exceeds this token budget",
+    )
+    summarize_parser.add_argument(
+        "--level",
+        choices=["session", "day", "project"],
+        default="session",
+        help="Summary granularity (only session is implemented)",
+    )
+    summarize_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print machine-readable JSON on stdout",
+    )
+    _add_automated_flag(summarize_parser)
 
     # format command - Format sessions with LLM
     format_parser = subparsers.add_parser(

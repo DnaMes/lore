@@ -43,7 +43,29 @@ provider is named before anything is sent). Results are stored per session in
 deleted sessions are excluded. `--tool` also scopes the printed output. The command
 exits 1 when every provider call fails.
 
-### 3. `lore format` - Session Formatting
+### 3. `lore summarize` - AI session summaries
+
+Generate structured per-session summaries (goal, outcome, decisions with cites) from
+archived transcript data. Rows live in the v2 store (`session_summaries`); the web UI
+reads them later.
+
+```bash
+# Local-first default (Ollama); estimate cost first
+lore summarize --dry-run
+
+# One session (full id or unique prefix)
+lore summarize --session abc123
+
+# Cloud provider — transcript text leaves the machine; requires opt-in
+lore summarize --provider gemini --allow-cloud --max-sessions 5
+```
+
+Default provider is **Ollama** (local). Cloud providers require `--allow-cloud` or the
+command exits without sending anything. Prompts are redacted before send; transcript tasks
+disable the LLM disk cache. Use `--dry-run` to preview token/call estimates. Summaries can
+still be wrong or costly on large backlogs — cap with `--max-sessions` and `--max-input-tokens`.
+
+### 4. `lore format` - Session Formatting
 
 Format sessions with AI-generated summaries and tags.
 
@@ -216,7 +238,7 @@ Create `~/.ai-history/config.json`:
 
 LLM responses are cached in `~/.lore/llm_cache/` for tasks that do not send session
 transcript text (for example aggregate statistics insights); transcript-bearing tasks such as
-`lore knowledge`, session formatting summaries, and future `lore summarize` never use the disk
+`lore knowledge`, `lore summarize`, and session formatting summaries never use the disk
 cache, and no environment variable re-enables that caching.
 
 Before any transcript text is sent to a provider, Lore runs prompt redaction so secret-shaped

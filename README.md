@@ -372,6 +372,16 @@ This helps Lore resolve Gemini's project hash to real folders.
 
 ---
 
+## AI session summaries
+
+`lore summarize` writes validated JSON summaries to the v2 archive (`session_summaries` in
+`~/.lore/lore.sqlite`, surfaced in the web UI). The default provider is local **Ollama**;
+cloud providers (for example Gemini) send redacted transcript text only when you pass
+`--allow-cloud`. Transcript-bearing runs never use the LLM disk cache. Run
+`lore summarize --dry-run` first to see per-session token and call estimates. Large backlogs
+can be slow and costly — use `--max-sessions`, `--max-input-tokens`, and `--since` (default
+30 days when no `--session` is given).
+
 ## Automated sessions
 
 Sessions that are not a person talking to an assistant carry an `origin` of `exec`,
@@ -382,7 +392,7 @@ exactly as before.
 
 | Surface | Show them |
 | --- | --- |
-| `lore list`, `search`, `stats`, `digest`, `threads`, `rules`, `generate-titles`, `analyze`, `format`, `knowledge`, `prune` | `--include-automated` |
+| `lore list`, `search`, `stats`, `digest`, `threads`, `rules`, `generate-titles`, `analyze`, `format`, `knowledge`, `summarize`, `prune` | `--include-automated` |
 | Web UI (`/`, `/sessions`, `/projects`, `/threads`, `/stats`, `/api/v1/...`) | `?automated=1`, or the "Automated" checkbox on the sessions list |
 | MCP `list_sessions`, `search_history`, `list_recent_sessions`, `list_projects`, `get_thread` | argument `include_automated: true` |
 
