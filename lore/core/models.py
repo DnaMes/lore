@@ -145,8 +145,6 @@ class UnifiedSession:
     git_branch: Optional[str] = None
     git_commit: Optional[str] = None
     source_path: Optional[str] = None
-    # When set, used instead of ``stat(source_path)`` for incremental reuse (SQLite rows).
-    source_mtime_ns: Optional[int] = None
     generated_title: Optional[str] = None
     title_source: Optional[TitleSource] = None
     todos: List[Dict[str, Any]] = field(default_factory=list)
@@ -155,6 +153,8 @@ class UnifiedSession:
     relation: Optional[str] = None  # one of RELATIONS
     source_version: Optional[str] = None
     parser_version: int = 0
+    # When set, used instead of ``stat(source_path)`` for incremental reuse (SQLite rows).
+    source_mtime_ns: Optional[int] = None
 
     @property
     def message_count(self) -> int:

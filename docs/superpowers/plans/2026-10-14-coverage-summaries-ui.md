@@ -113,7 +113,7 @@ Read `brain/<id>/.system_generated/logs/transcript_full.jsonl` (else `transcript
 
 ### B2.6 Claude Code enrichment — dossier "Claude Code"
 Thinking blocks, `message.model`, `ai-title`/`custom-title`, `isMeta`, `isCompactSummary` (kind `compaction_summary`), `system.compact_boundary`, `cost-state`, `isSidechain` + `agentId` relation, `tool-results/` sidecars when referenced.
-- [ ] done
+- [x] done
 
 ### B2.7a Cursor agent transcripts — dossier "Cursor"
 `~/.cursor/projects/*/agent-transcripts/*/*.jsonl` (no timestamps, no results; plain-text legacy variant) as a new source next to the existing IDE reader; `origin` from the source kind.

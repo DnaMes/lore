@@ -5,13 +5,31 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Optional
 
-from ..core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from ..core.models import Role, TitleSource, Tool, UnifiedMessage, UnifiedSession
 from ..utils.datetime import parse_timestamp
 from ..utils.home_discovery import discover_home_marker_paths
 from ..utils.paths import make_thread_id
 from .base import BaseExtractor
 
 logger = logging.getLogger(__name__)
+
+_MAX_REASONING_CHARS = 20_000
+
+# Record types that are intentionally not turned into messages (dossier noise list).
+_KNOWN_NON_MESSAGE_RECORD_TYPES = frozenset(
+    {
+        "attachment",
+        "queue-operation",
+        "file-history-snapshot",
+        "last-prompt",
+        "agent-name",
+        "permission-mode",
+        "progress",
+        "cost-state",
+    }
+)
+
+_SYSTEM_SILENT_SUBTYPES = frozenset({"compact_boundary", "turn_duration"})
 
 
 def _parse_usage_tokens(usage) -> dict | None:
@@ -64,7 +82,8 @@ class ClaudeCodeExtractor(BaseExtractor):
     # 2: subagent transcripts carry ``origin="subagent"``. They keep the prompt floor
     # they always had (only sessions imported before are tagged, the index does not grow).
     # 3: subagent sessions also carry ``parent_session_id`` and ``relation="subagent"``.
-    PARSER_VERSION = 3
+    # 4: titles, thinking, model, compaction/meta kinds, known-record telemetry.
+    PARSER_VERSION = 4
     AUTOMATED_BYPASSES_PROMPT_FLOOR = False
 
     def __init__(self):
@@ -231,6 +250,77 @@ class ClaudeCodeExtractor(BaseExtractor):
 
         yield from seen.values()
 
+    def _flatten_message_content(
+        self,
+        content,
+        tool_use_by_id: dict[str, dict],
+        *,
+        collect_thinking: bool = False,
+    ) -> tuple[str, list[dict], Optional[str]]:
+        """Turn Claude message content into text, tool_calls, and optional reasoning."""
+        if isinstance(content, str):
+            return content, [], None
+        if not isinstance(content, list):
+            return str(content) if content is not None else "", [], None
+
+        text_parts: list[str] = []
+        tool_calls: list[dict] = []
+        reasoning_parts: list[str] = []
+        reasoning_len = 0
+        for item in content:
+            if isinstance(item, dict):
+                item_type = item.get("type")
+                if item_type == "text":
+                    text_parts.append(item.get("text", ""))
+                elif item_type == "thinking" and collect_thinking:
+                    thinking = item.get("thinking")
+                    if isinstance(thinking, str) and thinking:
+                        # Cap while collecting: a multi-megabyte block must never be
+                        # held (or joined) in full just to be cut afterwards.
+                        room = _MAX_REASONING_CHARS - reasoning_len
+                        if room > 0:
+                            piece = thinking[:room]
+                            reasoning_parts.append(piece)
+                            reasoning_len += len(piece) + 1
+                elif item_type == "tool_use":
+                    tool_calls.append(item)
+                    tool_use_id = item.get("id")
+                    if tool_use_id:
+                        tool_use_by_id[tool_use_id] = item
+                    tool_name = item.get("name", "Unknown")
+                    tool_input = item.get("input", {})
+                    if isinstance(tool_input, dict):
+                        if tool_name == "Bash":
+                            cmd = tool_input.get("command", "")
+                            text_parts.append(f"[Tool: {tool_name}]\n```bash\n{cmd}\n```")
+                        elif tool_name in ("Read", "Write", "Edit"):
+                            file_path = tool_input.get("file_path", "")
+                            text_parts.append(f"[Tool: {tool_name}] {file_path}")
+                        elif tool_name == "Glob":
+                            pattern = tool_input.get("pattern", "")
+                            text_parts.append(f"[Tool: {tool_name}] {pattern}")
+                        elif tool_name == "Grep":
+                            pattern = tool_input.get("pattern", "")
+                            text_parts.append(f"[Tool: {tool_name}] {pattern}")
+                        else:
+                            text_parts.append(f"[Tool: {tool_name}]")
+                elif item_type == "tool_result":
+                    tool_id = item.get("tool_use_id", "")
+                    result_content = _stringify_tool_result(item.get("content", ""))
+                    text_parts.append(f"[Tool Result]\n{result_content}")
+                    parent_call = tool_use_by_id.get(tool_id)
+                    if parent_call is not None:
+                        parent_call["output"] = result_content
+                        if item.get("is_error"):
+                            parent_call["status"] = "error"
+            elif isinstance(item, str):
+                text_parts.append(item)
+        content_text = "\n".join(text_parts)
+        reasoning = "\n".join(reasoning_parts) if reasoning_parts else None
+        if reasoning and len(reasoning) > _MAX_REASONING_CHARS:
+            reasoning = reasoning[:_MAX_REASONING_CHARS]
+        return content_text, tool_calls, reasoning
+
     @staticmethod
     def _add_or_replace_newer(seen: "dict[str, UnifiedSession]", session: UnifiedSession) -> None:
         """Insert ``session`` unless an entry with the same id is newer."""
@@ -258,6 +348,9 @@ class ClaudeCodeExtractor(BaseExtractor):
         """
         messages = []
         summary = None
+        custom_title = None
+        ai_title = None
+        title_source: Optional[TitleSource] = None
         session_id = path.stem
         if parent_session_id:
             # Subagent files use names like 'agent-a9dff77.jsonl' which are
@@ -288,82 +381,48 @@ class ClaudeCodeExtractor(BaseExtractor):
 
                 if record_type == "summary":
                     summary = self._sanitize_summary(record.get("summary"))
-                elif record_type not in ("user", "assistant"):
-                    self._count("records_unknown")
-                elif record_type in ("user", "assistant"):
+                elif record_type == "custom-title":
+                    custom_title = self._sanitize_summary(record.get("customTitle"))
+                elif record_type == "ai-title":
+                    raw_ai = record.get("aiTitle")
+                    if raw_ai is None:
+                        raw_ai = record.get("title")
+                    ai_title = self._sanitize_summary(raw_ai)
+                elif record_type == "system":
+                    subtype = record.get("subtype")
+                    if subtype not in _SYSTEM_SILENT_SUBTYPES:
+                        self._count("records_unknown")
+                elif record_type in _KNOWN_NON_MESSAGE_RECORD_TYPES:
+                    continue
+                elif record_type == "user":
                     msg_data = record.get("message", {})
-                    role = Role.USER if record_type == "user" else Role.ASSISTANT
-                    content = msg_data.get("content", "")
-
-                    # Handle content that is a list (tool use, etc.)
-                    if isinstance(content, list):
-                        text_parts = []
-                        tool_calls = []
-                        for item in content:
-                            if isinstance(item, dict):
-                                if item.get("type") == "text":
-                                    text_parts.append(item.get("text", ""))
-                                elif item.get("type") == "tool_use":
-                                    tool_calls.append(item)
-                                    tool_use_id = item.get("id")
-                                    if tool_use_id:
-                                        tool_use_by_id[tool_use_id] = item
-                                    tool_name = item.get("name", "Unknown")
-                                    tool_input = item.get("input", {})
-                                    if isinstance(tool_input, dict):
-                                        if tool_name == "Bash":
-                                            cmd = tool_input.get("command", "")
-                                            text_parts.append(
-                                                f"[Tool: {tool_name}]\n```bash\n{cmd}\n```"
-                                            )
-                                        elif tool_name in ("Read", "Write", "Edit"):
-                                            file_path = tool_input.get("file_path", "")
-                                            text_parts.append(f"[Tool: {tool_name}] {file_path}")
-                                        elif tool_name == "Glob":
-                                            pattern = tool_input.get("pattern", "")
-                                            text_parts.append(f"[Tool: {tool_name}] {pattern}")
-                                        elif tool_name == "Grep":
-                                            pattern = tool_input.get("pattern", "")
-                                            text_parts.append(f"[Tool: {tool_name}] {pattern}")
-                                        else:
-                                            text_parts.append(f"[Tool: {tool_name}]")
-                                elif item.get("type") == "tool_result":
-                                    tool_id = item.get("tool_use_id", "")
-                                    result_content = _stringify_tool_result(item.get("content", ""))
-                                    # Full result kept — no truncation. The web view
-                                    # collapses long output behind an expand toggle
-                                    # (see session_view_prep), the source must stay
-                                    # complete for search and forensics.
-                                    text_parts.append(f"[Tool Result]\n{result_content}")
-                                    # Attach the result back to its tool_use dict so
-                                    # the structured renderer can show call+result
-                                    # together instead of re-parsing the string.
-                                    parent_call = tool_use_by_id.get(tool_id)
-                                    if parent_call is not None:
-                                        parent_call["output"] = result_content
-                                        if item.get("is_error"):
-                                            parent_call["status"] = "error"
-                            elif isinstance(item, str):
-                                text_parts.append(item)
-                        content = "\n".join(text_parts)
+                    if record.get("isCompactSummary") is True:
+                        role = Role.INFO
+                        kind = "compaction_summary"
                     else:
-                        tool_calls = []
-
+                        role = Role.USER
+                        if (
+                            record.get("isMeta") is True
+                            or record.get("isVisibleInTranscriptOnly") is True
+                        ):
+                            kind = "injected_context"
+                        else:
+                            kind = "text"
+                    content, tool_calls, _ = self._flatten_message_content(
+                        msg_data.get("content", ""),
+                        tool_use_by_id,
+                    )
                     timestamp = parse_timestamp(record.get("timestamp", ""))
-
                     if created_at is None or timestamp < created_at:
                         created_at = timestamp
                     if last_updated is None or timestamp > last_updated:
                         last_updated = timestamp
-
-                    # Extract version and branch
                     if cli_version is None:
                         cli_version = record.get("version")
                     if git_branch is None:
                         git_branch = record.get("gitBranch")
                     if session_id == path.stem:
                         session_id = record.get("sessionId", path.stem)
-
                     messages.append(
                         UnifiedMessage(
                             role=role,
@@ -372,19 +431,62 @@ class ClaudeCodeExtractor(BaseExtractor):
                             message_id=record.get("uuid"),
                             tool_calls=tool_calls if tool_calls else [],
                             tokens=_parse_usage_tokens(msg_data.get("usage")),
+                            kind=kind,
                         )
                     )
+                elif record_type == "assistant":
+                    msg_data = record.get("message", {})
+                    content, tool_calls, reasoning = self._flatten_message_content(
+                        msg_data.get("content", ""),
+                        tool_use_by_id,
+                        collect_thinking=True,
+                    )
+                    model = msg_data.get("model")
+                    if not isinstance(model, str):
+                        model = None
+                    timestamp = parse_timestamp(record.get("timestamp", ""))
+                    if created_at is None or timestamp < created_at:
+                        created_at = timestamp
+                    if last_updated is None or timestamp > last_updated:
+                        last_updated = timestamp
+                    if cli_version is None:
+                        cli_version = record.get("version")
+                    if git_branch is None:
+                        git_branch = record.get("gitBranch")
+                    if session_id == path.stem:
+                        session_id = record.get("sessionId", path.stem)
+                    messages.append(
+                        UnifiedMessage(
+                            role=Role.ASSISTANT,
+                            content=content,
+                            timestamp=timestamp,
+                            message_id=record.get("uuid"),
+                            tool_calls=tool_calls if tool_calls else [],
+                            tokens=_parse_usage_tokens(msg_data.get("usage")),
+                            reasoning=reasoning,
+                            model=model,
+                        )
+                    )
+                else:
+                    self._count("records_unknown")
 
         if created_at is None:
             created_at = datetime.fromtimestamp(path.stat().st_mtime)
         if last_updated is None:
             last_updated = datetime.fromtimestamp(path.stat().st_mtime)
 
-        title = summary
+        if custom_title:
+            title = custom_title
+            title_source = TitleSource.NATIVE
+        elif ai_title:
+            title = ai_title
+            title_source = TitleSource.NATIVE
+        else:
+            title = summary
         if parent_session_id:
             agent_label = path.stem
-            if summary:
-                title = f"[subagent {agent_label}] {summary}"
+            if title:
+                title = f"[subagent {agent_label}] {title}"
             else:
                 title = f"[subagent {agent_label}]"
 
@@ -402,6 +504,7 @@ class ClaudeCodeExtractor(BaseExtractor):
             thread_id=thread_id,
             title=title,
             summary=summary,
+            title_source=title_source,
             origin="subagent" if parent_session_id else "unknown",
             parent_session_id=parent_session_id,
             relation="subagent" if parent_session_id else None,

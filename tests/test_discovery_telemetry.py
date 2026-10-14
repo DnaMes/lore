@@ -273,6 +273,7 @@ def test_claude_reports_counts(home):
         for _ in range(3)
     ]
     rows.append({"type": "file-history-snapshot", "snapshot": {}})
+    rows.append({"type": "bogus-record-type"})
     (project / "c-1.jsonl").write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
     short = {**rows[0], "sessionId": "c-2"}
     (project / "c-2.jsonl").write_text(json.dumps(short) + "\n", encoding="utf-8")
