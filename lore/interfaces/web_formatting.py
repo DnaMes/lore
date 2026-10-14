@@ -7,13 +7,133 @@ for the web interface.
 import html
 import json
 import re
+from datetime import datetime
+from typing import Optional
 
 import markdown
 import nh3
 
+from lore.core.models import AUTOMATED_ORIGINS
 from lore.utils.text_processing import strip_ansi
 
 from .web_data import threadsafe_lru_cache
+
+_COMPARE_STRIP_RE = re.compile(r"[\W_]+", re.UNICODE)
+
+
+def _normalize_compare_text(value: Optional[str]) -> str:
+    if not value:
+        return ""
+    lowered = str(value).casefold()
+    return _COMPARE_STRIP_RE.sub("", lowered)
+
+
+def should_show_prompt_outline(
+    title: Optional[str],
+    outline: Optional[str],
+    prefix_len: int = 40,
+) -> bool:
+    """True when outline adds information beyond the title prefix (list row snippet)."""
+    if not outline or not str(outline).strip():
+        return False
+    norm_title = _normalize_compare_text(title)
+    norm_outline = _normalize_compare_text(outline)
+    if not norm_outline:
+        return False
+    title_prefix = norm_title[:prefix_len]
+    outline_prefix = norm_outline[:prefix_len]
+    if title_prefix and norm_outline.startswith(title_prefix):
+        return False
+    if outline_prefix and norm_title.startswith(outline_prefix):
+        return False
+    return True
+
+
+def format_compact_token_count(tokens: Optional[int]) -> str:
+    if tokens is None or tokens < 0:
+        return ""
+    if tokens < 1000:
+        return str(tokens)
+    if tokens < 1_000_000:
+        scaled = tokens / 1000.0
+        if scaled >= 100:
+            return f"{int(scaled)}k"
+        text = f"{scaled:.1f}k"
+        return text.replace(".0k", "k")
+    scaled = tokens / 1_000_000.0
+    if scaled >= 100:
+        return f"{int(scaled)}M"
+    text = f"{scaled:.1f}M"
+    return text.replace(".0M", "M")
+
+
+def _parse_local_naive(value: Optional[str]) -> Optional[datetime]:
+    """Parse an ISO timestamp; aware values are converted to local time, then made naive.
+
+    The index mixes naive local timestamps with ``Z``/offset ones, so every comparison and
+    display goes through this one normalisation.
+    """
+    if not value or not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone().replace(tzinfo=None)
+    return parsed
+
+
+def format_session_duration(created: Optional[str], updated: Optional[str]) -> str:
+    start = _parse_local_naive(created)
+    end = _parse_local_naive(updated)
+    if start is None or end is None:
+        return ""
+    total_minutes = int((end - start).total_seconds()) // 60
+    if total_minutes < 1:
+        return ""
+    hours, minutes = divmod(total_minutes, 60)
+    if hours and minutes:
+        return f"{hours}h {minutes}m"
+    if hours:
+        return f"{hours}h"
+    return f"{minutes}m"
+
+
+def format_session_row_time(
+    iso_value: Optional[str],
+    now: Optional[datetime] = None,
+) -> tuple[str, str]:
+    """Return (visible label, datetime attribute) for a session row timestamp."""
+    dt = _parse_local_naive(iso_value)
+    if dt is None:
+        return ("", "")
+    ref = now or datetime.now()
+    if ref.tzinfo is not None:
+        ref = ref.replace(tzinfo=None)
+    time_part = dt.strftime("%H:%M")
+    if dt.date() == ref.date():
+        label = time_part
+    else:
+        label = f"{dt.strftime('%b')} {dt.day} {time_part}"
+    return (label, dt.isoformat(timespec="minutes"))
+
+
+def session_row_tokens(entry: dict) -> Optional[int]:
+    raw = entry.get("tokens")
+    if raw is None:
+        raw = entry.get("total_tokens")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def is_automated_origin(origin: Optional[str]) -> bool:
+    return origin in AUTOMATED_ORIGINS
+
 
 # HTML sanitization constants (nh3 requires sets, not lists)
 SANITIZE_TAGS = {
@@ -229,4 +349,10 @@ __all__ = [
     "_format_message_content_cached",
     "format_message_content",
     "format_tool_calls",
+    "should_show_prompt_outline",
+    "format_compact_token_count",
+    "format_session_duration",
+    "format_session_row_time",
+    "session_row_tokens",
+    "is_automated_origin",
 ]

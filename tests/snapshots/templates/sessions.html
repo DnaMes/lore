@@ -164,7 +164,129 @@
         .compact-list { display: flex; flex-direction: column; gap: 8px; }
         .compact-row { border: 1px solid var(--border); background: var(--card); border-radius: 14px; padding: 12px; transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease; }
         .compact-row:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--border) 65%, #60a5fa 35%); box-shadow: 0 12px 22px -20px rgba(2, 8, 23, 0.45); }
+        @media (prefers-reduced-motion: reduce) {
+            .compact-row, .compact-row:hover { transform: none; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+        }
         .compact-title { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; line-height: 1.25; }
+        .sessions-filters { margin-bottom: 2rem; }
+        .session-row { align-items: stretch; }
+        .session-row-icon, .row-menu { flex-shrink: 0; }
+        .session-row-title { min-width: 0; }
+        .session-row-link {
+            display: block;
+            min-width: 0;
+            color: inherit;
+            text-decoration: none;
+            border-radius: 10px;
+            padding: 2px 4px;
+            margin: -2px -4px;
+        }
+        .session-row-link:focus { outline: none; }
+        .session-row-link:focus-visible {
+            outline: 2px solid var(--primary, #2563eb);
+            outline-offset: 2px;
+        }
+        .session-row-time {
+            font-size: 11px;
+            font-family: "Source Code Pro", "SF Mono", Menlo, monospace;
+            color: var(--muted);
+            white-space: nowrap;
+            flex-shrink: 0;
+            font-variant-numeric: tabular-nums;
+        }
+        .session-row-meta { color: var(--muted); display: flex; flex-wrap: wrap; align-items: center; font-size: 12px; row-gap: 2px; }
+        .session-row-meta > *:not(:last-child)::after { content: "\00b7"; margin: 0 7px; opacity: 0.55; }
+        .session-row-project { color: var(--text); font-weight: 600; }
+        .session-row-automated { font-weight: 600; }
+        .session-row-time-inline { display: none; font-variant-numeric: tabular-nums; }
+        .session-row-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .session-list { gap: 0; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
+        .session-list .session-row { border: 0; border-radius: 0; background: transparent; padding: 10px 12px; box-shadow: none; transform: none; }
+        .session-list .session-row + .session-row { border-top: 1px solid var(--border); }
+        .session-list .session-row:first-child { border-radius: 14px 14px 0 0; }
+        .session-list .session-row:last-child { border-radius: 0 0 14px 14px; }
+        .session-list .session-row:only-child { border-radius: 14px; }
+        .session-list .session-row:hover { background: color-mix(in srgb, var(--card) 93%, var(--primary, #2563eb) 7%); transform: none; box-shadow: none; }
+        .session-list .row-menu-trigger { border-color: transparent; background: transparent; width: 28px; height: 28px; }
+        .session-list .row-menu-trigger:hover, .row-menu[open] .row-menu-trigger { border-color: var(--border); background: var(--card); }
+        .session-row-outline { line-height: 1.35; }
+        .tag-chip-automated { font-weight: 600; }
+        .row-menu { position: relative; align-self: flex-start; }
+        .row-menu-trigger {
+            list-style: none;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--muted);
+            border-radius: 10px;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            line-height: 1;
+            padding: 0;
+        }
+        .row-menu-trigger::-webkit-details-marker { display: none; }
+        .row-menu-trigger:focus { outline: none; }
+        .row-menu-trigger:focus-visible {
+            outline: 2px solid var(--primary, #2563eb);
+            outline-offset: 2px;
+        }
+        .row-menu-panel {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 4px);
+            z-index: 5;
+            min-width: 10rem;
+            border: 1px solid var(--border);
+            background: var(--card);
+            border-radius: 12px;
+            padding: 6px;
+            box-shadow: 0 12px 28px -18px rgba(2, 8, 23, 0.45);
+        }
+        .row-menu-delete {
+            width: 100%;
+            text-align: left;
+            border: 1px solid var(--border);
+            background: var(--panel-strong);
+            color: var(--text);
+            border-radius: 8px;
+            padding: 8px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .row-menu-delete::before { content: "✕ "; color: var(--error, #dc2626); font-weight: 700; }
+        .filters-sheet { border: 1px solid var(--border); border-radius: 14px; background: var(--card); padding: 10px 12px; }
+        .filters-sheet-summary {
+            cursor: pointer;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.16em;
+            color: var(--muted);
+            list-style: none;
+        }
+        .filters-sheet-summary::-webkit-details-marker { display: none; }
+        .filters-sheet-body { margin-top: 12px; }
+        @media (min-width: 1024px) {
+            .filters-sheet { border: none; background: transparent; padding: 0; }
+            .filters-sheet-summary { display: none; }
+            .filters-sheet-body { display: grid !important; margin-top: 0; }
+        }
+        @media (max-width: 1023px) {
+            .filters-sheet:not([open]) .filters-sheet-body { display: none; }
+        }
+        @media (max-width: 640px) {
+            .session-row-line1 { gap: 8px; }
+            .session-row-icon, .session-row-time { display: none; }
+            .session-row-time-inline { display: inline; }
+            .session-row-title {
+                white-space: normal; display: -webkit-box; -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+            }
+        }
         /* --- Conversation transcript (consolidated, fully theme-driven) --- */
         .message-cluster { border: none; background: transparent; border-radius: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
         body.session-view .message-cluster { border: none; background: transparent; padding: 0; }
@@ -893,55 +1015,87 @@
             <p class="text-sm text-slate-500 mt-2">1 session</p>
         </div>
     </div>
-    <form method="get" data-autosubmit="true" class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-8">
-        <select name="tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-            <option value="">All Tools</option>
-            <option value="claude-code" >Claude</option><option value="cursor" >Cursor</option><option value="gemini-cli" >Gemini</option><option value="warp" >Warp</option><option value="codex" >Codex</option><option value="vscode-copilot" >VSCode Copilot</option><option value="copilot-cli" >Copilot CLI</option><option value="opencode" >OpenCode</option><option value="antigravity" >Antigravity</option><option value="aider" >Aider</option><option value="pi" >Pi</option><option value="command-code" >Command Code</option><option value="hermes" >Hermes</option><option value="cline" >Cline</option><option value="roo-code" >Roo Code</option><option value="kilo-code" >Kilo Code</option><option value="goose" >Goose</option><option value="crush" >Crush</option><option value="kimi" >Kimi</option><option value="qwen" >Qwen Code</option><option value="zed" >Zed</option><option value="factory-droid" >Factory Droid</option>
-        </select>
-        <select name="tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-            <option value="">All Tags</option>
-            
-        </select>
-        <input type="date" name="start" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-        <input type="date" name="end" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-        <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
-            <input type="checkbox" name="automated" value="1" data-auto-submit class="w-4 h-4">
-            Automated
-        </label>
-        <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
+    
+    <form method="get" data-autosubmit="true" class="sessions-filters mb-8">
+        <details class="filters-sheet">
+            <summary class="filters-sheet-summary">Filters · 0</summary>
+            <div class="filters-sheet-body grid grid-cols-1 lg:grid-cols-5 gap-3">
+                <select name="tool" aria-label="Tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                    <option value="">All Tools</option>
+                    <option value="claude-code" >Claude</option><option value="cursor" >Cursor</option><option value="gemini-cli" >Gemini</option><option value="warp" >Warp</option><option value="codex" >Codex</option><option value="vscode-copilot" >VSCode Copilot</option><option value="copilot-cli" >Copilot CLI</option><option value="opencode" >OpenCode</option><option value="antigravity" >Antigravity</option><option value="aider" >Aider</option><option value="pi" >Pi</option><option value="command-code" >Command Code</option><option value="hermes" >Hermes</option><option value="cline" >Cline</option><option value="roo-code" >Roo Code</option><option value="kilo-code" >Kilo Code</option><option value="goose" >Goose</option><option value="crush" >Crush</option><option value="kimi" >Kimi</option><option value="qwen" >Qwen Code</option><option value="zed" >Zed</option><option value="factory-droid" >Factory Droid</option>
+                </select>
+                <select name="tag" aria-label="Tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                    <option value="">All Tags</option>
+                    
+                </select>
+                <input type="date" name="start" aria-label="From date" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                <input type="date" name="end" aria-label="To date" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
+                    <input type="checkbox" name="automated" value="1" data-auto-submit class="w-4 h-4">
+                    Automated
+                </label>
+                <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
+            </div>
+        </details>
     </form>
-    <div class="compact-list" id="sessionRows"
+    <div class="compact-list session-list" id="sessionRows" role="list"
          data-tool="" data-tag="" data-start=""
          data-end="" data-back="/sessions"
          data-per-page="50" data-pages="1">
         
 
-<div class="compact-row flex items-start gap-3 group">
-    <a href="/session/session-1?back=%2Fsessions" class="flex items-center gap-3 flex-1">
-        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-white border border-slate-200" style="color: #C084FC">
-            C
-        </div>
-        <div class="flex-1 min-w-0">
-            <div class="compact-title text-slate-900 group-hover:text-slate-900 truncate">Claude debugging session</div>
-            
-            <div class="flex flex-wrap gap-2 mt-3 text-[10px]">
-                <span class="tag-chip">via Claude</span>
-                <span class="tag-chip">demo</span>
-                <span class="tag-chip">1 prompts</span>
+<div class="compact-row session-row flex gap-2 group" role="listitem">
+    <a href="/session/session-1?back=%2Fsessions" class="session-row-link flex-1 min-w-0">
+        <div class="session-row-line1 flex items-center gap-3 min-w-0">
+            <div class="session-row-icon w-8 h-8 rounded-lg flex items-center justify-center text-sm border border-slate-200" style="color: #C084FC">
+                C
             </div>
+            <div class="session-row-title compact-title text-slate-900 flex-1 min-w-0">Claude debugging session</div>
+            
+            
+            <time class="session-row-time" datetime="2026-04-01T10:05">Apr 1 10:05</time>
+            
         </div>
-        <div class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">2026-04-01</div>
+        <div class="session-row-meta mt-1">
+            <time class="session-row-time-inline" datetime="2026-04-01T10:05">Apr 1 10:05</time>
+            <span class="session-row-project">demo</span>
+            <span>1 prompts</span>
+            
+            
+            <span>1.2k tokens</span>
+            
+            
+            
+            <span>5m</span>
+            
+            <span>Claude</span>
+            
+        </div>
+        
     </a>
-    <form action="/session/session-1/delete" method="POST" data-confirm="Delete this session?" class="ml-2">
-        <input type="hidden" name="next" value="/sessions">
-        <button type="submit" aria-label="Delete session Claude debugging session" class="text-red-600 hover:text-red-900 border border-red-200 p-1.5 rounded-lg transition-all bg-white"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </form>
+    <details class="row-menu">
+        <summary class="row-menu-trigger" aria-label="Actions for Claude debugging session">⋯</summary>
+        <div class="row-menu-panel">
+            <form action="/session/session-1/delete" method="POST" data-confirm="Delete this session?">
+                <input type="hidden" name="next" value="/sessions">
+                <button type="submit" class="row-menu-delete">Delete session</button>
+            </form>
+        </div>
+    </details>
 </div>
 
     </div>
     
 </section>
 <script nonce="NONCE">
+(function () {
+    // A closed <details> hides its content whatever the CSS says: open the filter sheet on
+    // desktop widths (it is folded only on narrow screens).
+    const sheet = document.querySelector('details.filters-sheet');
+    if (sheet && window.matchMedia('(min-width: 1024px)').matches) {
+        sheet.setAttribute('open', '');
+    }
+})();
 (function () {
     const btn = document.getElementById('loadMoreSessions');
     const rows = document.getElementById('sessionRows');

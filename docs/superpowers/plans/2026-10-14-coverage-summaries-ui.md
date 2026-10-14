@@ -178,7 +178,7 @@ Flags as in the design (`--session`, `--project`, `--since`, `--tool`, `--provid
 
 ### B5.1 Fixes and compact rows
 Compact two-line rows (use a list/listitem structure with real links and buttons; the mock's `role=option` rows with interactive children are not a valid pattern) with tokens, duration, time and project chip; drop the per-row delete (menu only); remove the duplicated outline line; fix the 390 px clipping; snapshot tests updated only where the diff is the intended markup.
-- [ ] done
+- [x] done
 
 ### B5.2 Code blocks, tool status, thinking
 Single-frame code block with language, line count, Copy and collapse above ~24 lines; tool cards show ok/failed and duration instead of "N CHARS"; thinking in `<details>`.

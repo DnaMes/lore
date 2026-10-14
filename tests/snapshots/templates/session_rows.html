@@ -1,23 +1,41 @@
 
 
-<div class="compact-row flex items-start gap-3 group">
-    <a href="/session/session-1?back=%2Fsessions" class="flex items-center gap-3 flex-1">
-        <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-white border border-slate-200" style="color: #C084FC">
-            C
-        </div>
-        <div class="flex-1 min-w-0">
-            <div class="compact-title text-slate-900 group-hover:text-slate-900 truncate">Claude debugging session</div>
-            
-            <div class="flex flex-wrap gap-2 mt-3 text-[10px]">
-                <span class="tag-chip">via Claude</span>
-                <span class="tag-chip">demo</span>
-                <span class="tag-chip">1 prompts</span>
+<div class="compact-row session-row flex gap-2 group" role="listitem">
+    <a href="/session/session-1?back=%2Fsessions" class="session-row-link flex-1 min-w-0">
+        <div class="session-row-line1 flex items-center gap-3 min-w-0">
+            <div class="session-row-icon w-8 h-8 rounded-lg flex items-center justify-center text-sm border border-slate-200" style="color: #C084FC">
+                C
             </div>
+            <div class="session-row-title compact-title text-slate-900 flex-1 min-w-0">Claude debugging session</div>
+            
+            
+            <time class="session-row-time" datetime="2026-04-01T10:05">Apr 1 10:05</time>
+            
         </div>
-        <div class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">2026-04-01</div>
+        <div class="session-row-meta mt-1">
+            <time class="session-row-time-inline" datetime="2026-04-01T10:05">Apr 1 10:05</time>
+            <span class="session-row-project">demo</span>
+            <span>1 prompts</span>
+            
+            
+            <span>1.2k tokens</span>
+            
+            
+            
+            <span>5m</span>
+            
+            <span>Claude</span>
+            
+        </div>
+        
     </a>
-    <form action="/session/session-1/delete" method="POST" data-confirm="Delete this session?" class="ml-2">
-        <input type="hidden" name="next" value="/sessions">
-        <button type="submit" aria-label="Delete session Claude debugging session" class="text-red-600 hover:text-red-900 border border-red-200 p-1.5 rounded-lg transition-all bg-white"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6l12 12M18 6L6 18"/></svg></button>
-    </form>
+    <details class="row-menu">
+        <summary class="row-menu-trigger" aria-label="Actions for Claude debugging session">⋯</summary>
+        <div class="row-menu-panel">
+            <form action="/session/session-1/delete" method="POST" data-confirm="Delete this session?">
+                <input type="hidden" name="next" value="/sessions">
+                <button type="submit" class="row-menu-delete">Delete session</button>
+            </form>
+        </div>
+    </details>
 </div>

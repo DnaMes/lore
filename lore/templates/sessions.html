@@ -12,24 +12,30 @@
             {%- endif %}
         </div>
     </div>
-    <form method="get" data-autosubmit="true" class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-8">
-        <select name="tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-            <option value="">All Tools</option>
-            {% for t in tools %}<option value="{{ t }}" {{ 'selected' if tool==t else '' }}>{{ get_style(t).name }}</option>{% endfor %}
-        </select>
-        <select name="tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-            <option value="">All Tags</option>
-            {% for t in tags %}<option value="{{ t }}" {{ 'selected' if tag==t else '' }}>{{ t }}</option>{% endfor %}
-        </select>
-        <input type="date" name="start" data-auto-submit value="{{ start or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-        <input type="date" name="end" data-auto-submit value="{{ end or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-        <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
-            <input type="checkbox" name="automated" value="1" data-auto-submit{{ ' checked' if include_automated else '' }} class="w-4 h-4">
-            Automated
-        </label>
-        <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
+    {% set active_filters = (1 if tool else 0) + (1 if tag else 0) + (1 if start else 0) + (1 if end else 0) + (1 if include_automated else 0) %}
+    <form method="get" data-autosubmit="true" class="sessions-filters mb-8">
+        <details class="filters-sheet">
+            <summary class="filters-sheet-summary">Filters · {{ active_filters }}</summary>
+            <div class="filters-sheet-body grid grid-cols-1 lg:grid-cols-5 gap-3">
+                <select name="tool" aria-label="Tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                    <option value="">All Tools</option>
+                    {% for t in tools %}<option value="{{ t }}" {{ 'selected' if tool==t else '' }}>{{ get_style(t).name }}</option>{% endfor %}
+                </select>
+                <select name="tag" aria-label="Tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                    <option value="">All Tags</option>
+                    {% for t in tags %}<option value="{{ t }}" {{ 'selected' if tag==t else '' }}>{{ t }}</option>{% endfor %}
+                </select>
+                <input type="date" name="start" aria-label="From date" data-auto-submit value="{{ start or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                <input type="date" name="end" aria-label="To date" data-auto-submit value="{{ end or '' }}" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
+                    <input type="checkbox" name="automated" value="1" data-auto-submit{{ ' checked' if include_automated else '' }} class="w-4 h-4">
+                    Automated
+                </label>
+                <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
+            </div>
+        </details>
     </form>
-    <div class="compact-list" id="sessionRows"
+    <div class="compact-list session-list" id="sessionRows" role="list"
          data-tool="{{ tool }}" data-tag="{{ tag }}" data-start="{{ start or '' }}"
          data-end="{{ end or '' }}" {% if include_automated %}data-automated="1" {% endif %}data-back="{{ back_to or '/sessions' }}"
          data-per-page="{{ per_page }}" data-pages="{{ pages }}">
@@ -45,6 +51,14 @@
     {% endif %}
 </section>
 <script nonce="{{ nonce }}">
+(function () {
+    // A closed <details> hides its content whatever the CSS says: open the filter sheet on
+    // desktop widths (it is folded only on narrow screens).
+    const sheet = document.querySelector('details.filters-sheet');
+    if (sheet && window.matchMedia('(min-width: 1024px)').matches) {
+        sheet.setAttribute('open', '');
+    }
+})();
 (function () {
     const btn = document.getElementById('loadMoreSessions');
     const rows = document.getElementById('sessionRows');
