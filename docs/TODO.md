@@ -39,6 +39,28 @@ were not verified on real machines.
 tools. Licence notes: `basic-memory` is AGPL-3.0 and cass carries an additional
 clause, so take ideas, not code. See `docs/research/2026-10-14-oss-landscape.md`.
 
+## Deferred roadmap (label `deferred` on GitHub)
+
+### #29 — MCP-over-HTTP transport (streamable-http)
+
+Lore's MCP server runs over stdio only. An HTTP transport is real work and the
+`/api/search` shape it would have to expose is about to change under #174 and
+#175.
+
+**Recommended decision:** implement after #174 and #175 are closed, so the
+transport freezes a search surface that is already final. Until then the issue
+stays open with the `deferred` label.
+
+### #48 — JSON-retirement exit criteria
+
+`index.json`/`index.sqlite` are still written next to the v2 store; the coexistence
+is annoying but reversible, and five exit criteria remain (tombstones into v2,
+search routed through v2, staleness assert, CI equivalence test, stop writing).
+
+**Recommended decision:** start only when the CI equivalence test between v2 and
+JSON exists (sub-task 4 of the issue). Everything before it is safe; the final
+step is the one that cannot be rolled back cheaply without that test.
+
 ## Stopped work
 
 None yet. The overnight loop appends entries here when a task fails four times
