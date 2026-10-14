@@ -182,7 +182,7 @@ Compact two-line rows (use a list/listitem structure with real links and buttons
 
 ### B5.2 Code blocks, tool status, thinking
 Single-frame code block with language, line count, Copy and collapse above ~24 lines; tool cards show ok/failed and duration instead of "N CHARS"; thinking in `<details>`.
-- [ ] done
+- [x] done
 
 ### B5.3 Day grouping and sticky header
 Day headers (with the pagination hand-off so a header is not repeated), date chips, group toggle; sticky compact detail header with Resume primary and the rest in a menu.

@@ -132,20 +132,81 @@ def strip_ansi(text: str) -> str:
     return re.compile(r"\x1B(?:[@-Z\\-_]|[0-?]*[ -/]*[@-~])").sub("", text)
 
 
+_MAX_DURATION_MS = 10**9  # ~11 days; anything larger is corrupt data, not a duration
+
+
+def format_duration_ms(value: Any) -> str | None:
+    """Format a tool duration for display; unknown values return None."""
+    if value is None or isinstance(value, bool) or not isinstance(value, int):
+        return None
+    if value < 0 or value > _MAX_DURATION_MS:
+        return None
+    if value < 1000:
+        return f"{value}ms"
+    if value < 60_000:
+        seconds = value / 1000.0
+        if value % 1000 == 0:
+            return f"{value // 1000}s"
+        formatted = f"{seconds:.1f}".rstrip("0").rstrip(".")
+        return f"{formatted}s"
+    return f"{value // 1000}s"
+
+
+def _canonical_tool_status(
+    status: Any = None,
+    *,
+    is_error: bool = False,
+) -> str | None:
+    if is_error:
+        return "failed"
+    if status is None:
+        return None
+    normalized = str(status).strip().lower()
+    if normalized in ("ok", "success", "completed"):
+        return "ok"
+    if normalized in ("failed", "error", "failure"):
+        return "failed"
+    return None
+
+
+def _tool_status_meta_html(
+    status_word: str | None,
+    duration_ms: Any = None,
+    exit_code: int | None = None,
+) -> str:
+    if not status_word and format_duration_ms(duration_ms) is None:
+        return ""
+    parts: list[str] = []
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        exit_code = None  # only a plain integer may reach the markup
+    if status_word == "ok":
+        parts.append(
+            '<span class="tool-chip status-ok">'
+            '<span class="tool-status-icon" aria-hidden="true">✓</span> ok</span>'
+        )
+    elif status_word == "failed":
+        parts.append(
+            '<span class="tool-chip status-error">'
+            '<span class="tool-status-icon" aria-hidden="true">✗</span> failed</span>'
+        )
+        if exit_code is not None:
+            parts.append(f'<span class="action-meta">exit {exit_code}</span>')
+    duration_label = format_duration_ms(duration_ms)
+    if duration_label:
+        parts.append(f'<span class="action-meta">{html.escape(duration_label)}</span>')
+    if not parts:
+        return ""
+    return f'<span class="action-meta-group">{"".join(parts)}</span>'
+
+
 def format_thinking(text: str) -> str:
-    """Format <thinking> blocks as collapsible details (SpecStory Style)."""
-    return f"""
-    <details class="action-block group">
-        <summary>
-            <svg class="action-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
-            <span class="thinking-label">Thinking</span>
-            <span class="thinking-summary">{html.escape(text[:80]).strip()}{"..." if len(text) > 80 else ""}</span>
-        </summary>
-        <div class="action-content">
-            <div class="thinking-content">{html.escape(text)}</div>
-        </div>
-    </details>
-    """
+    """Render reasoning as a native closed details fold."""
+    words = len(re.findall(r"\S+", text or ""))
+    body = html.escape(text or "")
+    return (
+        f'<details class="think-fold"><summary>Thinking · {words} words</summary>'
+        f'<div class="thinking-content">{body}</div></details>'
+    )
 
 
 def _normalize_tool_name(raw_name: str) -> str:
@@ -242,32 +303,42 @@ def _render_kv_grid(tool_input) -> str:
     return '<div class="action-kv-grid">' + "".join(items) + "</div>"
 
 
-def format_tool_result(text: str) -> str:
+def format_tool_result(
+    text: str,
+    *,
+    status: Any = None,
+    duration_ms: Any = None,
+    exit_code: int | None = None,
+    is_error: bool = False,
+) -> str:
     text = (text or "").strip()
     if not text:
         text = "(empty output)"
+    if isinstance(exit_code, bool) or not isinstance(exit_code, int):
+        exit_code = None
 
     lowered = text.lower()
     lines = text.split("\n")
     line_count = len(lines)
-    char_count = len(text)
 
-    status = "neutral"
-    if any(token in lowered for token in ("error", "exception", "traceback", "failed")):
-        status = "error"
-    elif any(token in lowered for token in ("ok", "success", "completed", "created", "updated")):
-        status = "ok"
+    status_word = _canonical_tool_status(status, is_error=is_error)
+    legacy_error = status_word is None and any(
+        token in lowered for token in ("error", "exception", "traceback", "failed")
+    )
+    if status_word is None and legacy_error:
+        status_word = "failed"
 
     first_line = next((line.strip() for line in lines if line.strip()), "Output")
     summary = _safe_preview(first_line, 90)
 
-    exit_code = None
-    exit_match = re.search(r"(?:exit\s*code|code)\s*[:=]?\s*(\d{1,3})", lowered)
-    if exit_match:
-        try:
-            exit_code = int(exit_match.group(1))
-        except ValueError:
-            exit_code = None
+    parsed_exit = exit_code
+    if parsed_exit is None:
+        exit_match = re.search(r"(?:exit\s*code|code)\s*[:=]?\s*(\d{1,3})", lowered)
+        if exit_match:
+            try:
+                parsed_exit = int(exit_match.group(1))
+            except ValueError:
+                parsed_exit = None
 
     warning_count = len(re.findall(r"\bwarning\b", lowered))
     error_count = len(re.findall(r"\berror\b|\bexception\b|\btraceback\b", lowered))
@@ -282,46 +353,50 @@ def format_tool_result(text: str) -> str:
         elif line.startswith("-"):
             deletions += 1
 
-    status_label = {
-        "ok": "Success",
-        "error": "Error",
-        "neutral": "Result",
-    }[status]
+    pill_status = status_word or ("error" if legacy_error else "neutral")
+    meta_html = _tool_status_meta_html(status_word, duration_ms, parsed_exit)
+    open_attr = " open" if status_word == "failed" else ""
 
-    chips = [
-        f'<span class="action-meta">{line_count} lines</span>',
-        f'<span class="action-meta">{char_count} chars</span>',
-    ]
-    if exit_code is not None:
-        chips.append(f'<span class="action-meta">exit {exit_code}</span>')
+    content_chips: list[str] = [f'<span class="action-meta">{line_count} lines</span>']
+    if parsed_exit is not None:
+        content_chips.append(f'<span class="action-meta">exit {parsed_exit}</span>')
     if warning_count > 0:
-        chips.append(f'<span class="action-meta">warnings {warning_count}</span>')
+        content_chips.append(f'<span class="action-meta">warnings {warning_count}</span>')
     if error_count > 0:
-        chips.append(f'<span class="action-meta">errors {error_count}</span>')
+        content_chips.append(f'<span class="action-meta">errors {error_count}</span>')
     if additions > 0 or deletions > 0:
-        chips.append(f'<span class="action-meta">diff +{additions}/-{deletions}</span>')
+        content_chips.append(f'<span class="action-meta">diff +{additions}/-{deletions}</span>')
 
     importance = (
-        "major" if status == "error" or (exit_code is not None and exit_code != 0) else "minor"
+        "major"
+        if status_word == "failed" or (parsed_exit is not None and parsed_exit != 0)
+        else "minor"
     )
 
     return f"""
-    <details class="action-block tool-result importance-{importance} group">
-        <summary class="tool-call-pill tool-result-pill status-{status}">
+    <details class="action-block tool-result importance-{importance} group"{open_attr}>
+        <summary class="tool-call-pill tool-result-pill status-{pill_status}">
             <svg class="action-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
-            <span class="tool-chip status-{status}">{status_label}</span>
             <span class="action-title truncate">Tool result</span>
-            <span class="action-meta-group">{"".join(chips)}</span>
+            {meta_html}
             <span class="truncate opacity-75">{html.escape(summary)}</span>
         </summary>
         <div class="action-content">
+            <div class="action-content-head">{"".join(content_chips)}</div>
             <pre class="action-output"><code class="language-plaintext">{html.escape(text)}</code></pre>
         </div>
     </details>
     """
 
 
-def format_tool_display(tool_name: str, args: str) -> str:
+def format_tool_display(
+    tool_name: str,
+    args: str,
+    *,
+    status: Any = None,
+    duration_ms: Any = None,
+    is_error: bool = False,
+) -> str:
     normalized_tool = _normalize_tool_name(tool_name)
     icon = _tool_icon(normalized_tool)
     importance = _tool_importance(normalized_tool)
@@ -386,13 +461,16 @@ def format_tool_display(tool_name: str, args: str) -> str:
         "</details>"
     )
 
+    status_word = _canonical_tool_status(status, is_error=is_error)
+    meta_html = _tool_status_meta_html(status_word, duration_ms)
+
     return f"""
     <details class="action-block tool-action importance-{importance} group">
         <summary class="tool-call-pill">
             <svg class="action-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
             <span class="tool-call-icon">{icon}</span>
             <span class="action-title">Run {html.escape(normalized_tool)}</span>
-            <span class="action-meta">{len(arg_display)} chars</span>
+            {meta_html}
             <span class="truncate opacity-75">{html.escape(preview)}</span>
         </summary>
         <div class="action-content">

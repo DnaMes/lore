@@ -1,6 +1,10 @@
 from lore.interfaces import web
 from lore.interfaces.web_formatting import format_message_content, format_tool_calls
-from lore.utils.text_processing import format_tool_display, format_tool_result
+from lore.utils.text_processing import (
+    format_duration_ms,
+    format_tool_display,
+    format_tool_result,
+)
 
 
 def test_format_tool_display_renders_command_and_raw_args():
@@ -19,7 +23,24 @@ def test_format_tool_result_marks_error_status_and_metadata():
     assert "status-error" in html
     assert "Tool result" in html
     assert "lines" in html
-    assert "chars" in html
+    assert "chars" not in html
+
+
+def test_format_duration_ms_cases():
+    assert format_duration_ms(None) is None
+    assert format_duration_ms(0) == "0ms"
+    assert format_duration_ms(340) == "340ms"
+    assert format_duration_ms(1200) == "1.2s"
+    assert format_duration_ms(65_000) == "65s"
+    assert format_duration_ms(-1) is None
+    assert format_duration_ms("fast") is None
+
+
+def test_format_tool_display_and_result_never_emit_chars_chip():
+    display = format_tool_display("read", '{"path":"/tmp/x"}', status="ok", duration_ms=200)
+    result = format_tool_result("output", status="ok", duration_ms=200)
+    assert "chars" not in display.lower()
+    assert "chars" not in result.lower()
 
 
 def test_format_tool_result_includes_exit_warning_and_diff_stats():

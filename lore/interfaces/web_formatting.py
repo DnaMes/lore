@@ -312,7 +312,29 @@ def format_message_content(content):
     return _format_message_content_cached(content)
 
 
-def format_tool_calls(tool_calls):
+def _tool_event_for_call(
+    tool_events, index: int, call_id, tool_name: str = "", aligned: bool = True
+) -> dict | None:
+    """Find the compact event for a call: by id, else by position when no folding happened.
+
+    Identical consecutive calls are folded upstream, which shifts positions; an event is then
+    only used when its name also matches, so a status never lands on the wrong call.
+    """
+    if not tool_events:
+        return None
+    if call_id:
+        for ev in tool_events:
+            if isinstance(ev, dict) and ev.get("id") == call_id:
+                return ev
+    if aligned and index < len(tool_events) and isinstance(tool_events[index], dict):
+        ev = tool_events[index]
+        name = ev.get("name")
+        if not name or not tool_name or str(name).lower() == tool_name.split(" ")[0].lower():
+            return ev
+    return None
+
+
+def format_tool_calls(tool_calls, tool_events=None):
     """Format tool calls for display."""
     from lore.utils.text_processing import format_tool_display, format_tool_result
 
@@ -321,7 +343,9 @@ def format_tool_calls(tool_calls):
     from lore.core.models import normalize_tool_call
 
     blocks = []
-    for raw_tc in tool_calls:
+    events = tool_events or []
+    aligned = len(events) == len(tool_calls)
+    for idx, raw_tc in enumerate(tool_calls):
         tc = normalize_tool_call(raw_tc)
         tool_name = str(tc["tool"])
         # Identical consecutive calls are folded upstream (#83); show the count.
@@ -333,11 +357,40 @@ def format_tool_calls(tool_calls):
             tool_args = json.dumps(tool_input, indent=2, ensure_ascii=False)
         else:
             tool_args = str(tool_input)
-        blocks.append(format_tool_display(tool_name, tool_args))
+
+        ev = _tool_event_for_call(events, idx, tc.get("id"), str(tc["tool"]), aligned)
+        duration_ms = tc.get("duration_ms")
+        if duration_ms is None and ev:
+            duration_ms = ev.get("duration_ms")
+        status = tc.get("status")
+        if status is None and ev:
+            status = ev.get("status")
+        is_error = bool(ev.get("is_error")) if ev else False
+        exit_code = tc.get("exit_code")
+        if exit_code is None and ev:
+            exit_code = ev.get("exit_code")
+
+        blocks.append(
+            format_tool_display(
+                tool_name,
+                tool_args,
+                status=status,
+                duration_ms=duration_ms,
+                is_error=is_error,
+            )
+        )
 
         tool_output = tc["output"]
         if isinstance(tool_output, str) and tool_output.strip():
-            blocks.append(format_tool_result(tool_output))
+            blocks.append(
+                format_tool_result(
+                    tool_output,
+                    status=status,
+                    duration_ms=duration_ms,
+                    exit_code=exit_code if isinstance(exit_code, int) else None,
+                    is_error=is_error,
+                )
+            )
     return "\n".join(blocks)
 
 
