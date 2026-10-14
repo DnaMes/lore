@@ -23,6 +23,8 @@ TOOL_STYLES = {
     "crush": {"color": "#F472B6", "icon": "Cr", "name": "Crush"},
     "kimi": {"color": "#38BDF8", "icon": "Ki", "name": "Kimi"},
     "qwen": {"color": "#A78BFA", "icon": "Qw", "name": "Qwen Code"},
+    "zed": {"color": "#84CC16", "icon": "Zd", "name": "Zed"},
+    "factory-droid": {"color": "#F97316", "icon": "Fd", "name": "Factory Droid"},
 }
 
 

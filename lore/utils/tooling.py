@@ -21,6 +21,8 @@ CANONICAL_TOOLS = {
     "crush",
     "kimi",
     "qwen",
+    "zed",
+    "factory-droid",
 }
 
 
@@ -65,6 +67,11 @@ TOOL_ALIASES = {
     "qwen": "qwen",
     "qwen-code": "qwen",
     "qwen-cli": "qwen",
+    "zed": "zed",
+    "zed-agent": "zed",
+    "factory-droid": "factory-droid",
+    "droid": "factory-droid",
+    "factory": "factory-droid",
 }
 
 

@@ -93,6 +93,8 @@ class Tool(Enum):
     CRUSH = "crush"
     KIMI = "kimi"
     QWEN = "qwen"
+    ZED = "zed"
+    FACTORY_DROID = "factory-droid"
 
 
 class Role(Enum):

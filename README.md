@@ -79,6 +79,8 @@ docker compose up -d
 | **Crush** | `~/.local/share/crush/projects.json` → `crush.db` | Fixtures from the upstream schema, not verified on real data |
 | **Kimi** | `~/.kimi/sessions/<md5>/<session_id>/context.jsonl` | Fixtures from the upstream schema, not verified on real data |
 | **Qwen Code** | `~/.qwen/projects/<slug>/chats/*.jsonl` (and legacy `tmp/`) | Fixtures from the upstream schema, not verified on real data |
+| **Zed** | `~/.local/share/zed/threads/threads.db` (and `$XDG_DATA_HOME`) | Fixtures from upstream format descriptions, not verified on real data |
+| **Factory Droid** | `~/.factory/sessions/<slug>/<uuid>.jsonl` | Fixtures from third-party format descriptions, not verified on real data |
 
 ---
 

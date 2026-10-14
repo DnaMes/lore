@@ -20,6 +20,7 @@ from lore.extractors.commandcode import CommandCodeExtractor
 from lore.extractors.copilot import CopilotCLIExtractor
 from lore.extractors.crush import CrushExtractor
 from lore.extractors.cursor import CursorExtractor
+from lore.extractors.factory_droid import FactoryDroidExtractor
 from lore.extractors.gemini import GeminiCLIExtractor
 from lore.extractors.goose import GooseExtractor
 from lore.extractors.hermes import HermesExtractor
@@ -29,6 +30,7 @@ from lore.extractors.pi import PiExtractor
 from lore.extractors.qwen import QwenExtractor
 from lore.extractors.vscode import VSCodeCopilotExtractor
 from lore.extractors.warp import WarpExtractor
+from lore.extractors.zed import ZedExtractor
 
 # ---------------------------------------------------------------------------
 # All concrete extractor classes under test
@@ -50,6 +52,8 @@ ALL_EXTRACTOR_CLASSES = [
     CrushExtractor,
     KimiExtractor,
     QwenExtractor,
+    ZedExtractor,
+    FactoryDroidExtractor,
     OpenCodeExtractor,
     PiExtractor,
     RooCodeExtractor,

@@ -229,6 +229,8 @@ def validate_tool_name(tool: str) -> bool:
         "crush",
         "kimi",
         "qwen",
+        "zed",
+        "factory-droid",
     ]
     return tool in valid_tools
 
