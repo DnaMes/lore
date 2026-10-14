@@ -54,7 +54,21 @@ def test_no_input_causes_an_fts5_syntax_error(query):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("query", ["", "plain words", '"foo bar"', '  "foo"  ', "oauth2 *"])
+@pytest.mark.parametrize(
+    "query",
+    [
+        "",
+        "plain words",
+        '"foo bar"',
+        '  "foo"  ',
+        "oauth2 *",
+        # #199: an apostrophe is not special — FTS5 tokenizes it away and the
+        # query only ever reaches a parameterized MATCH, so `don't` searches.
+        "don't",
+        "it's fine",
+        '"don\'t stop"',
+    ],
+)
 def test_validate_search_query_accepts(query):
     assert validate_search_query(query)
 
@@ -68,13 +82,17 @@ def test_validate_search_query_accepts(query):
         '"a" "b"',
         '""',
         '"  "',
-        "'x'",
         '"a"b"',
         "a;b",
         "x" * 257,
         '"foo"\n',
         '\r"foo"',
         '"foo\nbar"',
+        # only plain spaces may surround a quoted phrase (#199)
+        '\t"foo bar"',
+        '\n"foo bar"',
+        '"foo bar"\t',
+        "don't; drop",
     ],
 )
 def test_validate_search_query_rejects(query):

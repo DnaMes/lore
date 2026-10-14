@@ -112,7 +112,8 @@ def test_search_sessions_title_match_yields_valid_snippet(tmp_path):
     assert [h["session"]["id"] for h in hits] == ["a"]
     # The indexed body starts with the title, so a title hit is marked too.
     snippet = hits[0]["snippet"]
-    assert snippet is None or "«Quantumfoo»" in snippet_to_text(snippet)
+    assert snippet is not None
+    assert "«Quantumfoo»" in snippet_to_text(snippet)
 
 
 def test_search_sessions_keeps_existing_keys(tmp_path):

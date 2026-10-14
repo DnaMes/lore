@@ -277,18 +277,35 @@ def validate_search_param(param: str, max_length: int = 256) -> bool:
     return not any(char in param for char in forbidden_chars)
 
 
+# Characters that can never appear in a search query: statement separators,
+# markup delimiters and the double quote that is reserved for the one-phrase
+# form. An apostrophe is deliberately absent (#199): FTS5 tokenizes it away,
+# ``don't`` is an ordinary search term, and the query only ever reaches a
+# parameterized MATCH. Tool/project filters keep rejecting it (see
+# :func:`validate_search_param`).
+_QUERY_FORBIDDEN_CHARS = (";", "|", "&", "\n", "\r", "\0", "<", ">", '"')
+
+
 def validate_search_query(query: str, max_length: int = 256) -> bool:
     """Validate a free-text search query.
 
-    Same rules as :func:`validate_search_param`, except that a double quote is
-    allowed when the whole query is one quoted phrase: it starts and ends with
-    ``"``, has exactly two quotes and non-empty content between them (#197).
+    Same rules as :func:`validate_search_param`, with two deliberate
+    differences (#199):
+
+    - a double quote is allowed when the whole query is one quoted phrase: it
+      starts and ends with ``"``, has exactly two quotes and non-empty content
+      between them;
+    - an apostrophe is allowed anywhere (see ``_QUERY_FORBIDDEN_CHARS``).
+
+    Only plain spaces may surround a quoted phrase: a tab or newline outside
+    the quotes makes the query fail the phrase shape, and the quote then hits
+    the forbidden list, so those inputs are rejected.
     """
     if len(query or "") > max_length:
         return False
 
-    # Only plain spaces may surround the quotes; \n and \r must still be rejected.
     text = (query or "").strip(" ")
     if len(text) >= 2 and text.startswith('"') and text.endswith('"') and text.count('"') == 2:
-        return bool(text[1:-1].strip()) and validate_search_param(text[1:-1], max_length)
-    return validate_search_param(query, max_length)
+        inner = text[1:-1]
+        return bool(inner.strip()) and not any(c in inner for c in _QUERY_FORBIDDEN_CHARS)
+    return not any(c in (query or "") for c in _QUERY_FORBIDDEN_CHARS)
