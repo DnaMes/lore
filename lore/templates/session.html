@@ -184,10 +184,10 @@
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const html = await resp.text();
             btn.insertAdjacentHTML('beforebegin', html);
-            if (typeof hljs !== 'undefined') {
-                stream.querySelectorAll('pre code:not(.hljs)').forEach(function (el) {
-                    hljs.highlightElement(el);
-                });
+            // One enhancement path for initial and appended blocks: the exported,
+            // idempotent enhancer wraps, highlights and wires the copy button (#176).
+            if (typeof window.loreEnhanceCodeBlocks === 'function') {
+                window.loreEnhanceCodeBlocks();
             }
             // Tell the TOC spy to observe the freshly added #msg-N anchors.
             window.dispatchEvent(new CustomEvent('lore:messages-appended'));

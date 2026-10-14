@@ -281,3 +281,43 @@ def test_sticky_header_wrap_owns_the_sticky_position_and_compacts_on_scroll():
     assert "session-header-sentinel" not in page
     assert "addEventListener('scroll'" in page and "requestAnimationFrame" in page
     assert "is-compact" in page
+
+
+# --- #176: one exported enhancer, exact clipboard content -------------------
+
+
+def _base_template_text() -> str:
+    return (Path(__file__).resolve().parents[1] / "lore" / "templates" / "base.html").read_text(
+        encoding="utf-8"
+    )
+
+
+def _enhancer_block() -> str:
+    text = _base_template_text()
+    return text[text.index("function initCodeBlocks") : text.index("window.FocusTrap")]
+
+
+def test_base_exports_the_enhancer_on_window():
+    """One named, idempotent enhancer other templates can call (#176)."""
+    assert "window.loreEnhanceCodeBlocks = initCodeBlocks" in _base_template_text()
+    assert _enhancer_block().count("function initCodeBlocks") == 1
+    # idempotency: an already-wrapped block is skipped on every re-run
+    assert "el.closest('.code-card')" in _enhancer_block()
+
+
+def test_copy_payload_is_the_exact_text_content():
+    """`innerText` normalises whitespace and omits hidden text — the clipboard must not (#176)."""
+    block = _enhancer_block()
+    assert "const payload = el.textContent || '';" in block
+    assert "el.innerText" not in block  # neither payload nor line count may rewrite the code
+
+
+def test_session_loader_reuses_the_exported_enhancer():
+    """The lazy loader must not run a second, partial enhancement path (#176)."""
+    source = (
+        Path(__file__).resolve().parents[1] / "lore" / "templates" / "session.html"
+    ).read_text(encoding="utf-8")
+    assert "window.loreEnhanceCodeBlocks" in source
+    assert "pre code:not(.hljs)" not in source  # the local highlight loop is gone
+    # appended pairs still announce themselves to the other listeners
+    assert "window.dispatchEvent(new CustomEvent('lore:messages-appended'))" in source

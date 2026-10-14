@@ -1795,10 +1795,10 @@
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const html = await resp.text();
             btn.insertAdjacentHTML('beforebegin', html);
-            if (typeof hljs !== 'undefined') {
-                stream.querySelectorAll('pre code:not(.hljs)').forEach(function (el) {
-                    hljs.highlightElement(el);
-                });
+            // One enhancement path for initial and appended blocks: the exported,
+            // idempotent enhancer wraps, highlights and wires the copy button (#176).
+            if (typeof window.loreEnhanceCodeBlocks === 'function') {
+                window.loreEnhanceCodeBlocks();
             }
             // Tell the TOC spy to observe the freshly added #msg-N anchors.
             window.dispatchEvent(new CustomEvent('lore:messages-appended'));
@@ -2381,7 +2381,7 @@ document.addEventListener('keydown', function(e) {
                 if (langMatch) {
                     return langMatch[1].toLowerCase();
                 }
-                const firstLine = (codeEl.innerText.split('\n').find((line) => line.trim()) || '').trim();
+                const firstLine = (codeEl.textContent.split('\n').find((line) => line.trim()) || '').trim();
                 if (firstLine.startsWith('*** Begin Patch') || firstLine.startsWith('diff --git') || firstLine.startsWith('@@')) {
                     return 'diff';
                 }
@@ -2404,7 +2404,7 @@ document.addEventListener('keydown', function(e) {
                     el.dataset.highlighted = 'true';
                 }
 
-                const text = el.innerText || el.textContent || '';
+                const text = el.textContent || '';
                 const lines = text.split('\n').length;
                 const lang = guessCodeLanguage(el);
 
@@ -2438,7 +2438,9 @@ document.addEventListener('keydown', function(e) {
                 copyBtn.setAttribute('aria-label', 'Copy code');
                 copyBtn.textContent = 'Copy';
                 copyBtn.addEventListener('click', function () {
-                    const payload = el.innerText || el.textContent || '';
+                    // textContent, not innerText: the clipboard gets the code exactly as
+                    // stored, with no whitespace normalisation or hidden-text loss (#176).
+                    const payload = el.textContent || '';
                     const done = function () {
                         copyBtn.textContent = 'Copied';
                         setTimeout(function () { copyBtn.textContent = 'Copy'; }, 2000);
@@ -2477,6 +2479,9 @@ document.addEventListener('keydown', function(e) {
                 }
             });
         }
+        /* One idempotent enhancer, exported for templates that append content later:
+           the session view calls it after its lazy load (#176). */
+        window.loreEnhanceCodeBlocks = initCodeBlocks;
         document.addEventListener('DOMContentLoaded', initCodeBlocks);
         window.addEventListener('lore:messages-appended', initCodeBlocks);
 
