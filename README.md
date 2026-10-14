@@ -374,7 +374,26 @@ automated sessions"). A session or thread opened by its id always works, hidden 
 `lore export` writes every session. `lore prune` never removes automated sessions unless
 `--include-automated` is given. Today the Claude Code and Gemini CLI extractors tag their
 subagent sessions `subagent` (only those already imported before, so the index does not
-grow); other tools gain `exec`/`cron` detection with their extractor work.
+grow); other tools gain `exec`/`cron` detection with their extractor work. Claude Code and
+Gemini CLI subagent sessions also record their parent (`parent_session_id`, `relation` of
+`subagent`) when the path names it.
+
+Boolean switches (`include_automated`, `?automated=`) are parsed strictly: `true`/`1`/`yes`/`on`
+and `false`/`0`/`no`/`off` (or a real boolean, or the integers `0`/`1`) work, anything else
+is an error (MCP: an error string, web and `/api/v1`: HTTP 400). A repeated `?automated=`
+takes its first value.
+
+### Re-extraction after a parser upgrade
+
+When an extractor learns to produce more fields, its `PARSER_VERSION` rises and sessions
+indexed by the older parser are parsed again once, even if the source file did not change.
+The first sync after such an upgrade therefore re-extracts sessions in batches: each run
+re-parses at most `LORE_PARSER_REEXTRACT_BUDGET` stale sources per tool (default `150`) and
+the next runs drain the rest. `0` re-parses no stale source in that run (changed sources
+are still parsed), a negative value removes the cap, an invalid value falls back to `150`.
+The variable is read on every run, so `LORE_PARSER_REEXTRACT_BUDGET=0` persists across runs:
+existing Claude Code and Gemini CLI subagent sessions stay untagged (and visible) until the
+variable is unset.
 
 ---
 

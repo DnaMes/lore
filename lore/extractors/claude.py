@@ -63,7 +63,8 @@ class ClaudeCodeExtractor(BaseExtractor):
 
     # 2: subagent transcripts carry ``origin="subagent"``. They keep the prompt floor
     # they always had (only sessions imported before are tagged, the index does not grow).
-    PARSER_VERSION = 2
+    # 3: subagent sessions also carry ``parent_session_id`` and ``relation="subagent"``.
+    PARSER_VERSION = 3
     AUTOMATED_BYPASSES_PROMPT_FLOOR = False
 
     def __init__(self):
@@ -402,6 +403,8 @@ class ClaudeCodeExtractor(BaseExtractor):
             title=title,
             summary=summary,
             origin="subagent" if parent_session_id else "unknown",
+            parent_session_id=parent_session_id,
+            relation="subagent" if parent_session_id else None,
             cli_version=cli_version,
             git_branch=git_branch,
             source_path=str(path),

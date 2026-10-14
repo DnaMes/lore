@@ -121,6 +121,35 @@ def _origin_of(session: Any) -> str:
     return str(getattr(session, "origin", "") or "")
 
 
+class InvalidFlagError(ValueError):
+    """A boolean flag argument that is neither a boolean nor a known string."""
+
+
+_TRUE_FLAGS = frozenset({"true", "1", "yes", "on"})
+_FALSE_FLAGS = frozenset({"false", "0", "no", "off", ""})
+
+
+def parse_bool_flag(value: Any, default: bool = False, name: str = "flag") -> bool:
+    """Strict boolean for MCP arguments and query parameters.
+
+    ``bool("false")`` is True, so strings are parsed by name. ``None`` gives ``default``;
+    anything that is not a bool, 0/1 or a known string raises ``InvalidFlagError``.
+    """
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        text = value.strip().lower()
+        if text in _TRUE_FLAGS:
+            return True
+        if text in _FALSE_FLAGS:
+            return False
+    raise InvalidFlagError(f"Invalid {name} parameter.")
+
+
 def is_automated(session: Any) -> bool:
     return _origin_of(session) in AUTOMATED_ORIGINS
 

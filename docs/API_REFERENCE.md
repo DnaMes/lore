@@ -139,7 +139,8 @@ Input fields:
 - `include_automated`: optional boolean; also lists `exec`/`cron`/`subagent` sessions, which
   are hidden by default (the response then carries `automated_hidden` and
   `automated_hidden_line`). `list_recent_sessions`, `list_projects` and `get_thread` take
-  the same argument.
+  the same argument. Accepts a boolean, `0`/`1` or `true`/`1`/`yes`/`on`/`false`/`0`/`no`/`off`; any other value
+  returns `Invalid include_automated parameter.` (HTTP `automated=`: status 400).
 
 ### `get_session`
 

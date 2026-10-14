@@ -1,4 +1,5 @@
 import json
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -9,6 +10,11 @@ from lore.utils.tooling import normalize_tool_name
 
 # Rows the SQLite path returns at most (the historical ``LIMIT 50``).
 SQLITE_RESULT_LIMIT = 50
+# The origin filter never widens the fetch past this many scanned rows (50, 200, 800, 2000):
+# a table of mostly automated rows returns what was collected and sets ``last_search_truncated``.
+SQLITE_MAX_SCANNED_ROWS = 2000
+
+logger = logging.getLogger(__name__)
 
 
 class SearchEngine:
@@ -18,6 +24,8 @@ class SearchEngine:
         self.index_path = index_path
         self.sqlite_path = index_path.with_suffix(".sqlite")
         self.index = self._load_index()
+        # True when the last ``search`` hit the scan cap with fewer results than asked for.
+        self.last_search_truncated = False
 
     def _load_index(self) -> Dict:
         """Load index from file."""
@@ -48,6 +56,7 @@ class SearchEngine:
         With ``include_automated=False`` exec/cron/subagent sessions are dropped before
         the result cap, so they cannot crowd interactive hits out of the first rows.
         """
+        self.last_search_truncated = False
         tool = normalize_tool_name(tool) if tool else None
         excluded = set() if include_automated else self._automated_ids()
         if self.sqlite_path.exists():
@@ -141,8 +150,8 @@ class SearchEngine:
             LIMIT ?
         """
 
-        # Over-fetch until ``SQLITE_RESULT_LIMIT`` rows survive the origin filter or the
-        # table is exhausted (fewer rows than asked for come back).
+        # Over-fetch until ``SQLITE_RESULT_LIMIT`` rows survive the origin filter, the
+        # table is exhausted (fewer rows than asked for come back) or a cap is reached.
         fetch = SQLITE_RESULT_LIMIT
         kept: List[tuple] = []
         conn = sqlite3.connect(self.sqlite_path)
@@ -155,7 +164,16 @@ class SearchEngine:
                 kept = [row for row in rows if str(row[0]) not in (excluded or ())]
                 if len(kept) >= SQLITE_RESULT_LIMIT or len(rows) < fetch:
                     break
-                fetch *= 4
+                if fetch >= SQLITE_MAX_SCANNED_ROWS:
+                    self.last_search_truncated = True
+                    logger.warning(
+                        "Search stopped at the %d-row scan cap with %d of %d results",
+                        SQLITE_MAX_SCANNED_ROWS,
+                        len(kept),
+                        SQLITE_RESULT_LIMIT,
+                    )
+                    break
+                fetch = min(fetch * 4, SQLITE_MAX_SCANNED_ROWS)
         finally:
             conn.close()
 

@@ -16,7 +16,9 @@ from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
 from lore.extractors.base import BaseExtractor
 from lore.extractors.claude import ClaudeCodeExtractor
 from lore.extractors.codex import CodexExtractor
+from lore.extractors.cursor import CursorExtractor
 from lore.extractors.gemini import GeminiCLIExtractor
+from lore.extractors.vscode import VSCodeCopilotExtractor
 from lore.services.discovery import record_discovery
 from lore.storage.schema import initialise
 from lore.storage.writer import v2_db_path
@@ -311,6 +313,52 @@ def test_codex_reports_counts(home):
     assert extractor.discovery["files_parsed"] == 2
     assert extractor.discovery["records_unknown"] == 1
     assert "~/.codex/sessions" in extractor.source_description()
+
+
+def test_cursor_counts_only_real_parse_results(home):
+    db = home / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb"
+    db.parent.mkdir(parents=True)
+    chat = {
+        "tabs": [
+            {"tabId": "t1", "bubbles": [{"type": "user", "text": f"hello {i}"} for i in range(2)]},
+            {"tabId": "t2", "bubbles": []},  # nothing to parse: no session
+        ]
+    }
+    conn = sqlite3.connect(db)
+    conn.execute("CREATE TABLE cursorDiskKV (key TEXT PRIMARY KEY, value TEXT)")
+    conn.execute(
+        "INSERT INTO cursorDiskKV VALUES ('workbench.panel.aichat.view.aichat.chatdata', ?)",
+        (json.dumps(chat),),
+    )
+    conn.commit()
+    conn.close()
+
+    extractor = CursorExtractor()
+    sessions = list(extractor.extract_sessions())
+
+    assert [s.session_id for s in sessions] == ["sidebar-t1"]
+    assert extractor.discovery["files_matched"] == 2
+    assert extractor.discovery["files_parsed"] == 1
+
+
+def test_vscode_counts_each_unknown_record_once(home):
+    chats = home / ".config" / "Code" / "User" / "workspaceStorage" / "w1" / "chatSessions"
+    chats.mkdir(parents=True)
+    rows: list[Any] = [
+        {"kind": 0, "v": {"sessionId": "s1", "creationDate": 1_700_000_000_000}},
+        {"kind": 9, "v": [{"kind": "other"}]},  # one unknown line, its parts are not walked
+        {"kind": 2, "v": [{"requestId": "r1", "message": {"text": "hello there"}}]},
+        {"kind": 2, "v": [{"kind": "toolInvocation"}, {"kind": "inlineReference"}]},  # two parts
+        {"kind": 1, "k": ["x"], "v": 1},
+    ]
+    (chats / "s1.jsonl").write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
+
+    extractor = VSCodeCopilotExtractor()
+    list(extractor.extract_sessions())
+
+    assert extractor.discovery["files_matched"] == 1
+    assert extractor.discovery["files_parsed"] == 1
+    assert extractor.discovery["records_unknown"] == 3
 
 
 def test_every_extractor_describes_its_sources_without_the_home_directory(home):

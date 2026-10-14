@@ -399,8 +399,8 @@ def test_explicit_parser_version_is_not_overwritten(tmp_path):
     assert [s.parser_version for s in FakeExtractor(src).extract_sessions()] == [1, 1]
 
 
-def test_gemini_declares_parser_version_three():
-    assert GeminiCLIExtractor.PARSER_VERSION == 3
+def test_gemini_declares_parser_version_four():
+    assert GeminiCLIExtractor.PARSER_VERSION == 4
     assert BaseExtractor.PARSER_VERSION == 1
 
 
@@ -411,7 +411,6 @@ def test_gemini_declares_parser_version_three():
 def backlog(tmp_path, monkeypatch):
     """Ten indexed sources, all stored with parser version 0; a new extractor per run."""
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "3")
     src = tmp_path / "src"
     src.mkdir()
     for i in range(10):
@@ -423,7 +422,6 @@ def backlog(tmp_path, monkeypatch):
         return [runs[-1]]
 
     monkeypatch.setattr(lore_cli, "get_all_extractors", make)
-    monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "-1")
     _export(tmp_path)  # a full first parse, unbudgeted
     _set_stored_version(tmp_path, 0)
     monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "3")
@@ -461,19 +459,33 @@ def test_budget_drains_the_stale_backlog_over_several_runs(backlog):
     assert runs[4].parse_calls == []
 
 
+def test_budget_zero_reextracts_nothing_but_still_parses_changed_sources(backlog, monkeypatch):
+    tmp_path, src, runs = backlog
+    monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "0")
+    last = src / "s09.src"
+    stat = last.stat()
+    os.utime(last, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
+
+    index = _export(tmp_path)
+
+    assert runs[0].parse_calls == ["s09.src"]
+    assert _stale_count(index) == 9
+    assert len(index["sessions"]) == 10
+
+
 def test_budget_exhaustion_logs_one_info_line(backlog, caplog):
     tmp_path, _, _ = backlog
     with caplog.at_level(logging.INFO, logger="lore.extractors.base"):
         _export(tmp_path)
-    lines = [r for r in caplog.records if "re-extract budget" in r.getMessage()]
+    lines = [r for r in caplog.records if r.name == "lore.extractors.base"]
     assert len(lines) == 1
-    assert "spent" in lines[0].getMessage()
+    assert lines[0].levelno == logging.INFO
+    assert "budget of 3 spent" in lines[0].getMessage()
 
 
-def test_changed_source_is_parsed_even_when_budget_is_spent(backlog):
+def test_changed_source_is_parsed_even_when_budget_is_spent(backlog, monkeypatch):
     tmp_path, src, runs = backlog
-    monkey_budget = os.environ
-    monkey_budget[REEXTRACT_BUDGET_ENV] = "1"
+    monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "1")
     last = src / "s09.src"
     stat = last.stat()
     os.utime(last, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
@@ -542,7 +554,7 @@ def test_budget_default_and_invalid_values(monkeypatch):
     monkeypatch.delenv(REEXTRACT_BUDGET_ENV, raising=False)
     assert DEFAULT_REEXTRACT_BUDGET == 150
     assert reextract_budget_from_env() == 150
-    for raw, expected in (("0", 150), ("abc", 150), ("", 150), ("7", 7), ("-1", None)):
+    for raw, expected in (("0", 0), ("abc", 150), ("", 150), ("7", 7), ("-1", None)):
         monkeypatch.setenv(REEXTRACT_BUDGET_ENV, raw)
         assert reextract_budget_from_env() == expected, raw
 

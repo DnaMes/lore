@@ -22,6 +22,7 @@
 - Public repo: no personal paths, names, project slugs or secrets in code, fixtures, docs or commit messages.
 - Test command: `HOME=$TEST_HOME <main-checkout>/.venv/bin/python -m pytest <paths> -p no:cacheprovider -q -o addopts=""` where `$TEST_HOME` is a scratch directory reserved for the suite. Never run the CLI manually with that HOME; use `HOME=$(mktemp -d)`.
 - Backward compatible: JSON keys and CLI flags additive; existing exports unchanged.
+- Whoever touches `lore/templates/*` or `lore/static/*` also runs `tests/test_vendored_assets.py` and `tests/test_template_render_snapshots.py`: the vendored Tailwind bundle has no rule for classes that are not already used elsewhere (for example `underline`); reuse compiled classes or define semantic CSS in the template style block.
 
 ## Night-loop protocol (what each iteration does)
 
@@ -74,6 +75,12 @@
 **Files:** `lore/extractors/base.py` (`should_import_session`, `_effective_thresholds`), `lore/services/index.py`, `lore/interfaces/web.py` + templates, `lore_cli.py`, MCP `list_sessions`/`search_history`, `tests/test_origin_policy.py`.
 **Rules:** sessions with `origin` in (`exec`, `cron`, `subagent`) bypass `MIN_USER_PROMPTS` but keep `MIN_MESSAGES`; every list/search surface and every LLM stage (`lore knowledge`, `improve`, `summarize`) skips them unless `include_automated` (CLI `--include-automated`, web query param and a toggle, MCP argument). Counts in dashboards say how many are hidden.
 **Done when:** default listings are unchanged for interactive-only fixtures; an `exec` fixture appears only with the switch; documented in README.
+- [x] done
+
+### B1.4 Gate follow-ups for block B1 **[R]**
+From the B1 review gate notes: (1) `_index_entry_to_session` in `lore_cli.py` keeps only `origin`; keep `parent_session_id`, `relation`, `source_version`, `parser_version` too; (2) MCP `include_automated` must be parsed strictly (`bool("false")` is True today): accept real booleans and the strings true/false/1/0, anything else is an error string; apply to every MCP tool and web/CLI parameter that takes it; (3) cap the over-fetch loop in `lore/search/engine.py` (for example 8 rounds or 2000 rows); (4) `files_parsed` is counted for a `None` parse result in `cursor.py` and `records_unknown` is double counted in `vscode.py`: count only real results; (5) set `parent_session_id` and `relation="subagent"` for Claude and Gemini subagent sessions when the parent id is known from the path; (6) `automated_kept` is incremented before message/content limits are checked: increment only when the session is actually imported; (7) `LORE_PARSER_REEXTRACT_BUDGET=0` means "no re-extraction this run" (stale sources reused, changed sources still parsed), invalid values fall back to 150, negative is unlimited; update tests and README; (8) a thread consisting only of automated sessions requested by id must be returned (test), and the "show" URL must be autoescaped (test with `"><script>` in the query string); (9) README note: the first sync after the upgrade re-extracts sessions in batches of the budget; (10) test hygiene from the gate: lengthen the `ok` fixture session to pass `MIN_CONTENT_SIZE`, replace the vacuous `payload is not other` assert with a real identity assertion, drop the dead `setenv("3")`, use `monkeypatch` instead of writing `os.environ`, assert a stable field instead of log wording where cheap.
+
+(4) vscode double count not reproducible; pinned by a test.
 - [x] done
 
 ## Block B2 — extractors (each task also adds: `Tool` enum value, alias in `normalize_tool_name`, CLI/web filter entry, README coverage row)

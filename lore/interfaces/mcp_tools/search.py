@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from ...services.index import automated_hidden_line, is_automated
+from ...services.index import (
+    InvalidFlagError,
+    automated_hidden_line,
+    is_automated,
+    parse_bool_flag,
+)
 from ...utils.datetime import make_naive, parse_duration
 from ...utils.security import (
     validate_search_param,
@@ -28,7 +33,12 @@ def register(server, deps: MCPToolDeps) -> None:
         project_filter = args.get("project") or None
         limit = deps.normalize_limit(args.get("limit"), default=10)
         scope = str(args.get("scope") or "all").strip().lower()
-        include_automated = bool(args.get("include_automated", False))
+        try:
+            include_automated = parse_bool_flag(
+                args.get("include_automated"), name="include_automated"
+            )
+        except InvalidFlagError as exc:
+            return str(exc)
 
         if not query or not validate_search_query(query):
             return "Invalid search query parameter."
@@ -96,7 +106,12 @@ def register(server, deps: MCPToolDeps) -> None:
         thread_filter = args.get("thread_id") or None
         since = args.get("since")
         limit = deps.normalize_limit(args.get("limit"), default=20)
-        include_automated = bool(args.get("include_automated", False))
+        try:
+            include_automated = parse_bool_flag(
+                args.get("include_automated"), name="include_automated"
+            )
+        except InvalidFlagError as exc:
+            return str(exc)
 
         if tool_filter and not validate_tool_name(tool_filter):
             return "Invalid tool parameter."

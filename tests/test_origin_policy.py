@@ -10,6 +10,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -27,12 +29,15 @@ from lore.extractors.gemini import GeminiCLIExtractor
 from lore.interfaces import mcp, web, web_data
 from lore.llm import LLMConfig
 from lore.llm.base import LLMProvider, LLMResponse
+from lore.search.engine import SearchEngine
 from lore.services import extraction
 from lore.services.index import (
+    InvalidFlagError,
     apply_deleted_filter,
     automated_hidden_line,
     filter_automated,
     filter_automated_payload,
+    parse_bool_flag,
     search_index,
 )
 from lore.storage.writer import v2_db_path
@@ -120,11 +125,21 @@ def test_automated_origin_still_honours_message_and_content_floor():
     tiny = _session("tiny", 1, "exec")
     tiny.messages = tiny.messages[:1]
     tiny.messages[0].content = "x"
-    extractor = FixtureExtractor(
-        [tiny, _session("ok", 1, "exec")], MIN_MESSAGES=2, MIN_CONTENT_SIZE=50
-    )
+    ok = _session("ok", 1, "exec")
+    ok.messages[0].content = "a request that is long enough to pass the content floor " * 2
+    extractor = FixtureExtractor([tiny, ok], MIN_MESSAGES=3, MIN_CONTENT_SIZE=50)
     assert [s.session_id for s in extractor.extract_sessions()] == ["ok"]
     assert extractor.skip_counts == {"too_little_content": 1}
+
+
+def test_bypass_is_not_counted_for_a_session_the_content_floor_drops():
+    tiny = _session("tiny", 1, "exec")
+    tiny.messages = tiny.messages[:1]
+    tiny.messages[0].content = "x"
+    extractor = FixtureExtractor([tiny], MIN_MESSAGES=2, MIN_CONTENT_SIZE=50)
+    assert list(extractor.extract_sessions()) == []
+    assert extractor.skip_counts == {"too_little_content": 1}
+    assert extractor.discovery.get("automated_kept", 0) == 0
 
 
 def test_bypass_is_counted_in_discovery_not_in_skips():
@@ -254,9 +269,106 @@ def test_claude_subagent_gets_origin_subagent_and_short_ones_stay_dropped(tmp_pa
     assert by_id["main1"].origin == "unknown"
 
 
+def test_claude_subagent_records_its_parent_session(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    project = tmp_path / ".claude" / "projects" / "-home-user-app"
+    _write_lines(project / "main1.jsonl", _claude_records("main1", 3))
+    _write_lines(project / "main1" / "subagents" / "agent-big.jsonl", _claude_records("x", 3))
+    by_id = {s.session_id: s for s in ClaudeCodeExtractor().extract_sessions()}
+    sub = by_id["main1:agent-big"]
+    assert (sub.parent_session_id, sub.relation) == ("main1", "subagent")
+    assert sub.parent_session_id in by_id
+    assert (by_id["main1"].parent_session_id, by_id["main1"].relation) == (None, None)
+
+
+def test_gemini_subagent_records_its_parent_session(tmp_path, monkeypatch):
+    _gemini_home(tmp_path, monkeypatch, prompts_sub=3)
+    sessions = {s.session_id: s for s in GeminiCLIExtractor().extract_sessions()}
+    parent = "22222222-aaaa-bbbb-cccc-000000000002"
+    sub = sessions[f"{parent}:sub0001"]
+    assert (sub.parent_session_id, sub.relation) == (parent, "subagent")
+    assert parent in sessions
+    assert (sessions[parent].parent_session_id, sessions[parent].relation) == (None, None)
+    # A header-only subagent has no parent directory, so no parent is invented.
+    assert sessions["hdr0001"].parent_session_id is None
+    assert sessions["hdr0001"].relation is None
+
+
+def _gemini_main(chats: Path, name: str, sid: Optional[str]) -> None:
+    header = _gemini_header(sid or "unused", "main")
+    if sid is None:
+        del header["sessionId"]
+    _write_lines(chats / f"{name}.jsonl", [header, {"$set": {"messages": _gemini_msgs(3)}}])
+
+
+def _gemini_sub(chats: Path, directory: str, name: str) -> None:
+    _write_lines(
+        chats / directory / f"{name}.jsonl",
+        [_gemini_header(name, "subagent"), {"$set": {"messages": _gemini_msgs(3)}}],
+    )
+
+
+def _gemini_relations(tmp_path: Path, monkeypatch) -> dict[str, tuple[Any, Any]]:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.delenv("GEMINI_PROJECT_ROOTS", raising=False)
+    sessions = GeminiCLIExtractor().extract_sessions()
+    return {s.session_id: (s.parent_session_id, s.relation) for s in sessions}
+
+
+def test_gemini_subagent_parent_is_the_stem_when_the_main_file_has_no_session_id(
+    tmp_path, monkeypatch
+):
+    chats = tmp_path / ".gemini" / "tmp" / "demo" / "chats"
+    _gemini_main(chats, "session-2026-05-01T10-00-abcd1234", None)
+    _gemini_sub(chats, "session-2026-05-01T10-00-abcd1234", "sub0001")
+    _gemini_sub(chats, "other-dir", "sub0002")
+    found = _gemini_relations(tmp_path, monkeypatch)
+    main = "session-2026-05-01T10-00-abcd1234"
+    assert found[main] == (None, None)
+    assert found[f"{main}:sub0001"] == (main, "subagent")
+    # The directory name matches neither a header sessionId nor a main file stem.
+    assert found["other-dir:sub0002"] == (None, None)
+
+
+def test_gemini_subagent_parent_is_the_deduped_session_id(tmp_path, monkeypatch):
+    dup = "33333333-aaaa-bbbb-cccc-000000000003"
+    first = tmp_path / ".gemini" / "tmp" / "alpha" / "chats"
+    second = tmp_path / ".gemini" / "tmp" / "beta" / "chats"
+    _gemini_main(first, "session-first", dup)
+    _gemini_main(second, "session-second", dup)
+    _gemini_sub(first, dup, "subA")
+    _gemini_sub(second, dup, "subB")
+    found = _gemini_relations(tmp_path, monkeypatch)
+    assert found[dup] == (None, None)
+    assert found["session-second"] == (None, None)
+    assert found[f"{dup}:subA"] == (dup, "subagent")
+    # The second main file lost the id to the first one and is stored under its stem.
+    assert found[f"{dup}:subB"] == ("session-second", "subagent")
+
+
+def test_gemini_subagent_without_a_main_file_has_no_parent(tmp_path, monkeypatch):
+    chats = tmp_path / ".gemini" / "tmp" / "demo" / "chats"
+    _gemini_sub(chats, "44444444-aaaa-bbbb-cccc-000000000004", "orphan")
+    found = _gemini_relations(tmp_path, monkeypatch)
+    assert found == {"44444444-aaaa-bbbb-cccc-000000000004:orphan": (None, None)}
+
+
+def test_gemini_peek_reads_the_session_id_of_an_unparsed_main_file(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    chats = tmp_path / ".gemini" / "tmp" / "demo" / "chats"
+    _gemini_main(chats, "session-a", "peek-id-a")
+    _gemini_main(chats, "session-b", None)
+    (chats / "session-c.json").write_text(
+        json.dumps({"sessionId": "peek-id-c", "messages": []}), encoding="utf-8"
+    )
+    # Nothing was parsed in this run: the ids come from the file headers.
+    ids = GeminiCLIExtractor()._main_session_ids(chats)
+    assert ids == {"peek-id-a": "peek-id-a", "session-b": "session-b", "peek-id-c": "peek-id-c"}
+
+
 def test_parser_versions_rise_for_origin_assignment():
-    assert ClaudeCodeExtractor.PARSER_VERSION >= 2
-    assert GeminiCLIExtractor.PARSER_VERSION >= 3
+    assert ClaudeCodeExtractor.PARSER_VERSION >= 3
+    assert GeminiCLIExtractor.PARSER_VERSION >= 4
 
 
 # --- the central filter ---------------------------------------------------------------
@@ -837,7 +949,8 @@ def test_filter_results_are_memoized_on_the_source_identity():
     renewed = filter_automated_payload(other, False)
     assert renewed is not first
     assert filter_automated_payload(other, False) is renewed
-    assert filter_automated_payload(payload, False) is not first or payload is not other
+    # Memoizing another payload leaves the first one's entry intact.
+    assert filter_automated_payload(payload, False) is first
 
 
 def test_visible_index_is_one_object_per_request_so_identity_memos_hit(store):
@@ -1057,3 +1170,208 @@ def test_semantic_search_widens_k_when_the_neighbourhood_is_automated(tmp_path, 
     assert [h["session"]["id"] for h in hits] == ["human-a", "human-b"]
     everything = semantic_search_sessions(tmp_path, "anything", limit=2, include_automated=True)
     assert [h["session"]["id"] for h in everything] == ["auto-00", "auto-01"]
+
+
+# --- B1.4: strict flags, caps, thread by id, show URL ---------------------------------
+
+
+def _mcp_raw(name: str, arguments: dict) -> str:
+    server = mcp.create_server()
+    return asyncio.run(server.tools[name]["handler"](arguments))
+
+
+MCP_FLAG_TOOLS = {
+    "list_sessions": {"limit": 50},
+    "list_recent_sessions": {"limit": 50},
+    "search_history": {"query": SHARED_WORD, "limit": 50},
+    "list_projects": {},
+    "get_thread": {"thread_id": "thread-main"},
+}
+
+
+def _mcp_shows_automated(name: str, args: dict[str, Any]) -> bool:
+    payload = json.loads(_mcp_raw(name, args))
+    if name == "search_history":
+        return bool({r["id"] for r in payload["results"]} & AUTOMATED)
+    if name == "list_projects":
+        return "/proj/gamma" in json.dumps(payload)
+    if name == "get_thread":
+        return payload["thread"]["session_count"] == 2
+    return bool({s["id"] for s in payload["sessions"]} & AUTOMATED)
+
+
+@pytest.mark.parametrize("name", sorted(MCP_FLAG_TOOLS))
+@pytest.mark.parametrize("value", ["false", False, 0, "no", "FALSE", ""])
+def test_mcp_false_flag_values_keep_automated_hidden(store, name, value):
+    assert not _mcp_shows_automated(name, {**MCP_FLAG_TOOLS[name], "include_automated": value})
+
+
+@pytest.mark.parametrize("name", sorted(MCP_FLAG_TOOLS))
+@pytest.mark.parametrize("value", ["true", True, 1, "yes", "1"])
+def test_mcp_true_flag_values_show_automated(store, name, value):
+    assert _mcp_shows_automated(name, {**MCP_FLAG_TOOLS[name], "include_automated": value})
+
+
+@pytest.mark.parametrize("name", sorted(MCP_FLAG_TOOLS))
+@pytest.mark.parametrize("value", ["maybe", ["true"], {"a": 1}, 2, 1.5, -1])
+def test_mcp_unknown_flag_values_are_an_error_string(store, name, value):
+    text = _mcp_raw(name, {**MCP_FLAG_TOOLS[name], "include_automated": value})
+    assert text == "Invalid include_automated parameter."
+
+
+def test_parse_bool_flag_defaults_and_errors():
+    assert parse_bool_flag(None) is False
+    assert parse_bool_flag(None, default=True) is True
+    assert parse_bool_flag(" Yes ") is True
+    with pytest.raises(InvalidFlagError):
+        parse_bool_flag("maybe", name="automated")
+    assert issubclass(InvalidFlagError, ValueError)
+
+
+@pytest.mark.parametrize("value", ["on", "ON", " on "])
+def test_parse_bool_flag_accepts_on(value):
+    assert parse_bool_flag(value) is True
+
+
+@pytest.mark.parametrize("value", ["off", "OFF", " off "])
+def test_parse_bool_flag_accepts_off(value):
+    assert parse_bool_flag(value) is False
+
+
+@pytest.mark.parametrize("value", [1.0, 0.0, 1.5, 2, -1])
+def test_parse_bool_flag_rejects_floats_and_other_numbers(value):
+    with pytest.raises(InvalidFlagError):
+        parse_bool_flag(value)
+
+
+def test_parse_bool_flag_accepts_only_int_zero_and_one():
+    assert parse_bool_flag(1) is True
+    assert parse_bool_flag(0) is False
+
+
+def test_web_repeated_automated_parameter_takes_the_first_value(store):
+    client = web.app.test_client()
+    first_hides = client.get("/api/v1/sessions?automated=0&automated=1").get_json()
+    assert {s["id"] for s in first_hides["sessions"]} == VISIBLE
+    first_shows = client.get("/api/v1/sessions?automated=1&automated=0").get_json()
+    assert {s["id"] for s in first_shows["sessions"]} == VISIBLE | AUTOMATED
+
+
+@pytest.mark.parametrize("path", ["/sessions", "/api/v1/sessions", "/api/v1/threads/thread-main"])
+def test_web_rejects_an_unknown_automated_value_with_400_json(store, path):
+    client = web.app.test_client()
+    response = client.get(f"{path}?automated=maybe")
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "Invalid automated parameter."}
+
+
+def test_web_false_automated_value_keeps_them_hidden(store):
+    client = web.app.test_client()
+    for value in ("false", "0", "no", ""):
+        body = client.get(f"/api/v1/sessions?automated={value}").get_json()
+        assert {s["id"] for s in body["sessions"]} == VISIBLE, value
+
+
+def test_search_widening_is_capped(tmp_path, monkeypatch, caplog):
+    """A table of mostly automated rows stops at the scan cap and returns what it has."""
+    from lore.search import engine as engine_module
+
+    index_path = tmp_path / "index.json"
+    automated = [f"auto-{i:04d}" for i in range(2600)]
+    index = {
+        "sessions": [{"id": sid, "origin": "subagent"} for sid in automated],
+        "search_index": {},
+    }
+    index_path.write_text(json.dumps(index), encoding="utf-8")
+    conn = sqlite3.connect(index_path.with_suffix(".sqlite"))
+    conn.execute(
+        "CREATE TABLE sessions (id TEXT PRIMARY KEY, tool TEXT, project TEXT, thread_id TEXT, "
+        "title TEXT, created TEXT, updated TEXT, messages INTEGER, export_path TEXT)"
+    )
+    conn.execute("CREATE VIRTUAL TABLE sessions_fts USING fts5(id, title, project, tool, text)")
+    # The one interactive row matches weakest, so it ranks behind every automated row.
+    rows = [(sid, f"{SHARED_WORD} " * 5) for sid in automated]
+    rows.append(("human-1", f"{SHARED_WORD} " + "filler " * 50))
+    for sid, text in rows:
+        conn.execute("INSERT INTO sessions(id, tool, messages) VALUES (?, 'codex', 1)", (sid,))
+        conn.execute(
+            "INSERT INTO sessions_fts(id, title, project, tool, text) VALUES (?, '', '', '', ?)",
+            (sid, text),
+        )
+    conn.commit()
+    conn.close()
+
+    limits: list[int] = []
+    real_connect = sqlite3.connect
+
+    class Spy:
+        def __init__(self, inner: sqlite3.Connection) -> None:
+            self.inner = inner
+
+        def execute(self, sql: str, params: list) -> sqlite3.Cursor:
+            limits.append(params[-1])
+            return self.inner.execute(sql, params)
+
+        def close(self) -> None:
+            self.inner.close()
+
+    monkeypatch.setattr(engine_module.sqlite3, "connect", lambda p: Spy(real_connect(p)))
+    engine = SearchEngine(index_path)
+    with caplog.at_level(logging.WARNING, logger="lore.search.engine"):
+        found = engine.search(SHARED_WORD, include_automated=False)
+
+    assert found == []
+    assert limits == [50, 200, 800, engine_module.SQLITE_MAX_SCANNED_ROWS]
+    assert engine.last_search_truncated is True
+    warnings = [r for r in caplog.records if r.name == "lore.search.engine"]
+    assert len(warnings) == 1 and warnings[0].levelno == logging.WARNING
+    assert SHARED_WORD not in warnings[0].getMessage()
+    assert "2000" in warnings[0].getMessage()
+    # A later search that is not cut short clears the flag.
+    engine.search(SHARED_WORD, include_automated=True)
+    assert engine.last_search_truncated is False
+
+
+def test_thread_of_only_automated_sessions_is_returned_by_id(store):
+    client = web.app.test_client()
+    api = client.get("/api/v1/threads/thread-exec")
+    assert api.status_code == 200
+    assert {s["id"] for s in api.get_json()["timeline"]} == {"exec-sess1"}
+    assert client.get("/thread/thread-exec").status_code == 200
+    only = _mcp_call("get_thread", {"thread_id": "thread-exec"})
+    assert only["thread"]["session_count"] == 1
+    assert "automated_hidden" not in only
+
+
+def test_show_url_escapes_a_hostile_query_string(store):
+    client = web.app.test_client()
+    hostile = '"><script>alert(1)</script>'
+    body = client.get("/stats", query_string={"x": hostile}).get_data(as_text=True)
+    assert "2 automated sessions hidden" in body
+    assert "<script>alert(1)" not in body
+    link = re.search(r'<a href="([^"]*)"[^>]*>show</a>', body)
+    assert link is not None
+    assert link.group(1).startswith("/stats?")
+    assert "automated=1" in link.group(1)
+    assert "<" not in link.group(1) and ">" not in link.group(1)
+
+
+def test_index_entry_to_session_keeps_the_contract_fields():
+    entry = {
+        "id": "sub-1",
+        "tool": "claude-code",
+        "origin": "subagent",
+        "parent_session_id": "main-1",
+        "relation": "subagent",
+        "source_version": "2.1",
+        "parser_version": 3,
+    }
+    session = lore_cli._index_entry_to_session(entry)
+    assert (session.origin, session.parent_session_id, session.relation) == (
+        "subagent",
+        "main-1",
+        "subagent",
+    )
+    assert (session.source_version, session.parser_version) == ("2.1", 3)
+    bare = lore_cli._index_entry_to_session({"id": "old", "tool": "claude-code"})
+    assert (bare.parent_session_id, bare.relation, bare.parser_version) == (None, None, 0)

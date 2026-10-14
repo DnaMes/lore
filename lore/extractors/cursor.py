@@ -79,7 +79,8 @@ class CursorExtractor(BaseExtractor):
                             decoded = self._decode_blob(value)
                             data = json.loads(decoded)
                             session = self._parse_composer(key.split(":")[-1], data, conn)
-                            self._count("files_parsed")
+                            if session is not None:
+                                self._count("files_parsed")
                             if (
                                 session
                                 and (session.messages or session.title)
@@ -105,7 +106,8 @@ class CursorExtractor(BaseExtractor):
                                 for tab in data.get("tabs", []):
                                     self._count("files_matched")
                                     session = self._parse_sidebar_tab(tab)
-                                    self._count("files_parsed")
+                                    if session is not None:
+                                        self._count("files_parsed")
                                     if session and self.should_import_session(session):
                                         yield session
                         except (json.JSONDecodeError, KeyError) as e:

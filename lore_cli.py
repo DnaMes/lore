@@ -84,6 +84,13 @@ def _get_extractors_for_tool(tool: str):
     return [ex for ex in extractors if ex.tool.value == tool]
 
 
+def _as_int(value) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
 def _index_entry_to_session(entry):
     created = entry.get("created")
     updated = entry.get("updated")
@@ -112,6 +119,10 @@ def _index_entry_to_session(entry):
         thread_id=entry.get("thread_id"),
         title=entry.get("title"),
         origin=entry.get("origin") or "unknown",
+        parent_session_id=entry.get("parent_session_id"),
+        relation=entry.get("relation"),
+        source_version=entry.get("source_version"),
+        parser_version=_as_int(entry.get("parser_version")),
     )
 
 

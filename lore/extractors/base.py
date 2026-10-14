@@ -18,7 +18,8 @@ DEFAULT_REEXTRACT_BUDGET = 150
 def reextract_budget_from_env() -> Optional[int]:
     """Version-stale sources one extractor may re-parse per run (``None`` = unlimited).
 
-    Unset, ``0`` and invalid values give the default; a negative value lifts the cap.
+    Unset and invalid values give the default; ``0`` re-parses no stale source this run
+    (changed sources are still parsed); a negative value lifts the cap.
     """
     raw = os.environ.get(REEXTRACT_BUDGET_ENV, "").strip()
     if not raw:
@@ -27,8 +28,6 @@ def reextract_budget_from_env() -> Optional[int]:
         value = int(raw)
     except ValueError:
         logger.warning("Ignoring invalid %s=%r", REEXTRACT_BUDGET_ENV, raw)
-        return DEFAULT_REEXTRACT_BUDGET
-    if value == 0:
         return DEFAULT_REEXTRACT_BUDGET
     return None if value < 0 else value
 
@@ -317,24 +316,23 @@ class BaseExtractor(ABC):
         message_count = len(session.messages)
         user_prompt_count = session.user_prompt_count
 
+        bypassed = False
         if user_prompt_count < min_user_prompts:
             # Automated work is not dropped for few prompts: it is kept and hidden
-            # from default views. Counted in discovery, never as a skip. The
-            # message/content floors below still apply.
+            # from default views. The message/content floors below still apply.
             if session.origin in AUTOMATED_ORIGINS and self.AUTOMATED_BYPASSES_PROMPT_FLOOR:
-                self._count("automated_kept")
+                bypassed = True
             else:
                 self._record_skip("too_few_user_prompts")
                 return False
 
-        # Always import if enough messages
-        if message_count >= min_messages:
-            return True
-
-        # For short sessions, check content size
-        total_content_size = sum(len(msg.content or "") for msg in session.messages)
-
-        if total_content_size >= min_content_size:
+        # Always import if enough messages; short sessions need enough content.
+        if message_count >= min_messages or (
+            sum(len(msg.content or "") for msg in session.messages) >= min_content_size
+        ):
+            if bypassed:
+                # Counted only for a session that is actually imported.
+                self._count("automated_kept")
             return True
         self._record_skip("too_little_content")
         return False

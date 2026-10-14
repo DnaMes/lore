@@ -7,8 +7,10 @@ import json
 import subprocess
 
 from ...services.index import (
+    InvalidFlagError,
     automated_hidden_line,
     filter_automated,
+    parse_bool_flag,
     thread_hidden_count,
     thread_sessions,
 )
@@ -130,7 +132,12 @@ def register(server, deps: MCPToolDeps) -> None:
 
     async def list_recent_sessions(args: dict) -> str:
         limit = deps.normalize_limit(args.get("limit"), default=10)
-        include_automated = bool(args.get("include_automated", False))
+        try:
+            include_automated = parse_bool_flag(
+                args.get("include_automated"), name="include_automated"
+            )
+        except InvalidFlagError as exc:
+            return str(exc)
         sessions = sorted(
             filter_automated(deps.ensure_index().get("sessions", []), include_automated),
             key=lambda session: str(session.get("updated") or session.get("created") or ""),
@@ -163,7 +170,12 @@ def register(server, deps: MCPToolDeps) -> None:
 
     async def list_projects(args: dict) -> str:
         limit = deps.normalize_limit(args.get("limit"), default=50)
-        include_automated = bool(args.get("include_automated", False))
+        try:
+            include_automated = parse_bool_flag(
+                args.get("include_automated"), name="include_automated"
+            )
+        except InvalidFlagError as exc:
+            return str(exc)
         projects = build_projects_payload(
             filter_automated(deps.ensure_index().get("sessions", []), include_automated),
             lambda value: value,
@@ -194,7 +206,12 @@ def register(server, deps: MCPToolDeps) -> None:
     async def get_thread(args: dict) -> str:
         thread_id = args.get("thread_id")
         include_messages = bool(args.get("include_messages", False))
-        include_automated = bool(args.get("include_automated", False))
+        try:
+            include_automated = parse_bool_flag(
+                args.get("include_automated"), name="include_automated"
+            )
+        except InvalidFlagError as exc:
+            return str(exc)
 
         if not thread_id or not validate_session_id(thread_id):
             return "Invalid thread_id parameter."

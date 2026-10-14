@@ -32,9 +32,11 @@ from lore.utils.tooling import normalize_tool_name
 from ..services.cache import threadsafe_lru_cache
 from ..services.extraction import find_live_session
 from ..services.index import (
+    InvalidFlagError,
     automated_hidden_line,
     filter_automated_payload,
     is_automated,
+    parse_bool_flag,
     session_by_id_map,
     thread_hidden_count,
     thread_sessions,
@@ -401,10 +403,20 @@ def _template_env():
 
 
 def _include_automated() -> bool:
-    """True when the request asks for automated sessions (``?automated=1``)."""
+    """True when the request asks for automated sessions (``?automated=1``).
+
+    A repeated parameter (``?automated=1&automated=0``) takes its first value; an
+    unknown value raises ``InvalidFlagError`` (answered as HTTP 400).
+    """
     if not has_request_context():
         return False
-    return request.args.get("automated", "").strip().lower() in ("1", "true", "yes", "on")
+    return parse_bool_flag(request.args.get("automated"), name="automated")
+
+
+@app.errorhandler(InvalidFlagError)
+def _invalid_flag(exc: InvalidFlagError):
+    """A boolean query parameter with an unknown value is a plain 400 JSON error."""
+    return jsonify({"error": str(exc)}), 400
 
 
 def _automated_kwargs() -> dict:

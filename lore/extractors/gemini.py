@@ -27,6 +27,8 @@ _MAX_LINE_CHARS = 8 * 1024 * 1024
 _MAX_PATH_CHARS = 4096
 _MAX_TOOL_ARG_CHARS = 200
 _MAX_TOOL_OUTPUT_CHARS = 4000
+_PEEK_LINES = 50
+_PEEK_LINE_CHARS = 64 * 1024
 
 
 def _safe_ts(value: Any, fallback: datetime) -> datetime:
@@ -116,7 +118,9 @@ class GeminiCLIExtractor(BaseExtractor):
     # were indexed from the old, mostly empty reader.
     # 3: subagent sessions carry ``origin="subagent"``. They keep the prompt floor
     # they always had (only sessions imported before are tagged, the index does not grow).
-    PARSER_VERSION = 3
+    # 4: subagent sessions under ``chats/<parent>/`` also carry ``parent_session_id`` and
+    # ``relation="subagent"``.
+    PARSER_VERSION = 4
     AUTOMATED_BYPASSES_PROMPT_FLOOR = False
 
     def __init__(self):
@@ -125,6 +129,8 @@ class GeminiCLIExtractor(BaseExtractor):
         self._hash_to_path: Dict[str, str] = {}
         self._slug_maps: Dict[Path, Dict[str, str]] = {}
         self._seen_session_ids: set[str] = set()
+        # Main session file -> (header sessionId or file stem, resolved session_id), this run.
+        self._main_ids: Dict[Path, tuple[str, str]] = {}
         # Replay telemetry: malformed_lines, unknown_records, unmatched_ids.
         self.record_counts: Dict[str, int] = {}
         self._build_hash_map()
@@ -265,6 +271,54 @@ class GeminiCLIExtractor(BaseExtractor):
                 self._count("files_matched")
                 yield path, path.parent.name
 
+    def _peek_session_id(self, path: Path) -> Optional[str]:
+        """Header ``sessionId`` of a main session file, read without replaying it."""
+        try:
+            if path.suffix == ".jsonl":
+                found: Optional[str] = None
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    for _ in range(_PEEK_LINES):
+                        line = f.readline(_PEEK_LINE_CHARS)
+                        if not line:
+                            break
+                        try:
+                            rec = json.loads(line)
+                        except (ValueError, RecursionError):
+                            continue
+                        if not isinstance(rec, dict):
+                            continue
+                        if isinstance(rec.get("$set"), dict):
+                            rec = rec["$set"]
+                        if isinstance(rec.get("sessionId"), str) and rec["sessionId"]:
+                            found = rec["sessionId"]
+                return found
+            if path.stat().st_size > _MAX_SMALL_FILE:
+                return None
+            data = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        except (OSError, ValueError, RecursionError):
+            return None
+        value = data.get("sessionId") if isinstance(data, dict) else None
+        return value if isinstance(value, str) and value else None
+
+    def _main_session_ids(self, chats_dir: Path) -> Dict[str, str]:
+        """Directory name -> real ``session_id`` of the main session that owns it.
+
+        Subagents live at ``chats/<header sessionId>/``; a main file without a
+        ``sessionId`` is addressed by its file stem. Files parsed in this run give the
+        resolved id (after dedupe); unparsed ones (unchanged) are peeked.
+        """
+        mapping: Dict[str, str] = {}
+        for pattern in ("session-*.jsonl", "session-*.json"):
+            for path in sorted(chats_dir.glob(pattern)):
+                if not self._is_plain_file(path):
+                    continue
+                known = self._main_ids.get(path)
+                if known is None:
+                    key = self._peek_session_id(path) or path.stem
+                    known = (key, path.stem if key in self._seen_session_ids else key)
+                mapping.setdefault(known[0], known[1])
+        return mapping
+
     @staticmethod
     def _is_plain_file(path: Path) -> bool:
         """Regular file, not a symlink (a FIFO would block the reader forever)."""
@@ -278,6 +332,7 @@ class GeminiCLIExtractor(BaseExtractor):
             return
 
         self._seen_session_ids = set()
+        self._main_ids = {}
         for base_path in self.base_paths:
             for project_dir in sorted(base_path.iterdir()):
                 if not project_dir.is_dir():
@@ -290,7 +345,13 @@ class GeminiCLIExtractor(BaseExtractor):
                 project_path = self._project_path_for(project_dir)
                 dir_hash = project_dir.name if len(project_dir.name) == 64 else None
 
+                parents: Optional[Dict[str, str]] = None
                 for session_file, parent_id in self._session_files(chats_dir):
+                    parent_session_id: Optional[str] = None
+                    if parent_id:
+                        if parents is None:
+                            parents = self._main_session_ids(chats_dir)
+                        parent_session_id = parents.get(parent_id)
                     if self._source_unchanged(session_file):
                         continue
                     try:
@@ -298,7 +359,11 @@ class GeminiCLIExtractor(BaseExtractor):
                             self._count_record("skipped_oversize")
                             continue
                         session = self._parse_session_file(
-                            session_file, project_path, dir_hash, parent_session_id=parent_id
+                            session_file,
+                            project_path,
+                            dir_hash,
+                            parent_dir=parent_id,
+                            parent_session_id=parent_session_id,
                         )
                         self._count("files_parsed")
                         if self.should_import_session(session):
@@ -540,9 +605,14 @@ class GeminiCLIExtractor(BaseExtractor):
         path: Path,
         project_path: Optional[str],
         project_hash: Optional[str],
+        parent_dir: Optional[str] = None,
         parent_session_id: Optional[str] = None,
     ) -> UnifiedSession:
-        """Parse one Gemini session file (current JSONL log or legacy single JSON)."""
+        """Parse one Gemini session file (current JSONL log or legacy single JSON).
+
+        ``parent_dir`` is the ``chats/<dir>/`` a subagent lives in; ``parent_session_id`` is
+        the resolved session id of the main session that owns that directory (or None).
+        """
         if path.suffix == ".jsonl":
             header, raw_messages = self._replay_jsonl(path)
         else:
@@ -568,16 +638,19 @@ class GeminiCLIExtractor(BaseExtractor):
         thread_id = make_thread_id(project_path=project_path, project_hash=project_hash)
 
         def qualified(name: str) -> str:
-            return f"{parent_session_id}:{name}" if parent_session_id else name
+            return f"{parent_dir}:{name}" if parent_dir else name
 
         header_id = header.get("sessionId")
-        session_id = qualified(header_id if isinstance(header_id, str) and header_id else path.stem)
+        base_id = header_id if isinstance(header_id, str) and header_id else path.stem
+        session_id = qualified(base_id)
         if session_id in self._seen_session_ids:
             session_id = qualified(path.stem)
         self._seen_session_ids.add(session_id)
-        if parent_session_id:
-            thread_id = f"gemini-cli:{parent_session_id}"
-        is_subagent = bool(parent_session_id) or header.get("kind") == "subagent"
+        if parent_dir:
+            thread_id = f"gemini-cli:{parent_dir}"
+        else:
+            self._main_ids[path] = (base_id, session_id)
+        is_subagent = bool(parent_dir) or header.get("kind") == "subagent"
         if is_subagent:
             label = f"[subagent {path.stem}]"
             title = f"{label} {summary}" if summary else label
@@ -603,5 +676,7 @@ class GeminiCLIExtractor(BaseExtractor):
             title=title,
             summary=summary,
             origin="subagent" if is_subagent else "unknown",
+            parent_session_id=parent_session_id,
+            relation="subagent" if parent_session_id else None,
             source_path=str(path),
         )
