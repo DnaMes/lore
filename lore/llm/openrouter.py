@@ -13,9 +13,10 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-from ..utils.paths import lore_home
+from ..utils.paths import lore_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -37,9 +38,35 @@ def resolve_openrouter_model(config: LLMConfig) -> str:
     return os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
 
 
+def _openrouter_loopback_host(host: Optional[str]) -> bool:
+    if not host:
+        return False
+    normalized = host.lower().strip("[]")
+    return normalized in ("localhost", "127.0.0.1", "::1")
+
+
+def validate_openrouter_base_url(base_url: str) -> str:
+    """Require https, or http only to a loopback host (local OpenAI-compatible servers)."""
+    trimmed = base_url.rstrip("/")
+    parsed = urlparse(trimmed)
+    if not parsed.scheme or not parsed.netloc:
+        raise OpenRouterError(
+            "OpenRouter base URL must be an absolute https URL "
+            "(http:// is only allowed for loopback hosts)"
+        )
+    scheme = parsed.scheme.lower()
+    if scheme == "https":
+        return trimmed
+    if scheme == "http" and _openrouter_loopback_host(parsed.hostname):
+        return trimmed
+    raise OpenRouterError(
+        "OpenRouter base URL must use https (http:// is only allowed for loopback hosts)"
+    )
+
+
 def resolve_openrouter_base_url(config: LLMConfig) -> str:
     raw = config.base_url or os.environ.get("LORE_OPENROUTER_BASE_URL") or DEFAULT_BASE_URL
-    return raw.rstrip("/")
+    return validate_openrouter_base_url(raw)
 
 
 class OpenRouterProvider(LLMProvider):
@@ -52,8 +79,7 @@ class OpenRouterProvider(LLMProvider):
         if not self.config.cache_enabled:
             return None
         if self._cache_dir is None:
-            self._cache_dir = self._cache_dir_path
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            self._cache_dir = secure_dir(self._cache_dir_path)
         return self._cache_dir
 
     def _api_key(self) -> Optional[str]:
@@ -69,9 +95,19 @@ class OpenRouterProvider(LLMProvider):
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> LLMResponse:
+        eff_max_tokens = max_tokens or self.config.max_tokens
+        eff_temperature = temperature if temperature is not None else self.config.temperature
+        base_url = resolve_openrouter_base_url(self.config)
+
         cache_key = None
         if self.config.cache_enabled:
-            cache_key = self._get_cache_key(prompt, system_prompt)
+            cache_key = self._get_cache_key(
+                prompt,
+                system_prompt,
+                eff_max_tokens,
+                eff_temperature,
+                base_url,
+            )
             cached = self._load_from_cache(cache_key)
             if cached:
                 return cached
@@ -81,8 +117,8 @@ class OpenRouterProvider(LLMProvider):
             model=model,
             prompt=prompt,
             system_prompt=system_prompt,
-            max_tokens=max_tokens or self.config.max_tokens,
-            temperature=temperature if temperature is not None else self.config.temperature,
+            max_tokens=eff_max_tokens,
+            temperature=eff_temperature,
         )
 
         content = payload["content"]
@@ -168,7 +204,7 @@ class OpenRouterProvider(LLMProvider):
                         f"OpenRouter request failed after retries (HTTP {exc.code})"
                     ) from exc
                 raise OpenRouterError(f"OpenRouter request failed (HTTP {exc.code})") from exc
-            except URLError as exc:
+            except (URLError, OSError, TimeoutError) as exc:
                 last_error = exc
                 if attempt < _MAX_RETRIES:
                     self._sleep_before_retry(attempt, {})
@@ -214,9 +250,16 @@ class OpenRouterProvider(LLMProvider):
 
         return {"content": content, "tokens_used": tokens_used}
 
-    def _get_cache_key(self, prompt: str, system_prompt: Optional[str] = None) -> str:
+    def _get_cache_key(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        max_tokens: int,
+        temperature: float,
+        base_url: str,
+    ) -> str:
         model = resolve_openrouter_model(self.config)
-        combined = f"{system_prompt or ''}|{prompt}|{model}"
+        combined = f"{system_prompt or ''}|{prompt}|{model}|{base_url}|{max_tokens}|{temperature}"
         return hashlib.sha256(combined.encode()).hexdigest()
 
     def _load_from_cache(self, cache_key: str) -> Optional[LLMResponse]:
@@ -253,5 +296,6 @@ class OpenRouterProvider(LLMProvider):
                     },
                     f,
                 )
+            restrict_file(cache_file)
         except OSError as exc:
             logger.debug("Could not write OpenRouter cache entry: %s", exc)
