@@ -21,7 +21,6 @@ from .deps import MCPToolDeps
 
 _SESSION_LOCKS: dict[str, threading.Lock] = {}
 _LOCKS_GUARD = threading.Lock()
-_ERROR_TEXT_MAX = 200
 
 
 def _session_lock(session_id: str) -> threading.Lock:
@@ -207,7 +206,7 @@ def register(server, deps: MCPToolDeps) -> None:
                 model_label=model_label,
                 force=force,
             )
-            summary_available = (
+            summary_available = outcome in ("written", "unchanged") and (
                 get_summary(output_dir, "session", f"session:{session_id}") is not None
             )
             return deps.json_text(

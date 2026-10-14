@@ -377,3 +377,29 @@ def test_missing_store_is_not_exit_code_1(tmp_path: Path, capsys):
     rc = lore_cli.cmd_summarize(_args(tmp_path / "does-not-exist"))
 
     assert rc == 2
+
+
+def test_ollama_with_an_off_host_endpoint_needs_allow_cloud(
+    tmp_path: Path, use_provider, monkeypatch
+):
+    store = tmp_path / "out"
+    _build_store(store, _rich_session())
+    provider = FakeProvider()
+    use_provider(provider)
+    monkeypatch.setenv("OLLAMA_HOST", "http://203.0.113.7:11434")
+
+    rc = lore_cli.cmd_summarize(_args(store, provider="ollama", allow_cloud=False))
+
+    assert rc == 2
+    assert provider.prompts == []
+
+
+def test_ollama_with_a_loopback_endpoint_stays_local(tmp_path: Path, use_provider, monkeypatch):
+    store = tmp_path / "out"
+    _build_store(store, _rich_session())
+    provider = FakeProvider()
+    use_provider(provider)
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+
+    assert lore_cli.cmd_summarize(_args(store, provider="ollama", allow_cloud=False)) == 0
+    assert provider.prompts

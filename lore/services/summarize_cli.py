@@ -72,7 +72,17 @@ def resolve_session_id(output_dir: Path, query: str) -> str:
 
 
 def provider_locality(provider: str) -> str:
-    return "local" if provider.lower() in LOCAL_PROVIDERS else "cloud"
+    """ "local" only for a local provider whose actual endpoint is loopback.
+
+    An Ollama client honours ``OLLAMA_HOST``: pointing it off-host makes it a remote
+    endpoint that must be treated (and announced) like any other cloud provider.
+    """
+    name = provider.lower()
+    if name not in LOCAL_PROVIDERS:
+        return "cloud"
+    if name == "ollama" and not llm_base_url_is_local(resolve_ollama_host()):
+        return "cloud"
+    return "local"
 
 
 def llm_base_url_is_local(base_url: str | None) -> bool:
