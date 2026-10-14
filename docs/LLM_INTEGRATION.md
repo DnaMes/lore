@@ -323,3 +323,8 @@ lore analyze --provider jev --allow-cloud --limit 5
 System prompts are prefixed to stdin (`system`, blank line, user prompt). The broker
 timeout follows `DELEGATE_TIMEOUT_SECONDS` (default 300s) inside `delegate`; Lore’s
 `LLMConfig.timeout` wraps each lane attempt.
+
+`max_tokens` and `temperature` are **ignored** by this provider — the broker decides
+the limits per lane, so Lore passes neither through. `LLMResponse.model` is
+`jev/<lane>` for the lane that actually answered, and `get_model_info()["model"]`
+is the configured lane list (`LORE_JEV_LANES`).

@@ -10,7 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from ..utils.paths import lore_home
+from ..utils.paths import lore_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
 
 logger = logging.getLogger(__name__)
@@ -69,8 +69,7 @@ class JevProvider(LLMProvider):
         if not self.config.cache_enabled:
             return None
         if self._cache_dir is None:
-            self._cache_dir = self._cache_dir_path
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            self._cache_dir = secure_dir(self._cache_dir_path)
         return self._cache_dir
 
     def is_available(self) -> bool:
@@ -123,6 +122,12 @@ class JevProvider(LLMProvider):
             except subprocess.TimeoutExpired:
                 failures.append(f"{lane}: timeout")
                 continue
+            except OSError as exc:
+                # Missing or unrunnable `delegate` binary: report the lane instead
+                # of letting FileNotFoundError escape generate().
+                failures.append(f"{lane}: delegate binary unavailable ({type(exc).__name__})")
+                logger.debug("jev lane %s could not run delegate: %s", lane, exc)
+                continue
 
             stdout = completed.stdout or ""
             if completed.returncode == 0 and stdout.strip():
@@ -149,15 +154,17 @@ class JevProvider(LLMProvider):
     def get_model_info(self) -> Dict[str, object]:
         return {
             "provider": "jev",
-            "model": self.config.model or DEFAULT_MODEL_LABEL,
+            "model": ",".join(self._lanes),
             "lanes": list(self._lanes),
             "max_tokens": self.config.max_tokens,
             "temperature": self.config.temperature,
         }
 
     def _get_cache_key(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        combined = f"{system_prompt or ''}|{prompt}|{','.join(self._lanes)}"
-        return hashlib.sha256(combined.encode()).hexdigest()
+        # JSON-encode the three parts: concatenating them with a separator lets a
+        # `|` inside a prompt collide with a different (system, prompt) pair.
+        parts = json.dumps([system_prompt or "", prompt, list(self._lanes)], ensure_ascii=False)
+        return hashlib.sha256(parts.encode()).hexdigest()
 
     def _load_from_cache(self, cache_key: str) -> Optional[LLMResponse]:
         cache_root = self._ensure_cache_dir()
@@ -183,8 +190,11 @@ class JevProvider(LLMProvider):
         if cache_root is None:
             return
         cache_file = cache_root / f"{cache_key}.json"
+        tmp_path: Optional[Path] = None
         try:
-            with open(cache_file, "w") as f:
+            fd, tmp_name = tempfile.mkstemp(dir=cache_root, prefix=f".{cache_key}.", suffix=".tmp")
+            tmp_path = Path(tmp_name)
+            with os.fdopen(fd, "w") as f:
                 json.dump(
                     {
                         "content": response.content,
@@ -193,5 +203,14 @@ class JevProvider(LLMProvider):
                     },
                     f,
                 )
+            os.replace(tmp_path, cache_file)  # atomic: never expose a partial file
+            tmp_path = None
+            restrict_file(cache_file)
         except OSError as exc:
             logger.debug("Could not write Jev cache entry: %s", exc)
+        finally:
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
