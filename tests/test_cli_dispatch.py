@@ -11,6 +11,9 @@ one side but not the other fails fast.
 from __future__ import annotations
 
 import argparse
+import sys
+
+import pytest
 
 import lore_cli
 from lore_cli import COMMANDS, build_parser
@@ -38,6 +41,26 @@ def test_every_handler_is_callable():
     for name, handler in COMMANDS.items():
         assert callable(handler), f"COMMANDS[{name!r}] is not callable"
     assert lore_cli.COMMANDS["export-html"] is not None
+
+
+def test_main_propagates_handler_exit_code(monkeypatch):
+    """A non-zero ``int`` returned by a handler becomes the process exit code (#198).
+
+    ``main()`` used to discard the handler result, so every command exited 0.
+    """
+    monkeypatch.setattr(sys, "argv", ["lore", "list"])
+    monkeypatch.setitem(COMMANDS, "list", lambda args: 1)
+    with pytest.raises(SystemExit) as excinfo:
+        lore_cli.main()
+    assert excinfo.value.code == 1
+
+
+def test_main_treats_zero_and_none_as_success(monkeypatch):
+    """``0`` and ``None`` (the majority of handlers) keep a clean exit (#198)."""
+    for value in (0, None):
+        monkeypatch.setattr(sys, "argv", ["lore", "list"])
+        monkeypatch.setitem(COMMANDS, "list", lambda args, _v=value: _v)
+        assert lore_cli.main() is None  # no SystemExit raised
 
 
 def test_unknown_or_missing_command_prints_help(capsys):
