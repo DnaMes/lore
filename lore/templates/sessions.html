@@ -8,7 +8,7 @@
             <h1 class="title-font page-headline text-slate-900 mt-2">Sessions</h1>
             <p class="text-sm text-slate-500 mt-2">{{ total }} session{{ '' if total == 1 else 's' }}</p>
             {%- if automated_hidden_line %}
-            <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="underline">show</a></p>
+            <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="text-blue-600 hover:text-blue-900">show</a></p>
             {%- endif %}
         </div>
     </div>
