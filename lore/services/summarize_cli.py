@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
+import os
+import socket
 import sys
 from argparse import Namespace
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from urllib.parse import urlparse
 
 from lore.services.summarize import (
     SessionEstimate,
@@ -22,7 +26,9 @@ from lore.utils.datetime import parse_duration
 from lore.utils.tooling import normalize_tool_name
 
 LOCAL_PROVIDERS = frozenset({"ollama"})
+_LOCAL_LLM_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
 DEFAULT_SINCE_NO_SESSION = "30d"
+MCP_SUMMARIZE_PROVIDER = "ollama"
 
 
 class SessionIdResolutionError(ValueError):
@@ -67,6 +73,70 @@ def resolve_session_id(output_dir: Path, query: str) -> str:
 
 def provider_locality(provider: str) -> str:
     return "local" if provider.lower() in LOCAL_PROVIDERS else "cloud"
+
+
+def llm_base_url_is_local(base_url: str | None) -> bool:
+    """True when the LLM endpoint hostname is loopback (or unset)."""
+    if base_url is None or not str(base_url).strip():
+        return True
+    raw = str(base_url).strip()
+    if "://" not in raw:
+        raw = f"http://{raw}"
+    host = (urlparse(raw).hostname or "").lower().rstrip(".")
+    return _host_is_loopback(host)
+
+
+def _host_is_loopback(host: str) -> bool:
+    """Loopback by address, or by name only when EVERY resolved address is loopback."""
+    if not host:
+        return False
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        pass
+    if host not in _LOCAL_LLM_HOSTS:
+        return False  # arbitrary hostnames are never trusted as local
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except OSError:
+        return False
+    addresses = {str(info[4][0]) for info in infos}
+    if not addresses:
+        return False
+    try:
+        return all(ipaddress.ip_address(a.split("%")[0]).is_loopback for a in addresses)
+    except ValueError:
+        return False
+
+
+def resolve_ollama_host() -> str | None:
+    return os.environ.get("OLLAMA_HOST")
+
+
+def mcp_summarize_model() -> str:
+    return os.environ.get("LORE_SUMMARY_MODEL") or default_model(MCP_SUMMARIZE_PROVIDER)
+
+
+def check_mcp_summarize_locality() -> str | None:
+    """Return an error message when MCP summarize cannot use a local endpoint."""
+    if not llm_base_url_is_local(resolve_ollama_host()):
+        return "Refused off-host Ollama base_url; MCP summarize requires a local provider"
+    return None
+
+
+def build_mcp_summarize_provider():
+    """Construct a transcript-safe local provider for MCP ``summarize_session``."""
+    from lore.llm import LLMConfig, get_provider
+    from lore.llm.base import transcript_safe
+
+    locality_err = check_mcp_summarize_locality()
+    if locality_err:
+        raise ValueError(locality_err)
+    model = mcp_summarize_model()
+    config = LLMConfig.for_transcripts(provider=MCP_SUMMARIZE_PROVIDER, model=model)
+    provider = get_provider(provider=config.provider, model=config.model)
+    model_label = f"{MCP_SUMMARIZE_PROVIDER}/{model}"
+    return transcript_safe(provider), model_label
 
 
 def default_model(provider: str) -> str:

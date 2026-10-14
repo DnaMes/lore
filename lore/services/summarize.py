@@ -440,6 +440,66 @@ def _chunk_row_fingerprint(user_prompt: str, model_label: str) -> str:
     return chunk_fingerprint(user_prompt, model_label, SUMMARY_PROMPT_VERSION, COMPRESSOR_VERSION)
 
 
+def _expected_session_fingerprint(
+    output_dir: Path, session_id: str, model_label: str
+) -> Optional[str]:
+    """Fingerprint for the current session content, or None when it cannot be computed."""
+    deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
+    if session_id in deleted:
+        return None
+    messages = load_session_messages_v2(output_dir, session_id)
+    if not messages:
+        return None
+    native_seq, prior_summary = _last_native_compaction(messages)
+    summary_msgs = from_unified(messages)
+    if native_seq is not None:
+        summary_msgs = [m for m in summary_msgs if m.seq > native_seq]
+    transcript = compress(summary_msgs)
+    if transcript.char_count < MIN_COMPRESSED_CHARS:
+        return None
+    artifacts, _ = _artifacts_payload(messages)
+    artifacts_blob = json.dumps(artifacts, sort_keys=True, ensure_ascii=False)
+    if estimate_tokens(transcript.char_count) > SINGLE_PASS_MAX_TOKENS:
+        raw_groups = split_chunks(transcript, chunk_max_chars())
+        selected, _, _ = sample_chunks(raw_groups)
+        chunk_fps: list[str] = []
+        prev_threads: Optional[str] = None
+        for idx, blocks in enumerate(selected):
+            tr = blocks_to_transcript(blocks)
+            _, user = build_prompt(
+                tr,
+                False,
+                prior_summary=prior_summary if idx == 0 else None,
+                open_threads=prev_threads,
+            )
+            user, _ = prepare_prompt(user)
+            chunk_fps.append(_chunk_row_fingerprint(user, model_label))
+            scope = chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq)
+            row = get_summary(output_dir, "chunk", scope)
+            if row and row.get("payload"):
+                prev_threads = build_open_threads(row["payload"])
+        return merge_fingerprint(chunk_fps, model_label, SUMMARY_PROMPT_VERSION, artifacts_blob)
+    _, user = build_prompt(
+        transcript,
+        bool(transcript.native_summary_seqs),
+        prior_summary=prior_summary,
+    )
+    user, _ = prepare_prompt(user)
+    return _fingerprint(user, artifacts, model_label)
+
+
+def is_summary_stale(output_dir: Path, session_id: str) -> Optional[bool]:
+    """True when a stored summary's fingerprint no longer matches the session."""
+    row = get_summary(output_dir, "session", f"session:{session_id}")
+    if row is None:
+        return None
+    model_label = str(row.get("model") or "ollama/llama3.2")
+    expected = _expected_session_fingerprint(output_dir, session_id, model_label)
+    if expected is None:
+        return None
+    return row.get("fingerprint") != expected
+
+
 def _is_transient_provider_error(exc: BaseException) -> bool:
     msg = str(exc).lower()
     return any(tok in msg for tok in ("429", "rate", "timeout", "timed out"))

@@ -26,14 +26,24 @@ class MCPServer:
         self.tools = {}
         self.output_dir = lore_home()
 
-    def register_tool(self, name: str, description: str, input_schema: dict, handler):
+    def register_tool(
+        self,
+        name: str,
+        description: str,
+        input_schema: dict,
+        handler,
+        annotations: Optional[dict] = None,
+    ):
         """Register a tool with the server."""
-        self.tools[name] = {
+        entry = {
             "name": name,
             "description": description,
             "inputSchema": input_schema,
             "handler": handler,
         }
+        if annotations:
+            entry["annotations"] = annotations
+        self.tools[name] = entry
 
     async def handle_request(self, request: dict) -> Optional[dict]:
         """Handle an incoming JSON-RPC request."""
@@ -73,13 +83,14 @@ class MCPServer:
         """Handle tools/list request."""
         tools = []
         for tool in self.tools.values():
-            tools.append(
-                {
-                    "name": tool["name"],
-                    "description": tool["description"],
-                    "inputSchema": tool["inputSchema"],
-                }
-            )
+            listed = {
+                "name": tool["name"],
+                "description": tool["description"],
+                "inputSchema": tool["inputSchema"],
+            }
+            if tool.get("annotations"):
+                listed["annotations"] = tool["annotations"]
+            tools.append(listed)
         return {
             "jsonrpc": "2.0",
             "id": request_id,

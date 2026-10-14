@@ -221,6 +221,40 @@ Input:
 }
 ```
 
+### `get_session_summary`
+
+Read the stored AI session summary (read-only). Returns JSON metadata and the validated
+summary object as data strings only — never transcript text. `artifacts.errors[].text` is
+trimmed to 200 characters.
+
+Input:
+
+```json
+{"session_id": "session-1"}
+```
+
+Output fields include `status` (`available`, `missing`, `deleted`, or `invalid_id`),
+`stale` (boolean or null), `summary`, `model`, `created`, `prompt_version`, `truncated`,
+and `chunks`.
+
+### `summarize_session`
+
+Generate or refresh a session summary. **Disabled by default.** Set
+`LORE_MCP_ALLOW_SUMMARIZE=1` to enable. When disabled the tool returns:
+
+```json
+{
+  "error": "summarize_session is disabled",
+  "hint": "set LORE_MCP_ALLOW_SUMMARIZE=1"
+}
+```
+
+When enabled, only a **local** Ollama provider is used (`ollama` on localhost). Cloud
+providers are never selected; a `provider` argument is rejected. Off-host `OLLAMA_HOST`
+values are refused. The response is `{session_id, outcome, summary_available}` and does
+not include summary text. Optional `force: true` re-runs even when the fingerprint is
+current. Tombstoned or unknown sessions return an error without constructing a provider.
+
 ### `memory_write`
 
 Record a durable memory. Input: `title` and `body` (required), `kind`

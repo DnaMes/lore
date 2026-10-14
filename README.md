@@ -382,6 +382,12 @@ cloud providers (for example Gemini) send redacted transcript text only when you
 can be slow and costly — use `--max-sessions`, `--max-input-tokens`, and `--since` (default
 30 days when no `--session` is given).
 
+**MCP.** `get_session_summary` is read-only and returns stored summary JSON (no
+transcript). `summarize_session` is off by default; set `LORE_MCP_ALLOW_SUMMARIZE=1` to
+enable it. When enabled, only a local Ollama endpoint on localhost is used — never a cloud
+provider — because an agent reading untrusted session content must not trigger sending
+private text off-machine (prompt-injection / exfiltration risk).
+
 ## Automated sessions
 
 Sessions that are not a person talking to an assistant carry an `origin` of `exec`,

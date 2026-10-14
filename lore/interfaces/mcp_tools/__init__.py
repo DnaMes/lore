@@ -14,6 +14,7 @@ from .deps import MCPToolDeps, build_deps
 from .memory import register as register_memory
 from .search import register as register_search
 from .sessions import register as register_sessions
+from .summaries import register as register_summaries
 
 __all__ = [
     "MCPToolDeps",
@@ -21,4 +22,5 @@ __all__ = [
     "register_memory",
     "register_search",
     "register_sessions",
+    "register_summaries",
 ]

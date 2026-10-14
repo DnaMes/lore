@@ -34,7 +34,13 @@ from ..services import (
     search_index as _service_search_index,
 )
 from ..utils.paths import lore_home
-from .mcp_tools import build_deps, register_memory, register_search, register_sessions
+from .mcp_tools import (
+    build_deps,
+    register_memory,
+    register_search,
+    register_sessions,
+    register_summaries,
+)
 from .server import MCPServer
 
 __all__ = [
@@ -107,4 +113,5 @@ def create_server() -> MCPServer:
     register_search(server, deps)
     register_sessions(server, deps)
     register_memory(server, deps)
+    register_summaries(server, deps)
     return server

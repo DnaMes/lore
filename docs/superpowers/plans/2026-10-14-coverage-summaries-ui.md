@@ -172,7 +172,7 @@ Flags as in the design (`--session`, `--project`, `--since`, `--tool`, `--provid
 
 ### B4.5 MCP tools and docs **[R]**
 `get_session_summary` (read-only, staleness), `summarize_session` gated by `LORE_MCP_ALLOW_SUMMARIZE=1` and local-only providers; `docs/API_REFERENCE.md`, README section.
-- [ ] done
+- [x] done
 
 ## Block B5 — session view (order from the UX report, section 11)
 
