@@ -11,12 +11,15 @@ from ..utils.home_discovery import discover_home_marker_paths
 from ..utils.paths import make_thread_id, safe_copy_db
 from ..utils.text_processing import decode_hex_or_str
 from .base import BaseExtractor
+from .cursor_agent import agent_transcripts_available, extract_agent_transcript_sessions
 
 logger = logging.getLogger(__name__)
 
 
 class CursorExtractor(BaseExtractor):
     """Extract chat history from Cursor IDE."""
+
+    PARSER_VERSION = 2
 
     def __init__(self):
         self.db_path = Path.home() / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb"
@@ -36,12 +39,13 @@ class CursorExtractor(BaseExtractor):
         return Tool.CURSOR
 
     def is_available(self) -> bool:
-        return len(self.db_paths) > 0
+        return len(self.db_paths) > 0 or agent_transcripts_available()
 
     def source_description(self) -> str:
         return (
             "~/.config/Cursor/User/globalStorage/state.vscdb "
-            "(cursorDiskKV composerData:* rows and the sidebar chat data)"
+            "(cursorDiskKV composerData:* rows and the sidebar chat data); "
+            "~/.cursor/projects/*/agent-transcripts/**/*.jsonl"
         )
 
     def _decode_blob(self, value: Any) -> str:
@@ -126,6 +130,7 @@ class CursorExtractor(BaseExtractor):
                 except (OSError, PermissionError) as e:
                     logger.debug(f"Failed to cleanup temp db files: {e}")
         self.db_path = original_db_path
+        yield from extract_agent_transcript_sessions(self)
 
     def _parse_composer(
         self, composer_id: str, data: dict, conn: sqlite3.Connection
