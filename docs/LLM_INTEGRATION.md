@@ -196,6 +196,32 @@ transcript text to OpenRouter when you opt in with `--allow-cloud` (e.g. on
 lore summarize --provider openrouter --allow-cloud
 ```
 
+#### Measured (2026-10-14)
+
+Live calls from the main session, free models only, redacted one-word prompts:
+
+| Model | Latency | Result |
+| ----- | ------- | ------ |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | 9.8 s | `bug` (correct label, no reasoning-only or empty output) |
+| `nvidia/nemotron-3.5-lightning:free` | 5.5 s | `bug` |
+
+No HTTP 429, no empty content, no cost reported, so no stderr warning fired.
+
+Rate limits read from <https://openrouter.ai/docs/api-reference/limits> on
+2026-10-14 (not guessed):
+
+- Free-model variants (`:free`): **20 requests per minute**.
+- **50 requests per day** when fewer than 10 credits were purchased all-time,
+  **1000 requests per day** at 10 credits or more (the higher ceiling starts one
+  credit below the threshold).
+- `GET /api/v1/key` → `free_model_daily_requests` reports `{used, limit, remaining}`
+  for the current UTC day.
+- Observed for this key: `is_free_tier: false`, all-time usage `67.03` USD, no
+  per-key limit, `free_model_daily_requests: {used: 40, limit: 1000, remaining: 960}`
+  — the 1000/day tier applies.
+- On 429, retry with exponential backoff and honour `Retry-After` (the provider
+  already does this, `_MAX_RETRIES`).
+
 #### Method 2: OAuth2 (Google AI Pro Subscription)
 
 If you have a Google AI Pro subscription and OAuth tokens:
