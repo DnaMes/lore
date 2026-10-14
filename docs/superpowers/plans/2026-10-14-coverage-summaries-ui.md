@@ -160,7 +160,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 
 ### B4.3a Single-pass pipeline and validator **[R]**
 `lore/services/summarize.py`: candidate selection (interactive only by default), redaction before send, single pass, validation (schema, cites exist, lengths, no secret-shaped strings), write only after validation, `unchanged` counting; fake-provider tests.
-- [ ] done
+- [x] done
 
 ### B4.3b Chunking, merge, repair and budgets **[R]**
 Chunks cut at user messages and never inside a call/result pair, merge call, one repair retry then a smaller chunk size, max 8 chunks with sampling and `truncated`, budget caps and dry-run estimate, a growing session re-runs only its last chunk and the merge; native compaction reuse.
