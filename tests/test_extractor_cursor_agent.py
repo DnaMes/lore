@@ -341,3 +341,26 @@ def test_symlink_swapped_in_after_check_is_not_read(home, monkeypatch):
     _, sessions = _extract(home)
 
     assert all("SECRET" not in m.content for s in sessions for m in s.messages)
+
+
+def test_secret_named_tool_inputs_are_not_rendered(home):
+    block = {
+        "type": "tool_use",
+        "name": "http_get",
+        "input": {"url": "https://example.test", "api_key": "SENTINEL_KEY", "h": {"x": "SENTINEL"}},
+    }
+    _agent_jsonl(
+        home,
+        "slug-s",
+        "sec-1",
+        [
+            {"role": "user", "message": {"content": "go"}},
+            {"role": "assistant", "message": {"content": [block]}},
+        ],
+    )
+
+    _, sessions = _extract(home)
+
+    text = " ".join(m.content for s in sessions for m in s.messages)
+    assert "https://example.test" in text
+    assert "SENTINEL" not in text

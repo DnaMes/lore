@@ -27,6 +27,15 @@ _MAX_LEGACY_TEXT_BYTES = 2 * 1024 * 1024
 _MAX_TOOL_ARG_CHARS = 200
 _MAX_MESSAGES = 20_000
 
+_SECRET_NAME_PARTS = ("key", "secret", "token", "encryption", "blob", "password")
+
+
+def is_secret_field_name(name: str) -> bool:
+    """True for field names that may carry credentials (never rendered or persisted)."""
+    lower = name.lower()
+    return any(part in lower for part in _SECRET_NAME_PARTS)
+
+
 _USER_QUERY_RE = re.compile(
     r"^\s*<user_query>(.*)</user_query>\s*$",
     re.DOTALL | re.IGNORECASE,
@@ -377,6 +386,11 @@ def _render_tool_input(tool_input: Any) -> str:
     rendered: List[str] = []
     if isinstance(tool_input, dict):
         for key, value in tool_input.items():
+            if not isinstance(key, str) or is_secret_field_name(key):
+                continue
+            if isinstance(value, (dict, list)):
+                rendered.append(f"{key}=<{type(value).__name__}>")  # may hold nested secrets
+                continue
             v_str = str(value)
             if len(v_str) > _MAX_TOOL_ARG_CHARS:
                 v_str = v_str[:_MAX_TOOL_ARG_CHARS]

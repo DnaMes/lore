@@ -15,7 +15,11 @@ from ..utils.paths import make_thread_id
 from ..utils.sqlite_copy import copy_sqlite_with_sidecars
 from ..utils.text_processing import decode_hex_or_str
 from .base import BaseExtractor
-from .cursor_agent import agent_transcripts_available, extract_agent_transcript_sessions
+from .cursor_agent import (
+    agent_transcripts_available,
+    extract_agent_transcript_sessions,
+    is_secret_field_name,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -37,12 +41,7 @@ _PARSE_ERRORS = (
     RecursionError,
 )
 _MAX_TITLE_CHARS = 200
-_SECRET_NAME_PARTS = ("key", "secret", "token", "encryption", "blob", "password")
-
-
-def _is_secret_composer_field(name: str) -> bool:
-    lower = name.lower()
-    return any(part in lower for part in _SECRET_NAME_PARTS)
+_is_secret_composer_field = is_secret_field_name
 
 
 def _filter_composer_data(data: Any) -> dict:
