@@ -350,6 +350,29 @@ Cached non-transcript responses help:
 - Speed up repeated queries
 - Enable offline access to previous results
 
+## Session titles
+
+`lore generate-titles` sends a transcript excerpt (first six messages, capped) to the selected
+provider, so the provider is explicit and defaults to **local**:
+
+| Flag | Effect |
+| --- | --- |
+| `--provider local` (default) | Ollama with `--model` or `phi3:mini`. Nothing leaves the machine. |
+| `--provider gemini-cli` | The Gemini CLI on `PATH` — **cloud**, used only when selected here. |
+| `--model NAME` | Model for the selected provider. |
+
+The Gemini CLI is no longer picked because its binary happens to exist: before this change a
+SMART/AUTO run silently sent excerpts to it whenever `gemini` was on `PATH`. When the selected
+provider does not answer, titles fall back to the *local strategies* (keywords, first message) —
+never to a different provider (#185).
+
+Every generated title is recorded in `~/.lore/title_cache/titles.json` (owner-only, written
+atomically because it can carry an excerpt) with `provider`, `model`, `prompt_version`, a
+120-character `excerpt` of what was sent, and `status` (`native`, `summary`, `llm`, `llm-failed`,
+`keywords`, `first_message`, `fallback`). A failed LLM attempt is kept under `llm_failed` next to
+the fallback's own record. The `fast` strategy never calls a provider at all, so index builds stay
+local and offline.
+
 ## Cost Optimization
 
 - Use `--no-llm` for basic stats (free)

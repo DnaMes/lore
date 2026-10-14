@@ -1503,7 +1503,16 @@ def cmd_generate_titles(args):
     }
 
     strategy = strategy_map.get(args.strategy, TitleStrategy.AUTO)
-    generator = TitleGenerator(strategy=strategy)
+    provider = getattr(args, "provider", None)
+    generator = TitleGenerator(
+        strategy=strategy,
+        provider=provider,
+        model=getattr(args, "model", None),
+    )
+    if strategy in (TitleStrategy.SMART, TitleStrategy.AUTO):
+        # Titles send a transcript excerpt: say where they go before the first
+        # call, so an explicit provider selection is never silent (#185).
+        print(f"Title provider: {generator.provider} (model: {generator.model})")
 
     extractors = get_all_extractors()
     generated = 0
@@ -1980,6 +1989,18 @@ Examples:
     titles_parser.add_argument("--tool", help="Only generate for specific tool")
     titles_parser.add_argument("--since", help="Only sessions since (e.g., 7d, 2w)")
     titles_parser.add_argument("--force", action="store_true", help="Regenerate even if cached")
+    titles_parser.add_argument(
+        "--provider",
+        choices=["local", "gemini-cli"],
+        default=None,
+        help=(
+            "Provider for LLM titles (default: local). 'gemini-cli' is a cloud "
+            "provider and is only used when selected here — titles send a transcript excerpt."
+        ),
+    )
+    titles_parser.add_argument(
+        "--model", default=None, help="Model for the selected provider (provider default otherwise)"
+    )
     _add_automated_flag(titles_parser)
 
     subparsers.add_parser(

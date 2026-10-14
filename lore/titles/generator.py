@@ -1,6 +1,8 @@
 import json
 import logging
+import os
 import re
+import tempfile
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
@@ -28,14 +30,27 @@ except ImportError:
     ollama = None
     OLLAMA_AVAILABLE = False
 
-# Check if Gemini CLI is available
+# Check if a cloud CLI is installed: only used to *report* availability —
+# never to pick a provider implicitly (#185).
 import shutil
 
-from ..utils.paths import lore_home
+from ..utils.paths import lore_home, restrict_file, secure_dir
 
 logger = logging.getLogger(__name__)
 
 GEMINI_CLI_AVAILABLE = shutil.which("gemini") is not None
+
+# Providers a title request may be routed to (#185). Titles send a transcript
+# excerpt, so the default is the local one: the Gemini CLI is cloud and must be
+# selected explicitly, never picked because its binary happens to exist.
+TITLE_PROVIDERS = ("local", "gemini-cli")
+
+# Bumped when the title prompt changes; recorded with every generated title so a
+# cached title can be recognised as pre-change output.
+TITLE_PROMPT_VERSION = 1
+
+# How much of the sent excerpt is recorded with the title (audit trail, not a copy).
+TITLE_EXCERPT_MAX_CHARS = 120
 
 
 class TitleStrategy(Enum):
@@ -51,10 +66,19 @@ class TitleGenerator:
         strategy: TitleStrategy = TitleStrategy.AUTO,
         cache_dir: Optional[Path] = None,
         ollama_model: str = "phi3:mini",
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
     ):
         self.strategy = strategy
+        self.provider = provider or "local"
+        if self.provider not in TITLE_PROVIDERS:
+            raise ValueError(
+                f"Unknown title provider {self.provider!r}; expected one of: "
+                f"{', '.join(TITLE_PROVIDERS)}"
+            )
+        self.model = model or (ollama_model if self.provider == "local" else "gemini-cli")
         self.cache_dir = cache_dir or lore_home() / "title_cache"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
+        secure_dir(self.cache_dir)
         self.cache_file = self.cache_dir / "titles.json"
         self.ollama_model = ollama_model
         self._cache = self._load_cache()
@@ -74,6 +98,11 @@ class TitleGenerator:
             and not self._is_generic_title(session.title)
         ):
             session.title_source = TitleSource.NATIVE
+            self._cache_title(
+                session.session_id,
+                session.title.strip(),
+                {"provider": "none", "model": "", "status": "native", "excerpt": ""},
+            )
             return session.title.strip()
 
         if (
@@ -84,39 +113,52 @@ class TitleGenerator:
         ):
             session.title_source = TitleSource.SUMMARY
             title = session.summary.strip()
-            return title[:80] if len(title) > 80 else title
+            title = title[:80] if len(title) > 80 else title
+            self._cache_title(
+                session.session_id,
+                title,
+                {"provider": "none", "model": "", "status": "summary", "excerpt": ""},
+            )
+            return title
 
         if not force:
             cached = self._get_cached(session.session_id)
             if cached:
                 return cached
 
-        title = self._generate_by_strategy(session)
-        self._cache_title(session.session_id, title)
+        title, record = self._generate_by_strategy_recorded(session)
+        self._cache_title(session.session_id, title, record)
 
         return title
 
-    def _generate_by_strategy(self, session: "UnifiedSession") -> str:
+    def _generate_by_strategy_recorded(self, session: "UnifiedSession") -> tuple[str, dict]:
+        """Run the strategy chain and say how the title was produced (#197/#185).
+
+        Returns ``(title, record)`` where ``record`` names the provider, model,
+        prompt version, a bounded excerpt of what was sent, and the status — so
+        a cached title can be traced back to the call that produced it.
+        """
         from ..core.models import TitleSource
 
         if self.strategy == TitleStrategy.SMART and OLLAMA_AVAILABLE:
             title = self._generate_llm(session)
             if title:
                 session.title_source = TitleSource.LLM
-                return title
+                return title, self._llm_record(session, "llm")
 
         if self.strategy == TitleStrategy.KEYWORD and self._yake:
             title = self._generate_keywords(session)
             if title:
                 session.title_source = TitleSource.KEYWORDS
-                return title
+                return title, self._record("keywords")
 
         if self.strategy == TitleStrategy.AUTO:
-            return self._generate_auto(session)
+            title, record = self._generate_auto_recorded(session)
+            return title, record
 
-        return self._generate_first_message(session)
+        return self._generate_first_message(session), self._record("first_message")
 
-    def _generate_auto(self, session: "UnifiedSession") -> str:
+    def _generate_auto_recorded(self, session: "UnifiedSession") -> tuple[str, dict]:
         from ..core.models import TitleSource
 
         msg_count = session.message_count
@@ -127,15 +169,55 @@ class TitleGenerator:
             title = self._generate_llm(session)
             if title:
                 session.title_source = TitleSource.LLM
-                return title
+                return title, self._llm_record(session, "llm")
+            # The selected provider did not answer: fall back to the *local*
+            # strategies only. Never another provider (#185) — that is how
+            # transcript text used to reach a different tool than the one the
+            # run selected.
+            failed_record = self._llm_record(session, "llm-failed")
+        else:
+            failed_record = None
 
         if (msg_count >= 5 or first_msg_len >= 100) and self._yake:
             title = self._generate_keywords(session)
             if title:
                 session.title_source = TitleSource.KEYWORDS
-                return title
+                record = self._record("keywords")
+                if failed_record:
+                    record["llm_failed"] = failed_record
+                return title, record
 
-        return self._generate_first_message(session)
+        title = self._generate_first_message(session)
+        record = self._record("first_message")
+        if failed_record:
+            record["llm_failed"] = failed_record
+        return title, record
+
+    def _record(
+        self,
+        status: str,
+        *,
+        provider: Optional[str] = None,
+        model: Optional[str] = None,
+        excerpt: str = "",
+        prompt_version: int = 0,
+    ) -> dict:
+        return {
+            "provider": provider or "none",
+            "model": model or "",
+            "prompt_version": prompt_version,
+            "excerpt": excerpt[:TITLE_EXCERPT_MAX_CHARS],
+            "status": status,
+        }
+
+    def _llm_record(self, session: "UnifiedSession", status: str) -> dict:
+        return self._record(
+            status,
+            provider=self.provider,
+            model=self.model,
+            prompt_version=TITLE_PROMPT_VERSION,
+            excerpt=self._build_context(session, max_messages=6),
+        )
 
     def _generate_keywords(self, session: "UnifiedSession") -> Optional[str]:
         if not self._yake:
@@ -155,9 +237,10 @@ class TitleGenerator:
         return None
 
     def _generate_llm(self, session: "UnifiedSession") -> Optional[str]:
-        if GEMINI_CLI_AVAILABLE:
+        """Ask the *selected* provider only — never fall through to another one (#185)."""
+        if self.provider == "gemini-cli":
             return self._generate_llm_gemini(session)
-        elif OLLAMA_AVAILABLE:
+        if self.provider == "local":
             return self._generate_llm_ollama(session)
         return None
 
@@ -303,13 +386,21 @@ Title:"""
                 pass
         return None
 
-    def _cache_title(self, session_id: str, title: str):
-        self._cache[session_id] = {
+    def _cache_title(self, session_id: str, title: str, record: Optional[dict] = None):
+        entry = {
             "title": title,
             "timestamp": datetime.now().isoformat(),
         }
+        if record:
+            entry["record"] = record
+        self._cache[session_id] = entry
         try:
-            with open(self.cache_file, "w", encoding="utf-8") as f:
+            # Atomic and owner-only: the record can carry a transcript excerpt (#185).
+            fd, tmp_name = tempfile.mkstemp(dir=self.cache_dir, prefix=".titles.", suffix=".tmp")
+            tmp_path = Path(tmp_name)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(self._cache, f, indent=2)
+            os.replace(tmp_path, self.cache_file)
+            restrict_file(self.cache_file)
         except OSError:
             pass
