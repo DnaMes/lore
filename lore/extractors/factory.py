@@ -28,4 +28,3 @@ def get_all_extractors() -> List[BaseExtractor]:
         AiderExtractor(),
         PiExtractor(),
     ]
-

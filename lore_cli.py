@@ -64,7 +64,6 @@ TOOL_EXECUTABLES = {
 }
 
 
-
 def _include_automated(args) -> bool:
     """``--include-automated`` (exec/cron/subagent sessions are hidden by default)."""
     return bool(getattr(args, "include_automated", False))

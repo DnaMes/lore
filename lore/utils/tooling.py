@@ -45,7 +45,6 @@ SESSION_SWITCH_ALIASES = {
 }
 
 
-
 def normalize_tool_name(tool: Optional[str]) -> Optional[str]:
     if not tool:
         return tool

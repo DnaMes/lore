@@ -93,7 +93,7 @@ Map `session`, `message` (roles user/assistant/toolResult/system/bashExecution),
 
 ### B2.2a Codex content enrichment — dossier "Codex"
 `custom_tool_call` + `custom_tool_call_output`, `function_call_output`, `agent_message`, `event_msg.token_count`, `turn_context` model/effort/cwd, `compacted`; injected AGENTS.md/environment context typed `injected_context` and excluded from the user-prompt count; bump `PARSER_VERSION`.
-- [ ] done
+- [x] done
 
 ### B2.2b Codex origin and layout
 Subagent parent and `origin` from `session_meta.source`/`originator` (`exec` → exec), `archived_sessions/`, optional `.jsonl.zst` only if a zstd module imports, `state_5.sqlite` titles via a scratch copy.

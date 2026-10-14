@@ -17,7 +17,6 @@ TOOL_STYLES = {
 }
 
 
-
 def get_style(tool):
     return TOOL_STYLES.get(tool, {"color": "#A1A1AA", "icon": "🤖", "name": tool})
 

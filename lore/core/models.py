@@ -159,7 +159,9 @@ class UnifiedSession:
     @property
     def user_prompt_count(self) -> int:
         return sum(
-            1 for msg in self.messages if msg.role == Role.USER and (msg.content or "").strip()
+            1
+            for msg in self.messages
+            if msg.role == Role.USER and msg.kind == "text" and (msg.content or "").strip()
         )
 
     @property
@@ -170,7 +172,14 @@ class UnifiedSession:
 
     @property
     def total_tokens(self) -> Optional[int]:
-        total = 0
+        session_total: Optional[int] = None
+        turn_total = 0
         for msg in self.messages:
-            total += _message_token_total(msg.tokens)
-        return total if total > 0 else None
+            if isinstance(msg.tokens, dict):
+                st = msg.tokens.get("session_total")
+                if isinstance(st, (int, float)) and st > 0:
+                    session_total = int(st)
+            turn_total += _message_token_total(msg.tokens)
+        if session_total is not None:
+            return session_total
+        return turn_total if turn_total > 0 else None
