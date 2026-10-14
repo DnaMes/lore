@@ -10,7 +10,7 @@ docs close-out).
   filtered + bounded vector scan, failure-bucket report, explicit commit, validator edges, recall
   floor calibrated to **0.6** on 61 labelled pairs), #193 (`LORE_PUBLIC_ORIGINS` + forwarded-header
   validation, 25 new tests), #92 (semantic distance cutoff **0.88**, percentile-derived, before RRF
-  fusion). Open count 49 → **46**.
+  fusion). Open count 49 → **44**.
 - **#185 closed** — titles route through the explicitly selected provider (`local` default,
   `gemini-cli` only when chosen), never switch provider on failure, and record
   provider/model/prompt-version/excerpt/status in an owner-only cache. Deliberate privacy change: a

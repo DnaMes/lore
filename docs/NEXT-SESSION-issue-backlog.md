@@ -50,7 +50,7 @@ All commits passed `review-gate` (APPROVE) and are on remote `main`.
 | 1.6 | #185 | closed — explicit title provider, no provider switch, full record in an owner-only cache | `f3a65bc` |
 
 Wave-1 full suite: **2753 passed, 25 skipped, 0 failed** (19m44s, concurrent with the A/B), ruff
-clean. Open issues: 54 → **45** (Wave 0 closed 5, Wave 1 closed 5 more: #199, #193, #92, #185,
+clean. Open issues: 54 → **44** (Wave 0 closed 5, Wave 1 closed 5 more: #199, #193, #92, #185,
 #112; #176 left open with a checklist).
 
 Still to do: Waves 2-7 and Track L steps 4-8 (steps 4+5 only after Wave 2.3); #176 needs its
