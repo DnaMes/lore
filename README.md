@@ -286,6 +286,14 @@ Browse your history at `http://localhost:5000`.
 - **Rules**: Derived rules extracted from assistant responses.
 - **Export**: Save any session as a clean Markdown file.
 
+Plain `lore export` files are **unredacted** local archives by design — they stay on your machine
+with full fidelity for search and replay. When you need to share or publish, use
+`lore export --redact --output-dir /path/to/share` (or `lore export-html SESSION --redact`, or
+`/export/<id>?redact=1` in the web UI). Redaction applies best-effort pattern matching for
+secret-shaped strings (OpenAI/Anthropic keys, JWTs, PEM private keys, assignment-style secrets,
+and more — see the `Kinds` list in [`lore/utils/redact.py`](lore/utils/redact.py)). Review
+redacted output before sharing; it is not a guarantee that nothing sensitive remains.
+
 ### Security Probe Matrix
 
 Run deterministic route/API hardening probes against a local or deployed web URL:

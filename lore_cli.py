@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lore.core.models import AUTOMATED_ORIGINS, Tool, UnifiedSession
 from lore.exporters.index import IndexBuilder
 from lore.exporters.markdown import MarkdownExporter
+from lore.exporters.redaction import REDACTED_EXPORT_MARKER, redact_session
 from lore.extractors.base import stamp_parser_version
 from lore.extractors.factory import get_all_extractors
 from lore.extractors.opencode import OpenCodeExtractor
@@ -332,9 +333,50 @@ def _reusable_entries(extractor, prior_by_path: dict, ignored_ids: set) -> dict[
     return reusable
 
 
+def _redacted_export_dir_error(output_dir: Path) -> str | None:
+    """Refuse redacted export into (or below) the live archive and into plain exports."""
+    resolved = output_dir.resolve()
+    home = lore_home().resolve()
+    if resolved == home or resolved.is_relative_to(home) or home.is_relative_to(resolved):
+        return (
+            "Error: --redact requires --output-dir outside the default archive "
+            f"({lore_home()}) and not containing it"
+        )
+    marker = output_dir / REDACTED_EXPORT_MARKER
+    try:
+        non_empty = output_dir.is_dir() and any(output_dir.iterdir())
+    except OSError:
+        non_empty = True
+    if non_empty and not marker.exists():
+        return (
+            "Error: --redact needs an empty or previously redacted --output-dir "
+            f"({output_dir} already holds other files)"
+        )
+    return None
+
+
 def cmd_export(args):
     """Export sessions to Markdown."""
     output_dir = Path(args.output_dir).expanduser()
+    redact_exports = bool(getattr(args, "redact", False))
+
+    if redact_exports:
+        err = _redacted_export_dir_error(output_dir)
+        if err:
+            print(err, file=sys.stderr)
+            return 1
+    elif (output_dir / REDACTED_EXPORT_MARKER).exists():
+        print(
+            "Error: refusing plain export into a redacted-export directory "
+            f"(found {REDACTED_EXPORT_MARKER}); use a different --output-dir",
+            file=sys.stderr,
+        )
+        return 1
+
+    if redact_exports:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / REDACTED_EXPORT_MARKER).write_text("", encoding="utf-8")
+
     exporter = MarkdownExporter(output_dir)
     index_builder = IndexBuilder(output_dir)
 
@@ -346,12 +388,18 @@ def cmd_export(args):
     index_path = output_dir / "index.json"
     merged_paths, prior_sessions = _load_existing_index_state(index_path)
     exported = 0
+    total_redactions = 0
 
     # Incremental: a source file the last scan had already finished reading and
     # that has not changed since is not parsed again; its prior index entry is
     # reused. Only valid for an unfiltered run, because a filtered run rebuilds
     # the index from a separate full pass.
-    incremental = not getattr(args, "full", False) and not tool_filter and not args.project
+    incremental = (
+        not getattr(args, "full", False)
+        and not tool_filter
+        and not args.project
+        and not redact_exports
+    )
     known_mtimes, prior_by_path, known_versions = (
         _incremental_baseline(index_path, prior_sessions) if incremental else ({}, {}, {})
     )
@@ -367,7 +415,7 @@ def cmd_export(args):
         at ~3 GB for ~1000 sessions (lore-sync). ``IndexBuilder.build_index``
         consumes this stream and drops each session after indexing it.
         """
-        nonlocal exported
+        nonlocal exported, total_redactions
         for extractor in get_all_extractors():
             if tool_filter and extractor.tool.value != tool_filter:
                 continue
@@ -402,21 +450,27 @@ def cmd_export(args):
                 _tag_git_info(session, git_info_cache)
                 exported += 1
 
+                export_target = session
+                if redact_exports:
+                    export_target, redactions = redact_session(session)
+                    total_redactions += redactions
+
                 # Export to markdown (skips if file is already up-to-date)
                 try:
-                    candidate = exporter._candidate_path(session)
+                    candidate = exporter._candidate_path(export_target)
                     was_current = (
-                        candidate.exists()
+                        not redact_exports
+                        and candidate.exists()
                         and candidate.stat().st_mtime >= session.last_updated.timestamp()
                     )
-                    path = exporter.export_session(session)
+                    path = exporter.export_session(export_target, force=redact_exports)
                     merged_paths[session.session_id] = path
                     if not was_current:
                         print(f"  Exported: {path}")
                 except Exception as e:
                     print(f"  Error exporting {session.session_id}: {e}", file=sys.stderr)
 
-                yield session
+                yield export_target
 
             if skipped_by_id is None:
                 skipped_by_id = _reusable_entries(extractor, prior_by_path, ignored_ids)
@@ -450,7 +504,8 @@ def cmd_export(args):
     record_discovery(output_dir, finished_extractors)
 
     unchanged = f" (+{len(reused_entries)} unchanged, not re-parsed)" if reused_entries else ""
-    print(f"\nExported {exported} sessions{unchanged} to {output_dir}")
+    redacted_note = f"; Redacted {total_redactions} secret-like strings" if redact_exports else ""
+    print(f"\nExported {exported} sessions{unchanged} to {output_dir}{redacted_note}")
 
 
 def _find_session_by_id(session_id: str):
@@ -499,6 +554,15 @@ def cmd_export_html(args):
     if session is None:
         print(f"Error: no session found for id '{args.session_id}'", file=sys.stderr)
         return 1
+
+    total_redactions = 0
+    if getattr(args, "redact", False):
+        session, total_redactions = redact_session(session)
+        if total_redactions:
+            print(
+                f"Redacted {total_redactions} secret-like strings",
+                file=sys.stderr,
+            )
 
     # The default filename is derived from the session id — sanitise it so a
     # malformed extractor id (e.g. containing '/' or '..') cannot escape cwd.
@@ -1669,6 +1733,11 @@ Examples:
         action="store_true",
         help="Re-parse every source, even those unchanged since the last export",
     )
+    export_parser.add_argument(
+        "--redact",
+        action="store_true",
+        help="Redact secret-shaped strings (requires a non-default --output-dir)",
+    )
 
     # export-html command — single shareable standalone HTML file
     export_html_parser = subparsers.add_parser(
@@ -1678,6 +1747,11 @@ Examples:
     export_html_parser.add_argument(
         "--output",
         help="Output file or directory (default: <session-id>.html in cwd)",
+    )
+    export_html_parser.add_argument(
+        "--redact",
+        action="store_true",
+        help="Redact secret-shaped strings before rendering HTML",
     )
 
     # search command
@@ -1909,7 +1983,9 @@ def main():
     if handler is None:
         parser.print_help()
         return
-    handler(args)
+    rc = handler(args)
+    if isinstance(rc, int) and rc != 0:
+        sys.exit(rc)
 
 
 if __name__ == "__main__":

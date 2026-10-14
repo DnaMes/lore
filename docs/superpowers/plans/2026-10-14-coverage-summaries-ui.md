@@ -146,7 +146,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 
 ### B3.3 Redaction for exports and sharing
 `lore export --redact` (markdown/HTML/JSON) and every future share feature call `redact()`; plain exports stay unredacted by design because they are local files the user asked for, and the README says so.
-- [ ] done
+- [x] done
 
 ## Block B4 — summaries (design: `docs/research/2026-10-14-session-summaries-design.md`)
 

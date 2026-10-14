@@ -2212,15 +2212,31 @@ def export_session(session_id):
     if not validate_session_id(session_id):
         return "Invalid session ID", 400
 
+    want_redact = request.args.get("redact") == "1"
+
     idx = load_index()
     session_meta = next((s for s in idx.get("sessions", []) if s.get("id") == session_id), None)
     from ..exporters.markdown import MarkdownExporter
+    from ..exporters.redaction import redact_session
+    from ..utils.redact import redact
+
+    def _markdown_response(body: str, redactions: int = 0) -> Response:
+        headers = {
+            "Content-Disposition": f'attachment; filename="{session_id}.md"',
+        }
+        if want_redact:
+            headers["X-Lore-Redactions"] = str(redactions)
+        return Response(body, mimetype="text/markdown", headers=headers)
 
     if session_meta:
         export_path = resolve_export_path(session_meta.get("export_path"))
         if export_path and export_path.exists():
+            body = export_path.read_text(encoding="utf-8", errors="replace")
+            if want_redact:
+                result = redact(body)
+                return _markdown_response(result.text, result.count)
             return Response(
-                export_path.read_text(encoding="utf-8", errors="replace"),
+                body,
                 mimetype="text/markdown",
                 headers={"Content-Disposition": f'attachment; filename="{export_path.name}"'},
             )
@@ -2229,9 +2245,13 @@ def export_session(session_id):
         if tool_filter:
             session = load_session_by_id(session_id, preferred_tool=tool_filter)
             if session:
-                return Response(
+                if want_redact:
+                    session, redactions = redact_session(session)
+                else:
+                    redactions = 0
+                return _markdown_response(
                     MarkdownExporter(OUTPUT_DIR)._generate_markdown(session),
-                    mimetype="text/markdown",
+                    redactions,
                 )
 
     if os.environ.get("LORE_EXPORT_FALLBACK_SCAN", "").lower() != "true":
@@ -2242,9 +2262,13 @@ def export_session(session_id):
             continue
         for session in ex.extract_sessions():
             if session.session_id == session_id:
-                return Response(
+                if want_redact:
+                    session, redactions = redact_session(session)
+                else:
+                    redactions = 0
+                return _markdown_response(
                     MarkdownExporter(OUTPUT_DIR)._generate_markdown(session),
-                    mimetype="text/markdown",
+                    redactions,
                 )
     return "Not found", 404
 
