@@ -115,8 +115,11 @@ Fetch the key from 1Password per command (see Secrets) and run it only after ste
 If `op read` fails, write NOT VERIFIED in the final report and continue; never write a key to a
 file. Commands (main session, redacted prompts only, no transcripts):
 ```bash
-OPENROUTER_API_KEY="$(op read 'op://HomeLab/f3nskhs24ko7izgqoxttkeapqa/credential')" \
-.venv/bin/python - <<'EOF'
+# Fetch first and check the status: never start Python with an empty key.
+if ! key="$(op read 'op://HomeLab/f3nskhs24ko7izgqoxttkeapqa/credential' 2>/dev/null)" || [[ -z "$key" ]]; then
+  echo "NOT VERIFIED: op read failed, skipping live OpenRouter checks"
+else
+OPENROUTER_API_KEY="$key" .venv/bin/python - <<'EOF'
 import time
 from lore.llm import get_provider
 for model in ("nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3.5-lightning:free"):
@@ -125,6 +128,8 @@ for model in ("nvidia/nemotron-3-ultra-550b-a55b:free", "nvidia/nemotron-3.5-lig
     r = p.generate("Classify as bug, feature or question, answer with one word: 'login fails with 500'")
     print(model, repr(r.content), round(time.time() - t, 1), "s")
 EOF
+fi
+unset key
 ```
 Record latency and any 429/empty-content behavior in `docs/LLM_INTEGRATION.md` under a
 "Measured" subsection with the date. If free models return reasoning-only or empty content on
