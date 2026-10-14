@@ -167,6 +167,47 @@ def build_index_if_missing(
     IndexBuilder(output_dir).build_index(sessions, {})
 
 
+def _source_fingerprints(prior_entries: dict[str, dict]) -> tuple[dict[str, int], dict[str, int]]:
+    """What is already indexed, per source file: ``{path: mtime_ns}`` and ``{path: version}``.
+
+    Fed to the extractors so an unchanged source is skipped *before* it is opened
+    (#112). Two safety rules:
+
+    - the mtime is recorded only when every prior entry for that path agrees —
+      an ambiguous mtime makes the path re-parse instead of guessing;
+    - the parser version is the **minimum** per path, so one stale session of a
+      multi-session source re-parses the whole source (the invariant
+      ``BaseExtractor._source_unchanged`` documents).
+
+    Paths without a recorded mtime are left out entirely: no fingerprint, no skip.
+    """
+    mtimes: dict[str, int] = {}
+    versions: dict[str, int] = {}
+    ambiguous: set[str] = set()
+    for entry in prior_entries.values():
+        raw_path = entry.get("source_path")
+        if not raw_path:
+            continue
+        path = str(raw_path)
+        if path in ambiguous:
+            continue
+        raw_mtime = entry.get("source_mtime")
+        if raw_mtime is None:
+            ambiguous.add(path)
+            mtimes.pop(path, None)
+            continue
+        if path in mtimes and mtimes[path] != int(raw_mtime):
+            # Two sessions claim different mtimes for one file: neither can be
+            # trusted as "what is on disk now" — always re-parse this source.
+            ambiguous.add(path)
+            mtimes.pop(path, None)
+            continue
+        mtimes[path] = int(raw_mtime)
+        version = int(entry.get("parser_version") or 0)
+        versions[path] = min(versions.get(path, version), version)
+    return mtimes, {path: versions[path] for path in mtimes}
+
+
 def build_search_index(
     output_dir: Path,
     index_path: Path,
@@ -185,6 +226,13 @@ def build_search_index(
     not observed during an incomplete extractor run are preserved unless they
     have an explicit tombstone. Set ``incremental=False`` to force refreshed
     extraction while retaining that preservation guarantee.
+
+    The same knowledge is pushed down to the extractors first (#112): a source
+    whose mtime and parser version already match what is indexed is skipped
+    *before* it is opened. Skipping never costs data — the prior JSON entry is
+    carried over verbatim, the v2 message rows and the FTS row of the session
+    are left untouched, and a source that disappeared keeps its entry too: only
+    an explicit deletion creates a tombstone.
 
     Returns a list of report dicts:
     - ``{"extractor": ..., "error": ...}`` for an extractor that crashed.
@@ -207,6 +255,13 @@ def build_search_index(
             logger.warning("Failed to read existing index for preservation merge: %s", exc)
 
     reused_entries: list[dict] = []
+    # Source fingerprints of what is already indexed: handed to the extractors so
+    # an unchanged source is never opened (#112). Only for incremental runs — a
+    # forced refresh must always re-parse.
+    known_mtimes: dict[str, int] = {}
+    known_versions: dict[str, int] = {}
+    if incremental and existing_by_id:
+        known_mtimes, known_versions = _source_fingerprints(existing_by_id)
     # Ids of the reused (unchanged) sessions. They are yielded through the SAME
     # stream as refreshed sessions; build_index routes an id in this set to a
     # v2-only write (its JSON/legacy entry comes from reused_entries). This is
@@ -247,6 +302,12 @@ def build_search_index(
             tool_name = extractor.tool.value
             if progress_callback:
                 progress_callback(base_progress, f"Loading {tool_name}")
+            # Fresh per-run state: a stale skipped set would lie about this run,
+            # and a stale map from an earlier (incremental) run would let a
+            # forced refresh skip sources (#112).
+            extractor.skipped_sources = set()
+            extractor.known_source_mtimes = known_mtimes if incremental else {}
+            extractor.known_source_parser_versions = known_versions if incremental else {}
             imported = 0
             try:
                 sess_count = 0
