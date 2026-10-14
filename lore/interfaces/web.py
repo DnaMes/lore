@@ -140,6 +140,7 @@ from .web_summary import (
     cite_href as summary_cite_href,
 )
 from .web_utils import (
+    LOOPBACK_HOSTS,
     METRICS,
     METRICS_LOCK,
     NOISE_RULES_PATH,
@@ -156,7 +157,11 @@ from .web_utils import (
     _record_job_outcome,
     _request_id,
     _should_rate_limit,
+    configured_public_origins,
+    forwarded_header_error,
     load_noise_rules,
+    normalize_origin,
+    parse_origin,
     save_noise_rules,
 )
 
@@ -258,13 +263,36 @@ def _check_local_origin() -> Optional[tuple]:
     Browsers always send Origin on cross-origin requests. curl/MCP clients
     never send Origin, so they are unaffected. Returns an error Response if
     the request should be rejected, None otherwise.
+
+    Accepted origins (#193):
+
+    - loopback hosts, unchanged from before (local UI, tests, ``localhost``),
+    - an origin listed in ``LORE_PUBLIC_ORIGINS`` — but only while
+      ``TRUSTED_PROXY`` is set, because without a proxy nothing rewrites
+      scheme/host and the configured list would just be attack surface.
+
+    Scheme *and* port are part of the comparison, so ``https://host:8443``
+    never authorises ``http://host`` or ``https://host``. While a proxy is
+    configured, malformed ``X-Forwarded-*`` headers are rejected first: a
+    request whose forwarded headers do not parse is not one a proxy sent.
     """
+    if (bad := forwarded_header_error()) is not None:
+        logger.warning("Rejecting state-changing request with bad forwarded headers: %s", bad)
+        return jsonify({"error": "Invalid forwarded headers"}), 400
+
     origin = request.headers.get("Origin")
     if origin is None:
         return None
-    parsed = urlparse(origin)
-    host = parsed.hostname or ""
-    if host in ("localhost", "127.0.0.1", "::1"):
+    parsed = parse_origin(origin)
+    if parsed is None:
+        return jsonify({"error": "Cross-origin request rejected"}), 403
+    scheme, host, port = parsed
+    if host in LOOPBACK_HOSTS:
+        return None
+    if (
+        os.environ.get("TRUSTED_PROXY")
+        and normalize_origin(scheme, host, port) in configured_public_origins()
+    ):
         return None
     return jsonify({"error": "Cross-origin request rejected"}), 403
 

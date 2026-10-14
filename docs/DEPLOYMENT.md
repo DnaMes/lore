@@ -48,6 +48,29 @@ See README.md "Production Ops" section for rate limiting and logging configurati
 - **Local**: http://localhost:5000
 - **Deployed (via Traefik or reverse proxy)**: https://your-domain.example.com/
 
+### Behind a reverse proxy
+
+Two environment variables control what the app believes about the client (#193):
+
+| Variable | Effect |
+| --- | --- |
+| `TRUSTED_PROXY=1` | Read `X-Forwarded-For` / `-Proto` / `-Host` at all. Unset (the default): the headers are ignored, never parsed, never trusted. |
+| `LORE_PUBLIC_ORIGINS` | Comma-separated `scheme://host[:port]` origins a browser may send as `Origin` on state-changing requests, e.g. `https://lore.example.com,https://lore.example.com:8443`. Honoured **only** together with `TRUSTED_PROXY`. |
+
+```bash
+TRUSTED_PROXY=1 \
+LORE_PUBLIC_ORIGINS=https://lore.example.com \
+docker compose up -d
+```
+
+Scheme and port are part of an origin, so `https://host:8443` never authorises `http://host`
+or `https://host`. Entries that are not `scheme://host[:port]` are dropped with a warning.
+Without `LORE_PUBLIC_ORIGINS` only loopback origins (`localhost`, `127.0.0.1`, `::1`) pass the
+cross-origin guard, so a UI reached through a proxy gets `403` on every state-changing POST
+until its origin is listed. While `TRUSTED_PROXY` is set, a state-changing request whose
+`X-Forwarded-*` headers do not parse (bad scheme, host or address list) is rejected with `400`
+before the origin check.
+
 ### Clearing Container State
 
 ```bash

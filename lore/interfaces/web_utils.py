@@ -7,13 +7,15 @@ This module contains:
 - Request ID generation
 """
 
+import ipaddress
 import json
 import logging
 import os
 import time
 import uuid
 from threading import Lock
-from typing import Optional
+from typing import Optional, Tuple
+from urllib.parse import urlparse
 
 from flask import request
 
@@ -38,6 +40,163 @@ METRICS_LOCK = Lock()
 
 # Paths
 OUTPUT_DIR = lore_home()
+
+# Origins the app is legitimately served from, as a comma-separated list of
+# ``scheme://host[:port]`` (#193). Honoured only while TRUSTED_PROXY is set —
+# without a proxy nothing rewrites scheme/host, so the loopback check below is
+# all a direct deployment needs.
+LORE_PUBLIC_ORIGINS_ENV = "LORE_PUBLIC_ORIGINS"
+
+# Hosts a browser can only mean for "this machine": always a permitted Origin.
+LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def parse_origin(origin: str) -> Optional[Tuple[str, str, Optional[int]]]:
+    """Split an Origin into ``(scheme, host, port)``; ``None`` when it is malformed.
+
+    A browser Origin is exactly ``scheme://host[:port]``: a real scheme, a host,
+    and no path, query, fragment or userinfo. Everything else (``javascript:``,
+    ``https://``, a userinfo form, a non-numeric port) is malformed and must
+    never be treated as an origin (#193).
+    """
+    raw = (origin or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = urlparse(raw)
+        port = parsed.port  # raises ValueError for a non-numeric or huge port
+    except ValueError:
+        return None
+    if parsed.scheme not in ("http", "https"):
+        return None
+    host = parsed.hostname
+    if not host:
+        return None
+    if parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    return parsed.scheme.lower(), host.lower(), port
+
+
+def normalize_origin(scheme: str, host: str, port: Optional[int]) -> str:
+    """Canonical origin: lowercase scheme and host, default port omitted."""
+    base = f"{scheme}://{host}"
+    if port and port != _DEFAULT_PORTS.get(scheme):
+        return f"{base}:{port}"
+    return base
+
+
+def configured_public_origins() -> Tuple[str, ...]:
+    """Normalized origins from ``LORE_PUBLIC_ORIGINS``.
+
+    Entries that are not ``scheme://host[:port]`` are dropped with one warning
+    instead of being silently accepted or failing the whole list (#193).
+    """
+    raw = os.environ.get(LORE_PUBLIC_ORIGINS_ENV, "")
+    origins: list[str] = []
+    for chunk in raw.split(","):
+        entry = chunk.strip()
+        if not entry:
+            continue
+        parsed = parse_origin(entry)
+        if parsed is None:
+            logger.warning(
+                "Ignoring malformed entry in %s: %r", LORE_PUBLIC_ORIGINS_ENV, entry[:120]
+            )
+            continue
+        origins.append(normalize_origin(*parsed))
+    return tuple(origins)
+
+
+def _is_valid_host(value: str) -> bool:
+    """A ``host[:port]`` header value: dotted labels or a bracketed IPv6 literal."""
+    if not value or any(c in value for c in " /\\@?#%"):
+        return False
+    if value.startswith("["):
+        end = value.find("]")
+        if end == -1:
+            return False
+        try:
+            ipaddress.IPv6Address(value[1:end])
+        except ValueError:
+            return False
+        rest = value[end + 1 :]
+        return not rest or (rest.startswith(":") and rest[1:].isdigit())
+    try:
+        parsed = urlparse(f"http://{value}")
+        parsed.port  # noqa: B018 - ValueError is the validation
+    except ValueError:
+        return False
+    if parsed.hostname is None or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return False
+    for label in parsed.hostname.split("."):
+        if not label or len(label) > 63 or label.startswith("-") or label.endswith("-"):
+            return False
+        if not all(ch.isalnum() or ch == "-" for ch in label):
+            return False
+    return True
+
+
+def _is_valid_forwarded_for(hop: str) -> bool:
+    """One ``X-Forwarded-For`` hop: an IP, ``ip:port`` or ``[v6]:port``."""
+    hop = hop.strip()
+    if not hop:
+        return False
+    if hop.startswith("["):
+        end = hop.find("]")
+        if end == -1:
+            return False
+        try:
+            ipaddress.IPv6Address(hop[1:end])
+        except ValueError:
+            return False
+        rest = hop[end + 1 :]
+        return not rest or (rest.startswith(":") and rest[1:].isdigit())
+    host, sep, port = hop.rpartition(":")
+    if sep and port.isdigit() and host.count(":") == 0:
+        hop = host  # IPv4:port
+    try:
+        ipaddress.ip_address(hop)
+    except ValueError:
+        return False
+    return True
+
+
+def forwarded_header_error() -> Optional[str]:
+    """Reason to reject a request whose ``X-Forwarded-*`` headers are unusable (#193).
+
+    Returns ``None`` when no trusted proxy is configured — the headers are then
+    ignored entirely (never parsed, never trusted) — and when every header that
+    is present is well-formed. Checked on state-changing routes, which is where
+    a spoofed scheme/host would buy an attacker something.
+    """
+    if not os.environ.get("TRUSTED_PROXY"):
+        return None
+
+    proto = request.headers.get("X-Forwarded-Proto")
+    if proto is not None:
+        values = [p.strip().lower() for p in proto.split(",")]
+        if not values or any(v not in ("http", "https") for v in values):
+            return f"X-Forwarded-Proto must list only http/https: {proto[:60]!r}"
+
+    host = request.headers.get("X-Forwarded-Host")
+    if host is not None:
+        first = host.split(",")[0].strip()
+        if not _is_valid_host(first):
+            return f"X-Forwarded-Host is not a valid host[:port]: {host[:60]!r}"
+
+    forwarded_for = request.headers.get("X-Forwarded-For")
+    if forwarded_for is not None:
+        hops = forwarded_for.split(",")
+        if any(not _is_valid_forwarded_for(h) for h in hops):
+            return f"X-Forwarded-For is not a list of addresses: {forwarded_for[:60]!r}"
+
+    return None
+
+
 NOISE_RULES_PATH = OUTPUT_DIR / "noise_rules.json"
 
 
