@@ -7,7 +7,6 @@ import io
 import json
 import logging
 import re
-import shutil
 import sqlite3
 import tempfile
 import time
@@ -19,6 +18,7 @@ from ..core.models import Role, TitleSource, Tool, UnifiedMessage, UnifiedSessio
 from ..utils.datetime import make_naive, parse_timestamp
 from ..utils.home_discovery import discover_home_marker_paths
 from ..utils.paths import make_thread_id
+from ..utils.sqlite_copy import copy_sqlite_with_sidecars
 from .base import BaseExtractor
 
 logger = logging.getLogger(__name__)
@@ -133,30 +133,6 @@ _MAX_TITLE_CHARS = 200
 _SQLITE_QUERY_SECONDS = 5.0
 
 
-def _copy_sqlite_with_sidecars(db_path: Path, tmp_dir: Path) -> Optional[Path]:
-    """Copy the database and its -wal/-shm files; None if any file is unsafe or too big."""
-    total = 0
-    sources: List[Tuple[Path, str]] = []
-    for suffix in ("", "-wal", "-shm"):
-        src = db_path if suffix == "" else Path(f"{db_path}{suffix}")
-        try:
-            if not src.exists():
-                if suffix == "":
-                    return None
-                continue
-            if src.is_symlink() or not src.is_file():
-                return None
-            total += src.stat().st_size
-        except OSError:
-            return None
-        if total > _MAX_SQLITE_BYTES:
-            return None
-        sources.append((src, f"{db_path.name}{suffix}"))
-    for src, name in sources:
-        shutil.copyfile(src, tmp_dir / name)
-    return tmp_dir / db_path.name
-
-
 def _load_thread_titles(codex_base: Path) -> Dict[str, str]:
     """Read thread titles from a scratch copy of state_5.sqlite (never open the original)."""
     db_path = codex_base / "state_5.sqlite"
@@ -164,7 +140,7 @@ def _load_thread_titles(codex_base: Path) -> Dict[str, str]:
     rows: List[Tuple[Any, ...]] = []
     try:
         with tempfile.TemporaryDirectory() as tmp:
-            copy_path = _copy_sqlite_with_sidecars(db_path, Path(tmp))
+            copy_path = copy_sqlite_with_sidecars(db_path, Path(tmp), _MAX_SQLITE_BYTES)
             if copy_path is None:
                 return {}
             conn = sqlite3.connect(

@@ -101,7 +101,7 @@ Subagent parent and `origin` from `session_meta.source`/`originator` (`exec` →
 
 ### B2.3 Antigravity from plaintext transcripts — dossier "Antigravity"
 Read `brain/<id>/.system_generated/logs/transcript_full.jsonl` (else `transcript.jsonl`) under `antigravity`, `antigravity-cli`, `antigravity-ide`; map `source` USER_EXPLICIT/MODEL/SYSTEM, `type`, `thinking`, `tool_calls`; titles and workspace from `conversation_summaries.db` (read-only). Do not decode `.pb`; keep the old `task.md` path as fallback.
-- [ ] done
+- [x] done
 
 ### B2.4 Command Code — dossier "Command Code"
 `projects/<slug>/<uuid>.jsonl` (v3-style and flat variant), `.meta.json`, `.checkpoints.jsonl` for print-mode runs without a transcript (prompts from `prompt`); usage with `costUsd`; never read `auth.json`.
