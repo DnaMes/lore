@@ -13,7 +13,9 @@ TOOL_STYLES = {
     "opencode": {"color": "#F97316", "icon": "O", "name": "OpenCode"},
     "antigravity": {"color": "#8B5CF6", "icon": "A", "name": "Antigravity"},
     "aider": {"color": "#14B8A6", "icon": "Ai", "name": "Aider"},
+    "pi": {"color": "#EC4899", "icon": "Pi", "name": "Pi"},
 }
+
 
 
 def get_style(tool):

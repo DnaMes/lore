@@ -89,7 +89,7 @@ Common acceptance for B2.x: fixtures cover user/assistant text, tool call with r
 
 ### B2.1 Pi (version 3 tree) — dossier "Pi"
 Map `session`, `message` (roles user/assistant/toolResult/system/bashExecution), `model_change`, `thinking_level_change`, `compaction` (→ message kind `compaction_summary`, relation info), `branch_summary`, `context_edit` (target `active=False`), `custom_message` (kind `injected_context`), `custom`, `label`, `session_info`; active branch from the last leaf by `parentId`; usage and cost; sibling roots `~/.omp/agent/sessions`, `~/.prime/agent/sessions` when present; skip `subagent-artifacts`.
-- [ ] done
+- [x] done
 
 ### B2.2a Codex content enrichment — dossier "Codex"
 `custom_tool_call` + `custom_tool_call_output`, `function_call_output`, `agent_message`, `event_msg.token_count`, `turn_context` model/effort/cwd, `compacted`; injected AGENTS.md/environment context typed `injected_context` and excluded from the user-prompt count; bump `PARSER_VERSION`.

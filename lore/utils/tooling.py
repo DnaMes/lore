@@ -11,6 +11,7 @@ CANONICAL_TOOLS = {
     "opencode",
     "antigravity",
     "aider",
+    "pi",
 }
 
 
@@ -29,6 +30,8 @@ TOOL_ALIASES = {
     "opencode": "opencode",
     "antigravity": "antigravity",
     "aider": "aider",
+    "pi": "pi",
+    "pi-coding-agent": "pi",
 }
 
 
@@ -38,7 +41,9 @@ SESSION_SWITCH_ALIASES = {
     "codex": "codex",
     "cursor": "cursor",
     "vscode-copilot": "vscode",
+    "pi": "pi",
 }
+
 
 
 def normalize_tool_name(tool: Optional[str]) -> Optional[str]:

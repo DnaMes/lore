@@ -69,8 +69,10 @@ docker compose up -d
 | **OpenCode** | `~/.opencode/` | OpenCode agent sessions |
 | **Antigravity** | Varies | Experimental tool support |
 | **Aider** | `.aider.chat.history.md` per project | Markdown chat logs, discovered under your home dir |
+| **Pi** | `~/.pi/agent/sessions/` | JSONL v3 tree transcripts (also reads `~/.omp`, `~/.prime`) |
 
 ---
+
 
 ## 🎯 Features
 

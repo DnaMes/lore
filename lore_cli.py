@@ -60,7 +60,9 @@ TOOL_EXECUTABLES = {
     "gemini-cli": "gemini",
     "codex": "codex",
     "warp": "warp",
+    "pi": "pi",
 }
+
 
 
 def _include_automated(args) -> bool:
@@ -622,6 +624,7 @@ def cmd_reindex(args):
         "cursor",
         "gemini-cli",
         "warp",
+        "pi",
     ]
 
     all_sessions = []

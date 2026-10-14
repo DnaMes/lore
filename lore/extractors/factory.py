@@ -9,6 +9,7 @@ from .copilot import CopilotCLIExtractor
 from .cursor import CursorExtractor
 from .gemini import GeminiCLIExtractor
 from .opencode import OpenCodeExtractor
+from .pi import PiExtractor
 from .vscode import VSCodeCopilotExtractor
 from .warp import WarpExtractor
 
@@ -25,4 +26,6 @@ def get_all_extractors() -> List[BaseExtractor]:
         OpenCodeExtractor(),
         AntigravityExtractor(),
         AiderExtractor(),
+        PiExtractor(),
     ]
+
