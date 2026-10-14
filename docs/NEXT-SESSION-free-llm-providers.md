@@ -52,6 +52,20 @@ Facts verified this session (do not re-derive):
 - NOT verified: any real OpenRouter call (no key in the session), free-tier rate limits and
   prompt-logging policy, Nemotron "high" reasoning latency on short classification prompts.
 
+Secrets (verified 2026-10-14, values never printed):
+- The OpenRouter key lives in 1Password: vault `HomeLab`, item `Hermes: OPENROUTER_API_KEY`
+  (id `f3nskhs24ko7izgqoxttkeapqa`, category API_CREDENTIAL, field `credential`, env var name
+  `OPENROUTER_API_KEY`). `op` 2.41 is on PATH and was unlocked via the desktop app. Fetch it
+  yourself, per command, never into a file, shell history, log, commit or prompt:
+  `OPENROUTER_API_KEY="$(op read 'op://HomeLab/f3nskhs24ko7izgqoxttkeapqa/credential')" <command>`
+  If `op read` fails (locked vault, no desktop app), report NOT VERIFIED for the live steps and
+  continue with offline work; do not ask the owner and do not try other vault items.
+- The account is NOT free tier (`GET /api/v1/auth/key` returned `is_free_tier: false`, usage
+  about 67 USD, no limit set). A model id without the `:free` suffix costs real money. This is why
+  step 2b exists.
+- Never copy this key into Lore config, `.env*`, docs, test fixtures or the OpenRouter cache.
+- The two `OpenRouter` LOGIN items in the vault are account logins, not API keys: do not read them.
+
 Test baseline (isolated HOME is mandatory on this host):
 `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests -p no:cacheprovider -q -o addopts=`
 Last full run: 2649 passed, 25 skipped, plus one known failure
@@ -62,7 +76,7 @@ Lint: `.venv/bin/ruff format lore tests lore_cli.py && .venv/bin/ruff check lore
 
 ## Target State
 
-Nine steps, each its own verified unit and commit. Do them in order. After each step: run the
+Ten steps (1, 2, 2b, 3-9), each its own verified unit and commit. Do them in order. After each step: run the
 named acceptance commands, report the observed output, then hand the explicit paths to `git-ops`.
 
 ### Step 1 — Fix the open jev review notes (one small commit)
@@ -85,11 +99,23 @@ Lore's default `LLMConfig.timeout` is 60 s; Jev hops can take 9–180 s. Add one
 `openrouter` and `jev` only; Jev default 180, OpenRouter default 90. Document it. Test: env var is
 honored and an invalid value falls back to the default with a stderr warning.
 
+### Step 2b — Free-only guard (one small commit, do BEFORE any live call)
+The shared account is paid, so the provider must make accidental spend impossible.
+1. `OpenRouterProvider` refuses any model id that does not end in `:free` with an
+   `OpenRouterError` before a request is made, unless env `LORE_OPENROUTER_ALLOW_PAID=1` is set.
+   The check also applies to `LORE_OPENROUTER_MODEL` and the `--model` flag.
+2. When the response carries `usage.cost` (or any non-zero cost field), log one stderr warning
+   with the amount; with `:free` models it must be 0.
+3. Tests (no network): `:free` accepted; `openai/gpt-5.6-luna` and `nvidia/nemotron-3-ultra-550b-a55b`
+   (no suffix) rejected; override env accepted; error message contains no key.
+4. Document in `docs/LLM_INTEGRATION.md`: free-only by default, how to opt into paid models.
+
 ### Step 3 — Live verification of OpenRouter (no commit unless a bug is found)
-Only if `OPENROUTER_API_KEY` is set in the environment. If it is not set, write NOT VERIFIED in
-the final report and continue; do not ask the owner and never write a key to any file.
-Commands (main session, redacted prompts only, no transcripts):
+Fetch the key from 1Password per command (see Secrets) and run it only after step 2b is merged.
+If `op read` fails, write NOT VERIFIED in the final report and continue; never write a key to a
+file. Commands (main session, redacted prompts only, no transcripts):
 ```bash
+OPENROUTER_API_KEY="$(op read 'op://HomeLab/f3nskhs24ko7izgqoxttkeapqa/credential')" \
 .venv/bin/python - <<'EOF'
 import time
 from lore.llm import get_provider
