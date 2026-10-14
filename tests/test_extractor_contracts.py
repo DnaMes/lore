@@ -23,8 +23,10 @@ from lore.extractors.cursor import CursorExtractor
 from lore.extractors.gemini import GeminiCLIExtractor
 from lore.extractors.goose import GooseExtractor
 from lore.extractors.hermes import HermesExtractor
+from lore.extractors.kimi import KimiExtractor
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.extractors.pi import PiExtractor
+from lore.extractors.qwen import QwenExtractor
 from lore.extractors.vscode import VSCodeCopilotExtractor
 from lore.extractors.warp import WarpExtractor
 
@@ -46,6 +48,8 @@ ALL_EXTRACTOR_CLASSES = [
     KiloCodeExtractor,
     GooseExtractor,
     CrushExtractor,
+    KimiExtractor,
+    QwenExtractor,
     OpenCodeExtractor,
     PiExtractor,
     RooCodeExtractor,

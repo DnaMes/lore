@@ -91,6 +91,8 @@ class Tool(Enum):
     KILO_CODE = "kilo-code"
     GOOSE = "goose"
     CRUSH = "crush"
+    KIMI = "kimi"
+    QWEN = "qwen"
 
 
 class Role(Enum):

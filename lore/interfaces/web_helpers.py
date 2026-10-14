@@ -21,6 +21,8 @@ TOOL_STYLES = {
     "kilo-code": {"color": "#10B981", "icon": "Ki", "name": "Kilo Code"},
     "goose": {"color": "#EAB308", "icon": "Go", "name": "Goose"},
     "crush": {"color": "#F472B6", "icon": "Cr", "name": "Crush"},
+    "kimi": {"color": "#38BDF8", "icon": "Ki", "name": "Kimi"},
+    "qwen": {"color": "#A78BFA", "icon": "Qw", "name": "Qwen Code"},
 }
 
 

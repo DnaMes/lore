@@ -77,6 +77,8 @@ docker compose up -d
 | **Kilo Code** | VS Code `globalStorage/kilocode.kilo-code/tasks/` | Fixtures from the documented schema, not verified on real data |
 | **Goose** | `~/.local/share/goose/sessions/sessions.db` (and alternate roots) | Fixtures from the upstream schema, not verified on real data |
 | **Crush** | `~/.local/share/crush/projects.json` → `crush.db` | Fixtures from the upstream schema, not verified on real data |
+| **Kimi** | `~/.kimi/sessions/<md5>/<session_id>/context.jsonl` | Fixtures from the upstream schema, not verified on real data |
+| **Qwen Code** | `~/.qwen/projects/<slug>/chats/*.jsonl` (and legacy `tmp/`) | Fixtures from the upstream schema, not verified on real data |
 
 ---
 

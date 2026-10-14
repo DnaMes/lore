@@ -13,8 +13,10 @@ from .cursor import CursorExtractor
 from .gemini import GeminiCLIExtractor
 from .goose import GooseExtractor
 from .hermes import HermesExtractor
+from .kimi import KimiExtractor
 from .opencode import OpenCodeExtractor
 from .pi import PiExtractor
+from .qwen import QwenExtractor
 from .vscode import VSCodeCopilotExtractor
 from .warp import WarpExtractor
 
@@ -39,4 +41,6 @@ def get_all_extractors() -> List[BaseExtractor]:
         KiloCodeExtractor(),
         GooseExtractor(),
         CrushExtractor(),
+        KimiExtractor(),
+        QwenExtractor(),
     ]

@@ -127,7 +127,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 - [x] B2.8a Cline / Roo Code / Kilo (shared task JSON, VS Code globalStorage and Cline CLI)
 - [x] B2.8b OpenCode v2 tables (`session_v2`, `session_message`) alongside the existing reader
 - [x] B2.8c Goose (`sessions.db`) and Crush (`crush.db` via `projects.json`)
-- [ ] B2.8d Kimi CLI / Kimi Code (`wire.jsonl`) and Qwen Code (`chats/*.jsonl`)
+- [x] B2.8d Kimi CLI / Kimi Code (`wire.jsonl`) and Qwen Code (`chats/*.jsonl`)
 - [ ] B2.8e Factory Droid (`sessions/<slug>/<uuid>.jsonl`) and Zed (`threads.db`, zstd optional)
 
 ## Block B3 — safety layer

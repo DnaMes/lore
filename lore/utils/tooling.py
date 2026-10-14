@@ -19,6 +19,8 @@ CANONICAL_TOOLS = {
     "kilo-code",
     "goose",
     "crush",
+    "kimi",
+    "qwen",
 }
 
 
@@ -57,6 +59,12 @@ TOOL_ALIASES = {
     "block-goose": "goose",
     "crush": "crush",
     "charm-crush": "crush",
+    "kimi": "kimi",
+    "kimi-cli": "kimi",
+    "kimi-code": "kimi",
+    "qwen": "qwen",
+    "qwen-code": "qwen",
+    "qwen-cli": "qwen",
 }
 
 
