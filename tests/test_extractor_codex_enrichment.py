@@ -600,3 +600,60 @@ def test_many_token_count_events_stay_linear(home, monkeypatch):
 
     assert time.monotonic() - start < 15.0
     assert len(sessions) == 1
+
+
+def test_custom_tool_call_string_input_is_rendered(home):
+    long_input = "x" * 250
+    records = [
+        _meta(),
+        _user_import_gate(),
+        {
+            "type": "response_item",
+            "timestamp": "2025-06-15T10:02:00",
+            "payload": {
+                "type": "custom_tool_call",
+                "name": "patch_tool",
+                "input": long_input,
+                "call_id": "call-str-1",
+            },
+        },
+    ]
+    _rollout(home, records)
+    _, sessions = _extract(home)
+    assistant = next(m for m in sessions[0].messages if m.role == Role.ASSISTANT)
+    assert "x" * 200 in assistant.content
+    assert "x" * 201 not in assistant.content
+    assert "{}" not in assistant.content or "patch_tool" in assistant.content
+
+
+def test_zst_skipped_line_bytes_count_toward_decode_limit(home, monkeypatch):
+    import lore.extractors.codex as codex_module
+
+    zstd = pytest.importorskip("zstandard")
+    monkeypatch.setattr(codex_module, "_MAX_FILE_BYTES", 50_000)
+    monkeypatch.setattr(codex_module, "_MAX_LINE_CHARS", 4096)
+    huge = "z" * 40_000
+    plain = (
+        json.dumps(_meta(session_id="zst-cap"))
+        + "\n"
+        + json.dumps(_user_import_gate())
+        + "\n"
+        + json.dumps({"type": "oversize", "payload": huge})
+        + "\n"
+        + json.dumps(
+            {
+                "type": "response_item",
+                "timestamp": "2025-06-15T10:05:00",
+                "payload": {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "should not appear"}],
+                },
+            }
+        )
+        + "\n"
+    )
+    path = _sessions_dir(home) / "rollout-zst-limit.jsonl.zst"
+    path.write_bytes(zstd.ZstdCompressor().compress(plain.encode("utf-8")))
+    _, sessions = _extract(home)
+    assert not any("should not appear" in (m.content or "") for s in sessions for m in s.messages)

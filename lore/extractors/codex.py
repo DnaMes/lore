@@ -339,6 +339,11 @@ class CodexExtractor(BaseExtractor):
                 if len(line) >= _MAX_LINE_CHARS and not line.endswith("\n"):
                     while line and not line.endswith("\n"):
                         line = text.readline(_MAX_LINE_CHARS)
+                        if not line:
+                            break
+                        decoded += len(line)
+                        if decoded > _MAX_FILE_BYTES:
+                            return
                     continue
                 yield line.rstrip("\n")
 
@@ -721,9 +726,13 @@ class CodexExtractor(BaseExtractor):
         if not isinstance(tool_name, str):
             tool_name = "tool"
         tool_input = payload.get("input")
-        if not isinstance(tool_input, dict):
-            tool_input = {}
-        content = self._format_tool_call_content(tool_name, tool_input)
+        if isinstance(tool_input, dict):
+            content = self._format_tool_call_content(tool_name, tool_input)
+        elif isinstance(tool_input, str):
+            preview = tool_input[:_MAX_TOOL_ARG_CHARS]
+            content = f"[Tool: {tool_name}] {preview}"
+        else:
+            content = self._format_tool_call_content(tool_name, {})
         call_id = payload.get("call_id")
         return append_message(
             UnifiedMessage(
