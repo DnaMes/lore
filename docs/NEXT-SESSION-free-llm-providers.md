@@ -148,8 +148,9 @@ sketch that treated snippets as query-only data.
 1. `lore/services/rerank.py`: `rerank(query, results, provider, *, top_n=15) -> list[dict]`.
    Send per hit only: index number, title, project, and a snippet capped at 200 characters, all
    passed through `prepare_prompt` redaction. Ask for a JSON array of index numbers best-first.
-   Validate: ints only, in range, no duplicates; append any missing hits in original order;
-   anything invalid or any failure returns the input order unchanged (fail open).
+   Validate per entry: keep only ints that are in range, drop out-of-range and duplicate entries,
+   then append any hit the model did not mention in original order. If the output is not parseable
+   JSON, not a list, or the call fails or times out, return the input order unchanged (fail open).
 2. Wire behind `lore search --rerank` + `--allow-cloud` (cloud providers) via the same
    `provider_locality` check; env `LORE_SEARCH_RERANK=1` is honored only together with an explicit
    provider choice and `LORE_ALLOW_CLOUD=1`-style opt-in already used elsewhere (reuse, do not
