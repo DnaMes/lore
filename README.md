@@ -53,6 +53,8 @@ docker compose up -d
 
 > Full screenshots coming soon. Run `lore-web` to see the live dashboard.
 
+On a session detail page, use **Find** (or press `/`) to search the full transcript across lazy-loaded pages; **Prev** / **Next** jump between hits with in-page highlighting.
+
 ---
 
 ## Supported Tools
