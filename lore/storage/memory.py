@@ -370,6 +370,37 @@ def find_similar_memories(
     return hits[: max(0, limit)]
 
 
+def embed_missing_memories(output_dir: Path, *, limit: int = 500) -> int:
+    """Backfill embeddings for memories that have no stored vector (best-effort).
+
+    Skips ``rejected`` rows. Returns how many embeddings were stored.
+    """
+    from .embeddings import embeddings_available
+
+    if not embeddings_available():
+        return 0
+    conn = _connect(output_dir)
+    try:
+        rows = conn.execute(
+            """
+            SELECT m.id, m.title, m.body
+            FROM memory m
+            LEFT JOIN memory_embeddings e ON e.memory_id = m.id
+            WHERE e.memory_id IS NULL AND m.status != 'rejected'
+            ORDER BY m.id
+            LIMIT ?
+            """,
+            (max(1, limit),),
+        ).fetchall()
+    finally:
+        conn.close()
+    stored = 0
+    for row in rows:
+        _store_embedding(output_dir, int(row["id"]), f"{row['title']}\n{row['body']}")
+        stored += 1
+    return stored
+
+
 def _store_embedding(output_dir: Path, memory_id: int, text: str) -> None:
     """Compute and store an embedding for a memory. Silent no-op if the
     optional embedding backend is unavailable (#33)."""

@@ -43,7 +43,28 @@ provider is named before anything is sent). Results are stored per session in
 deleted sessions are excluded. `--tool` also scopes the printed output. The command
 exits 1 when every provider call fails.
 
-### 3. `lore summarize` - AI session summaries
+### 3. `lore improve` - Memory candidate pipeline
+
+Runs ordered stages: backfill memory embeddings, optional knowledge extraction,
+deterministic promotion of stored knowledge into memory candidates, and proposals
+from session summaries. Model output can only create `candidate` rows for review.
+
+```bash
+# Local-only stages (no LLM, no embedding backend): reports skip reasons, exits 0
+lore improve
+
+# Run one stage, dry-run counts, or machine-readable report
+lore improve --stage distill_lessons --dry-run
+lore improve --json
+
+# LLM extraction when a provider is configured (no cloud default)
+LORE_LLM_PROVIDER=ollama lore improve --provider ollama
+```
+
+The `extract_knowledge` stage uses `--provider` or `LORE_LLM_PROVIDER`; if neither
+is set it is skipped with `no_llm`. Exit code 1 only when a stage errors.
+
+### 4. `lore summarize` - AI session summaries
 
 Generate structured per-session summaries (goal, outcome, decisions with cites) from
 archived transcript data. Rows live in the v2 store (`session_summaries`); the web UI

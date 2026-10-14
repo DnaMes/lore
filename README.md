@@ -388,6 +388,15 @@ This helps Lore resolve Gemini's project hash to real folders.
 
 ---
 
+## `lore improve`
+
+`lore improve` runs a fixed pipeline: backfill memory embeddings, optional knowledge
+extraction, promotion of stored extractions into reviewable memory **candidates**, and
+proposals from session summaries. It has **no cloud LLM default** — configure
+`--provider` or `LORE_LLM_PROVIDER` for the extraction stage. Use `--dry-run` to count
+candidates without writing; `--json` prints a per-stage report. Exit code 1 only when a
+stage errors.
+
 ## AI session summaries
 
 `lore summarize` writes validated JSON summaries to the v2 archive (`session_summaries` in
@@ -414,7 +423,7 @@ exactly as before.
 
 | Surface | Show them |
 | --- | --- |
-| `lore list`, `search`, `stats`, `digest`, `threads`, `rules`, `generate-titles`, `analyze`, `format`, `knowledge`, `summarize`, `prune` | `--include-automated` |
+| `lore list`, `search`, `stats`, `digest`, `threads`, `rules`, `generate-titles`, `analyze`, `format`, `knowledge`, `improve`, `summarize`, `prune` | `--include-automated` |
 | Web UI (`/`, `/sessions`, `/projects`, `/threads`, `/stats`, `/api/v1/...`) | `?automated=1`, or the "Automated" checkbox on the sessions list |
 | MCP `list_sessions`, `search_history`, `list_recent_sessions`, `list_projects`, `get_thread` | argument `include_automated: true` |
 

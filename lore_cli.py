@@ -805,6 +805,43 @@ def cmd_summarize(args):
     return run_summarize_command(args)
 
 
+def cmd_improve(args):
+    """Run the improve pipeline (embeddings, extraction, memory candidates)."""
+    import json as json_mod
+
+    from lore.services.improve import run_improve
+
+    output_dir = Path(args.output_dir).expanduser()
+    stages = args.stage if getattr(args, "stage", None) else None
+    provider = getattr(args, "provider", None)
+    chosen = provider or os.environ.get("LORE_LLM_PROVIDER", "").strip()
+    if chosen and not getattr(args, "dry_run", False):
+        print(
+            f"Conversation text may be sent to provider '{chosen}' for extract_knowledge.",
+            file=sys.stderr,
+        )
+
+    results = run_improve(
+        output_dir,
+        provider_name=provider,
+        model=getattr(args, "model", None),
+        limit=args.limit,
+        stages=stages,
+        dry_run=bool(getattr(args, "dry_run", False)),
+        include_automated=_include_automated(args),
+    )
+
+    if args.json:
+        print(json_mod.dumps([r.to_dict() for r in results], indent=2))
+    else:
+        print("stage | status | reason | counts | ms")
+        for row in results:
+            counts = ",".join(f"{k}={v}" for k, v in sorted(row.counts.items()))
+            print(f"{row.stage} | {row.status} | {row.reason} | {counts} | {row.duration_ms}")
+
+    return 1 if any(r.status == "errored" for r in results) else 0
+
+
 def cmd_knowledge(args):
     """Extract knowledge from sessions using LLM."""
     from lore.llm import LLMConfig, get_provider
@@ -835,19 +872,18 @@ def cmd_knowledge(args):
         for e in index.get("sessions", [])
         if not include_automated and e.get("origin") in AUTOMATED_ORIGINS
     }
-    sessions = [
-        s
-        for s in (_index_entry_to_session(e) for e in index.get("sessions", []))
-        if s.session_id not in deleted and s.session_id not in hidden_ids
-    ]
+    from lore.services.knowledge import sessions_for_extraction
+
+    sessions = sessions_for_extraction(
+        output_dir,
+        limit=args.limit,
+        include_automated=include_automated,
+        tool=args.tool,
+    )
 
     in_scope: set[str] | None = None
     if args.tool:
-        tool = normalize_tool_name(args.tool) or args.tool
-        sessions = [s for s in sessions if s.tool.value == tool]
         in_scope = {s.session_id for s in sessions}
-
-    sessions = sorted(sessions, key=lambda s: s.created_at, reverse=True)[: args.limit]
 
     print(f"Extracting knowledge from {len(sessions)} sessions...")
 
@@ -1683,6 +1719,7 @@ COMMANDS = {
     "reindex": cmd_reindex,
     "analyze": cmd_analyze,
     "knowledge": cmd_knowledge,
+    "improve": cmd_improve,
     "summarize": cmd_summarize,
     "format": cmd_format,
 }
@@ -1959,6 +1996,32 @@ Examples:
         help="Output file (default: ~/.lore/knowledge/knowledge_base.json)",
     )
     _add_automated_flag(knowledge_parser)
+
+    improve_parser = subparsers.add_parser(
+        "improve",
+        help="Backfill embeddings, extract knowledge, and propose memory candidates",
+    )
+    improve_parser.add_argument("--provider", help="LLM provider for extract_knowledge")
+    improve_parser.add_argument("--model", help="Model name for extract_knowledge")
+    improve_parser.add_argument(
+        "--limit",
+        type=int,
+        default=50,
+        help="Max sessions for extract_knowledge (default: 50)",
+    )
+    improve_parser.add_argument(
+        "--stage",
+        action="append",
+        choices=["embed_memories", "extract_knowledge", "distill_lessons", "from_summaries"],
+        help="Run only these stages (repeatable)",
+    )
+    improve_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Compute candidate counts without writing or calling an LLM",
+    )
+    improve_parser.add_argument("--json", action="store_true", help="Print stage report as JSON")
+    _add_automated_flag(improve_parser)
 
     summarize_parser = subparsers.add_parser(
         "summarize", help="Generate AI session summaries for archived sessions"
