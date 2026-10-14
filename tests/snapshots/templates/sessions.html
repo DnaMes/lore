@@ -531,25 +531,164 @@
             cursor: pointer;
         }
         .row-menu-delete::before { content: "✕ "; color: var(--error, #dc2626); font-weight: 700; }
-        .filters-sheet { border: 1px solid var(--border); border-radius: 14px; background: var(--card); padding: 10px 12px; }
-        .filters-sheet-summary {
-            cursor: pointer;
+        .filters-sheet-body { margin-top: 0; }
+        .filters-sheet-trigger,
+        .select-mode-toggle,
+        .outline-sheet-trigger,
+        .bulk-bar-btn,
+        .bottom-sheet-close {
+            min-height: 40px;
+            min-width: 40px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text);
+            border-radius: 10px;
+            padding: 8px 12px;
             font-size: 11px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: 0.16em;
-            color: var(--muted);
-            list-style: none;
+            letter-spacing: 0.12em;
+            cursor: pointer;
         }
-        .filters-sheet-summary::-webkit-details-marker { display: none; }
-        .filters-sheet-body { margin-top: 12px; }
+        .filters-sheet-trigger:focus-visible,
+        .select-mode-toggle:focus-visible,
+        .outline-sheet-trigger:focus-visible,
+        .bulk-bar-btn:focus-visible,
+        .bottom-sheet-close:focus-visible {
+            outline: 2px solid var(--primary, #2563eb);
+            outline-offset: 2px;
+        }
+        .session-row-select {
+            display: none;
+            flex-shrink: 0;
+            width: 18px;
+            height: 18px;
+            margin-top: 10px;
+        }
+        body.select-mode .session-row-select { display: block; }
+        .bulk-bar {
+            position: fixed;
+            left: 12px;
+            right: 12px;
+            bottom: calc(12px + env(safe-area-inset-bottom));
+            z-index: 44;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 12px;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            box-shadow: 0 12px 28px -18px rgba(2, 8, 23, 0.45);
+        }
+        .bulk-bar[hidden] { display: none !important; }
+        .bulk-bar-count { font-size: 12px; font-weight: 600; color: var(--text); margin-right: 4px; }
+        .bulk-bar-danger { color: var(--error, #dc2626); border-color: color-mix(in srgb, var(--error, #dc2626) 40%, var(--border)); }
+        .confirm-sheet-host { z-index: 45; }
+        .outline-sheet-link { display: flex; text-decoration: none; color: inherit; }
+        .bottom-sheet-host {
+            position: fixed;
+            inset: 0;
+            z-index: 45;
+            display: none;
+        }
+        .bottom-sheet-host.is-open { display: block; }
+        .bottom-sheet-backdrop {
+            position: absolute;
+            inset: 0;
+            border: 0;
+            padding: 0;
+            margin: 0;
+            background: rgba(2, 8, 23, 0.45);
+            cursor: pointer;
+        }
+        .bottom-sheet-panel {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            max-height: 70vh;
+            overflow-y: auto;
+            border-radius: 16px 16px 0 0;
+            border: 1px solid var(--border);
+            background: var(--card);
+            padding: 12px 16px calc(16px + env(safe-area-inset-bottom));
+        }
+        @media (prefers-reduced-motion: no-preference) {
+            .bottom-sheet-panel { transition: transform 0.22s ease; transform: translateY(0); }
+            .bottom-sheet-host:not(.is-open) .bottom-sheet-panel { transform: translateY(8px); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .bottom-sheet-panel { transition: none; }
+        }
+        .bottom-sheet-handle {
+            width: 40px;
+            height: 4px;
+            border-radius: 999px;
+            background: var(--border);
+            margin: 4px auto 10px;
+        }
+        .bottom-sheet-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+        .bottom-sheet-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.14em; color: var(--muted); }
+        .outline-sheet-nav { max-height: calc(70vh - 72px); overflow-y: auto; }
+        body.sheet-open { overflow: hidden; }
+        .confirm-sheet-panel { max-width: 420px; margin: 0 auto; left: 12px; right: 12px; border-radius: 16px; bottom: calc(12px + env(safe-area-inset-bottom)); }
+        .confirm-sheet-title { font-size: 15px; font-weight: 600; margin: 0 0 8px; color: var(--text); }
+        .confirm-sheet-body { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+        .confirm-sheet-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+        .confirm-sheet-input {
+            width: 100%;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 10px 12px;
+            margin-bottom: 12px;
+            background: var(--panel-strong);
+            color: var(--text);
+            font-size: 14px;
+        }
+        .confirm-sheet-label { display: block; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 6px; }
         @media (min-width: 1024px) {
-            .filters-sheet { border: none; background: transparent; padding: 0; }
-            .filters-sheet-summary { display: none; }
-            .filters-sheet-body { display: grid !important; margin-top: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+            .filters-sheet-host {
+                position: static;
+                display: block !important;
+                inset: auto;
+                z-index: auto;
+            }
+            .filters-sheet-host[hidden] { display: block !important; }
+            .filters-sheet-host .bottom-sheet-backdrop,
+            .filters-sheet-host .bottom-sheet-handle,
+            .filters-sheet-host .bottom-sheet-head { display: none; }
+            .filters-sheet-body {
+                display: grid !important;
+                grid-template-columns: repeat(6, minmax(0, 1fr));
+                gap: 8px;
+            }
+            .filters-apply-btn { display: none; }
+            .outline-sheet-host { display: none !important; }
         }
         @media (max-width: 1023px) {
-            .filters-sheet:not([open]) .filters-sheet-body { display: none; }
+            body.js-filters-sheet .filters-sheet-host:not(.is-open) { display: none; }
+            body.js-filters-sheet .filters-sheet-host.is-open { display: block; }
+            body:not(.js-filters-sheet) .filters-sheet-trigger { display: none !important; }
+            body:not(.js-filters-sheet) .filters-sheet-host {
+                position: static;
+                display: block !important;
+                inset: auto;
+            }
+            body:not(.js-filters-sheet) .filters-sheet-host .bottom-sheet-backdrop,
+            body:not(.js-filters-sheet) .filters-sheet-host .bottom-sheet-handle,
+            body:not(.js-filters-sheet) .filters-sheet-host .bottom-sheet-head { display: none; }
+        }
+        @media (max-width: 390px) {
+            .session-list-toolbar,
+            .sessions-filters-host,
+            .compact-list { max-width: 100%; overflow-x: hidden; }
         }
         @media (max-width: 640px) {
             .session-row-line1 { gap: 8px; }
@@ -1195,17 +1334,17 @@
                         syncExpanded('themeDropdown','themeToggle');
                       };
                       var themeToggle=document.getElementById('themeToggle');
-                      if(themeToggle){themeToggle.onclick=function(e){
+                      if(themeToggle){themeToggle.addEventListener('click',function(e){
                         e.stopPropagation();
                         document.getElementById('themeDropdown').classList.toggle('open');
                         syncExpanded('themeDropdown','themeToggle');
-                      };}
+                      });}
                       var syncBtn=document.getElementById('syncBtn');
-                      if(syncBtn){syncBtn.onclick=function(e){
+                      if(syncBtn){syncBtn.addEventListener('click',function(e){
                         e.stopPropagation();
                         document.getElementById('syncDropdown').classList.toggle('open');
                         syncExpanded('syncDropdown','syncBtn');
-                      };}
+                      });}
                       document.addEventListener('click',function(e){
                         if(!e.target.closest('.theme-dropdown')){
                           document.getElementById('themeDropdown').classList.remove('open');
@@ -1245,30 +1384,41 @@
         </div>
     </div>
     
-    <form method="get" data-autosubmit="true" class="sessions-filters mb-4">
-        <details class="filters-sheet" open>
-            <summary class="filters-sheet-summary">Filters · 0</summary>
-            <div class="filters-sheet-body grid grid-cols-1 gap-3">
-                <select name="tool" aria-label="Tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-                    <option value="">All Tools</option>
-                    <option value="claude-code" >Claude</option><option value="cursor" >Cursor</option><option value="gemini-cli" >Gemini</option><option value="warp" >Warp</option><option value="codex" >Codex</option><option value="vscode-copilot" >VSCode Copilot</option><option value="copilot-cli" >Copilot CLI</option><option value="opencode" >OpenCode</option><option value="antigravity" >Antigravity</option><option value="aider" >Aider</option><option value="pi" >Pi</option><option value="command-code" >Command Code</option><option value="hermes" >Hermes</option><option value="cline" >Cline</option><option value="roo-code" >Roo Code</option><option value="kilo-code" >Kilo Code</option><option value="goose" >Goose</option><option value="crush" >Crush</option><option value="kimi" >Kimi</option><option value="qwen" >Qwen Code</option><option value="zed" >Zed</option><option value="factory-droid" >Factory Droid</option>
-                </select>
-                <select name="tag" aria-label="Tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-                    <option value="">All Tags</option>
-                    
-                </select>
-                <input type="date" name="start" aria-label="From date" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-                <input type="date" name="end" aria-label="To date" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-                <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
-                    <input type="checkbox" name="automated" value="1" data-auto-submit class="w-4 h-4">
-                    Automated
-                </label>
-                <input type="hidden" name="group" value="day">
-                <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
+    <div class="sessions-filters-host mb-4">
+        <button type="button" id="filtersSheetTrigger" class="filters-sheet-trigger lg:hidden" aria-haspopup="dialog" aria-expanded="false" aria-controls="filtersSheetDialog">Filters · 0</button>
+        <div id="filtersSheetDialog" class="bottom-sheet-host filters-sheet-host" role="dialog" aria-modal="true" aria-label="Session filters">
+            <button type="button" class="bottom-sheet-backdrop" data-sheet-dismiss aria-label="Close filters" tabindex="-1"></button>
+            <div class="bottom-sheet-panel">
+                <div class="bottom-sheet-handle" aria-hidden="true"></div>
+                <div class="bottom-sheet-head">
+                    <span class="bottom-sheet-title">Filters</span>
+                    <button type="button" class="bottom-sheet-close" data-sheet-dismiss aria-label="Close filters">×</button>
+                </div>
+                <form method="get" data-autosubmit="true" class="sessions-filters" id="sessionsFiltersForm">
+                    <div class="filters-sheet-body grid grid-cols-1 gap-3">
+                        <select name="tool" aria-label="Tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                            <option value="">All Tools</option>
+                            <option value="claude-code" >Claude</option><option value="cursor" >Cursor</option><option value="gemini-cli" >Gemini</option><option value="warp" >Warp</option><option value="codex" >Codex</option><option value="vscode-copilot" >VSCode Copilot</option><option value="copilot-cli" >Copilot CLI</option><option value="opencode" >OpenCode</option><option value="antigravity" >Antigravity</option><option value="aider" >Aider</option><option value="pi" >Pi</option><option value="command-code" >Command Code</option><option value="hermes" >Hermes</option><option value="cline" >Cline</option><option value="roo-code" >Roo Code</option><option value="kilo-code" >Kilo Code</option><option value="goose" >Goose</option><option value="crush" >Crush</option><option value="kimi" >Kimi</option><option value="qwen" >Qwen Code</option><option value="zed" >Zed</option><option value="factory-droid" >Factory Droid</option>
+                        </select>
+                        <select name="tag" aria-label="Tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                            <option value="">All Tags</option>
+                            
+                        </select>
+                        <input type="date" name="start" aria-label="From date" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                        <input type="date" name="end" aria-label="To date" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+                        <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
+                            <input type="checkbox" name="automated" value="1" data-auto-submit class="w-4 h-4">
+                            Automated
+                        </label>
+                        <input type="hidden" name="group" value="day">
+                        <button type="submit" class="filters-apply-btn bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
+                    </div>
+                </form>
             </div>
-        </details>
-    </form>
+        </div>
+    </div>
     <nav class="session-list-toolbar" aria-label="Session list options">
+        <button type="button" id="selectModeToggle" class="select-mode-toggle" aria-pressed="false">Select</button>
         <div class="date-chip-row" aria-label="Date range">
             
             <a href="/sessions?start=2026-10-14&amp;end=2026-10-14"
@@ -1315,7 +1465,8 @@
 
 
 
-<div class="compact-row session-row flex gap-2 group" role="listitem">
+<div class="compact-row session-row flex gap-2 group" role="listitem" data-session-id="session-1">
+    <input type="checkbox" class="session-row-select" value="session-1" aria-label="Select Claude debugging session">
     <a href="/session/session-1?back=%2Fsessions" class="session-row-link flex-1 min-w-0">
         <div class="session-row-line1 flex items-center gap-3 min-w-0">
             <div class="session-row-icon w-8 h-8 rounded-lg flex items-center justify-center text-sm border border-slate-200" style="color: #C084FC">
@@ -1367,17 +1518,264 @@
     </div>
     
 </section>
+
+<div id="bulkBar" class="bulk-bar" hidden role="region" aria-label="Bulk actions">
+    <span id="bulkCount" class="bulk-bar-count">0 selected</span>
+    <button type="button" class="bulk-bar-btn" data-bulk-action="select-page">Select all on page</button>
+    <button type="button" class="bulk-bar-btn" data-bulk-action="clear">Clear</button>
+    <button type="button" class="bulk-bar-btn bulk-bar-danger" data-bulk-action="delete">Delete…</button>
+    <button type="button" class="bulk-bar-btn" data-bulk-action="tag">Tag…</button>
+</div>
+
+<form id="bulkDeleteForm" method="POST" action="/sessions/bulk-delete" hidden>
+    <input type="hidden" name="next" value="/sessions">
+</form>
+<form id="bulkTagForm" method="POST" action="/sessions/bulk-tag" hidden>
+    <input type="hidden" name="next" value="/sessions">
+    <input type="hidden" name="tag" value="">
+</form>
+
+<div id="bulkDeleteConfirm" class="bottom-sheet-host confirm-sheet-host" role="dialog" aria-modal="true" aria-labelledby="bulkDeleteConfirmTitle" hidden>
+    <button type="button" class="bottom-sheet-backdrop" data-sheet-dismiss aria-label="Cancel" tabindex="-1"></button>
+    <div class="bottom-sheet-panel confirm-sheet-panel">
+        <h2 id="bulkDeleteConfirmTitle" class="confirm-sheet-title">Delete selected sessions?</h2>
+        <p class="confirm-sheet-body">This removes exports and cannot be undone.</p>
+        <div class="confirm-sheet-actions">
+            <button type="button" class="bulk-bar-btn" data-sheet-dismiss>Cancel</button>
+            <button type="button" class="bulk-bar-btn bulk-bar-danger" id="bulkDeleteConfirmBtn">Delete</button>
+        </div>
+    </div>
+</div>
+
+<div id="bulkTagDialog" class="bottom-sheet-host confirm-sheet-host" role="dialog" aria-modal="true" aria-labelledby="bulkTagDialogTitle" hidden>
+    <button type="button" class="bottom-sheet-backdrop" data-sheet-dismiss aria-label="Cancel" tabindex="-1"></button>
+    <div class="bottom-sheet-panel confirm-sheet-panel">
+        <h2 id="bulkTagDialogTitle" class="confirm-sheet-title">Tag selected sessions</h2>
+        <label class="confirm-sheet-label" for="bulkTagInput">Tag name</label>
+        <input type="text" id="bulkTagInput" class="confirm-sheet-input" autocomplete="off">
+        <div class="confirm-sheet-actions">
+            <button type="button" class="bulk-bar-btn" data-sheet-dismiss>Cancel</button>
+            <button type="button" class="bulk-bar-btn" id="bulkTagApplyBtn">Apply tag</button>
+        </div>
+    </div>
+</div>
+
 <script nonce="NONCE">
 (function () {
-    // The filter sheet is rendered open (desktop shows it inline, and it works without
-    // JavaScript); on narrow screens with no active filter it starts folded.
-    const sheet = document.querySelector('details.filters-sheet');
-    const active = 0;
-    if (sheet && active === 0 && window.matchMedia('(max-width: 1023px)').matches) {
-        sheet.removeAttribute('open');
+    function keyGuard(e) {
+        if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return true;
+        const t = e.target;
+        if (!t || !t.tagName) return false;
+        const tag = t.tagName.toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || tag === 'select') return true;
+        if (t.isContentEditable) return true;
+        return false;
     }
-})();
-(function () {
+
+    function openBottomSheet(dialog, trigger) {
+        if (!dialog) return null;
+        dialog.removeAttribute('hidden');
+        dialog.classList.add('is-open');
+        document.body.classList.add('sheet-open');
+        if (trigger) trigger.setAttribute('aria-expanded', 'true');
+        let release = null;
+        if (window.FocusTrap) {
+            const panel = dialog.querySelector('.bottom-sheet-panel') || dialog;
+            release = window.FocusTrap.activate(panel);
+        }
+        return release;
+    }
+
+    function closeBottomSheet(dialog, trigger, release) {
+        if (!dialog || dialog.hasAttribute('hidden')) return;
+        dialog.setAttribute('hidden', '');
+        dialog.classList.remove('is-open');
+        document.body.classList.remove('sheet-open');
+        if (trigger) trigger.setAttribute('aria-expanded', 'false');
+        if (release) release();
+    }
+
+    const filtersDialog = document.getElementById('filtersSheetDialog');
+    const filtersTrigger = document.getElementById('filtersSheetTrigger');
+    let filtersTrapRelease = null;
+    document.body.classList.add('js-filters-sheet');
+    if (filtersDialog && window.matchMedia('(max-width: 1023px)').matches) {
+        filtersDialog.setAttribute('hidden', '');
+    }
+    if (filtersTrigger && filtersDialog) {
+        filtersTrigger.addEventListener('click', function () {
+            if (filtersTrapRelease) return;
+            filtersTrapRelease = openBottomSheet(filtersDialog, filtersTrigger);
+        });
+        filtersDialog.querySelectorAll('[data-sheet-dismiss]').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                closeBottomSheet(filtersDialog, filtersTrigger, filtersTrapRelease);
+                filtersTrapRelease = null;
+            });
+        });
+    }
+
+    const selected = new Set();
+    const bulkBar = document.getElementById('bulkBar');
+    const bulkCount = document.getElementById('bulkCount');
+    const selectToggle = document.getElementById('selectModeToggle');
+    const rowsRoot = document.getElementById('sessionRows');
+
+    function syncBulkUi() {
+        if (!bulkCount || !bulkBar) return;
+        bulkCount.textContent = selected.size + ' selected';
+        bulkBar.hidden = !document.body.classList.contains('select-mode');
+    }
+
+    function setSelectMode(on) {
+        document.body.classList.toggle('select-mode', on);
+        if (selectToggle) selectToggle.setAttribute('aria-pressed', on ? 'true' : 'false');
+        if (!on) {
+            selected.clear();
+            rowsRoot.querySelectorAll('.session-row-select').forEach(function (cb) {
+                cb.checked = false;
+            });
+        }
+        syncBulkUi();
+    }
+
+    if (selectToggle) {
+        selectToggle.addEventListener('click', function () {
+            setSelectMode(!document.body.classList.contains('select-mode'));
+        });
+    }
+
+    function bindRow(row) {
+        if (row.dataset.boundSelect) return;  // idempotent: rows are never bound twice
+        row.dataset.boundSelect = '1';
+        const cb = row.querySelector('.session-row-select');
+        const link = row.querySelector('.session-row-link');
+        if (!cb) return;
+        cb.addEventListener('change', function () {
+            const id = row.getAttribute('data-session-id') || cb.value;
+            if (cb.checked) selected.add(id);
+            else selected.delete(id);
+            syncBulkUi();
+        });
+        row.addEventListener('click', function (e) {
+            if (!document.body.classList.contains('select-mode')) return;
+            if (e.target.closest('details.row-menu') || e.target.closest('.session-row-select')) return;
+            cb.checked = !cb.checked;
+            cb.dispatchEvent(new Event('change', { bubbles: true }));
+            e.preventDefault();
+        });
+        if (link) {
+            link.addEventListener('click', function (e) {
+                if (document.body.classList.contains('select-mode')) e.preventDefault();
+            });
+        }
+    }
+
+    if (rowsRoot) {
+        rowsRoot.querySelectorAll('.session-row').forEach(bindRow);
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (keyGuard(e)) return;
+        if (e.key === 'Escape') {
+            if (filtersDialog && filtersDialog.classList.contains('is-open')) {
+                closeBottomSheet(filtersDialog, filtersTrigger, filtersTrapRelease);
+                filtersTrapRelease = null;
+            }
+            [bulkDeleteConfirm, bulkTagDialog].forEach(function (dialog) {
+                if (dialog && dialog.classList.contains('is-open')) closeBulkDialog(dialog);
+            });
+            return;
+        }
+        if (e.key !== 'x' || !document.body.classList.contains('select-mode')) return;
+        const row = document.activeElement && document.activeElement.closest('.session-row');
+        if (!row) return;
+        const cb = row.querySelector('.session-row-select');
+        if (!cb) return;
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+
+    function appendIdsToForm(form) {
+        if (!form) return;
+        form.querySelectorAll('input[name="session_id"]').forEach(function (el) { el.remove(); });
+        selected.forEach(function (id) {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = 'session_id';
+            input.value = id;
+            form.appendChild(input);
+        });
+    }
+
+    const bulkDeleteForm = document.getElementById('bulkDeleteForm');
+    const bulkTagForm = document.getElementById('bulkTagForm');
+    const bulkDeleteConfirm = document.getElementById('bulkDeleteConfirm');
+    const bulkTagDialog = document.getElementById('bulkTagDialog');
+    let bulkTrapRelease = null;
+
+    if (bulkBar) {
+        bulkBar.addEventListener('click', function (e) {
+            const btn = e.target.closest('[data-bulk-action]');
+            if (!btn) return;
+            const action = btn.getAttribute('data-bulk-action');
+            if (action === 'select-page' && rowsRoot) {
+                rowsRoot.querySelectorAll('.session-row').forEach(function (row) {
+                    const cb = row.querySelector('.session-row-select');
+                    if (!cb) return;
+                    cb.checked = true;
+                    selected.add(row.getAttribute('data-session-id') || cb.value);
+                });
+                syncBulkUi();
+            } else if (action === 'clear') {
+                selected.clear();
+                rowsRoot.querySelectorAll('.session-row-select').forEach(function (cb) {
+                    cb.checked = false;
+                });
+                syncBulkUi();
+            } else if (action === 'delete' && selected.size) {
+                bulkTrapRelease = openBottomSheet(bulkDeleteConfirm, null);
+            } else if (action === 'tag' && selected.size) {
+                bulkTrapRelease = openBottomSheet(bulkTagDialog, null);
+                const input = document.getElementById('bulkTagInput');
+                if (input) input.focus();
+            }
+        });
+    }
+
+    function closeBulkDialog(dialog) {
+        closeBottomSheet(dialog, null, bulkTrapRelease);
+        bulkTrapRelease = null;
+    }
+
+    if (bulkDeleteConfirm) {
+        bulkDeleteConfirm.querySelectorAll('[data-sheet-dismiss]').forEach(function (btn) {
+            btn.addEventListener('click', function () { closeBulkDialog(bulkDeleteConfirm); });
+        });
+        const confirmBtn = document.getElementById('bulkDeleteConfirmBtn');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', function () {
+                appendIdsToForm(bulkDeleteForm);
+                bulkDeleteForm.submit();
+            });
+        }
+    }
+    if (bulkTagDialog) {
+        bulkTagDialog.querySelectorAll('[data-sheet-dismiss]').forEach(function (btn) {
+            btn.addEventListener('click', function () { closeBulkDialog(bulkTagDialog); });
+        });
+        const applyBtn = document.getElementById('bulkTagApplyBtn');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', function () {
+                const input = document.getElementById('bulkTagInput');
+                const tagField = bulkTagForm.querySelector('input[name="tag"]');
+                if (tagField && input) tagField.value = input.value.trim();
+                appendIdsToForm(bulkTagForm);
+                bulkTagForm.submit();
+            });
+        }
+    }
+
     const btn = document.getElementById('loadMoreSessions');
     const rows = document.getElementById('sessionRows');
     if (!btn || !rows) return;
@@ -1401,6 +1799,7 @@
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
             const html = await resp.text();
             rows.insertAdjacentHTML('beforeend', html);
+            rows.querySelectorAll('.session-row').forEach(bindRow);
             const markers = rows.querySelectorAll('[data-last-day]');
             const marker = markers.length ? markers[markers.length - 1] : null;
             if (marker && marker.getAttribute('data-last-day')) {
@@ -1424,6 +1823,18 @@
             </div>
         </main>
     </div>
+    <div id="confirmDialog" class="bottom-sheet-host confirm-sheet-host" role="dialog" aria-modal="true" aria-labelledby="confirmDialogTitle" hidden>
+        <button type="button" class="bottom-sheet-backdrop" data-confirm-dismiss aria-label="Cancel" tabindex="-1"></button>
+        <div class="bottom-sheet-panel confirm-sheet-panel">
+            <h2 id="confirmDialogTitle" class="confirm-sheet-title">Confirm</h2>
+            <p id="confirmDialogBody" class="confirm-sheet-body"></p>
+            <div class="confirm-sheet-actions">
+                <button type="button" class="bulk-bar-btn" data-confirm-dismiss>Cancel</button>
+                <button type="button" class="bulk-bar-btn bulk-bar-danger" id="confirmDialogOk">OK</button>
+            </div>
+        </div>
+    </div>
+
     <div id="searchModal" role="dialog" aria-modal="true" aria-label="Search sessions" aria-hidden="true" class="search-modal fixed inset-0 z-50 bg-black/60 backdrop-blur-sm items-start justify-center pt-[15vh]">
         <div id="searchPanel" class="w-full max-w-xl bg-white border border-slate-200 rounded-xl shadow-2xl overflow-hidden">
             <div class="flex items-center px-4 border-b border-slate-200">
@@ -2397,15 +2808,62 @@
                 if (el) runDataAction(el);
             });
 
-            // onsubmit="return confirm(...)" replacements.
-            document.addEventListener('submit', function (e) {
-                var form = e.target.closest('form[data-confirm]');
-                if (form && !window.confirm(form.dataset.confirm)) {
+            var confirmTrapRelease = null;
+            var pendingConfirmForm = null;
+            function closeConfirmDialog() {
+                var dialog = document.getElementById('confirmDialog');
+                if (!dialog || dialog.hasAttribute('hidden')) return;
+                dialog.setAttribute('hidden', '');
+                dialog.classList.remove('is-open');
+                document.body.classList.remove('sheet-open');
+                if (confirmTrapRelease) { confirmTrapRelease(); confirmTrapRelease = null; }
+                pendingConfirmForm = null;
+            }
+            function openConfirmDialog(message, form) {
+                var dialog = document.getElementById('confirmDialog');
+                var body = document.getElementById('confirmDialogBody');
+                if (!dialog || !body) {
+                    form.submit();
+                    return;
+                }
+                pendingConfirmForm = form;
+                body.textContent = message || 'Are you sure?';
+                dialog.removeAttribute('hidden');
+                dialog.classList.add('is-open');
+                document.body.classList.add('sheet-open');
+                if (window.FocusTrap) {
+                    if (confirmTrapRelease) confirmTrapRelease();
+                    var panel = dialog.querySelector('.bottom-sheet-panel') || dialog;
+                    confirmTrapRelease = window.FocusTrap.activate(panel);
+                }
+            }
+            document.querySelectorAll('[data-confirm-dismiss]').forEach(function (btn) {
+                btn.addEventListener('click', closeConfirmDialog);
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key !== 'Escape' || e.defaultPrevented) return;
+                if (e.ctrlKey || e.metaKey || e.altKey) return;
+                var dlg = document.getElementById('confirmDialog');
+                if (dlg && dlg.classList.contains('is-open')) {
                     e.preventDefault();
+                    closeConfirmDialog();
                 }
             });
+            var confirmOk = document.getElementById('confirmDialogOk');
+            if (confirmOk) {
+                confirmOk.addEventListener('click', function () {
+                    if (pendingConfirmForm) pendingConfirmForm.submit();
+                    closeConfirmDialog();
+                });
+            }
+            document.addEventListener('submit', function (e) {
+                var form = e.target.closest('form[data-confirm]');
+                if (!form) return;
+                e.preventDefault();
+                openConfirmDialog(form.dataset.confirm, form);
+            });
 
-            // onchange="this.form.submit()" replacements.
+            // Delegated auto-submit for fields with data-auto-submit.
             document.addEventListener('change', function (e) {
                 var field = e.target;
                 if (field && field.matches && field.matches('[data-auto-submit]') && field.form) {
