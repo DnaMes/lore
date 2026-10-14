@@ -379,6 +379,77 @@
         @media (prefers-reduced-motion: reduce) {
             .session-header, .date-chip, .group-toggle-option { transition: none; }
         }
+        .session-find-trigger {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid var(--border, #e5e7eb);
+            background: var(--surface, #fff);
+            color: var(--muted, #64748b);
+        }
+        .session-find-trigger:hover { color: var(--text, #0f172a); }
+        .session-find-trigger:focus-visible { outline: 2px solid var(--primary, #6366f1); outline-offset: 2px; }
+        .session-find-bar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 8px;
+            width: 100%;
+            padding: 8px 0 0;
+        }
+        .session-find-input {
+            flex: 1 1 140px;
+            min-width: 0;
+            max-width: 100%;
+            padding: 8px 10px;
+            border-radius: 10px;
+            border: 1px solid var(--border, #e5e7eb);
+            background: var(--surface, #fff);
+            color: var(--text, #0f172a);
+            font-size: 13px;
+        }
+        .session-find-input:focus-visible { outline: 2px solid var(--primary, #6366f1); outline-offset: 1px; }
+        .session-find-nav, .session-find-close {
+            flex-shrink: 0;
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid var(--border, #e5e7eb);
+            background: var(--surface, #fff);
+            color: var(--text, #334155);
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .session-find-nav:focus-visible, .session-find-close:focus-visible {
+            outline: 2px solid var(--primary, #6366f1);
+            outline-offset: 2px;
+        }
+        .session-find-status {
+            flex: 1 1 auto;
+            min-width: 3rem;
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+            color: var(--muted, #64748b);
+        }
+        .find-hit {
+            background: color-mix(in srgb, var(--primary, #6366f1) 35%, transparent);
+            color: inherit;
+            border-radius: 2px;
+            padding: 0 1px;
+        }
+        .find-hit-current {
+            background: color-mix(in srgb, var(--primary, #6366f1) 65%, #fef08a);
+            outline: 1px solid var(--primary, #6366f1);
+        }
+        @media (max-width: 390px) {
+            .session-find-bar { gap: 6px; }
+            .session-find-input { flex-basis: 100%; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .find-hit, .find-hit-current { transition: none; }
+        }
         .session-row-outline { line-height: 1.35; }
         .session-row-title-wrap { min-width: 0; }
         .session-row-summary-line {
@@ -2272,6 +2343,7 @@
                     jumpTo(item.dataset.toc);
                 });
             });
+            window.loreJumpToMessage = jumpTo;
         }
         document.addEventListener('DOMContentLoaded', initTocSpy);
     </script>

@@ -1666,6 +1666,40 @@ def _reject_summary_provider_params() -> Optional[tuple]:
     return None
 
 
+@app.route("/api/session/<session_id>/find")
+def api_session_find(session_id):
+    from .session_find import find_session_matches, validate_find_query
+
+    if not validate_session_id(session_id):
+        return jsonify({"error": "Invalid session ID"}), 400
+    q = (request.args.get("q") or "").strip()
+    err = validate_find_query(q)
+    if err:
+        return jsonify({"error": err}), 400
+    deleted = load_deleted_session_ids(DELETED_SESSIONS_PATH)
+    if session_id in deleted:
+        return jsonify({"error": "Not found"}), 404
+    if not _index_session_meta(session_id):
+        return jsonify({"error": "Not found"}), 404
+    include_reasoning = (request.args.get("include_reasoning") or "0").strip().lower() in (
+        "1",
+        "true",
+    )
+    force_live = (request.args.get("live") or "").strip() == "1"
+    resolved = _enriched_session_for_detail(session_id, force_live=force_live)
+    if not resolved:
+        return jsonify({"error": "Not found"}), 404
+    session_obj, _toc = resolved
+    return jsonify(
+        find_session_matches(
+            session_obj,
+            q,
+            include_reasoning=include_reasoning,
+            per_page=MESSAGES_PER_PAGE,
+        )
+    )
+
+
 @app.route("/api/session/<session_id>/summary")
 def api_session_summary(session_id):
     if not validate_session_id(session_id):

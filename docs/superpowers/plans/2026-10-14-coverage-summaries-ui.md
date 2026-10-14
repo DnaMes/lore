@@ -203,7 +203,7 @@ Outline and filters as bottom sheets with focus trap; explicit select mode with 
 
 ### B5.7a In-session find
 Find across all pages with highlight and n/N.
-- [ ] done
+- [x] done
 
 ### B5.7b Peek pane (≥1280 px)
 - [ ] done
