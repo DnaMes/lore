@@ -233,7 +233,10 @@ def test_cite_links_only_when_anchor_exists(detail_client, tmp_path, monkeypatch
     assert 'href="#msg-99"' not in html
 
 
-def test_absent_summary_renders_at_a_glance_without_provider(detail_client, monkeypatch):
+def test_absent_summary_renders_at_a_glance_without_provider(detail_client, tmp_path, monkeypatch):
+    # "absent" must be a precondition of the test, not of the host archive:
+    # point the summary store at an empty directory before rendering.
+    monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
     calls = {"n": 0}
 
     def _boom():
@@ -297,6 +300,10 @@ def use_provider(monkeypatch):
 
 def test_post_summary_starts_job_and_writes_row(detail_client, tmp_path, monkeypatch, use_provider):
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
+    # The job imports OUTPUT_DIR from web_data at call time; patch it there too,
+    # otherwise the worker writes its row into the real output directory and
+    # leaks state into every later test (#197).
+    monkeypatch.setattr("lore.interfaces.web_data.OUTPUT_DIR", tmp_path)
     initialise(v2_db_path(tmp_path))
     write_sessions(v2_db_path(tmp_path), [_session()])
     monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "ollama")
