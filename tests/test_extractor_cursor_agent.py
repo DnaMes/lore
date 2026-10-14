@@ -62,7 +62,7 @@ def home(monkeypatch, tmp_path):
 
 
 def test_parser_version_bumped():
-    assert CursorExtractor.PARSER_VERSION == 2
+    assert CursorExtractor.PARSER_VERSION == 3
 
 
 def test_source_description_mentions_both_sources(home):

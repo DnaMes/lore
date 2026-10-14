@@ -121,7 +121,7 @@ Thinking blocks, `message.model`, `ai-title`/`custom-title`, `isMeta`, `isCompac
 
 ### B2.7b Cursor IDE store enrichment
 Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` for timestamps and archive flags (scratch copy of `state.vscdb`); never persist `blobEncryptionKey` or other key fields. A test asserts that no field whose name contains `key`, `secret`, `token` or `encryption` from composer data reaches the database or the index JSON.
-- [ ] done
+- [x] done
 
 ### B2.8 Wave 2 (separate small tasks; fixtures from the documented schemas, flagged "not verified on real data" in the README row)
 - [ ] B2.8a Cline / Roo Code / Kilo (shared task JSON, VS Code globalStorage and Cline CLI)
