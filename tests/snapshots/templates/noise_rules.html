@@ -546,7 +546,7 @@
         @media (min-width: 1024px) {
             .filters-sheet { border: none; background: transparent; padding: 0; }
             .filters-sheet-summary { display: none; }
-            .filters-sheet-body { display: grid !important; margin-top: 0; }
+            .filters-sheet-body { display: grid !important; margin-top: 0; grid-template-columns: repeat(6, minmax(0, 1fr)); }
         }
         @media (max-width: 1023px) {
             .filters-sheet:not([open]) .filters-sheet-body { display: none; }
@@ -621,6 +621,22 @@
         details.think-fold > summary { cursor: pointer; padding: 8px 12px; color: var(--muted); list-style: none; font-weight: 600; }
         details.think-fold > summary::-webkit-details-marker { display: none; }
         details.think-fold .thinking-content { border: none; border-top: 1px solid var(--border); border-radius: 0; margin: 0; max-height: none; }
+        details.tool-group { border: 1px solid var(--border); border-radius: 10px; background: var(--card); margin: 8px 0; font-size: 13px; overflow: hidden; }
+        details.tool-group > summary.tool-group-summary { list-style: none; cursor: pointer; padding: 8px 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; color: var(--muted); }
+        details.tool-group > summary.tool-group-summary::-webkit-details-marker { display: none; }
+        details.tool-group > summary.tool-group-summary:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+        .tool-group-count { font-weight: 600; color: var(--text); }
+        .tool-group-names { color: var(--muted); font-family: "Source Code Pro", "SF Mono", Menlo, monospace; font-size: 11.5px; }
+        .tool-group-status { margin-left: auto; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+        .tool-group-status-ok { color: #15803d; }
+        .tool-group-status-fail { color: #b91c1c; }
+        html.dark .tool-group-status-ok { color: #4ade80; }
+        html.dark .tool-group-status-fail { color: #f87171; }
+        .tool-group-body { border-top: 1px solid var(--border); padding: 4px 8px 8px; }
+        .tool-group-body .action-block { margin: 6px 0; }
+        body.session-view[data-tools="hide"] .tool-group,
+        body.session-view[data-tools="hide"] .action-block.tool-action,
+        body.session-view[data-tools="hide"] .action-block.tool-result { display: none !important; }
         .action-content-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
         .tool-status-icon { margin-right: 2px; }
         .assistant-stream { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; margin-left: 0; padding-left: 0; }
@@ -722,11 +738,19 @@
         .view-menu { position: relative; }
         .view-menu > summary { list-style: none; cursor: pointer; }
         .view-menu > summary::-webkit-details-marker { display: none; }
-        .view-menu-panel { position: absolute; right: 0; top: calc(100% + 8px); min-width: 220px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 26px -18px rgba(2, 8, 23, 0.45); padding: 10px; display: none; z-index: 50; }
+        .view-menu-panel { position: absolute; right: 0; top: calc(100% + 8px); min-width: min(280px, calc(100vw - 24px)); max-width: 320px; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 10px 26px -18px rgba(2, 8, 23, 0.45); padding: 10px; display: none; z-index: 50; }
         .view-menu[open] .view-menu-panel { display: block; }
-        .view-menu-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-        .view-menu-grid button { width: 100%; justify-content: center; }
-        .view-menu-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #94a3b8; margin-bottom: 8px; font-weight: 700; }
+        .view-menu-section { margin-bottom: 10px; }
+        .view-menu-section:last-child { margin-bottom: 0; }
+        .view-menu-label { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: #94a3b8; margin-bottom: 6px; font-weight: 700; }
+        .view-segment { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; max-width: 100%; }
+        .view-segment button { border: 0; background: transparent; padding: 5px 10px; font-size: 11px; cursor: pointer; color: var(--muted); min-height: 30px; }
+        .view-segment button + button { border-left: 1px solid var(--border); }
+        .view-segment button[aria-pressed="true"] { background: color-mix(in srgb, var(--card) 70%, var(--primary) 30%); color: var(--text); font-weight: 600; }
+        .view-segment button:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+        .view-segment-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+        .view-mini-btn { border: 1px solid var(--border); background: var(--panel-strong); color: var(--muted); border-radius: 8px; padding: 3px 8px; font-size: 10px; cursor: pointer; }
+        .view-mini-btn:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
         body.session-view .app-main > .h-16 { height: 58px; background: color-mix(in srgb, var(--panel-strong) 88%, transparent); }
         html.dark .view-menu-panel { background: #0f172a; border-color: #334155; }
         .search-modal { display: none; visibility: hidden; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
@@ -789,10 +813,6 @@
         body.presenter-mode .app-main > .h-16 .reload-group,
         body.presenter-mode .app-main > .h-16 #auditScope,
         body.presenter-mode .app-main > .h-16 #auditBtn,
-        body.presenter-mode .app-main > .h-16 #cleanToggle,
-        body.presenter-mode .app-main > .h-16 #ultraCleanToggle,
-        body.presenter-mode .app-main > .h-16 #readabilityToggle,
-        body.presenter-mode .app-main > .h-16 #densityToggle,
         body.presenter-mode .app-main > .h-16 #themeToggle,
         body.presenter-mode .app-main > .h-16 #viewMenu {
             display: none !important;
@@ -2067,6 +2087,158 @@
                 if (btn) { btn.disabled = false; btn.textContent = original || 'Audit'; }
             }
         }
+        const LORE_VIEW_KEY = 'lore.view.v2';
+        const LORE_VIEW_LEGACY = {
+            density: 'aihistory-density',
+            clean: 'aihistory-clean-mode',
+            ultra: 'aihistory-ultra-clean',
+            readability: 'aihistory-readability',
+            presenter: 'aihistory-presenter-mode',
+        };
+        function defaultLoreViewState() {
+            return { tools: 'fold', thinking: 'fold', density: 'comfortable' };
+        }
+        function migrateLoreViewState() {
+            let state = defaultLoreViewState();
+            let migrated = false;
+            try {
+                const raw = localStorage.getItem(LORE_VIEW_KEY);
+                if (raw) {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && typeof parsed === 'object') {
+                        const pick = (value, allowed, fallback) =>
+                            (allowed.indexOf(value) >= 0 ? value : fallback);
+                        return {
+                            tools: pick(parsed.tools, ['hide', 'fold', 'open'], state.tools),
+                            thinking: pick(parsed.thinking, ['fold', 'show'], state.thinking),
+                            density: pick(parsed.density, ['comfortable', 'compact'], state.density),
+                        };
+                    }
+                }
+                const density = localStorage.getItem(LORE_VIEW_LEGACY.density);
+                const clean = localStorage.getItem(LORE_VIEW_LEGACY.clean);
+                const ultra = localStorage.getItem(LORE_VIEW_LEGACY.ultra);
+                const readability = localStorage.getItem(LORE_VIEW_LEGACY.readability);
+                const presenter = localStorage.getItem(LORE_VIEW_LEGACY.presenter);
+                if (density || clean || ultra || readability || presenter) {
+                    migrated = true;
+                    if (density === 'compact' || ultra === 'on') {
+                        state.density = 'compact';
+                    }
+                    if (clean === 'clean') {
+                        state.tools = 'hide';
+                    }
+                    if (readability === 'strict' || presenter === 'on') {
+                        state.thinking = 'show';
+                    }
+                }
+                if (migrated) {
+                    localStorage.setItem(LORE_VIEW_KEY, JSON.stringify(state));
+                    Object.values(LORE_VIEW_LEGACY).forEach((key) => {
+                        try { localStorage.removeItem(key); } catch (_) {}
+                    });
+                }
+            } catch (_) {}
+            return state;
+        }
+        function syncViewSegmentButtons(state) {
+            document.querySelectorAll('[data-action="set-view-tools"]').forEach((btn) => {
+                const on = btn.dataset.viewValue === state.tools;
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            document.querySelectorAll('[data-action="set-view-thinking"]').forEach((btn) => {
+                const on = btn.dataset.viewValue === state.thinking;
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+            document.querySelectorAll('[data-action="set-view-density"]').forEach((btn) => {
+                const on = btn.dataset.viewValue === state.density;
+                btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            });
+        }
+        function syncLoreViewDetailsOpen(state) {
+            const toolsMode = state.tools || document.body.dataset.tools || 'fold';
+            const thinkingMode = state.thinking || document.body.dataset.thinking || 'fold';
+            document.querySelectorAll('details.tool-group').forEach((el) => {
+                if (toolsMode === 'open') {
+                    el.setAttribute('open', '');
+                } else if (toolsMode === 'fold' && el.hasAttribute('data-default-open')) {
+                    el.setAttribute('open', '');
+                } else {
+                    el.removeAttribute('open');
+                }
+            });
+            document.querySelectorAll('details.action-block').forEach((el) => {
+                if (toolsMode === 'open') {
+                    el.setAttribute('open', '');
+                } else {
+                    el.removeAttribute('open');
+                }
+            });
+            document.querySelectorAll('details.think-fold').forEach((el) => {
+                if (thinkingMode === 'show') {
+                    el.setAttribute('open', '');
+                } else {
+                    el.removeAttribute('open');
+                }
+            });
+        }
+        function applyLoreViewState(state, persist) {
+            const next = {
+                tools: state.tools || 'fold',
+                thinking: state.thinking || 'fold',
+                density: state.density || 'comfortable',
+            };
+            document.body.dataset.tools = next.tools;
+            document.body.dataset.thinking = next.thinking;
+            document.body.dataset.density = next.density;
+            if (next.density === 'compact') {
+                document.body.classList.add('density-compact');
+                document.body.classList.remove('density-comfortable');
+            } else {
+                document.body.classList.remove('density-compact');
+                document.body.classList.add('density-comfortable');
+            }
+            syncViewSegmentButtons(next);
+            syncLoreViewDetailsOpen(next);
+            if (persist) {
+                try { localStorage.setItem(LORE_VIEW_KEY, JSON.stringify(next)); } catch (_) {}
+            }
+            return next;
+        }
+        function setLoreViewTools(mode) {
+            const state = applyLoreViewState(
+                { tools: mode, thinking: document.body.dataset.thinking, density: document.body.dataset.density },
+                true,
+            );
+            return state;
+        }
+        function setLoreViewThinking(mode) {
+            return applyLoreViewState(
+                { tools: document.body.dataset.tools, thinking: mode, density: document.body.dataset.density },
+                true,
+            );
+        }
+        function setLoreViewDensity(mode) {
+            return applyLoreViewState(
+                { tools: document.body.dataset.tools, thinking: document.body.dataset.thinking, density: mode },
+                true,
+            );
+        }
+        function expandAllToolDetails() {
+            document.querySelectorAll('details.tool-group, details.action-block').forEach((el) => {
+                el.setAttribute('open', '');
+            });
+            if (document.body.dataset.thinking === 'show') {
+                document.querySelectorAll('details.think-fold').forEach((el) => {
+                    el.setAttribute('open', '');
+                });
+            }
+        }
+        function collapseAllToolDetails() {
+            document.querySelectorAll('details.tool-group, details.action-block, details.think-fold').forEach((el) => {
+                el.removeAttribute('open');
+            });
+        }
         function syncSessionControlVisibility() {
             const hasTranscriptView = Boolean(
                 document.querySelector('[data-transcript-view="1"]')
@@ -2079,104 +2251,19 @@
                     viewMenu.removeAttribute('open');
                 }
             }
-            const controlIds = [
-                'cleanToggle',
-                'ultraCleanToggle',
-                'readabilityToggle',
-                'presenterToggle',
-                'densityToggle',
-            ];
-            controlIds.forEach((id) => {
-                const node = document.getElementById(id);
-                if (!node) {
-                    return;
-                }
-                node.style.display = hasTranscriptView ? '' : 'none';
-                node.disabled = !hasTranscriptView;
-                node.setAttribute('aria-hidden', hasTranscriptView ? 'false' : 'true');
+        }
+        function initLoreViewControls() {
+            // data-default-open is rendered by the server (failed groups only): a group the
+            // user opened by hand is never promoted to "default open".
+            const state = migrateLoreViewState();
+            applyLoreViewState(state, false);
+            window.addEventListener('lore:messages-appended', () => {
+                syncLoreViewDetailsOpen({
+                    tools: document.body.dataset.tools,
+                    thinking: document.body.dataset.thinking,
+                    density: document.body.dataset.density,
+                });
             });
-        }
-        function applyDensity(mode) {
-            if (mode === 'compact') {
-                document.body.classList.add('density-compact');
-                document.body.classList.remove('density-comfortable');
-                document.body.dataset.density = 'compact';
-            } else {
-                document.body.classList.remove('density-compact');
-                document.body.classList.add('density-comfortable');
-                document.body.dataset.density = 'comfortable';
-            }
-            try { localStorage.setItem('aihistory-density', mode); } catch (_) {}
-            const toggle = document.getElementById('densityToggle');
-            if (toggle) toggle.textContent = mode === 'compact' ? 'Comfortable' : 'Compact';
-            if (toggle) toggle.classList.toggle('active', mode === 'compact');
-            if (toggle) toggle.setAttribute('aria-pressed', mode === 'compact' ? 'true' : 'false');
-        }
-        function toggleDensity() {
-            const compact = document.body.classList.contains('density-compact');
-            applyDensity(compact ? 'comfortable' : 'compact');
-        }
-        function applyCleanMode(mode) {
-            const clean = mode === 'clean';
-            document.body.classList.toggle('clean-transcript', clean);
-            try { localStorage.setItem('aihistory-clean-mode', clean ? 'clean' : 'full'); } catch (_) {}
-            const toggle = document.getElementById('cleanToggle');
-            if (toggle) toggle.textContent = clean ? 'Full' : 'Clean';
-            if (toggle) toggle.classList.toggle('active', clean);
-            if (toggle) toggle.setAttribute('aria-pressed', clean ? 'true' : 'false');
-        }
-        function toggleCleanMode() {
-            const clean = document.body.classList.contains('clean-transcript');
-            applyCleanMode(clean ? 'full' : 'clean');
-        }
-        function setToolDetailsCollapsed(collapsed) {
-            document.querySelectorAll('details.action-block').forEach((el) => {
-                if (collapsed) {
-                    el.removeAttribute('open');
-                }
-            });
-        }
-        function applyUltraClean(mode) {
-            const ultra = mode === 'on';
-            document.body.classList.toggle('ultra-clean', ultra);
-            try { localStorage.setItem('aihistory-ultra-clean', ultra ? 'on' : 'off'); } catch (_) {}
-            const toggle = document.getElementById('ultraCleanToggle');
-            if (toggle) toggle.textContent = ultra ? 'Normal' : 'Ultra';
-            if (toggle) toggle.classList.toggle('active', ultra);
-            if (toggle) toggle.setAttribute('aria-pressed', ultra ? 'true' : 'false');
-            if (ultra) {
-                setToolDetailsCollapsed(true);
-            }
-        }
-        function toggleUltraClean() {
-            const ultra = document.body.classList.contains('ultra-clean');
-            applyUltraClean(ultra ? 'off' : 'on');
-        }
-        function applyPresenterMode(mode) {
-            const presenter = mode === 'on';
-            document.body.classList.toggle('presenter-mode', presenter);
-            try { localStorage.setItem('aihistory-presenter-mode', presenter ? 'on' : 'off'); } catch (_) {}
-            const toggle = document.getElementById('presenterToggle');
-            if (toggle) toggle.textContent = presenter ? 'Exit' : 'Present';
-            if (toggle) toggle.classList.toggle('active', presenter);
-            if (toggle) toggle.setAttribute('aria-pressed', presenter ? 'true' : 'false');
-        }
-        function togglePresenterMode() {
-            const presenter = document.body.classList.contains('presenter-mode');
-            applyPresenterMode(presenter ? 'off' : 'on');
-        }
-        function applyReadability(mode) {
-            const strict = mode === 'strict';
-            document.body.classList.toggle('readability-strict', strict);
-            try { localStorage.setItem('aihistory-readability', strict ? 'strict' : 'standard'); } catch (_) {}
-            const toggle = document.getElementById('readabilityToggle');
-            if (toggle) toggle.textContent = strict ? 'Standard' : 'Readable';
-            if (toggle) toggle.classList.toggle('active', strict);
-            if (toggle) toggle.setAttribute('aria-pressed', strict ? 'true' : 'false');
-        }
-        function toggleReadability() {
-            const strict = document.body.classList.contains('readability-strict');
-            applyReadability(strict ? 'standard' : 'strict');
         }
         function applyTheme(mode) {
             if (mode === 'dark') {
@@ -2197,11 +2284,7 @@
             });
             const themeToggle = document.getElementById('themeToggle');
             try {
-                applyDensity(localStorage.getItem('aihistory-density') || 'comfortable');
-                applyCleanMode(localStorage.getItem('aihistory-clean-mode') || 'full');
-                applyUltraClean(localStorage.getItem('aihistory-ultra-clean') || 'off');
-                applyReadability(localStorage.getItem('aihistory-readability') || 'standard');
-                applyPresenterMode(localStorage.getItem('aihistory-presenter-mode') || 'off');
+                initLoreViewControls();
             } catch (_) {}
             document.querySelectorAll('form[data-autosubmit="true"] select, form[data-autosubmit="true"] input[type="date"]').forEach((el) => {
                 el.addEventListener('change', () => {
@@ -2375,20 +2458,26 @@
                     case 'cancel-action':
                         if (typeof cancelActiveAction === 'function') cancelActiveAction();
                         break;
-                    case 'toggle-clean':
-                        if (typeof toggleCleanMode === 'function') toggleCleanMode();
+                    case 'set-view-tools':
+                        if (typeof setLoreViewTools === 'function' && d.viewValue) {
+                            setLoreViewTools(d.viewValue);
+                        }
                         break;
-                    case 'toggle-ultra':
-                        if (typeof toggleUltraClean === 'function') toggleUltraClean();
+                    case 'set-view-thinking':
+                        if (typeof setLoreViewThinking === 'function' && d.viewValue) {
+                            setLoreViewThinking(d.viewValue);
+                        }
                         break;
-                    case 'toggle-readable':
-                        if (typeof toggleReadability === 'function') toggleReadability();
+                    case 'set-view-density':
+                        if (typeof setLoreViewDensity === 'function' && d.viewValue) {
+                            setLoreViewDensity(d.viewValue);
+                        }
                         break;
-                    case 'toggle-presenter':
-                        if (typeof togglePresenterMode === 'function') togglePresenterMode();
+                    case 'expand-all-tools':
+                        if (typeof expandAllToolDetails === 'function') expandAllToolDetails();
                         break;
-                    case 'toggle-density':
-                        if (typeof toggleDensity === 'function') toggleDensity();
+                    case 'collapse-all-tools':
+                        if (typeof collapseAllToolDetails === 'function') collapseAllToolDetails();
                         break;
                     case 'open-search':
                         if (typeof openSearch === 'function') openSearch();
