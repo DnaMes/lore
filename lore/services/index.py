@@ -73,6 +73,18 @@ def remember_deleted_session_id(
     ids = load_deleted_session_ids(deleted_sessions_path)
     ids.add(session_id)
     save_deleted_session_ids(ids, output_dir, deleted_sessions_path)
+    from lore.storage.knowledge import delete_session_knowledge
+    from lore.storage.summaries import delete_summaries_for_session
+
+    # Each purge is attempted on its own; a failure is logged, never blocks the tombstone
+    # (the tombstone alone already hides the rows from every reader).
+    for purge in (delete_summaries_for_session, delete_session_knowledge):
+        try:
+            purge(output_dir, session_id)
+        except Exception as exc:  # noqa: BLE001 - a broken store must not undo the deletion
+            logger.warning(
+                "Failed to purge %s for deleted session %s: %s", purge.__name__, session_id, exc
+            )
 
 
 # --- Index Filtering ---

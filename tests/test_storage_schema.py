@@ -122,6 +122,7 @@ def test_expected_tables_exist(tmp_path):
         "session_tags",
         "session_embedding_meta",
         "session_knowledge",
+        "session_summaries",
         "memory_feedback",
     }
     tables = _tables(conn)

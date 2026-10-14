@@ -156,7 +156,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 
 ### B4.2 Storage (migration 18) **[R]**
 `lore/storage/summaries.py` with `session_summaries` as in the design; `get_summary`, `save_summary` (only after validation), `delete_summaries_for_session`, `list_summaries`; tombstoned sessions never returned. Wire `delete_summaries_for_session` (and `session_knowledge` cleanup) into the same code path that records a deletion tombstone in the web, MCP and CLI, with a test per path, plus a test that a tombstoned session's summary stays deleted after a re-sync (`_write_reused_entry` must not resurrect it).
-- [ ] done
+- [x] done
 
 ### B4.3a Single-pass pipeline and validator **[R]**
 `lore/services/summarize.py`: candidate selection (interactive only by default), redaction before send, single pass, validation (schema, cites exist, lengths, no secret-shaped strings), write only after validation, `unchanged` counting; fake-provider tests.

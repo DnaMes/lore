@@ -93,6 +93,21 @@ def save_session_knowledge(
         conn.close()
 
 
+def delete_session_knowledge(output_dir: Path, session_id: str) -> int:
+    """Delete the stored extraction for ``session_id``. Returns rows removed."""
+    conn = _connect(output_dir)
+    if conn is None:
+        return 0
+    try:
+        cur = conn.execute(
+            "DELETE FROM session_knowledge WHERE session_id = ?",
+            (session_id,),
+        )
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def list_session_knowledge(output_dir: Path) -> List[Dict[str, Any]]:
     """Return every stored extraction (``session_id``, ``payload``, ``created``)."""
     conn = _connect(output_dir)

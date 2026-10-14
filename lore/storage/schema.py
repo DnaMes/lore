@@ -316,6 +316,30 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         ALTER TABLE messages ADD COLUMN reasoning TEXT;
         """,
     ),
+    (
+        18,
+        "persisted session summaries (#197)",
+        # One row per (level, scope_key). session_id is a loose reference (not
+        # a foreign key) so rows survive re-sync; tombstones hide them at read.
+        """
+        CREATE TABLE IF NOT EXISTS session_summaries (
+            level          TEXT NOT NULL,
+            scope_key      TEXT NOT NULL,
+            session_id     TEXT,
+            fingerprint    TEXT NOT NULL,
+            model          TEXT NOT NULL,
+            prompt_version INTEGER NOT NULL,
+            compressor_version INTEGER NOT NULL,
+            payload_json   TEXT NOT NULL,
+            input_tokens   INTEGER,
+            output_tokens  INTEGER,
+            created        TEXT NOT NULL,
+            PRIMARY KEY (level, scope_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_summaries_session
+            ON session_summaries(session_id);
+        """,
+    ),
 ]
 
 
