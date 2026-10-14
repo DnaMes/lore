@@ -2,13 +2,20 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 if TYPE_CHECKING:
     from ...core.models import UnifiedSession
 
 from ...utils.paths import lore_home
 from ..base import LLMProvider, prepare_prompt, transcript_safe
+
+# Why an extraction produced no entry. The report counts these apart so a
+# failing run says whether the provider or the answer was the problem (#199).
+# None of these ever carries prompt or response text.
+FAILURE_PROVIDER_UNAVAILABLE = "provider-unavailable"
+FAILURE_PROVIDER_ERROR = "provider-error"
+FAILURE_UNPARSABLE = "unparsable"
 
 
 @dataclass
@@ -107,14 +114,34 @@ Format as JSON:
         session: "UnifiedSession",
         max_messages: int = 20,
     ) -> Optional[KnowledgeEntry]:
+        """Extract one session, or None when it failed (see :meth:`extract_with_reason`)."""
+        entry, _failure = self.extract_with_reason(session, max_messages)
+        return entry
+
+    def extract_with_reason(
+        self,
+        session: "UnifiedSession",
+        max_messages: int = 20,
+    ) -> Tuple[Optional[KnowledgeEntry], Optional[str]]:
+        """Extract one session and say why nothing came out (#199).
+
+        Returns ``(entry, None)`` on success and ``(None, FAILURE_*)`` otherwise,
+        so the caller can count provider problems separately from answers that
+        arrived but could not be parsed.
+        """
         if not self.provider.is_available():
-            return None
+            return None, FAILURE_PROVIDER_UNAVAILABLE
 
         prompt = self.build_prompt(session, max_messages)
         prompt, redactions = prepare_prompt(prompt)
 
         try:
             response = self.provider.generate(prompt, temperature=0.2)
+        except Exception:
+            # Outage, quota, bad key or timeout: the provider did not answer.
+            return None, FAILURE_PROVIDER_ERROR
+
+        try:
             content = response.content.strip()
 
             if content.startswith("```"):
@@ -125,7 +152,7 @@ Format as JSON:
 
             data = json.loads(content)
             if not isinstance(data, dict):
-                return None
+                return None, FAILURE_UNPARSABLE
             topic = data.get("topic", "Unknown")
             fields = {
                 name: data.get(name) or []
@@ -136,21 +163,24 @@ Format as JSON:
             if not isinstance(topic, str) or not all(
                 isinstance(v, list) and all(isinstance(i, str) for i in v) for v in fields.values()
             ):
-                return None
+                return None, FAILURE_UNPARSABLE
 
-            return KnowledgeEntry(
-                session_id=session.session_id,
-                topic=topic,
-                key_points=fields["key_points"],
-                code_snippets=fields["code_snippets"],
-                decisions=fields["decisions"],
-                tools_used=fields["tools_used"],
-                project=session.project_path,
-                redactions=redactions,
+            return (
+                KnowledgeEntry(
+                    session_id=session.session_id,
+                    topic=topic,
+                    key_points=fields["key_points"],
+                    code_snippets=fields["code_snippets"],
+                    decisions=fields["decisions"],
+                    tools_used=fields["tools_used"],
+                    project=session.project_path,
+                    redactions=redactions,
+                ),
+                None,
             )
-
         except Exception:
-            return None
+            # The response arrived but could not be turned into an entry.
+            return None, FAILURE_UNPARSABLE
 
     def extract_from_sessions(
         self,

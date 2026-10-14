@@ -972,8 +972,12 @@ def cmd_knowledge(args):
         )
 
     if report.failed and not report.extracted:
-        # Every attempted call failed (outage, quota, bad key): scripts must see it.
-        print(f"Error: all {report.failed} extraction calls failed.", file=sys.stderr)
+        # Every attempted call failed (outage, quota, bad key): scripts must see it,
+        # and the message says which kind of failure it was (#199).
+        print(
+            f"Error: all {report.failed} extraction calls failed ({report.failure_breakdown()}).",
+            file=sys.stderr,
+        )
         return 1
 
     output_file = Path(args.output) if args.output else extractor.output_dir / "knowledge_base.json"

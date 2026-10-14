@@ -68,6 +68,9 @@ def save_session_knowledge(
     """Insert or replace the extraction for ``session_id``."""
     conn = open_v2_connection(v2_db_path(output_dir))
     try:
+        # Explicit transaction: the write must not depend on the connection
+        # happening to be in autocommit mode (#199).
+        conn.execute("BEGIN")
         conn.execute(
             """
             INSERT INTO session_knowledge
@@ -89,6 +92,13 @@ def save_session_knowledge(
                 datetime.now(timezone.utc).isoformat(timespec="seconds"),
             ),
         )
+        conn.execute("COMMIT")
+    except sqlite3.Error:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.OperationalError:
+            pass
+        raise
     finally:
         conn.close()
 

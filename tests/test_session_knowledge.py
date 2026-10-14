@@ -483,3 +483,65 @@ def test_cmd_knowledge_tool_scope_ignores_the_limit(tmp_path, use_provider):
 
     kb = json.loads((tmp_path / "knowledge" / "knowledge_base.json").read_text())
     assert {e["session_id"] for e in kb["entries"]} == {"claude-old", "claude-new"}
+
+
+# --- #199: failures explain themselves, and the write commits explicitly -----
+
+
+def test_failure_buckets_distinguish_provider_problems_from_bad_answers(tmp_path):
+    """`failed` is the total, but the cause is counted separately (#199)."""
+    _build(tmp_path, _session("s1", "hello there"))
+
+    unparsable = _run(tmp_path, FakeProvider(["not json"]), _session("s1"))
+    assert (unparsable.failed, unparsable.unparsable) == (1, 1)
+    assert (unparsable.provider_unavailable, unparsable.provider_error) == (0, 0)
+
+    class Boom(FakeProvider):
+        def generate(self, prompt, *args, **kwargs):  # type: ignore[no-untyped-def]
+            raise RuntimeError("quota")
+
+    errored = _run(tmp_path, Boom(), _session("s1"))
+    assert (errored.failed, errored.provider_error, errored.unparsable) == (1, 1, 0)
+
+    class Unavailable(FakeProvider):
+        def is_available(self) -> bool:
+            return False
+
+    absent = _run(tmp_path, Unavailable(), _session("s1"))
+    assert (absent.failed, absent.provider_unavailable) == (1, 1)
+    assert (absent.provider_error, absent.unparsable) == (0, 0)
+    assert absent.provider_unavailable + absent.provider_error + absent.unparsable == absent.failed
+
+
+def test_cmd_knowledge_error_names_the_failure_cause(tmp_path, use_provider, capsys):
+    """Exit code 1 says which kind of failure it was (#199)."""
+    _build(tmp_path, _session("s1", "hello there"))
+    use_provider(FakeProvider(["not json"]))
+
+    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 1
+    err = capsys.readouterr().err
+    assert "all 1 extraction calls failed" in err
+    assert "1 unparsable" in err
+
+
+def test_save_session_knowledge_brackets_an_explicit_transaction(tmp_path, monkeypatch):
+    """The upsert must not lean on autocommit: it brackets itself (#199)."""
+    from lore.storage import knowledge as knowledge_mod
+    from lore.storage.writer import v2_db_path as _v2_path
+
+    initialise(_v2_path(tmp_path))  # schema is current, so nothing else emits BEGIN
+    statements: List[str] = []
+    real_open = knowledge_mod.open_v2_connection
+
+    def tracing_open(path: Path):
+        conn = real_open(path)
+        conn.set_trace_callback(statements.append)
+        return conn
+
+    monkeypatch.setattr(knowledge_mod, "open_v2_connection", tracing_open)
+    save_session_knowledge(tmp_path, "s1", "fp", "fake-model", 1, {"topic": "T"})
+
+    sql = [s.strip().split()[0].upper() for s in statements if s.strip()]
+    assert sql.count("BEGIN") == 1 and sql.count("COMMIT") == 1
+    assert sql.index("BEGIN") < sql.index("INSERT") < sql.index("COMMIT")
+    assert get_session_knowledge(tmp_path, "s1")["fingerprint"] == "fp"

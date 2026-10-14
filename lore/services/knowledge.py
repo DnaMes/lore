@@ -13,7 +13,11 @@ from pathlib import Path
 from typing import List, Optional
 
 from ..core.models import AUTOMATED_ORIGINS, Tool, UnifiedSession
-from ..llm.tasks.knowledge import KnowledgeExtractor
+from ..llm.tasks.knowledge import (
+    FAILURE_PROVIDER_ERROR,
+    FAILURE_PROVIDER_UNAVAILABLE,
+    KnowledgeExtractor,
+)
 from ..services.index import load_deleted_session_ids
 from ..storage.knowledge import get_session_knowledge, prompt_fingerprint, save_session_knowledge
 from ..storage.reader import load_session_messages_v2
@@ -100,13 +104,48 @@ def sessions_for_extraction(
 
 @dataclass
 class ExtractionReport:
-    """Per-run counts of how each session was handled."""
+    """Per-run counts of how each session was handled.
+
+    ``failed`` is the total of the three cause buckets, kept as a property so
+    the summary line and the exit-code message can never drift apart (#199).
+    """
 
     extracted: int = 0
     unchanged: int = 0
     skipped_no_messages: int = 0
-    failed: int = 0
     redactions: int = 0
+    provider_unavailable: int = 0
+    provider_error: int = 0
+    unparsable: int = 0
+
+    @property
+    def failed(self) -> int:
+        """Every extraction that produced no entry, whatever the cause."""
+        return self.provider_unavailable + self.provider_error + self.unparsable
+
+    def count_failure(self, reason: Optional[str]) -> None:
+        """Count one failed extraction under its cause.
+
+        An unknown or missing reason counts as ``unparsable`` — "the provider
+        did not answer" would blame the wrong side.
+        """
+        if reason == FAILURE_PROVIDER_UNAVAILABLE:
+            self.provider_unavailable += 1
+        elif reason == FAILURE_PROVIDER_ERROR:
+            self.provider_error += 1
+        else:
+            self.unparsable += 1
+
+    def failure_breakdown(self) -> str:
+        """Non-zero causes, e.g. ``'1 provider unavailable, 2 unparsable'``."""
+        parts = []
+        if self.provider_unavailable:
+            parts.append(f"{self.provider_unavailable} provider unavailable")
+        if self.provider_error:
+            parts.append(f"{self.provider_error} provider error")
+        if self.unparsable:
+            parts.append(f"{self.unparsable} unparsable")
+        return ", ".join(parts)
 
 
 def run_extraction(
@@ -139,9 +178,9 @@ def run_extraction(
             report.unchanged += 1
             continue
 
-        entry = extractor.extract_from_session(session)
+        entry, failure = extractor.extract_with_reason(session)
         if entry is None:
-            report.failed += 1
+            report.count_failure(failure)
             continue
         report.redactions += entry.redactions
         save_session_knowledge(
