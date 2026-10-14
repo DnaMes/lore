@@ -880,6 +880,10 @@
         </select>
         <input type="date" name="start" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
         <input type="date" name="end" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <label class="flex items-center gap-2 bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold">
+            <input type="checkbox" name="automated" value="1" data-auto-submit class="w-4 h-4">
+            Automated
+        </label>
         <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
     </form>
     <div class="compact-list" id="sessionRows"
@@ -930,6 +934,7 @@
             start: rows.dataset.start || '',
             end: rows.dataset.end || '',
         });
+        if (rows.dataset.automated) params.set('automated', '1');
         try {
             const resp = await fetch('/sessions/rows?' + params.toString(), { credentials: 'same-origin' });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);

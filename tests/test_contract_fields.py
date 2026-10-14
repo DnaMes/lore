@@ -181,7 +181,7 @@ def test_roundtrip_preserves_every_contract_field(tmp_path):
         "is_error": True,
     }
 
-    hit = search_sessions(tmp_path, "answer")[0]["session"]
+    hit = search_sessions(tmp_path, "answer", include_automated=True)[0]["session"]
     assert hit["origin"] == "exec" and hit["relation"] == "subagent"
 
 
@@ -491,6 +491,35 @@ def test_semantic_search_falls_back_on_unmigrated_store(tmp_path, monkeypatch):
     hits = semantic_search_sessions(tmp_path, "anything")
     assert [h["session"]["id"] for h in hits] == ["old"]
     assert hits[0]["session"]["origin"] == "unknown"
+
+
+def test_default_views_work_on_an_unmigrated_store(tmp_path):
+    """The origin exclusion needs migration 17; a v16 store is read unfiltered, not broken."""
+    from lore.services.index import search_index
+    from lore.storage.reader import automated_exclusion_sql
+
+    conn = _v16_store(tmp_path)
+    try:
+        _v16_session(conn, "old", "Legacy session", "zebrafish content")
+    finally:
+        conn.close()
+
+    conn = open_connection(v2_db_path(tmp_path))  # reading never migrates
+    try:
+        assert current_version(conn) == 16
+        assert automated_exclusion_sql(conn, "s") == ""
+    finally:
+        conn.close()
+
+    assert [h["session"]["id"] for h in search_sessions(tmp_path, "zebrafish")] == ["old"]
+    assert [
+        h["session"]["id"] for h in search_sessions(tmp_path, "zebrafish", include_automated=True)
+    ] == ["old"]
+    found = search_index(tmp_path / "index.json", "zebrafish", set())
+    assert [h["session"]["id"] for h in found] == ["old"]
+    sessions = load_index_v2(tmp_path)["sessions"]
+    assert [s["id"] for s in sessions] == ["old"]
+    assert sessions[0]["origin"] == "unknown"
 
 
 def test_half_applied_migration_17_completes_without_data_loss(tmp_path):

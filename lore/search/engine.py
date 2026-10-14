@@ -3,8 +3,12 @@ import sqlite3
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from lore.core.models import AUTOMATED_ORIGINS
 from lore.utils.security import validate_search_param, validate_tool_name
 from lore.utils.tooling import normalize_tool_name
+
+# Rows the SQLite path returns at most (the historical ``LIMIT 50``).
+SQLITE_RESULT_LIMIT = 50
 
 
 class SearchEngine:
@@ -23,13 +27,31 @@ class SearchEngine:
         with open(self.index_path, "r", encoding="utf-8") as f:
             return json.load(f)
 
+    def _automated_ids(self) -> set:
+        """Ids of automated sessions. The legacy SQLite table has no origin column,
+        so the origin comes from the JSON index entries."""
+        return {
+            str(s.get("id"))
+            for s in self.index.get("sessions", [])
+            if s.get("origin") in AUTOMATED_ORIGINS
+        }
+
     def search(
-        self, query: str, tool: Optional[str] = None, project: Optional[str] = None
+        self,
+        query: str,
+        tool: Optional[str] = None,
+        project: Optional[str] = None,
+        include_automated: bool = True,
     ) -> List[Dict]:
-        """Search sessions by query."""
+        """Search sessions by query.
+
+        With ``include_automated=False`` exec/cron/subagent sessions are dropped before
+        the result cap, so they cannot crowd interactive hits out of the first rows.
+        """
         tool = normalize_tool_name(tool) if tool else None
+        excluded = set() if include_automated else self._automated_ids()
         if self.sqlite_path.exists():
-            results = self._search_sqlite(query, tool=tool, project=project)
+            results = self._search_sqlite(query, tool=tool, project=project, excluded=excluded)
             if results:
                 return results
         # Quotes only mark a phrase for the v2 store; this legacy path matches words.
@@ -37,6 +59,8 @@ class SearchEngine:
         results = []
 
         for session in self.index.get("sessions", []):
+            if str(session.get("id")) in excluded:
+                continue
             # Filter by tool
             if tool and session.get("tool") != tool:
                 continue
@@ -71,7 +95,11 @@ class SearchEngine:
         return results
 
     def _search_sqlite(
-        self, query: str, tool: Optional[str] = None, project: Optional[str] = None
+        self,
+        query: str,
+        tool: Optional[str] = None,
+        project: Optional[str] = None,
+        excluded: Optional[set] = None,
     ) -> List[Dict]:
         tool = normalize_tool_name(tool) if tool else None
         # A quoted phrase reaches this fallback unchanged: drop the quotes so every
@@ -110,19 +138,29 @@ class SearchEngine:
             JOIN sessions s ON s.id = sessions_fts.id
             WHERE sessions_fts MATCH ? {where_sql}
             ORDER BY score ASC
-            LIMIT 50
+            LIMIT ?
         """
 
+        # Over-fetch until ``SQLITE_RESULT_LIMIT`` rows survive the origin filter or the
+        # table is exhausted (fewer rows than asked for come back).
+        fetch = SQLITE_RESULT_LIMIT
+        kept: List[tuple] = []
         conn = sqlite3.connect(self.sqlite_path)
         try:
-            rows = conn.execute(sql, params).fetchall()
-        except sqlite3.Error:
-            return []
+            while True:
+                try:
+                    rows = conn.execute(sql, [*params, fetch]).fetchall()
+                except sqlite3.Error:
+                    return []
+                kept = [row for row in rows if str(row[0]) not in (excluded or ())]
+                if len(kept) >= SQLITE_RESULT_LIMIT or len(rows) < fetch:
+                    break
+                fetch *= 4
         finally:
             conn.close()
 
         results = []
-        for row in rows:
+        for row in kept[:SQLITE_RESULT_LIMIT]:
             session = {
                 "id": row[0],
                 "tool": row[1],

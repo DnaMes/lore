@@ -65,6 +65,9 @@ def normalize_tool_call(raw: Dict[str, Any]) -> Dict[str, Any]:
 
 # Closed value sets for the contract fields; storage normalises anything else.
 ORIGINS = ("interactive", "exec", "cron", "subagent", "unknown")
+# Non-interactive work: stored, but hidden from default views and LLM stages
+# unless ``include_automated`` is set (see ``lore.services.index.filter_automated``).
+AUTOMATED_ORIGINS = ("exec", "cron", "subagent")
 RELATIONS = ("subagent", "fork", "continuation", "compaction")
 MESSAGE_KINDS = ("text", "injected_context", "compaction_summary")
 

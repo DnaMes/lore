@@ -19,6 +19,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from lore.core.models import AUTOMATED_ORIGINS
+
 from .schema import current_version, open_connection
 from .writer import v2_db_path
 
@@ -105,6 +107,14 @@ def session_contract_select(conn: sqlite3.Connection, alias: str = "") -> str:
         return _SESSION_CONTRACT_DEFAULTS
     prefix = f"{alias}." if alias else ""
     return ", ".join(f"{prefix}{col}" for col in _SESSION_CONTRACT_COLUMNS)
+
+
+def automated_exclusion_sql(conn: sqlite3.Connection, alias: str = "s") -> str:
+    """`` AND <alias>.origin NOT IN (...)`` for default views; empty before migration 17."""
+    if current_version(conn) < _CONTRACT_VERSION:
+        return ""
+    marks = ", ".join(f"'{origin}'" for origin in AUTOMATED_ORIGINS)
+    return f" AND {alias}.origin NOT IN ({marks})"
 
 
 def _row_to_session_dict(row: sqlite3.Row) -> Dict[str, Any]:

@@ -41,13 +41,14 @@ from pathlib import Path
 # Add local package to path if running from source
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lore.core.models import Tool, UnifiedSession
+from lore.core.models import AUTOMATED_ORIGINS, Tool, UnifiedSession
 from lore.exporters.index import IndexBuilder
 from lore.exporters.markdown import MarkdownExporter
 from lore.extractors.base import stamp_parser_version
 from lore.extractors.factory import get_all_extractors
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.services.discovery import read_last_discovery, record_discovery
+from lore.services.index import automated_hidden_line, filter_automated
 from lore.utils.datetime import make_naive, parse_duration
 from lore.utils.git import get_git_info
 from lore.utils.paths import get_current_project, lore_home, make_thread_id
@@ -60,6 +61,19 @@ TOOL_EXECUTABLES = {
     "codex": "codex",
     "warp": "warp",
 }
+
+
+def _include_automated(args) -> bool:
+    """``--include-automated`` (exec/cron/subagent sessions are hidden by default)."""
+    return bool(getattr(args, "include_automated", False))
+
+
+def _add_automated_flag(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--include-automated",
+        action="store_true",
+        help="Also include automated (exec/cron/subagent) sessions, hidden by default",
+    )
 
 
 def _get_extractors_for_tool(tool: str):
@@ -97,6 +111,7 @@ def _index_entry_to_session(entry):
         project_path=entry.get("project"),
         thread_id=entry.get("thread_id"),
         title=entry.get("title"),
+        origin=entry.get("origin") or "unknown",
     )
 
 
@@ -135,7 +150,8 @@ def _merge_sessions_with_existing_index(all_sessions, existing_index_sessions):
     merged_by_id = {session.session_id: session for session in all_sessions}
     for entry in existing_index_sessions:
         session_id = entry.get("id")
-        if _is_low_value_index_entry(entry):
+        # Automated sessions are kept below the prompt floor on purpose.
+        if _is_low_value_index_entry(entry) and entry.get("origin") not in AUTOMATED_ORIGINS:
             continue
         if session_id and session_id not in merged_by_id:
             merged_by_id[session_id] = _index_entry_to_session(entry)
@@ -195,6 +211,9 @@ def cmd_list(args):
     # Sort by date
     sessions.sort(key=lambda s: make_naive(s.last_updated), reverse=True)
 
+    shown_sessions = filter_automated(sessions, _include_automated(args))
+    hidden_line = automated_hidden_line(len(sessions) - len(shown_sessions))
+    sessions = shown_sessions
     total_sessions = len(sessions)
 
     limit = args.limit if hasattr(args, "limit") and args.limit else None
@@ -234,6 +253,8 @@ def cmd_list(args):
             print(f"  → Use --offset {offset + limit} --limit {limit} to see more")
     else:
         print(f"\nTotal: {total_sessions} sessions")
+    if hidden_line:
+        print(f"{hidden_line} (use --include-automated to show them)")
 
 
 def _tag_git_info(session, cache: dict) -> None:
@@ -512,9 +533,10 @@ def cmd_prune(args):
     with open(index_path, "r", encoding="utf-8") as f:
         index = json.load(f)
 
+    # Automated sessions sit below the prompt floor by design: never pruned unless asked.
     candidates = [
         s
-        for s in index.get("sessions", [])
+        for s in filter_automated(index.get("sessions", []), _include_automated(args))
         if s.get("prompts", s.get("messages", 0)) <= args.max_prompts
     ]
     if not candidates:
@@ -651,7 +673,10 @@ def cmd_analyze(args):
     with open(index_file, "r") as f:
         index = json.load(f)
 
-    sessions = [_index_entry_to_session(s) for s in index.get("sessions", [])]
+    sessions = [
+        _index_entry_to_session(s)
+        for s in filter_automated(index.get("sessions", []), _include_automated(args))
+    ]
 
     print(f"Analyzing {len(sessions)} sessions...")
 
@@ -717,10 +742,18 @@ def cmd_knowledge(args):
     # Deleted sessions must not be sent to a provider, and a stored extraction of one
     # must not reappear in the knowledge base.
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
+    # Automated sessions are neither sent to a provider nor shown in the knowledge base
+    # unless --include-automated is given (the extraction of one stays stored).
+    include_automated = _include_automated(args)
+    hidden_ids = {
+        str(e.get("id"))
+        for e in index.get("sessions", [])
+        if not include_automated and e.get("origin") in AUTOMATED_ORIGINS
+    }
     sessions = [
         s
         for s in (_index_entry_to_session(e) for e in index.get("sessions", []))
-        if s.session_id not in deleted
+        if s.session_id not in deleted and s.session_id not in hidden_ids
     ]
 
     in_scope: set[str] | None = None
@@ -767,6 +800,7 @@ def cmd_knowledge(args):
             row
             for row in list_session_knowledge(output_dir)
             if row["session_id"] not in deleted
+            and row["session_id"] not in hidden_ids
             and (in_scope is None or row["session_id"] in in_scope)
         ]
     except sqlite3.Error as e:
@@ -816,7 +850,10 @@ def cmd_format(args):
     with open(index_file, "r") as f:
         index = json.load(f)
 
-    sessions = [_index_entry_to_session(s) for s in index.get("sessions", [])]
+    entries = index.get("sessions", [])
+    if not args.session_id:  # an explicit id is honoured, hidden or not
+        entries = filter_automated(entries, _include_automated(args))
+    sessions = [_index_entry_to_session(s) for s in entries]
 
     if args.session_id:
         sessions = [s for s in sessions if s.session_id == args.session_id]
@@ -1026,7 +1063,14 @@ def cmd_search(args):
 
     index_path = output_dir / "index.json"
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
-    results = search_index(index_path, args.query, deleted, tool=args.tool, project=args.project)
+    results = search_index(
+        index_path,
+        args.query,
+        deleted,
+        tool=args.tool,
+        project=args.project,
+        include_automated=_include_automated(args),
+    )
 
     if not results:
         print("No results found.")
@@ -1058,11 +1102,17 @@ def cmd_stats(args):
     with open(index_path, "r", encoding="utf-8") as f:
         index = json.load(f)
 
+    from lore.services.index import filter_automated_payload
+
+    index = filter_automated_payload(index, _include_automated(args))
     stats = index.get("stats", {})
 
     print("AI History Statistics")
     print("=" * 40)
     print(f"Total Sessions: {stats.get('total_sessions', 0)}")
+    hidden_line = automated_hidden_line(int(index.get("automated_hidden") or 0))
+    if hidden_line:
+        print(f"({hidden_line}; use --include-automated to show them)")
     print(f"Total Messages: {stats.get('total_messages', 0)}")
     print(f"Generated: {index.get('generated_at', 'Unknown')}")
     print()
@@ -1099,7 +1149,9 @@ def cmd_digest(args):
 
     from lore.digest import build_digest, format_digest
 
-    digest = build_digest(index.get("sessions", []), since=cutoff)
+    digest = build_digest(
+        filter_automated(index.get("sessions", []), _include_automated(args)), since=cutoff
+    )
     fmt = "markdown" if args.format == "markdown" else "text"
     print(format_digest(digest, fmt=fmt))
 
@@ -1215,7 +1267,7 @@ def cmd_threads(args):
         index = json.load(f)
 
     by_thread = {}
-    for s in index.get("sessions", []):
+    for s in filter_automated(index.get("sessions", []), _include_automated(args)):
         thread_id = s.get("thread_id")
         if not thread_id:
             continue
@@ -1256,6 +1308,7 @@ def cmd_rules(args):
             continue
         sessions.extend(extractor.extract_sessions())
 
+    sessions = filter_automated(sessions, _include_automated(args))
     rules = extract_rules(sessions, max_rules=args.limit)
     if not rules:
         print("No rules extracted.")
@@ -1299,6 +1352,8 @@ def cmd_generate_titles(args):
         print(f"\nProcessing {extractor.tool.value}...")
 
         for session in extractor.extract_sessions():
+            if not _include_automated(args) and session.origin in AUTOMATED_ORIGINS:
+                continue
             if args.since:
                 cutoff = datetime.now() - parse_duration(args.since)
                 if make_naive(session.created_at) < cutoff:
@@ -1578,6 +1633,7 @@ Examples:
     list_parser.add_argument("--format", choices=["table", "json"], default="table")
     list_parser.add_argument("--limit", type=int, help="Limit number of results")
     list_parser.add_argument("--offset", type=int, default=0, help="Offset for pagination")
+    _add_automated_flag(list_parser)
 
     # export command
     export_parser = subparsers.add_parser("export", help="Export sessions to Markdown")
@@ -1605,9 +1661,10 @@ Examples:
     search_parser.add_argument("query", help="Search query")
     search_parser.add_argument("--tool", help="Search only specific tool")
     search_parser.add_argument("--project", help="Search only specific project")
+    _add_automated_flag(search_parser)
 
     # stats command
-    subparsers.add_parser("stats", help="Show statistics")
+    _add_automated_flag(subparsers.add_parser("stats", help="Show statistics"))
 
     # digest command
     digest_parser = subparsers.add_parser(
@@ -1624,6 +1681,7 @@ Examples:
         default="text",
         help="Output format (default: text)",
     )
+    _add_automated_flag(digest_parser)
 
     # memory command — shared cross-tool knowledge store (#44 / #33)
     memory_parser = subparsers.add_parser(
@@ -1695,11 +1753,12 @@ Examples:
     )
 
     # threads command
-    subparsers.add_parser("threads", help="List threads")
+    _add_automated_flag(subparsers.add_parser("threads", help="List threads"))
 
     # rules command
     rules_parser = subparsers.add_parser("rules", help="Generate derived rules")
     rules_parser.add_argument("--limit", type=int, default=30, help="Max rules to extract")
+    _add_automated_flag(rules_parser)
 
     # prune command
     prune_parser = subparsers.add_parser("prune", help="Prune sessions by prompt count")
@@ -1710,6 +1769,7 @@ Examples:
         help="Delete sessions with this many prompts or fewer",
     )
     prune_parser.add_argument("--dry-run", action="store_true", help="Show what would be pruned")
+    _add_automated_flag(prune_parser)
 
     # sync command
     sync_parser = subparsers.add_parser("sync", help="Sync sessions for a tool")
@@ -1736,6 +1796,7 @@ Examples:
     titles_parser.add_argument("--tool", help="Only generate for specific tool")
     titles_parser.add_argument("--since", help="Only sessions since (e.g., 7d, 2w)")
     titles_parser.add_argument("--force", action="store_true", help="Regenerate even if cached")
+    _add_automated_flag(titles_parser)
 
     subparsers.add_parser(
         "reindex",
@@ -1762,6 +1823,7 @@ Examples:
         "--output",
         help="Output file for stats (default: ~/.lore/stats/stats.json)",
     )
+    _add_automated_flag(analyze_parser)
 
     # knowledge command - Build knowledge database
     knowledge_parser = subparsers.add_parser(
@@ -1785,6 +1847,7 @@ Examples:
         "--output",
         help="Output file (default: ~/.lore/knowledge/knowledge_base.json)",
     )
+    _add_automated_flag(knowledge_parser)
 
     # format command - Format sessions with LLM
     format_parser = subparsers.add_parser(
@@ -1798,6 +1861,7 @@ Examples:
     )
     format_parser.add_argument("--model", help="Model name (e.g., gemini-2.0-flash, llama3.2)")
     format_parser.add_argument("--session-id", help="Format specific session by ID")
+    _add_automated_flag(format_parser)
     format_parser.add_argument("--tool", help="Format sessions from specific tool")
     format_parser.add_argument(
         "--limit",

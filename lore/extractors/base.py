@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterable, Iterator, Optional
 
-from ..core.models import Role, TitleSource, Tool, UnifiedSession
+from ..core.models import AUTOMATED_ORIGINS, Role, TitleSource, Tool, UnifiedSession
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +46,12 @@ class BaseExtractor(ABC):
     MIN_MESSAGES = 1
     MIN_CONTENT_SIZE = 0
     MIN_USER_PROMPTS = 3
+
+    # Sessions with an automated origin (exec/cron/subagent) are stored below the
+    # prompt floor and hidden from default views instead. An extractor that already
+    # tagged such sessions before the policy existed sets this to False, so its
+    # import set (and the index size) stays what it was until its own task opts in.
+    AUTOMATED_BYPASSES_PROMPT_FLOOR = True
 
     # Bump when the extractor starts producing fields it did not before. An
     # indexed session stored with a lower version is parsed again even when its
@@ -299,6 +305,8 @@ class BaseExtractor(ABC):
         - It has >= MIN_MESSAGES messages, OR
         - Total content size >= MIN_CONTENT_SIZE bytes
 
+        and it has >= MIN_USER_PROMPTS user prompts, unless its origin is automated.
+
         This filters out test sessions, typos, and abandoned conversations
         while preserving sessions with substantial content.
         """
@@ -310,8 +318,14 @@ class BaseExtractor(ABC):
         user_prompt_count = session.user_prompt_count
 
         if user_prompt_count < min_user_prompts:
-            self._record_skip("too_few_user_prompts")
-            return False
+            # Automated work is not dropped for few prompts: it is kept and hidden
+            # from default views. Counted in discovery, never as a skip. The
+            # message/content floors below still apply.
+            if session.origin in AUTOMATED_ORIGINS and self.AUTOMATED_BYPASSES_PROMPT_FLOOR:
+                self._count("automated_kept")
+            else:
+                self._record_skip("too_few_user_prompts")
+                return False
 
         # Always import if enough messages
         if message_count >= min_messages:

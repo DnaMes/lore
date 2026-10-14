@@ -79,7 +79,7 @@ def find_live_session_by_id(session_id, tool=None):
     return _service_find_live_session(session_id, tool, deleted_ids=_deleted_ids())
 
 
-def search_index(query, tool=None, project=None, limit=50, scope=None):
+def search_index(query, tool=None, project=None, limit=50, scope=None, include_automated=False):
     """Search the index from the MCP server's output directory."""
     return _service_search_index(
         INDEX_PATH,
@@ -89,6 +89,7 @@ def search_index(query, tool=None, project=None, limit=50, scope=None):
         project=project,
         limit=limit,
         scope=scope,
+        include_automated=include_automated,
     )
 
 

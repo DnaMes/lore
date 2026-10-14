@@ -74,7 +74,7 @@
 **Files:** `lore/extractors/base.py` (`should_import_session`, `_effective_thresholds`), `lore/services/index.py`, `lore/interfaces/web.py` + templates, `lore_cli.py`, MCP `list_sessions`/`search_history`, `tests/test_origin_policy.py`.
 **Rules:** sessions with `origin` in (`exec`, `cron`, `subagent`) bypass `MIN_USER_PROMPTS` but keep `MIN_MESSAGES`; every list/search surface and every LLM stage (`lore knowledge`, `improve`, `summarize`) skips them unless `include_automated` (CLI `--include-automated`, web query param and a toggle, MCP argument). Counts in dashboards say how many are hidden.
 **Done when:** default listings are unchanged for interactive-only fixtures; an `exec` fixture appears only with the switch; documented in README.
-- [ ] done
+- [x] done
 
 ## Block B2 — extractors (each task also adds: `Tool` enum value, alias in `normalize_tool_name`, CLI/web filter entry, README coverage row)
 

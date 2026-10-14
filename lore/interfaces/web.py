@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Optional
-from urllib.parse import quote, urlparse
+from urllib.parse import quote, urlencode, urlparse
 
 import markdown
 import nh3
@@ -31,7 +31,14 @@ from lore.utils.tooling import normalize_tool_name
 
 from ..services.cache import threadsafe_lru_cache
 from ..services.extraction import find_live_session
-from ..services.index import session_by_id_map
+from ..services.index import (
+    automated_hidden_line,
+    filter_automated_payload,
+    is_automated,
+    session_by_id_map,
+    thread_hidden_count,
+    thread_sessions,
+)
 from .api_payloads import (
     search_result_snippet,
     serialize_index_session_summary,
@@ -393,9 +400,54 @@ def _template_env():
     return env
 
 
+def _include_automated() -> bool:
+    """True when the request asks for automated sessions (``?automated=1``)."""
+    if not has_request_context():
+        return False
+    return request.args.get("automated", "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _automated_kwargs() -> dict:
+    """``include_automated=True`` only when asked, so wrapped/faked callables stay compatible."""
+    return {"include_automated": True} if _include_automated() else {}
+
+
+def _visible_index() -> dict:
+    """The index without automated sessions (unless ``?automated=1``).
+
+    ``load_index()`` stays unfiltered: lookups by id (session pages, export, delete,
+    sync merge) must keep working for hidden sessions. Only list views use this.
+    """
+    return filter_automated_payload(load_index(), _include_automated())
+
+
+def _thread_sessions(thread_id: str) -> list:
+    """Index sessions a thread view works on; a known thread id never turns into a 404."""
+    return thread_sessions(load_index().get("sessions", []), thread_id, _include_automated())
+
+
+def _thread_hidden(thread_id: str) -> int:
+    """Automated children of this thread the default view leaves out."""
+    return thread_hidden_count(load_index().get("sessions", []), thread_id, _include_automated())
+
+
+def _origin_scoped(sessions: list, tag: str, hidden: Optional[list] = None) -> list:
+    """List-view sessions after the origin filter.
+
+    Filtering by a tag skips the origin filter: a session carrying that tag must stay
+    visible even when it is automated. ``hidden`` receives the number of sessions left out.
+    """
+    if tag or _include_automated():
+        return sessions
+    visible = [s for s in sessions if not is_automated(s)]
+    if hidden is not None:
+        hidden.append(len(sessions) - len(visible))
+    return visible
+
+
 def render(tpl_name, **kwargs):
     env = _template_env()
-    idx = load_index()
+    idx = _visible_index()
     recent = sorted(
         idx.get("sessions", []),
         key=lambda s: s.get("updated") or s.get("created") or "",
@@ -417,6 +469,19 @@ def render(tpl_name, **kwargs):
         else:
             kwargs["show_session_controls"] = tpl_name in ("session", "thread_detail")
     from lore import __version__
+
+    include_automated = _include_automated()
+    # A view that counted within its own filters passes ``automated_hidden``.
+    hidden_count = kwargs.pop("automated_hidden", None)
+    if hidden_count is None:
+        hidden_count = idx.get("automated_hidden") or 0
+    hidden_line = automated_hidden_line(int(hidden_count))
+    show_url = ""
+    if hidden_line and has_request_context():
+        show_url = request.path + "?" + urlencode({**request.args.to_dict(), "automated": "1"})
+    kwargs.setdefault("include_automated", include_automated)
+    kwargs.setdefault("automated_hidden_line", hidden_line)
+    kwargs.setdefault("automated_show_url", show_url)
 
     return env.get_template(f"{tpl_name}.html").render(
         get_style=get_style,
@@ -753,7 +818,7 @@ def api_action_cancel(job_id):
 
 @app.route("/")
 def dashboard():
-    idx = load_index()
+    idx = _visible_index()
     recent = sorted(
         idx.get("sessions", []),
         key=lambda s: s.get("updated") or s.get("created") or "",
@@ -783,30 +848,49 @@ def _index_mtime():
 
 
 @threadsafe_lru_cache(maxsize=128)
-def _filtered_sorted_session_ids(tool, tag, start, end, index_mtime):
-    """Apply list filters and sort newest-first, returning session IDs only."""
+def _filtered_sorted_session_ids(tool, tag, start, end, index_mtime, include_automated=False):
+    """Apply list filters and sort newest-first.
+
+    Returns ``(session ids, automated sessions left out)``. The count is taken after the
+    tool/date filters, so a scoped view reports its own number. A tag filter skips the
+    origin filter: a tagged automated session stays visible.
+    """
     all_s = load_index().get("sessions", [])
     start_dt = parse_date_param(start)
     end_dt = parse_date_param(end)
     filtered = filter_sessions(
         all_s, tool=tool or None, tag=tag or None, start=start_dt, end=end_dt
     )
+    hidden = 0
+    if not include_automated and not tag:
+        visible = [s for s in filtered if not is_automated(s)]
+        hidden = len(filtered) - len(visible)
+        filtered = visible
     filtered = sorted(
         filtered,
         key=lambda s: s.get("updated") or s.get("created") or "",
         reverse=True,
     )
-    return tuple(session.get("id") for session in filtered)
+    return tuple(session.get("id") for session in filtered), hidden
 
 
 def _filtered_sorted_sessions(tool, tag, start, end):
     """Apply list filters and sort newest-first. Returns the full filtered list."""
-    session_ids = _filtered_sorted_session_ids(tool, tag, start, end, _index_mtime())
+    session_ids, _hidden = _filtered_sorted_session_ids(
+        tool, tag, start, end, _index_mtime(), _include_automated()
+    )
     all_s = load_index().get("sessions", [])
     sessions_by_id = {session.get("id"): session for session in all_s}
     return [
         sessions_by_id[session_id] for session_id in session_ids if session_id in sessions_by_id
     ]
+
+
+def _filtered_automated_hidden(tool, tag, start, end) -> int:
+    """Automated sessions the same filters leave out (same cache entry, no extra pass)."""
+    return _filtered_sorted_session_ids(
+        tool, tag, start, end, _index_mtime(), _include_automated()
+    )[1]
 
 
 @app.route("/sessions")
@@ -828,9 +912,10 @@ def sessions():
     pages = max(1, math.ceil(total / SESSIONS_PER_PAGE))
     first_page = filtered[:SESSIONS_PER_PAGE]
 
-    tags = compute_top_tags(load_index().get("sessions", []), limit=12)
+    tags = compute_top_tags(_visible_index().get("sessions", []), limit=12)
     return render(
         "sessions",
+        automated_hidden=_filtered_automated_hidden(tool, tag, start, end),
         active="sessions",
         sessions=first_page,
         total=total,
@@ -879,8 +964,6 @@ def sessions_rows():
 
 @app.route("/projects")
 def projects():
-    idx = load_index()
-    all_s = idx.get("sessions", [])
     tool = request.args.get("tool", "")
     tag = request.args.get("tag", "")
     start = request.args.get("start", "")
@@ -896,13 +979,20 @@ def projects():
     start_dt = parse_date_param(start)
     end_dt = parse_date_param(end)
     filtered = filter_sessions(
-        all_s, tool=tool or None, tag=tag or None, start=start_dt, end=end_dt
+        load_index().get("sessions", []),
+        tool=tool or None,
+        tag=tag or None,
+        start=start_dt,
+        end=end_dt,
     )
+    hidden: list = []
+    filtered = _origin_scoped(filtered, tag, hidden)
 
     projects = build_projects_payload(filtered, project_label)
-    tags = compute_top_tags(all_s, limit=12)
+    tags = compute_top_tags(_visible_index().get("sessions", []), limit=12)
     return render(
         "projects",
+        automated_hidden=hidden[0] if hidden else 0,
         active="projects",
         projects=projects,
         tools=list(TOOL_STYLES.keys()),
@@ -919,12 +1009,13 @@ def _build_costs_payload() -> dict:
     """Compute token cost stats from the session index."""
     from datetime import timedelta
 
-    idx = load_index()
-    sessions = idx.get("sessions", [])
+    # Money is spent regardless of origin: costs always cover every session.
+    sessions = load_index().get("sessions", [])
 
     total_tokens = 0
     session_count = 0
     untokened_count = 0
+    automated_included = 0
     by_tool: dict[str, int] = {}
     by_day_map: dict[str, int] = {}
     by_project_map: dict[str, int] = {}
@@ -948,6 +1039,8 @@ def _build_costs_payload() -> dict:
 
         total_tokens += tokens
         session_count += 1
+        if is_automated(session):
+            automated_included += 1
 
         tool = str(session.get("tool") or "unknown")
         by_tool[tool] = by_tool.get(tool, 0) + tokens
@@ -986,6 +1079,13 @@ def _build_costs_payload() -> dict:
         "by_project": by_project_list,
         "session_count": session_count,
         "untokened_count": untokened_count,
+        "automated_included": automated_included,
+        "automated_included_line": (
+            f"includes {automated_included} automated session"
+            f"{'' if automated_included == 1 else 's'}"
+            if automated_included
+            else ""
+        ),
     }
 
 
@@ -1006,7 +1106,7 @@ def stats_page():
 
     from lore.digest import build_digest
 
-    sessions = load_index().get("sessions", [])
+    sessions = _visible_index().get("sessions", [])
     since = datetime.now() - timedelta(days=30)
     digest = build_digest(sessions, since=since, top_n_projects=10)
 
@@ -1547,7 +1647,7 @@ def session_delete(session_id):
 
 @app.route("/threads")
 def threads():
-    idx = load_index()
+    idx = _visible_index()
     threads_sorted = build_threads_overview(idx.get("sessions", []))
     return render("threads", active="threads", threads=threads_sorted, title="Threads")
 
@@ -1557,10 +1657,9 @@ def thread_detail(thread_id):
     if not validate_session_id(thread_id):
         return "Invalid thread id", 400
 
-    idx = load_index()
     payload = build_thread_detail_payload(
         thread_id,
-        idx.get("sessions", []),
+        _thread_sessions(thread_id),
         load_sessions_for_tool,
         format_message_content,
         format_tool_calls,
@@ -1581,6 +1680,7 @@ def thread_detail(thread_id):
         thread_meta=payload["thread_meta"],
         thread_groups=payload["thread_groups"],
         thread_timeline=payload["thread_timeline"],
+        automated_hidden=_thread_hidden(thread_id),
         title="Thread",
     )
 
@@ -1742,7 +1842,9 @@ def api_search():
     if project and not validate_search_param(project):
         return jsonify({"error": "Invalid project parameter"}), 400
 
-    res = search_index(q, tool=tool or None, project=project or None, limit=10)
+    res = search_index(
+        q, tool=tool or None, project=project or None, limit=10, **_automated_kwargs()
+    )
     return jsonify(
         [
             {
@@ -1794,7 +1896,14 @@ def api_v1_search():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    results = search_index(q, tool=tool or None, project=project or None, limit=limit, scope=scope)
+    results = search_index(
+        q,
+        tool=tool or None,
+        project=project or None,
+        limit=limit,
+        scope=scope,
+        **_automated_kwargs(),
+    )
     return jsonify(
         {
             "query": q,
@@ -1840,7 +1949,7 @@ def api_v1_index_summary():
     Useful for dashboard initialisation — fetch this first (fast), then
     paginate sessions lazily via GET /api/v1/sessions?page=N&per_page=M.
     """
-    summary = load_index_summary()
+    summary = load_index_summary(**_automated_kwargs())
     return jsonify(summary)
 
 
@@ -1884,11 +1993,15 @@ def api_v1_sessions():
         all_sessions = [
             result["session"]
             for result in search_index(
-                q, tool=tool or None, project=project or None, limit=search_limit
+                q,
+                tool=tool or None,
+                project=project or None,
+                limit=search_limit,
+                **_automated_kwargs(),
             )
         ]
     else:
-        all_sessions = load_index().get("sessions", [])
+        all_sessions = _visible_index().get("sessions", [])
         if tool:
             all_sessions = [s for s in all_sessions if s.get("tool") == tool]
         if project:
@@ -2003,7 +2116,7 @@ def api_v1_projects():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    sessions = load_index().get("sessions", [])
+    sessions = _visible_index().get("sessions", [])
     if tool:
         sessions = [session for session in sessions if session.get("tool") == tool]
     projects = build_projects_payload(sessions, project_label)
@@ -2022,7 +2135,7 @@ def api_v1_threads():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    threads = build_threads_overview(load_index().get("sessions", []))[:limit]
+    threads = build_threads_overview(_visible_index().get("sessions", []))[:limit]
     return jsonify(
         {
             "count": len(threads),
@@ -2038,7 +2151,7 @@ def api_v1_thread_detail(thread_id):
 
     payload = build_thread_detail_payload(
         thread_id,
-        load_index().get("sessions", []),
+        _thread_sessions(thread_id),
         load_sessions_for_tool,
         format_message_content,
         format_tool_calls,
@@ -2049,21 +2162,24 @@ def api_v1_thread_detail(thread_id):
     if not payload["thread_timeline"]:
         return jsonify({"error": "Not found"}), 404
 
-    return jsonify(
-        {
-            "thread": {
-                "id": thread_id,
-                **payload["thread_meta"],
-            },
-            "timeline": [
-                serialize_index_session_summary(session) for session in payload["thread_timeline"]
-            ],
-            "messages": serialize_thread_messages(payload["messages"]),
-            "toc_items": payload["toc_items"],
-            "groups": payload["thread_groups"],
-            "continue_command": payload["continue_cmd"],
-        }
-    )
+    body = {
+        "thread": {
+            "id": thread_id,
+            **payload["thread_meta"],
+        },
+        "timeline": [
+            serialize_index_session_summary(session) for session in payload["thread_timeline"]
+        ],
+        "messages": serialize_thread_messages(payload["messages"]),
+        "toc_items": payload["toc_items"],
+        "groups": payload["thread_groups"],
+        "continue_command": payload["continue_cmd"],
+    }
+    hidden = _thread_hidden(thread_id)
+    if hidden:
+        body["automated_hidden"] = hidden
+        body["automated_hidden_line"] = automated_hidden_line(hidden)
+    return jsonify(body)
 
 
 @app.route("/export/index")

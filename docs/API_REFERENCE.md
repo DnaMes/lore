@@ -122,6 +122,9 @@ phrase (`"exact phrase"`) matches that phrase. A quoted single word is an exact
 token, so `"oauth"` no longer matches `OAuth2` (unquoted terms still prefix-match).
 The legacy fallback ignores phrase adjacency.
 
+Sessions with origin `exec`, `cron` or `subagent` are left out unless
+`"include_automated": true` is passed (HTTP: `automated=1`).
+
 ### `list_sessions`
 
 List indexed sessions.
@@ -133,6 +136,10 @@ Input fields:
 - `thread_id`: optional
 - `since`: optional duration like `7d`
 - `limit`: optional, default `20`
+- `include_automated`: optional boolean; also lists `exec`/`cron`/`subagent` sessions, which
+  are hidden by default (the response then carries `automated_hidden` and
+  `automated_hidden_line`). `list_recent_sessions`, `list_projects` and `get_thread` take
+  the same argument.
 
 ### `get_session`
 

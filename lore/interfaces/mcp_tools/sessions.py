@@ -6,6 +6,12 @@ from __future__ import annotations
 import json
 import subprocess
 
+from ...services.index import (
+    automated_hidden_line,
+    filter_automated,
+    thread_hidden_count,
+    thread_sessions,
+)
 from ...utils.security import validate_session_id, validate_tool_name
 from ...utils.tooling import normalize_tool_name, to_session_switch_tool
 from ..api_payloads import (
@@ -124,8 +130,9 @@ def register(server, deps: MCPToolDeps) -> None:
 
     async def list_recent_sessions(args: dict) -> str:
         limit = deps.normalize_limit(args.get("limit"), default=10)
+        include_automated = bool(args.get("include_automated", False))
         sessions = sorted(
-            deps.ensure_index().get("sessions", []),
+            filter_automated(deps.ensure_index().get("sessions", []), include_automated),
             key=lambda session: str(session.get("updated") or session.get("created") or ""),
             reverse=True,
         )
@@ -145,6 +152,10 @@ def register(server, deps: MCPToolDeps) -> None:
             "type": "object",
             "properties": {
                 "limit": {"type": "integer"},
+                "include_automated": {
+                    "type": "boolean",
+                    "description": "Also list exec/cron/subagent sessions (hidden by default).",
+                },
             },
         },
         list_recent_sessions,
@@ -152,8 +163,10 @@ def register(server, deps: MCPToolDeps) -> None:
 
     async def list_projects(args: dict) -> str:
         limit = deps.normalize_limit(args.get("limit"), default=50)
+        include_automated = bool(args.get("include_automated", False))
         projects = build_projects_payload(
-            deps.ensure_index().get("sessions", []), lambda value: value
+            filter_automated(deps.ensure_index().get("sessions", []), include_automated),
+            lambda value: value,
         )
         return deps.json_text(
             {
@@ -169,6 +182,10 @@ def register(server, deps: MCPToolDeps) -> None:
             "type": "object",
             "properties": {
                 "limit": {"type": "integer"},
+                "include_automated": {
+                    "type": "boolean",
+                    "description": "Also count exec/cron/subagent sessions (hidden by default).",
+                },
             },
         },
         list_projects,
@@ -177,22 +194,29 @@ def register(server, deps: MCPToolDeps) -> None:
     async def get_thread(args: dict) -> str:
         thread_id = args.get("thread_id")
         include_messages = bool(args.get("include_messages", False))
+        include_automated = bool(args.get("include_automated", False))
 
         if not thread_id or not validate_session_id(thread_id):
             return "Invalid thread_id parameter."
 
         idx = deps.ensure_index()
+        # A thread of automated sessions only stays reachable by its id.
+        index_sessions = thread_sessions(idx.get("sessions", []), thread_id, include_automated)
         # O(1) bucket hit via the memoized {thread_id: overview} map (#126)
         # instead of regrouping every indexed session per call.
-        overview = thread_overview_by_id(idx.get("sessions", [])).get(thread_id)
+        overview = thread_overview_by_id(index_sessions).get(thread_id)
         if not overview:
             return deps.json_text({"error": "Thread not found", "thread_id": thread_id})
 
         payload: dict[str, object] = {"thread": serialize_thread_overview(overview)}
+        hidden = thread_hidden_count(idx.get("sessions", []), thread_id, include_automated)
+        if hidden:
+            payload["automated_hidden"] = hidden
+            payload["automated_hidden_line"] = automated_hidden_line(hidden)
         if include_messages:
             detail = build_thread_detail_payload(
                 thread_id,
-                idx.get("sessions", []),
+                index_sessions,
                 deps.load_sessions_for_tool,
                 lambda value: value,
                 lambda value: json.dumps(value, ensure_ascii=False),
@@ -213,6 +237,11 @@ def register(server, deps: MCPToolDeps) -> None:
             "properties": {
                 "thread_id": {"type": "string"},
                 "include_messages": {"type": "boolean"},
+                "include_automated": {
+                    "type": "boolean",
+                    "description": "Include exec/cron/subagent sessions of the thread "
+                    "(hidden by default).",
+                },
             },
             "required": ["thread_id"],
         },

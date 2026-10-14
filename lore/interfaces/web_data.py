@@ -160,7 +160,7 @@ def load_sessions_for_tool(tool: Optional[str] = None):
 # --- Index Loading & Search ---
 
 
-def search_index(query, tool=None, project=None, limit=50, scope=None):
+def search_index(query, tool=None, project=None, limit=50, scope=None, include_automated=False):
     """Search sessions (wrapper over ``services.search_index``)."""
     return _service_search_index(
         INDEX_PATH,
@@ -170,6 +170,7 @@ def search_index(query, tool=None, project=None, limit=50, scope=None):
         project=project,
         limit=limit,
         scope=scope,
+        include_automated=include_automated,
     )
 
 
@@ -177,9 +178,11 @@ def load_index():
     return _service_load_index(INDEX_PATH, OUTPUT_DIR, load_deleted_session_ids())
 
 
-def load_index_summary() -> dict:
+def load_index_summary(include_automated: bool = False) -> dict:
     """Return lightweight index metadata without loading full session details."""
-    return _service_load_index_summary(INDEX_PATH, load_deleted_session_ids())
+    return _service_load_index_summary(
+        INDEX_PATH, load_deleted_session_ids(), include_automated=include_automated
+    )
 
 
 # --- Export Path Resolution ---

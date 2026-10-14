@@ -399,8 +399,8 @@ def test_explicit_parser_version_is_not_overwritten(tmp_path):
     assert [s.parser_version for s in FakeExtractor(src).extract_sessions()] == [1, 1]
 
 
-def test_gemini_declares_parser_version_two():
-    assert GeminiCLIExtractor.PARSER_VERSION == 2
+def test_gemini_declares_parser_version_three():
+    assert GeminiCLIExtractor.PARSER_VERSION == 3
     assert BaseExtractor.PARSER_VERSION == 1
 
 
@@ -484,6 +484,60 @@ def test_changed_source_is_parsed_even_when_budget_is_spent(backlog):
     assert _stale_count(index) == 8
 
 
+def _origins(index: dict) -> dict[str, str]:
+    return {s["id"]: s["origin"] for s in index["sessions"]}
+
+
+def _untagged_run(monkeypatch, src: Path) -> None:
+    """A first run by a parser that does not know about automated origins yet."""
+    extractor = FakeExtractor(src, origin="unknown")
+    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+
+
+def _tagging_run(monkeypatch, src: Path) -> FakeExtractor:
+    """The next run uses a newer parser that tags these sources as subagents."""
+
+    class Tagging(FakeExtractor):
+        PARSER_VERSION = 2
+
+    extractor = Tagging(src, origin="subagent")
+    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    return extractor
+
+
+def test_unchanged_source_gets_the_origin_of_the_newer_parser(backlog, monkeypatch):
+    tmp_path, src, _ = backlog
+    monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "-1")
+    _untagged_run(monkeypatch, src)
+    index = _export(tmp_path)
+    assert set(_origins(index).values()) == {"unknown"}
+    extractor = _tagging_run(monkeypatch, src)
+
+    index = _export(tmp_path)
+
+    assert len(extractor.parse_calls) == 10  # nothing changed on disk, all re-extracted
+    assert set(_origins(index).values()) == {"subagent"}
+    assert {s["parser_version"] for s in index["sessions"]} == {2}
+
+
+def test_budget_spent_run_keeps_the_old_origin_until_drained(backlog, monkeypatch):
+    tmp_path, src, _ = backlog
+    monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "-1")
+    _untagged_run(monkeypatch, src)
+    _export(tmp_path)
+    extractor = _tagging_run(monkeypatch, src)
+    monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "3")
+
+    index = _export(tmp_path)
+
+    assert len(extractor.parse_calls) == 3
+    origins = _origins(index)
+    assert sorted(origins.values()) == ["subagent"] * 3 + ["unknown"] * 7
+    assert {sid for sid, o in origins.items() if o == "subagent"} == {
+        Path(c).stem + "-0" for c in extractor.parse_calls
+    }
+
+
 def test_budget_default_and_invalid_values(monkeypatch):
     monkeypatch.delenv(REEXTRACT_BUDGET_ENV, raising=False)
     assert DEFAULT_REEXTRACT_BUDGET == 150
@@ -534,7 +588,7 @@ def test_live_lookup_and_payload_report_the_extractor_parser_version():
     assert serialize_live_session(session)["parser_version"] == 3
 
 
-def test_gemini_session_is_stamped_two(tmp_path, monkeypatch):
+def test_gemini_session_is_stamped_with_its_parser_version(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("GEMINI_PROJECT_ROOTS", raising=False)
     chats = tmp_path / ".gemini" / "tmp" / "demo" / "chats"
@@ -559,7 +613,7 @@ def test_gemini_session_is_stamped_two(tmp_path, monkeypatch):
     )
     sessions = list(GeminiCLIExtractor().extract_sessions())
     assert sessions
-    assert {s.parser_version for s in sessions} == {2}
+    assert {s.parser_version for s in sessions} == {GeminiCLIExtractor.PARSER_VERSION}
 
 
 def test_unstamped_session_gets_the_extractor_version_at_the_index_entry_point(

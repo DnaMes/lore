@@ -10,8 +10,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
+from collections import OrderedDict
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+from lore.core.models import AUTOMATED_ORIGINS
 
 from .cache import threadsafe_lru_cache
 from .extraction import build_search_index
@@ -74,15 +78,7 @@ def remember_deleted_session_id(
 # --- Index Filtering ---
 
 
-def apply_deleted_filter(payload: dict, deleted: set[str]) -> dict:
-    """Drop tombstoned sessions from an index payload and recompute stats."""
-    if not deleted:
-        return payload
-
-    sessions = [
-        session for session in payload.get("sessions", []) if session.get("id") not in deleted
-    ]
-
+def _recompute_stats(sessions: list[dict]) -> dict:
     by_tool: dict[str, int] = {}
     by_project: dict[str, int] = {}
     total_messages = 0
@@ -94,15 +90,157 @@ def apply_deleted_filter(payload: dict, deleted: set[str]) -> dict:
         if project:
             by_project[project] = by_project.get(project, 0) + 1
         total_messages += int(session.get("messages") or 0)
-
-    payload["sessions"] = sessions
-    payload["stats"] = {
+    return {
         "total_sessions": len(sessions),
         "total_messages": total_messages,
         "by_tool": by_tool,
         "by_project": by_project,
     }
+
+
+def apply_deleted_filter(payload: dict, deleted: set[str]) -> dict:
+    """Drop tombstoned sessions from an index payload and recompute stats."""
+    if not deleted:
+        return payload
+
+    sessions = [
+        session for session in payload.get("sessions", []) if session.get("id") not in deleted
+    ]
+    payload["sessions"] = sessions
+    payload["stats"] = _recompute_stats(sessions)
     return payload
+
+
+# --- Automated sessions (origin policy, #197) ---
+
+
+def _origin_of(session: Any) -> str:
+    """Origin of an index dict or a ``UnifiedSession``; missing means not automated."""
+    if isinstance(session, dict):
+        return str(session.get("origin") or "")
+    return str(getattr(session, "origin", "") or "")
+
+
+def is_automated(session: Any) -> bool:
+    return _origin_of(session) in AUTOMATED_ORIGINS
+
+
+class _IdentityMemo:
+    """Small bounded memo keyed by the identity of a source object.
+
+    The source is held alive next to its result, so ``id()`` cannot be reused and the
+    ``is`` check stays valid. Callers pass lists/payloads that are shared, cached objects
+    and never mutated in place; an index rebuild or tombstone change yields a new object.
+    """
+
+    def __init__(self, slots: int = 4) -> None:
+        self._slots = slots
+        self._lock = threading.Lock()
+        self._items: OrderedDict[int, tuple[Any, Any]] = OrderedDict()
+
+    def get(self, source: Any) -> Optional[Any]:
+        with self._lock:
+            hit = self._items.get(id(source))
+        if hit is not None and hit[0] is source:
+            return hit[1]
+        return None
+
+    def put(self, source: Any, value: Any) -> None:
+        with self._lock:
+            self._items[id(source)] = (source, value)
+            self._items.move_to_end(id(source))
+            while len(self._items) > self._slots:
+                self._items.popitem(last=False)
+
+
+# Memos of the default (hiding) view. Results are returned by identity so the
+# ``thread_overview_by_id`` / ``session_by_id_map`` memos downstream keep hitting (#126).
+_VISIBLE_LIST_MEMO = _IdentityMemo()
+_VISIBLE_PAYLOAD_MEMO = _IdentityMemo()
+
+
+def filter_automated(sessions: Any, include_automated: bool = False) -> Any:
+    """Hide non-interactive sessions (``exec``/``cron``/``subagent``) unless asked for.
+
+    The one place every list view and LLM stage goes through. Works on index dicts
+    and ``UnifiedSession`` objects; the list is returned unchanged when nothing is hidden.
+    The hiding result is memoized on the identity of ``sessions``: the same list object
+    always yields the same result object.
+    """
+    if include_automated:
+        return sessions
+    cached = _VISIBLE_LIST_MEMO.get(sessions)
+    if cached is not None:
+        return cached
+    if any(is_automated(s) for s in sessions):
+        visible: Any = [s for s in sessions if not is_automated(s)]
+    else:
+        visible = sessions
+    _VISIBLE_LIST_MEMO.put(sessions, visible)
+    return visible
+
+
+def filter_automated_payload(payload: dict, include_automated: bool = False) -> dict:
+    """Index payload without automated sessions, stats recomputed, ``automated_hidden`` set.
+
+    Returns ``payload`` itself when nothing is hidden. Never mutates ``payload`` (it
+    may be a shared cached object). Independent of the tombstone filter's order.
+    Memoized on the identity of ``payload`` and of its ``sessions`` list, so repeated
+    calls on one cached payload return one object.
+    """
+    if include_automated:
+        return payload
+    sessions = payload.get("sessions", [])
+    cached = _VISIBLE_PAYLOAD_MEMO.get(payload)
+    if cached is not None and cached[0] is sessions:
+        return cached[1]
+    visible = filter_automated(sessions, False)
+    if visible is sessions:
+        out = payload
+    else:
+        out = dict(payload)
+        out["sessions"] = visible
+        out["stats"] = _recompute_stats(visible)
+        out["automated_hidden"] = len(sessions) - len(visible)
+    _VISIBLE_PAYLOAD_MEMO.put(payload, (sessions, out))
+    return out
+
+
+def thread_sessions(sessions: list[dict], thread_id: str, include_automated: bool = False) -> list:
+    """Sessions a thread view works on.
+
+    A thread that holds only automated sessions stays reachable by its id: the
+    unfiltered list is returned then, so a known thread id never turns into a 404.
+    """
+    visible = filter_automated(sessions, include_automated)
+    if visible is not sessions and not any(s.get("thread_id") == thread_id for s in visible):
+        return sessions
+    return visible
+
+
+def thread_hidden_count(
+    sessions: list[dict], thread_id: str, include_automated: bool = False
+) -> int:
+    """Automated members of ``thread_id`` that ``thread_sessions`` leaves out."""
+    if include_automated:
+        return 0
+    shown = thread_sessions(sessions, thread_id, False)
+    members = sum(1 for s in sessions if s.get("thread_id") == thread_id)
+    return members - sum(1 for s in shown if s.get("thread_id") == thread_id)
+
+
+def filter_automated_results(results: list, include_automated: bool = False) -> list:
+    """Drop search results of automated sessions (rows carry ``session.origin``)."""
+    if include_automated:
+        return results
+    return [r for r in results if not is_automated(r.get("session", {}))]
+
+
+def automated_hidden_line(count: int) -> str:
+    """ "12 automated sessions hidden", or an empty string when nothing is hidden."""
+    if count <= 0:
+        return ""
+    return f"{count} automated session{'' if count == 1 else 's'} hidden"
 
 
 def apply_deleted_filter_to_results(results: list, deleted: set[str]) -> list:
@@ -268,6 +406,7 @@ def _hybrid_search(
     limit: int,
     *,
     fts_results: list[dict],
+    include_automated: bool = False,
 ) -> list[dict]:
     """Fuse the already-computed FTS hits with semantic (vector) hits via RRF.
 
@@ -278,7 +417,12 @@ def _hybrid_search(
     from lore.storage import rrf_merge, semantic_search_sessions
 
     vec_results = semantic_search_sessions(
-        index_dir, query, tool=tool, project=project, limit=limit
+        index_dir,
+        query,
+        tool=tool,
+        project=project,
+        limit=limit,
+        include_automated=include_automated,
     )
     if not vec_results:
         return fts_results
@@ -347,18 +491,25 @@ def load_index(
     )
 
 
-def load_index_summary(index_path: Path, deleted: set[str]) -> dict:
-    """Return lightweight index metadata without shipping full session records."""
+def load_index_summary(
+    index_path: Path, deleted: set[str], include_automated: bool = False
+) -> dict:
+    """Return lightweight index metadata without shipping full session records.
+
+    Automated sessions are not counted unless ``include_automated``; their number is
+    reported as ``automated_hidden``.
+    """
     v2_payload = _load_index_from_v2(index_path, deleted)
     if v2_payload is not None:
-        sessions = v2_payload.get("sessions", [])
-        stats = v2_payload.get("stats", {})
+        visible = filter_automated_payload(v2_payload, include_automated)
+        stats = visible.get("stats", {})
         v2_db = index_path.parent / "index_v2.sqlite"
         return {
-            "total_sessions": int(stats.get("total_sessions") or len(sessions)),
+            "total_sessions": int(stats.get("total_sessions") or len(visible.get("sessions", []))),
             "by_tool": dict(stats.get("by_tool") or {}),
             "last_updated": v2_payload.get("generated_at"),
             "index_size_bytes": v2_db.stat().st_size if v2_db.exists() else 0,
+            "automated_hidden": int(visible.get("automated_hidden") or 0),
         }
 
     if not index_path.exists():
@@ -367,19 +518,25 @@ def load_index_summary(index_path: Path, deleted: set[str]) -> dict:
             "by_tool": {},
             "last_updated": None,
             "index_size_bytes": 0,
+            "automated_hidden": 0,
         }
 
     stat = index_path.stat()
     payload = _load_index_cached(str(index_path), stat.st_mtime_ns, stat.st_size)
 
+    sessions = payload.get("sessions", [])
     if deleted:
-        sessions = [s for s in payload.get("sessions", []) if s.get("id") not in deleted]
+        sessions = [s for s in sessions if s.get("id") not in deleted]
+    visible = filter_automated(sessions, include_automated)
+    hidden = len(sessions) - len(visible)
+
+    if deleted or hidden:
         by_tool: dict[str, int] = {}
-        for session in sessions:
+        for session in visible:
             tool = str(session.get("tool") or "")
             if tool:
                 by_tool[tool] = by_tool.get(tool, 0) + 1
-        total_sessions = len(sessions)
+        total_sessions = len(visible)
     else:
         stats = payload.get("stats", {})
         by_tool = dict(stats.get("by_tool") or {})
@@ -390,6 +547,7 @@ def load_index_summary(index_path: Path, deleted: set[str]) -> dict:
         "by_tool": by_tool,
         "last_updated": payload.get("generated_at"),
         "index_size_bytes": stat.st_size,
+        "automated_hidden": hidden,
     }
 
 
@@ -404,6 +562,7 @@ def search_index(
     project: Optional[str] = None,
     limit: int = 50,
     scope: Optional[str] = None,
+    include_automated: bool = False,
 ) -> list[dict]:
     """Search sessions, reading from whichever store ``load_index`` uses (#34).
 
@@ -415,6 +574,9 @@ def search_index(
     ``"user_only"``, ``"assistant_only"`` or ``"tool_results"``. Scoped
     search needs the v2 store's per-message rows — on the legacy fallback
     path scope is a no-op.
+
+    Sessions whose origin is exec/cron/subagent are left out unless
+    ``include_automated`` is set; this holds for the keyword, hybrid and legacy paths.
 
     Returns ``[{"session": <dict>, "score": <float>}]``.
 
@@ -433,7 +595,13 @@ def search_index(
             # nothing.
             if v2_is_available(index_dir, compare_to=index_path):
                 results = search_sessions(
-                    index_dir, query, tool=tool, project=project, limit=limit, scope=scope
+                    index_dir,
+                    query,
+                    tool=tool,
+                    project=project,
+                    limit=limit,
+                    scope=scope,
+                    include_automated=include_automated,
                 )
                 # Hybrid: fuse keyword hits with semantic (vector) hits so a
                 # query that only matches by meaning still surfaces. Only when
@@ -441,9 +609,16 @@ def search_index(
                 # set (scoping is keyword-only — vectors are per-session).
                 if _hybrid_enabled() and not (scope and scope != "all"):
                     results = _hybrid_search(
-                        index_dir, query, tool, project, limit, fts_results=results
+                        index_dir,
+                        query,
+                        tool,
+                        project,
+                        limit,
+                        fts_results=results,
+                        include_automated=include_automated,
                     )
                 if results:
+                    results = filter_automated_results(results, include_automated)
                     return apply_deleted_filter_to_results(results, deleted)
                 # v2 returned nothing — fall through to legacy. Better to
                 # double-check than to silently lie. Legacy may still have it.
@@ -464,5 +639,8 @@ def search_index(
 
     from lore.search.engine import SearchEngine
 
-    results = SearchEngine(index_path).search(query, tool=tool, project=project)[:limit]
-    return apply_deleted_filter_to_results(results, deleted)
+    engine = SearchEngine(index_path)
+    # The engine drops automated sessions before its row cap, so a flood of them cannot
+    # push the interactive hits out of the result.
+    results = engine.search(query, tool=tool, project=project, include_automated=include_automated)
+    return apply_deleted_filter_to_results(results[:limit], deleted)

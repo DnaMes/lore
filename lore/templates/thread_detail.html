@@ -13,6 +13,9 @@
                 <span class="session-meta-dot"></span>
                 <span>{{ thread_meta.message_count }} messages</span>
             </div>
+            {%- if automated_hidden_line %}
+            <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="underline">show</a></p>
+            {%- endif %}
             <div class="flex flex-wrap gap-2 mt-3">
                 <span class="pill bg-white border border-slate-200 text-slate-500 font-mono">{{ thread_id }}</span>
             </div>

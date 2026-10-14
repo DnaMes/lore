@@ -114,7 +114,10 @@ class GeminiCLIExtractor(BaseExtractor):
 
     # 2: the jsonl replay (B0.2) changed what sessions carry; version-1 rows
     # were indexed from the old, mostly empty reader.
-    PARSER_VERSION = 2
+    # 3: subagent sessions carry ``origin="subagent"``. They keep the prompt floor
+    # they always had (only sessions imported before are tagged, the index does not grow).
+    PARSER_VERSION = 3
+    AUTOMATED_BYPASSES_PROMPT_FLOOR = False
 
     def __init__(self):
         self.base_path = Path.home() / ".gemini" / "tmp"
@@ -574,7 +577,8 @@ class GeminiCLIExtractor(BaseExtractor):
         self._seen_session_ids.add(session_id)
         if parent_session_id:
             thread_id = f"gemini-cli:{parent_session_id}"
-        if parent_session_id or header.get("kind") == "subagent":
+        is_subagent = bool(parent_session_id) or header.get("kind") == "subagent"
+        if is_subagent:
             label = f"[subagent {path.stem}]"
             title = f"{label} {summary}" if summary else label
 
@@ -598,5 +602,6 @@ class GeminiCLIExtractor(BaseExtractor):
             thread_id=thread_id,
             title=title,
             summary=summary,
+            origin="subagent" if is_subagent else "unknown",
             source_path=str(path),
         )

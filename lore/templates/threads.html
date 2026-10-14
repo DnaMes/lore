@@ -6,6 +6,9 @@
         <div>
             <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Connections</div>
             <h1 class="title-font page-headline text-slate-900 mt-2">Threads</h1>
+            {%- if automated_hidden_line %}
+            <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="underline">show</a></p>
+            {%- endif %}
         </div>
     </div>
     <div class="compact-list">

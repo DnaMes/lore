@@ -18,6 +18,8 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from lore.core.models import AUTOMATED_ORIGINS
+
 from .fts import (
     SEARCH_INDEX_BODY_COLUMN,
     SNIPPET_CLOSE,
@@ -25,7 +27,7 @@ from .fts import (
     build_fts_query,
     phrase_of,
 )
-from .reader import _row_to_session_dict, session_contract_select
+from .reader import _row_to_session_dict, automated_exclusion_sql, session_contract_select
 from .schema import open_connection
 from .writer import v2_db_path
 
@@ -48,6 +50,7 @@ def search_sessions(
     project: Optional[str] = None,
     limit: int = 50,
     scope: Optional[str] = None,
+    include_automated: bool = False,
 ) -> List[Dict[str, Any]]:
     """Full-text search sessions in the v2 store.
 
@@ -61,6 +64,8 @@ def search_sessions(
             ``None`` or ``"all"`` searches whole sessions (default). Any other
             value keeps only sessions that have at least one message of the
             requested role whose content matches every query term.
+        include_automated: also return sessions whose origin is exec/cron/subagent
+            (hidden by default).
 
     Returns:
         ``[{"session": <legacy session dict>, "score": <float>, "snippet":
@@ -95,6 +100,7 @@ def search_sessions(
 
     conn = open_connection(db)
     try:
+        exclusion = "" if include_automated else automated_exclusion_sql(conn, "s")
         rows = conn.execute(
             f"""
             SELECT s.id, s.tool, s.project, s.thread_id, s.title,
@@ -108,7 +114,7 @@ def search_sessions(
             FROM search_index
             JOIN sessions s ON s.id = search_index.entity_id
             WHERE search_index MATCH ?
-              AND search_index.entity_type = 'session'
+              AND search_index.entity_type = 'session'{exclusion}
             ORDER BY score ASC
             LIMIT ?
             """,
@@ -187,6 +193,57 @@ def _sessions_matching_scope(
     return {row["session_id"] for row in rows}
 
 
+# KNN width: ``k = limit * KNN_K_FACTOR`` neighbours are fetched before the tool, project
+# and origin filters run. When that leaves fewer than ``limit`` hits the query is repeated
+# once with ``k * KNN_K_RETRY_FACTOR``, never above ``KNN_K_MAX`` (sqlite-vec accepts
+# k up to 4096; 1024 keeps the second pass cheap on large archives).
+KNN_K_FACTOR = 4
+KNN_K_RETRY_FACTOR = 8
+KNN_K_MAX = 1024
+
+
+def _knn_rows(conn: sqlite3.Connection, packed: bytes, k: int) -> List[sqlite3.Row]:
+    return conn.execute(
+        f"""
+        SELECT s.id, s.tool, s.project, s.thread_id, s.title,
+               s.created, s.updated, s.source_path, s.source_mtime_ns,
+               s.git_branch, s.git_commit, s.metadata_json,
+               s.messages_count, s.prompt_count, s.prompt_outline,
+               s.export_path, s.total_tokens,
+               {session_contract_select(conn, "s")},
+               se.distance AS score
+        FROM session_embeddings se
+        JOIN sessions s ON s.id = se.session_id
+        WHERE se.embedding MATCH ?
+          AND k = ?
+        ORDER BY se.distance ASC
+        """,
+        (packed, k),
+    ).fetchall()
+
+
+def _filter_semantic_rows(
+    rows: List[sqlite3.Row],
+    tool: Optional[str],
+    project: Optional[str],
+    limit: int,
+    include_automated: bool,
+) -> List[Dict[str, Any]]:
+    results: List[Dict[str, Any]] = []
+    for row in rows:
+        session = _row_to_session_dict(row)
+        if not include_automated and session.get("origin") in AUTOMATED_ORIGINS:
+            continue
+        if tool and session.get("tool") != tool:
+            continue
+        if project and project not in str(session.get("project") or ""):
+            continue
+        results.append({"session": session, "score": float(row["score"])})
+        if len(results) >= limit:
+            break
+    return results
+
+
 def semantic_search_sessions(
     output_dir: Path,
     query: str,
@@ -194,6 +251,7 @@ def semantic_search_sessions(
     tool: Optional[str] = None,
     project: Optional[str] = None,
     limit: int = 50,
+    include_automated: bool = False,
 ) -> List[Dict[str, Any]]:
     """Vector (KNN) search over the session archive.
 
@@ -224,37 +282,20 @@ def semantic_search_sessions(
 
     conn = open_connection(db)
     try:
-        rows = conn.execute(
-            f"""
-            SELECT s.id, s.tool, s.project, s.thread_id, s.title,
-                   s.created, s.updated, s.source_path, s.source_mtime_ns,
-                   s.git_branch, s.git_commit, s.metadata_json,
-                   s.messages_count, s.prompt_count, s.prompt_outline,
-                   s.export_path, s.total_tokens,
-                   {session_contract_select(conn, "s")},
-                   se.distance AS score
-            FROM session_embeddings se
-            JOIN sessions s ON s.id = se.session_id
-            WHERE se.embedding MATCH ?
-              AND k = ?
-            ORDER BY se.distance ASC
-            """,
-            (pack_vector(vector), max(1, limit) * 4),
-        ).fetchall()
+        packed = pack_vector(vector)
+        k = max(1, limit) * KNN_K_FACTOR
+        rows = _knn_rows(conn, packed, k)
+        results = _filter_semantic_rows(rows, tool, project, limit, include_automated)
+        # The filters run after the KNN cut-off, so a neighbourhood made of automated
+        # (or other filtered-out) sessions can leave fewer than ``limit`` hits. Ask once
+        # more with a wider k, only when the first pass was full (more neighbours exist).
+        if len(results) < limit and len(rows) >= k and k < KNN_K_MAX:
+            wider = min(k * KNN_K_RETRY_FACTOR, KNN_K_MAX)
+            rows = _knn_rows(conn, packed, wider)
+            results = _filter_semantic_rows(rows, tool, project, limit, include_automated)
     except sqlite3.Error:
         # No vec table (e.g. extension absent) or a malformed query — FTS covers it.
         return []
     finally:
         conn.close()
-
-    results: List[Dict[str, Any]] = []
-    for row in rows:
-        session = _row_to_session_dict(row)
-        if tool and session.get("tool") != tool:
-            continue
-        if project and project not in str(session.get("project") or ""):
-            continue
-        results.append({"session": session, "score": float(row["score"])})
-        if len(results) >= limit:
-            break
     return results

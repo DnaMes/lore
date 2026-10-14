@@ -61,6 +61,11 @@ def _stringify_tool_result(content) -> str:
 class ClaudeCodeExtractor(BaseExtractor):
     """Extract chat history from Claude Code."""
 
+    # 2: subagent transcripts carry ``origin="subagent"``. They keep the prompt floor
+    # they always had (only sessions imported before are tagged, the index does not grow).
+    PARSER_VERSION = 2
+    AUTOMATED_BYPASSES_PROMPT_FLOOR = False
+
     def __init__(self):
         self.base_path = Path.home() / ".claude" / "projects"
         self.base_paths = self._discover_base_paths()
@@ -396,6 +401,7 @@ class ClaudeCodeExtractor(BaseExtractor):
             thread_id=thread_id,
             title=title,
             summary=summary,
+            origin="subagent" if parent_session_id else "unknown",
             cli_version=cli_version,
             git_branch=git_branch,
             source_path=str(path),

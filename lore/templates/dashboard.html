@@ -22,6 +22,9 @@
         <div class="stat-card p-6">
             <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Sessions</div>
             <div class="text-3xl font-semibold text-slate-900">{{ stats.total_sessions }}</div>
+            {%- if automated_hidden_line %}
+            <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="underline">show</a></p>
+            {%- endif %}
         </div>
         <div class="stat-card p-6">
             <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Messages</div>

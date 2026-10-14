@@ -241,7 +241,7 @@ See [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) for full inputs, outputs, a
 ### Available MCP tools
 
 - `search_history`: Find matching past sessions.
-- `list_sessions`: List indexed sessions with filters.
+- `list_sessions`: List indexed sessions with filters (`include_automated` adds exec/cron/subagent sessions).
 - `get_session`: Load one session.
 - `get_session_messages`: Load the transcript for one session.
 - `get_thread`: Load cross-session thread context.
@@ -348,6 +348,33 @@ export GEMINI_PROJECT_ROOTS="$HOME/projects:$HOME/work:$HOME/code"
 ```
 
 This helps Lore resolve Gemini's project hash to real folders.
+
+---
+
+## Automated sessions
+
+Sessions that are not a person talking to an assistant carry an `origin` of `exec`,
+`cron` or `subagent`. Lore stores them (the archive stays complete, and they skip the
+minimum-user-prompts filter that drops tiny interactive sessions) but hides them from
+default views and from the LLM stages. `interactive` and `unknown` sessions behave
+exactly as before.
+
+| Surface | Show them |
+| --- | --- |
+| `lore list`, `search`, `stats`, `digest`, `threads`, `rules`, `generate-titles`, `analyze`, `format`, `knowledge`, `prune` | `--include-automated` |
+| Web UI (`/`, `/sessions`, `/projects`, `/threads`, `/stats`, `/api/v1/...`) | `?automated=1`, or the "Automated" checkbox on the sessions list |
+| MCP `list_sessions`, `search_history`, `list_recent_sessions`, `list_projects`, `get_thread` | argument `include_automated: true` |
+
+Where totals are shown the number of hidden sessions is printed ("12 automated sessions
+hidden"; a thread shows its own count for hidden subagent children, and counts follow
+the active filters). Filtering the sessions list by a tag does not hide automated
+sessions. Token and cost totals (`/api/stats/costs`) always cover every session, since the
+spend happened either way; the payload carries `automated_included_line` ("includes 3
+automated sessions"). A session or thread opened by its id always works, hidden or not, and
+`lore export` writes every session. `lore prune` never removes automated sessions unless
+`--include-automated` is given. Today the Claude Code and Gemini CLI extractors tag their
+subagent sessions `subagent` (only those already imported before, so the index does not
+grow); other tools gain `exec`/`cron` detection with their extractor work.
 
 ---
 
