@@ -30,7 +30,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - **FIX COMMAND:** `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests/test_source_revisions.py -q -o addopts=`
 
 ### #152 Archive #02: Preserve archived content when sources disappear or extraction fails
-- **STATUS: DONE-IN-REPO.** Commits `fe1ca50` + merge `45ae3f6`. `writer.py:186` `_SESSION_INSERT` uses `ON CONFLICT(id) DO UPDATE` (no cascade delete); `StreamingV2Writer.begin()` (`writer.py:544`) only `BEGIN`; `abort()` (`writer.py:596`) rolls back; `_write_full_session` deletes only its own messages/FTS (`writer.py:371-374`). Tests: `tests/test_storage_writer.py:75,95,107`, `tests/test_contract_fields.py:329`, `tests/test_services_extraction.py` (failed/empty/tombstone/cancel), plan all `[x]` in `docs/superpowers/plans/2026-09-12-archive-preservation.md`.
+- **STATUS: CLOSED 2026-10-14** (verified against `main`, evidence comment posted). Was DONE-IN-REPO. Commits `fe1ca50` + merge `45ae3f6`. `writer.py:186` `_SESSION_INSERT` uses `ON CONFLICT(id) DO UPDATE` (no cascade delete); `StreamingV2Writer.begin()` (`writer.py:544`) only `BEGIN`; `abort()` (`writer.py:596`) rolls back; `_write_full_session` deletes only its own messages/FTS (`writer.py:371-374`). Tests: `tests/test_storage_writer.py:75,95,107`, `tests/test_contract_fields.py:329`, `tests/test_services_extraction.py` (failed/empty/tombstone/cancel), plan all `[x]` in `docs/superpowers/plans/2026-09-12-archive-preservation.md`.
 - **SCOPE:** Close after verifying release notes; no code change required.
 - **ACCEPTANCE:** [x] missing/failed/empty/cancelled never delete prior rows; [x] unavailable source not treated as deletion; [x] only explicit tombstone removes derived views; [x] failed txn leaves last committed archive intact.
 - **FILES:** `lore/storage/writer.py`, `lore/services/extraction.py`, `lore/exporters/index.py`, `tests/test_storage_writer.py`, `tests/test_services_extraction.py`.
@@ -138,7 +138,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - **FIX COMMAND:** `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests/test_import_bundle.py -q -o addopts=`
 
 ### #164 Archive #14: Capture Pi sessions through a tested extractor
-- **STATUS: DONE-IN-REPO.** `lore/extractors/pi.py` (628 lines) from commit `d2b7d31`; registered; `tests/test_extractor_pi.py` has 35+ tests incl. registration (`:631`), malformed/unknown records (`:454`), thresholds (`:548`), parser-version reuse (`:574`). Focused suite passed (215 passed group).
+- **STATUS: CLOSED 2026-10-14** (evidence comment posted; proof `pytest tests/test_extractor_pi.py` → 41 passed). Was DONE-IN-REPO. `lore/extractors/pi.py` (628 lines) from commit `d2b7d31`; registered; `tests/test_extractor_pi.py` has 35+ tests incl. registration (`:631`), malformed/unknown records (`:454`), thresholds (`:548`), parser-version reuse (`:574`). Focused suite passed (215 passed group).
 - **SCOPE:** Close after a release-note entry; nothing left on the issue's listed criteria.
 - **ACCEPTANCE:** [x] local Pi layout discovered/documented; [x] supported records extract with stable ids + structured payloads; [x] unsupported records counted with diagnostics; [x] participates in common contract/completeness.
 - **FILES:** `lore/extractors/pi.py`, `lore/extractors/factory.py`, `tests/test_extractor_pi.py`.
@@ -207,7 +207,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 | # | STATUS | SIZE | RISK | Scope |
 |---|--------|------|------|-------|
 | 151 | OPEN | L | data-loss, privacy | Append-only raw source/attachment revision store before parsing |
-| 152 | DONE-IN-REPO | S | data-loss | Verify/close transaction-scoped upserts (`fe1ca50`) |
+| 152 | CLOSED 2026-10-14 | S | data-loss | Verify/close transaction-scoped upserts (`fe1ca50`) |
 | 153 | PARTIAL | M | data-loss | Capture all decoded sessions; make quality gate a view filter |
 | 154 | PARTIAL | M | format-compat, migration | Add versioned message envelope (native id, full tool calls, extensions) |
 | 155 | OPEN | L | data-loss, migration | Namespace session identity, link divergent copies, compat resolver |
@@ -219,7 +219,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 | 161 | OPEN | L | migration, data-loss | Versioned SQLite-consistent backup + verified restore |
 | 162 | PARTIAL | M | none | Durable per-source health/completeness model |
 | 163 | OPEN | L | migration, privacy | Portable bundle import/merge with provenance |
-| 164 | DONE-IN-REPO | S | none | Verify/close tested Pi extractor (`d2b7d31`) |
+| 164 | CLOSED 2026-10-14 | S | none | Verify/close tested Pi extractor (`d2b7d31`) |
 | 165 | PARTIAL | M | format-compat | Complete, provider-independent transcript export; mark derived content |
 | 166 | PARTIAL | M | format-compat | Canonical tool-call envelope in MD/HTML export |
 | 167 | PARTIAL | S–M | none | View-only normalization guarantees + idempotency |

@@ -39,6 +39,18 @@ were not verified on real machines.
 tools. Licence notes: `basic-memory` is AGPL-3.0 and cass carries an additional
 clause, so take ideas, not code. See `docs/research/2026-10-14-oss-landscape.md`.
 
+### Review gate approves without seeing the diff (harness)
+
+`review-gate` approved every commit of the 2026-10-14 Wave-0/Track-L pass, but each reviewer
+repeated the same note: the prompt carried only the stat, not the hunks, so nothing could be
+inspected line by line (report files in `~/.local/state/ai-stack/review-gate/`). The approvals are
+real decisions, just made without the diff.
+
+**Recommended decision:** file a `harness-idea` against ai-stack's `review-gate` to embed the
+diff itself (it is already capped by `MAX_DIFF_CHARS`) instead of the stat, and until that lands
+treat an APPROVE for this repo as "no finding raised", not as "line-level reviewed". Do not hold
+Lore commits back over it.
+
 ## Deferred roadmap (label `deferred` on GitHub)
 
 ### #29 — MCP-over-HTTP transport (streamable-http)

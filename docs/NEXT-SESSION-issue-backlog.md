@@ -10,6 +10,38 @@ Ground truth for every issue (status, scope, acceptance, files, proof command, d
 
 ---
 
+## Progress — updated 2026-10-14 (session that ran this prompt)
+
+**Wave 0 complete, 5 issues closed, 54 → 49 open.** Every closure carries an evidence comment
+with the proof output and the AI-disclosure line:
+
+| Item | Issue | State | Commit |
+| ---- | ----- | ----- | ------ |
+| 0.1 | #152 | closed (proof `pytest tests/test_storage_writer.py tests/test_services_extraction.py tests/test_index_builder_streaming.py` → 43 passed; tombstone file → 2 passed) | `fe1ca50` / `45ae3f6` (pre-existing) |
+| 0.2 | #164 | closed (`pytest tests/test_extractor_pi.py` → 41 passed) | `d2b7d31` (pre-existing) |
+| 0.3 | #198 | closed (`pytest tests/test_cli_dispatch.py` → 5 passed) | `c6e4ff0` |
+| 0.4 | #196 | closed (`grep -n "pip install lore" README.md` → empty; new install test → 1 passed) | `b6e6c74` |
+| 0.5 | #33 | closed — decision: one repository, `import lore` unchanged | no code |
+| 0.6 | #29, #48 | open + label `deferred`, decisions in `docs/TODO.md` | `4f7a474` |
+
+**Track L steps 1, 2, 2b, 3 and 9 complete:** `88f4726` (jev cache key / lane errors / 0600-0700
+atomic cache), `09821a1` (`LORE_LLM_TIMEOUT`, jev 180 s / openrouter 90 s), `9a58385` (free-only
+guard + cost warning, `LORE_OPENROUTER_ALLOW_PAID=1` opts in), `6e4802d` (live measurements and
+limits read on 2026-10-14), `5dc276a` (hermetic summary-card tests).
+
+**Known failure is gone.** Root cause of `test_absent_summary_renders_at_a_glance_without_provider`:
+the summary job does `from .web_data import OUTPUT_DIR` at call time while the test patched only
+`web.OUTPUT_DIR`, so a job test wrote a row into the real output directory and later runs rendered
+"AI summary". Both tests now patch the directory the code reads. Verified with two consecutive
+file runs (20 passed each) and a clean `session_summaries` table in the shared test home.
+
+**Full suite after Wave 0 + Track L: 2676 passed, 25 skipped, 0 failed (442 s), ruff clean.**
+All commits passed `review-gate` (APPROVE) and are on remote `main`.
+
+Still to do: Waves 1-7 and Track L steps 4-8 (steps 4+5 only after Wave 2.3).
+
+---
+
 ## Objective
 
 Work off all 54 open GitHub issues of `DnaMes/lore` in dependency order: close what is already
@@ -39,9 +71,10 @@ Repo facts:
   exceptions, no `from X import *`, no new third-party dependency without a reason in the commit.
 - Test baseline (isolated HOME is mandatory on this host):
   `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests -p no:cacheprovider -q -o addopts=`
-  = 2649 passed, 25 skipped, plus one known failure
-  `tests/test_session_summary_card.py::test_absent_summary_renders_at_a_glance_without_provider`
-  (also fails on a clean tree; Track L step 9 fixes it). Full suite ~11 minutes: run targeted
+  = **2676 passed, 25 skipped, 0 failed** as of 2026-10-14 after Wave 0 + Track L (baseline before
+  that session: 2649 passed, 25 skipped, plus one known failure
+  `tests/test_session_summary_card.py::test_absent_summary_renders_at_a_glance_without_provider`,
+  fixed in Track L step 9, commit `5dc276a`). Full suite ~7-11 minutes: run targeted
   tests per unit and the full suite once per wave.
 - Lint: `.venv/bin/ruff format lore tests lore_cli.py && .venv/bin/ruff check lore tests lore_cli.py`.
 - Schema: v2 SQLite migrations end at 18 (`lore/storage/schema.py`). Export formats (Markdown,
@@ -299,10 +332,10 @@ justify them; step 8 (docs/handoff) is folded into the end-of-wave documentation
 - Do not weaken or delete an existing test to make a change pass; fix the cause.
 
 ## Acceptance Criteria
-- [ ] Wave 0 done: #152, #164, #198, #196, #33 closed with evidence; #29 and #48 labelled
+- [x] Wave 0 done: #152, #164, #198, #196, #33 closed with evidence; #29 and #48 labelled
       `deferred` with a recommended decision in `docs/TODO.md`.
 - [ ] After each wave: targeted proof commands green, full suite = baseline passed count plus the
-      new tests, only the one known failure (until Track L step 9 fixes it), ruff clean.
+      new tests, no failures (the former known failure is fixed since Track L step 9), ruff clean.
 - [ ] Every closed issue has a comment with commit sha, quoted proof output and the AI-disclosure line.
 - [ ] No transcript text reaches a cloud provider without `--allow-cloud`; no transcript reaches
       an agentic lane; asserted by tests added in the unit that introduces a provider/adapter.

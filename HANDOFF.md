@@ -1,4 +1,40 @@
-# HANDOFF — Lore — 2026-09-11 (issue-backlog sweep: 26 issues closed, 13 commits pushed)
+# HANDOFF — Lore
+
+## Current checkpoint — 2026-10-14 (backlog prompt Wave 0 + Track L: 5 issues closed, 8 commits pushed)
+
+Ran `docs/NEXT-SESSION-issue-backlog.md` from a fresh session: Wave 0 (hygiene) plus Track L
+steps 1, 2, 2b, 3 and 9 of `docs/NEXT-SESSION-free-llm-providers.md`. Nothing else was touched;
+Waves 1-7 and Track L steps 4-8 are still ahead.
+
+- **Issues closed with evidence comments:** #152, #164 (both already implemented, verified),
+  #198 (regression test), #196 (install-from-clone + README), #33 (epic; decision: keep one
+  repository and the `import lore` package). Open count 54 → **49**. #29 and #48 stay open with
+  label `deferred` and a recommended decision each in `docs/TODO.md`.
+- **Commits (all `review-gate` APPROVE, all on remote `main`, verified with `git ls-remote`):**
+  `c6e4ff0` test(cli) exit code · `b6e6c74` docs(readme) install-from-clone · `4f7a474`
+  docs(todo) deferred roadmap · `88f4726` fix(llm) jev hardening · `09821a1` feat(llm)
+  `LORE_LLM_TIMEOUT` · `9a58385` feat(llm) free-only guard · `6e4802d` docs(llm) measurements ·
+  `5dc276a` fix(tests) hermetic summary-card tests.
+- **Full suite: 2676 passed, 25 skipped, 0 failed (442 s), ruff clean.** The long-standing failure
+  `test_absent_summary_renders_at_a_glance_without_provider` is fixed: the summary job imports
+  `OUTPUT_DIR` from `web_data` at call time while the tests patched only `web.OUTPUT_DIR`, so a job
+  test wrote a summary row into the real output directory and every later run rendered "AI summary".
+  Both tests now patch the directory the code reads; two consecutive runs of the file are green and
+  the shared test home's `session_summaries` table stays at 0 rows.
+- **Track L live check:** the OpenRouter key was fetched per command from 1Password (never stored,
+  never printed). Both free models answered (9.8 s and 5.5 s), no 429, no cost. Limits read from
+  `https://openrouter.ai/docs/api-reference/limits` on 2026-10-14: 20 req/min, 50 req/day below 10
+  credits, 1000 req/day at ≥10 credits; this key reports `free_model_daily_requests {used 40,
+  limit 1000}`. Recorded in `docs/LLM_INTEGRATION.md` ("Measured (2026-10-14)").
+- **Test-home hygiene:** one stray summary row written by the old polluting test was removed from
+  the *scratch* home `/tmp/opencode/lore-test-home/.lore/index_v2.sqlite` (backup:
+  `/tmp/lore-test-home-index.sqlite.bak`). The live `~/.lore` archive was not touched.
+- **Open finding, recommended decision in `docs/TODO.md`:** `review-gate` approves these commits
+  while telling us the diff body was empty — file a `harness-idea` to embed the diff; meanwhile
+  read an APPROVE for this repo as "no finding", not "line-level reviewed".
+
+Next: Wave 1 (#199 → #193 → #92 → #176 → #112 → #185; #112 is sequential and data-loss-sensitive),
+then Wave 2 before Track L steps 4-5.
 
 ## Current checkpoint — 2026-09-24
 

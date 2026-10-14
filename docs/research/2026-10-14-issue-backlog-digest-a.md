@@ -6,7 +6,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 
 
 ### #29 [#41] MCP-over-HTTP transport (streamable-http)
-- STATUS: OPEN (roadmap, maintainer-deferred 2026-05-18)
+- STATUS: DEFERRED 2026-10-14 (label `deferred`; open, decision in `docs/TODO.md`: build after #174/#175 stabilise the search API). Originally OPEN (roadmap, maintainer-deferred 2026-05-18)
 - SCOPE: Add `--transport streamable-http` (POST /mcp + SSE) to the MCP server and document it.
 - ACCEPTANCE: [ ] `--transport streamable-http` flag exists; [ ] HTTP transport implemented; [ ] README + API_REFERENCE updated.
 - FILES: `lore/interfaces/mcp.py`, `lore/cli/mcp.py`, `lore/interfaces/server.py`, `docs/API_REFERENCE.md`, `README.md`
@@ -15,7 +15,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `lore-mcp --help 2>&1 | grep streamable-http` (currently absent; `docs/API_REFERENCE.md:5` lists only "MCP over stdio", `lore/cli/mcp.py` calls `server.run()` stdio-only).
 
 ### #33 Vision: tool-übergreifendes Agent-Gedächtnis (shared memory DB)
-- STATUS: PARTIAL — all functional vision checkboxes shipped in-repo; only the strategic repo/naming split and "widen extractor spectrum" remain.
+- STATUS: CLOSED 2026-10-14 (decision: keep one repository and the `import lore` package; all functional vision checkboxes shipped, 22 contract-tested extractors). Was PARTIAL — all functional vision checkboxes shipped in-repo; only the strategic repo/naming split and "widen extractor spectrum" remain.
 - SCOPE: Decide the repo/naming split (or explicitly keep monorepo) and broaden extractor coverage; no code blocker.
 - ACCEPTANCE: [x] v2 SQLite store (#44); [x] `memory_write`/`memory_recall` MCP + CLI; [x] semantic search (migration 10, `lore/storage/embeddings.py`); [x] memory web UI; [x] `memory_sources` provenance (`add_memory(source_session=...)`); [ ] repo-split decision.
 - FILES: `lore/storage/memory.py`, `lore/storage/embeddings.py`, `lore/storage/schema.py`, `lore/interfaces/web.py`, `docs/superpowers/specs/`
@@ -24,7 +24,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `git log --oneline --grep='#33' | head` + record maintainer decision in the issue (no test; it is a tracking epic).
 
 ### #48 P2: define and execute the JSON-retirement exit criteria (#44 follow-up)
-- STATUS: OPEN (maintainer-deferred to v3, "risky coexistence, not a blocker")
+- STATUS: DEFERRED 2026-10-14 (label `deferred`; open, decision in `docs/TODO.md`: start only after sub-task 4, the CI v2-vs-JSON equivalence test, exists). Was OPEN (maintainer-deferred to v3, "risky coexistence, not a blocker")
 - SCOPE: Execute the 5 exit criteria then stop writing `index.json`/`index.sqlite` and make v2 the native shape.
 - ACCEPTANCE: [ ] tombstones+ignored into v2; [ ] search routed through v2; [ ] `generated_at`/hash staleness assert; [ ] CI equivalence test v2 vs JSON on realistic data; [ ] `IndexBuilder` stops writing `index.json`/`index.sqlite`.
 - FILES: `lore/services/index.py` (`load_index` v2-first then JSON fallback at 503-533), `lore/exporters/index.py:88-89`, `lore/storage/reader.py`, `lore/storage/schema.py`
@@ -96,7 +96,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests -p no:cacheprovider -q -o addopts= -k browser` (no matches today).
 
 ### #196 docs: install from a clone instead of the ambiguous 'pip install lore' (child of #191)
-- STATUS: OPEN
+- STATUS: CLOSED 2026-10-14 (commit `b6e6c74`; `tests/test_install_from_clone.py` builds a venv and asserts all five console scripts, `grep -n "pip install lore" README.md` empty, PyPI badges removed)
 - SCOPE: Change README Quickstart to install from a clone and add a clean-venv install test for the five documented entry points.
 - ACCEPTANCE: [ ] README no longer recommends `pip install lore`; [ ] clean-venv install-from-worktree test asserts `lore`, `lore-session`, `lore-web`, `lore-mcp`, `lore-web-probe`; [ ] `import lore` unchanged; [ ] no PyPI-availability claim; [ ] ruff + suite green.
 - FILES: `README.md:26,107` (still `pip install lore`), `tests/test_cli_entry_points.py` (import-only, not build/install), `pyproject.toml:60-65`
@@ -114,7 +114,7 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests -p no:cacheprovider -q -o addopts= -k "improve or knowledge or feedback or context"` plus `python lore_cli.py context --help` (unknown command today).
 
 ### #198 CLI: main() discards handler return values, every command exits 0
-- STATUS: PARTIAL — the reported bug is NO LONGER TRUE; exit propagation now works, but the acceptance test and the exact `return handler(...)` form are still missing.
+- STATUS: CLOSED 2026-10-14 (regression test added in commit `c6e4ff0`; fix itself landed in `39b5ae8`). Was PARTIAL — the reported bug is NO LONGER TRUE; exit propagation now works, but the acceptance test and the exact `return handler(...)` form are still missing.
 - VERDICT on claim: false at HEAD. `lore_cli.py:2169-2171` is `rc = handler(args)` / `if isinstance(rc, int) and rc != 0: sys.exit(rc)`. Landed incidentally in commit `39b5ae84` ("feat(export): add opt-in redacted exports for sharing (#197)"), which changed `handler(args)` → `rc = handler(args)` + `sys.exit(rc)`.
 - OBSERVED PROOF: stub `COMMANDS['list'] = lambda a: 1; main()` → printed `MAIN_EXIT_CODE 1`.
 - SCOPE: Add a regression test that runs `main()` through a stub handler returning 1; optionally switch to `return rc` per the issue text.
