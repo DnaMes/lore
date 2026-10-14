@@ -76,7 +76,7 @@ def test_request_shape_and_authorization(monkeypatch: pytest.MonkeyPatch, lore_k
 
     calls = _install_urlopen(monkeypatch, handler)
     provider = OpenRouterProvider(
-        LLMConfig(provider="openrouter", model="test/model", cache_enabled=False)
+        LLMConfig(provider="openrouter", model="test/model:free", cache_enabled=False)
     )
     resp = provider.generate("user prompt", system_prompt="sys", max_tokens=100, temperature=0.2)
 
@@ -86,7 +86,7 @@ def test_request_shape_and_authorization(monkeypatch: pytest.MonkeyPatch, lore_k
     assert calls[0]["url"] == "https://openrouter.ai/api/v1/chat/completions"
     assert calls[0]["headers"]["Authorization"] == f"Bearer {lore_key}"
     body = calls[0]["body"]
-    assert body["model"] == "test/model"
+    assert body["model"] == "test/model:free"
     assert body["max_tokens"] == 100
     assert body["temperature"] == 0.2
     assert body["messages"] == [
@@ -100,9 +100,11 @@ def test_content_parsing(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None
         return _FakeHTTPResponse(_completion_body("parsed text", 7))
 
     _install_urlopen(monkeypatch, handler)
-    provider = OpenRouterProvider(LLMConfig(provider="openrouter", model="m", cache_enabled=False))
+    provider = OpenRouterProvider(
+        LLMConfig(provider="openrouter", model="m:free", cache_enabled=False)
+    )
     resp = provider.generate("p")
-    assert resp.model == "m"
+    assert resp.model == "m:free"
     assert resp.content == "parsed text"
     assert resp.tokens_used == 7
 
@@ -127,7 +129,9 @@ def test_429_then_200_retries_with_sleep(monkeypatch: pytest.MonkeyPatch, lore_k
         return _FakeHTTPResponse(_completion_body("after retry"))
 
     _install_urlopen(monkeypatch, handler)
-    provider = OpenRouterProvider(LLMConfig(provider="openrouter", model="m", cache_enabled=False))
+    provider = OpenRouterProvider(
+        LLMConfig(provider="openrouter", model="m:free", cache_enabled=False)
+    )
     resp = provider.generate("p")
     assert resp.content == "after retry"
     assert sleeps == [2.0]
@@ -144,7 +148,9 @@ def test_401_raises_without_leaking_key(monkeypatch: pytest.MonkeyPatch, lore_ke
         )
 
     _install_urlopen(monkeypatch, handler)
-    provider = OpenRouterProvider(LLMConfig(provider="openrouter", model="m", cache_enabled=False))
+    provider = OpenRouterProvider(
+        LLMConfig(provider="openrouter", model="m:free", cache_enabled=False)
+    )
     with pytest.raises(OpenRouterError) as exc_info:
         provider.generate("p")
     msg = str(exc_info.value)
@@ -157,7 +163,9 @@ def test_empty_content_raises(monkeypatch: pytest.MonkeyPatch, lore_key: str) ->
         return _FakeHTTPResponse(_completion_body("   "))
 
     _install_urlopen(monkeypatch, handler)
-    provider = OpenRouterProvider(LLMConfig(provider="openrouter", model="m", cache_enabled=False))
+    provider = OpenRouterProvider(
+        LLMConfig(provider="openrouter", model="m:free", cache_enabled=False)
+    )
     with pytest.raises(OpenRouterError, match="empty message content"):
         provider.generate("p")
 
@@ -207,7 +215,7 @@ def test_cache_miss_when_temperature_max_tokens_or_base_url_change(
     cache_dir = str(tmp_path / "or-cache")
     base_cfg = dict(
         provider="openrouter",
-        model="m",
+        model="m:free",
         cache_enabled=True,
         cache_dir=cache_dir,
         temperature=0.5,
@@ -245,7 +253,9 @@ def test_urlerror_then_200_retries(monkeypatch: pytest.MonkeyPatch, lore_key: st
         return _FakeHTTPResponse(_completion_body("recovered"))
 
     calls = _install_urlopen(monkeypatch, handler)
-    provider = OpenRouterProvider(LLMConfig(provider="openrouter", model="m", cache_enabled=False))
+    provider = OpenRouterProvider(
+        LLMConfig(provider="openrouter", model="m:free", cache_enabled=False)
+    )
     resp = provider.generate("p")
     assert resp.content == "recovered"
     assert len(calls) == 2
@@ -261,7 +271,9 @@ def test_persistent_urlerror_raises_after_retries(
         raise URLError("down")
 
     calls = _install_urlopen(monkeypatch, handler)
-    provider = OpenRouterProvider(LLMConfig(provider="openrouter", model="m", cache_enabled=False))
+    provider = OpenRouterProvider(
+        LLMConfig(provider="openrouter", model="m:free", cache_enabled=False)
+    )
     with pytest.raises(OpenRouterError, match="after retries"):
         provider.generate("p")
     assert len(calls) == 3
@@ -271,7 +283,7 @@ def test_base_url_scheme_policy(monkeypatch: pytest.MonkeyPatch, lore_key: str) 
     provider = OpenRouterProvider(
         LLMConfig(
             provider="openrouter",
-            model="m",
+            model="m:free",
             cache_enabled=False,
             base_url="http://example.com/v1",
         )
@@ -286,7 +298,7 @@ def test_base_url_scheme_policy(monkeypatch: pytest.MonkeyPatch, lore_key: str) 
     OpenRouterProvider(
         LLMConfig(
             provider="openrouter",
-            model="m",
+            model="m:free",
             cache_enabled=False,
             base_url="http://127.0.0.1:8080",
         )
@@ -294,9 +306,9 @@ def test_base_url_scheme_policy(monkeypatch: pytest.MonkeyPatch, lore_key: str) 
     assert calls[-1]["url"] == "http://127.0.0.1:8080/chat/completions"
 
     calls.clear()
-    OpenRouterProvider(LLMConfig(provider="openrouter", model="m", cache_enabled=False)).generate(
-        "p2"
-    )
+    OpenRouterProvider(
+        LLMConfig(provider="openrouter", model="m:free", cache_enabled=False)
+    ).generate("p2")
     assert calls[-1]["url"] == "https://openrouter.ai/api/v1/chat/completions"
 
 
@@ -311,7 +323,7 @@ def test_cache_file_created_with_mode_0600(
     provider = OpenRouterProvider(
         LLMConfig(
             provider="openrouter",
-            model="m",
+            model="m:free",
             cache_enabled=True,
             cache_dir=str(cache_dir),
         )
@@ -321,3 +333,95 @@ def test_cache_file_created_with_mode_0600(
     assert len(cache_files) == 1
     mode = cache_files[0].stat().st_mode
     assert stat.S_IMODE(mode) == 0o600
+
+
+# --- free-only guard and cost reporting (Track L step 2b) ----------------
+
+
+def test_free_model_is_accepted(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+    monkeypatch.delenv("LORE_OPENROUTER_ALLOW_PAID", raising=False)
+    calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("ok")))
+    provider = OpenRouterProvider(
+        LLMConfig(
+            provider="openrouter", model="nvidia/nemotron-3.5-lightning:free", cache_enabled=False
+        )
+    )
+    assert provider.generate("hi").content == "ok"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("model", ["openai/gpt-5.6-luna", "nvidia/nemotron-3-ultra-550b-a55b"])
+def test_paid_model_refused_before_any_request(
+    monkeypatch: pytest.MonkeyPatch, lore_key: str, model: str
+) -> None:
+    monkeypatch.delenv("LORE_OPENROUTER_ALLOW_PAID", raising=False)
+    calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("x")))
+    provider = OpenRouterProvider(
+        LLMConfig(provider="openrouter", model=model, cache_enabled=False)
+    )
+
+    with pytest.raises(OpenRouterError) as exc:
+        provider.generate("hi")
+
+    assert calls == []  # refused before a request went out
+    message = str(exc.value)
+    assert model in message
+    assert "LORE_OPENROUTER_ALLOW_PAID" in message
+    assert lore_key not in message  # no key material in the error
+
+
+def test_paid_model_refused_when_coming_from_env(
+    monkeypatch: pytest.MonkeyPatch, lore_key: str
+) -> None:
+    monkeypatch.delenv("LORE_OPENROUTER_ALLOW_PAID", raising=False)
+    monkeypatch.setenv("LORE_OPENROUTER_MODEL", "openai/gpt-5.6-luna")
+    calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("x")))
+
+    with pytest.raises(OpenRouterError):
+        get_provider("openrouter", cache_enabled=False).generate("hi")
+
+    assert calls == []
+
+
+def test_allow_paid_env_opts_in(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+    monkeypatch.setenv("LORE_OPENROUTER_ALLOW_PAID", "1")
+    calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("paid")))
+    provider = OpenRouterProvider(
+        LLMConfig(provider="openrouter", model="openai/gpt-5.6-luna", cache_enabled=False)
+    )
+    assert provider.generate("hi").content == "paid"
+    assert len(calls) == 1
+
+
+def test_zero_cost_is_silent(monkeypatch: pytest.MonkeyPatch, lore_key: str, capsys) -> None:
+    body = {
+        "choices": [{"message": {"content": "ok"}}],
+        "usage": {"total_tokens": 5, "cost": 0},
+    }
+    _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(json.dumps(body).encode()))
+    provider = OpenRouterProvider(
+        LLMConfig(
+            provider="openrouter", model="nvidia/nemotron-3.5-lightning:free", cache_enabled=False
+        )
+    )
+    provider.generate("hi")
+    assert "cost" not in capsys.readouterr().err.lower()
+
+
+def test_nonzero_cost_warns_on_stderr(
+    monkeypatch: pytest.MonkeyPatch, lore_key: str, capsys
+) -> None:
+    body = {
+        "choices": [{"message": {"content": "ok"}}],
+        "usage": {"total_tokens": 5, "cost": 0.0042},
+    }
+    _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(json.dumps(body).encode()))
+    provider = OpenRouterProvider(
+        LLMConfig(
+            provider="openrouter", model="nvidia/nemotron-3.5-lightning:free", cache_enabled=False
+        )
+    )
+    provider.generate("hi")
+    err = capsys.readouterr().err
+    assert "0.0042" in err
+    assert "cost" in err.lower()

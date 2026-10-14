@@ -173,6 +173,21 @@ accepted only for loopback hosts (local OpenAI-compatible servers).
 A faster free alternative is `nvidia/nemotron-3.5-lightning:free` — set
 `LORE_OPENROUTER_MODEL` or pass `--model` explicitly.
 
+**Free-only by default.** The shared account is not on the free tier, so a
+non-free model id costs real money. Lore therefore refuses any model id that
+does not end in `:free` — before the request is sent — whether it comes from the
+default, from `LORE_OPENROUTER_MODEL` or from `--model`. The refusal names the
+model and never the API key.
+
+```bash
+LORE_OPENROUTER_ALLOW_PAID=1 lore summarize --provider openrouter --allow-cloud ...
+```
+
+Set `LORE_OPENROUTER_ALLOW_PAID=1` only when spending credit is intended. Any
+response whose `usage.cost` (or top-level `cost`) is non-zero additionally prints
+`warning: OpenRouter reported a cost of ...` on stderr; with a `:free` model the
+amount is always 0.
+
 **Privacy:** free OpenRouter endpoints may log prompts. Lore only sends archived
 transcript text to OpenRouter when you opt in with `--allow-cloud` (e.g. on
 `summarize`, `knowledge`, or `format`).

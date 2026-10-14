@@ -9,6 +9,7 @@ import hashlib
 import json
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -23,6 +24,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
+ALLOW_PAID_ENV_VAR = "LORE_OPENROUTER_ALLOW_PAID"
 _MAX_RETRIES = 2
 _MAX_SLEEP_SECONDS = 30.0
 
@@ -36,6 +38,25 @@ def resolve_openrouter_model(config: LLMConfig) -> str:
     if config.model:
         return config.model
     return os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
+
+
+def validate_openrouter_model(model: str) -> str:
+    """Free-only guard: refuse model ids without the ``:free`` suffix.
+
+    The shared OpenRouter account is not on the free tier, so an accidental
+    non-free model id would cost real money. Applies to the default, to
+    ``LORE_OPENROUTER_MODEL`` and to ``--model`` — they all arrive here through
+    ``config.model``. Opt in with ``LORE_OPENROUTER_ALLOW_PAID=1``.
+
+    The message names the model and the opt-in variable only; it never carries
+    key material.
+    """
+    if model.endswith(":free") or os.environ.get(ALLOW_PAID_ENV_VAR) == "1":
+        return model
+    raise OpenRouterError(
+        f"model {model!r} is not a free OpenRouter endpoint (':free' suffix required); "
+        f"set {ALLOW_PAID_ENV_VAR}=1 to allow paid models"
+    )
 
 
 def _openrouter_loopback_host(host: Optional[str]) -> bool:
@@ -98,6 +119,8 @@ class OpenRouterProvider(LLMProvider):
         eff_max_tokens = max_tokens or self.config.max_tokens
         eff_temperature = temperature if temperature is not None else self.config.temperature
         base_url = resolve_openrouter_base_url(self.config)
+        model = resolve_openrouter_model(self.config)
+        validate_openrouter_model(model)  # refuse paid ids before cache lookup or request
 
         cache_key = None
         if self.config.cache_enabled:
@@ -123,6 +146,12 @@ class OpenRouterProvider(LLMProvider):
 
         content = payload["content"]
         tokens_used = payload.get("tokens_used", 0)
+        cost = payload.get("cost")
+        if cost:  # a ':free' model always reports 0 — anything else is real money
+            print(
+                f"warning: OpenRouter reported a cost of {cost} for model {model}",
+                file=sys.stderr,
+            )
 
         result = LLMResponse(
             content=content,
@@ -247,8 +276,11 @@ class OpenRouterProvider(LLMProvider):
 
         usage = data.get("usage") or {}
         tokens_used = int(usage.get("total_tokens") or 0)
+        cost = usage.get("cost")
+        if cost is None:
+            cost = data.get("cost")
 
-        return {"content": content, "tokens_used": tokens_used}
+        return {"content": content, "tokens_used": tokens_used, "cost": cost}
 
     def _get_cache_key(
         self,
