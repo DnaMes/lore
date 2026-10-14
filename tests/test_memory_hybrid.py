@@ -12,7 +12,12 @@ import pytest
 
 import lore.storage.embeddings as emb
 from lore.storage import add_memory, recall_memory, supersede_memory
-from lore.storage.memory import DEFAULT_RECALL_MIN_SIMILARITY, recall_min_similarity
+from lore.storage.memory import (
+    DEFAULT_RECALL_MIN_SIMILARITY,
+    DEFAULT_VECTOR_SCAN_LIMIT,
+    recall_min_similarity,
+    vector_scan_limit,
+)
 
 TOPICS = (("postgres", "database", "relational"), ("sourdough", "bread", "baking"))
 
@@ -150,3 +155,69 @@ def test_floor_env_parsing(monkeypatch, raw, expected):
         monkeypatch.setenv("LORE_MEMORY_RECALL_MIN_SIMILARITY", raw)
     assert recall_min_similarity() == expected
     assert DEFAULT_RECALL_MIN_SIMILARITY == 0.7
+
+
+# --- #199: the vector check and the vector scan respect the query -----------
+
+
+def test_auto_skips_embedder_when_no_vector_matches_the_query_filters(tmp_path, fake):
+    """Auto mode must not load the embedder when the filtered candidates have no vector (#199)."""
+    add_memory(tmp_path, "fact", "Postgres notes", "relational store")  # gets a vector
+    calls_before = fake.calls
+
+    assert recall_memory(tmp_path, "database", kind="rule") == []
+    assert fake.calls == calls_before  # no embedder call for a filter without vectors
+
+
+def test_vector_scan_is_capped(tmp_path, fake, monkeypatch):
+    """The Python cosine scan has a bound; beyond it memories are keyword-ranked (#199)."""
+    monkeypatch.setenv("LORE_MEMORY_VECTOR_SCAN_LIMIT", "4")
+    for i in range(6):
+        add_memory(tmp_path, "fact", f"Postgres fact {i}", "relational store")
+
+    scored = {"n": 0}
+    real_cosine = emb.cosine_similarity
+
+    def counting_cosine(a, b):
+        scored["n"] += 1
+        return real_cosine(a, b)
+
+    monkeypatch.setattr(emb, "cosine_similarity", counting_cosine)
+
+    hits = recall_memory(tmp_path, "database", semantic=True)
+
+    assert scored["n"] <= 4  # the scan never exceeds the bound
+    assert len(hits) == 4  # exactly the bound's worth of newest memories
+
+
+def test_vector_filters_apply_before_the_scan_cap(tmp_path, fake, monkeypatch):
+    """kind/scope/status filter in SQL, so the bound never wastes itself on excluded rows (#199)."""
+    monkeypatch.setenv("LORE_MEMORY_VECTOR_SCAN_LIMIT", "4")
+    for i in range(3):  # older ids — pushed out by the bound first
+        add_memory(tmp_path, "fact", f"Postgres fact {i}", "relational store")
+    for i in range(3):  # newest rows: without an SQL filter they fill the bound
+        add_memory(tmp_path, "note", f"Postgres note {i}", "relational store")
+
+    hits = recall_memory(tmp_path, "database", kind="fact", semantic=True)
+
+    assert len(hits) == 3  # all facts survive: filtered before the bound
+    assert all(h.kind == "fact" for h in hits)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, DEFAULT_VECTOR_SCAN_LIMIT),
+        ("", DEFAULT_VECTOR_SCAN_LIMIT),
+        ("banana", DEFAULT_VECTOR_SCAN_LIMIT),
+        ("0", DEFAULT_VECTOR_SCAN_LIMIT),
+        ("-5", DEFAULT_VECTOR_SCAN_LIMIT),
+        ("42", 42),
+    ],
+)
+def test_vector_scan_limit_env_parsing(monkeypatch, raw, expected):
+    if raw is None:
+        monkeypatch.delenv("LORE_MEMORY_VECTOR_SCAN_LIMIT", raising=False)
+    else:
+        monkeypatch.setenv("LORE_MEMORY_VECTOR_SCAN_LIMIT", raw)
+    assert vector_scan_limit() == expected

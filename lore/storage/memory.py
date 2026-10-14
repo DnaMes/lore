@@ -81,6 +81,14 @@ DEFAULT_RECALL_MIN_SIMILARITY = 0.7
 SIMILARITY_THRESHOLD_ENV = "LORE_SIMILARITY_THRESHOLD"
 DEFAULT_SIMILARITY_THRESHOLD = 0.85
 
+# Upper bound on how many stored vectors one recall scores in Python. Semantic
+# ranking is a ranking aid, not the only retrieval path: memories beyond the
+# bound are still found through keywords, and the bound keeps a large archive
+# from turning one recall into a full-table vector scan (#199). Override with
+# LORE_MEMORY_VECTOR_SCAN_LIMIT.
+VECTOR_SCAN_LIMIT_ENV = "LORE_MEMORY_VECTOR_SCAN_LIMIT"
+DEFAULT_VECTOR_SCAN_LIMIT = 20_000
+
 
 def _unit_float_env(name: str, default: float) -> float:
     """``name`` parsed as a float clamped to [0, 1]; ``default`` if unset or invalid."""
@@ -104,6 +112,48 @@ def recall_min_similarity() -> float:
 def similarity_threshold() -> float:
     """The near-duplicate threshold: env value clamped to [0, 1], default if invalid."""
     return _unit_float_env(SIMILARITY_THRESHOLD_ENV, DEFAULT_SIMILARITY_THRESHOLD)
+
+
+def vector_scan_limit() -> int:
+    """Cap on memories scored in one recall: env value when a positive int, else the default."""
+    raw = os.environ.get(VECTOR_SCAN_LIMIT_ENV, "").strip()
+    if not raw:
+        return DEFAULT_VECTOR_SCAN_LIMIT
+    try:
+        value = int(raw)
+    except ValueError:
+        return DEFAULT_VECTOR_SCAN_LIMIT
+    return value if value > 0 else DEFAULT_VECTOR_SCAN_LIMIT
+
+
+def _memory_filter_where(
+    *,
+    kind: Optional[str],
+    scope_project: Optional[str],
+    include_superseded: bool,
+    status: Optional[str],
+) -> Tuple[str, List[Any]]:
+    """Shared ``WHERE`` fragment (with leading `` WHERE ``) over the ``m`` alias.
+
+    One definition for the vector check, the vector scan and any caller that
+    must agree on which memories a query is about (#199).
+    """
+    clauses: List[str] = []
+    params: List[Any] = []
+    if kind:
+        clauses.append("m.kind = ?")
+        params.append(kind)
+    if scope_project:
+        clauses.append("m.scope_project = ?")
+        params.append(scope_project)
+    if not include_superseded:
+        clauses.append("m.superseded_by IS NULL")
+    if status is not None:
+        clauses.append("m.status = ?")
+        params.append(status)
+    if not clauses:
+        return "", params
+    return " WHERE " + " AND ".join(clauses), params
 
 
 @dataclass
@@ -563,28 +613,45 @@ def _semantic_candidates(
     if query_vec is None:
         return None
 
+    where, where_params = _memory_filter_where(
+        kind=kind,
+        scope_project=scope_project,
+        include_superseded=include_superseded,
+        status=status,
+    )
     conn = _connect(output_dir)
     try:
+        bound = vector_scan_limit()
+        total = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM memory m JOIN memory_embeddings e ON e.memory_id = m.id"
+                + where,
+                where_params,
+            ).fetchone()[0]
+        )
+        if total > bound:
+            logger.warning(
+                "memory semantic scan scores %d of %d embedded memories (%s=%d); "
+                "the rest are reachable through keywords only",
+                bound,
+                total,
+                VECTOR_SCAN_LIMIT_ENV,
+                bound,
+            )
+        # Filters are applied in SQL so the bound is spent on candidates the
+        # query can actually return; newest first, so the bound is deterministic.
         rows = conn.execute(
-            """
-            SELECT m.*, e.vector AS _vec
-            FROM memory m
-            JOIN memory_embeddings e ON e.memory_id = m.id
-            """
+            "SELECT m.*, e.vector AS _vec "
+            "FROM memory m JOIN memory_embeddings e ON e.memory_id = m.id"
+            + where
+            + " ORDER BY m.updated DESC, m.id DESC LIMIT ?",
+            (*where_params, bound),
         ).fetchall()
         if not rows:
-            return None  # nothing embedded yet — fall back to FTS
+            return None  # nothing embedded for this query — fall back to FTS
 
         scored = []
         for row in rows:
-            if kind and row["kind"] != kind:
-                continue
-            if scope_project and row["scope_project"] != scope_project:
-                continue
-            if not include_superseded and row["superseded_by"] is not None:
-                continue
-            if status is not None and row["status"] != status:
-                continue
             score = cosine_similarity(query_vec, unpack_vector(row["_vec"]))
             if min_similarity is not None and score < min_similarity:
                 continue
@@ -623,15 +690,40 @@ def _semantic_recall(
     return None if pairs is None else [entry for entry, _score in pairs]
 
 
-def _has_stored_vectors(output_dir: Path) -> bool:
-    """True when the embedding backend is importable and a memory has a vector."""
+def _has_stored_vectors(
+    output_dir: Path,
+    *,
+    kind: Optional[str] = None,
+    scope_project: Optional[str] = None,
+    include_superseded: bool = False,
+    status: Optional[str] = "confirmed",
+) -> bool:
+    """True when the backend is importable and a memory *this query can return* has a vector.
+
+    The check takes the query's filters (#199): auto mode used to load the
+    embedder for a ``kind``/``scope_project`` whose memories are keyword-only.
+    """
     from .embeddings import embeddings_available
 
     if not embeddings_available():
         return False
+    where, params = _memory_filter_where(
+        kind=kind,
+        scope_project=scope_project,
+        include_superseded=include_superseded,
+        status=status,
+    )
     conn = _connect(output_dir)
     try:
-        return conn.execute("SELECT 1 FROM memory_embeddings LIMIT 1").fetchone() is not None
+        return (
+            conn.execute(
+                "SELECT 1 FROM memory m JOIN memory_embeddings e ON e.memory_id = m.id"
+                + where
+                + " LIMIT 1",
+                params,
+            ).fetchone()
+            is not None
+        )
     except sqlite3.Error:
         return False
     finally:
@@ -754,7 +846,8 @@ def _recall(
 
     - ``None`` (auto): keyword search (only, for a quoted phrase); when the
       optional embedding backend is
-      installed and a vector is stored, also semantic candidates at or above
+      installed and a vector is stored for a memory this query can return
+      (same kind/scope/status), also semantic candidates at or above
       :func:`recall_min_similarity`, fused with keyword hits by RRF. Memories
       without a vector are still found through keywords.
     - ``False``: keyword (FTS) search only; the embedder is never touched.
@@ -794,7 +887,17 @@ def _recall(
     # A quoted phrase asks for that exact text: build_fts_query ends a phrase with
     # '"' and every term query with '*'. Fusing similar-meaning memories would
     # break that contract, so auto mode stays keyword-only for phrases.
-    if semantic is not None or fts_query.endswith('"') or not _has_stored_vectors(output_dir):
+    if (
+        semantic is not None
+        or fts_query.endswith('"')
+        or not _has_stored_vectors(
+            output_dir,
+            kind=kind,
+            scope_project=scope_project,
+            include_superseded=include_superseded,
+            status=status,
+        )
+    ):
         return fts_entries
 
     pairs = _semantic_candidates(
