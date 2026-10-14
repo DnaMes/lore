@@ -14,6 +14,7 @@ from lore.extractors.aider import AiderExtractor
 from lore.extractors.antigravity import AntigravityExtractor
 from lore.extractors.base import BaseExtractor
 from lore.extractors.claude import ClaudeCodeExtractor
+from lore.extractors.cline import ClineExtractor, KiloCodeExtractor, RooCodeExtractor
 from lore.extractors.codex import CodexExtractor
 from lore.extractors.commandcode import CommandCodeExtractor
 from lore.extractors.copilot import CopilotCLIExtractor
@@ -33,14 +34,17 @@ ALL_EXTRACTOR_CLASSES = [
     AiderExtractor,
     AntigravityExtractor,
     ClaudeCodeExtractor,
+    ClineExtractor,
     CommandCodeExtractor,
     CodexExtractor,
     CopilotCLIExtractor,
     CursorExtractor,
     GeminiCLIExtractor,
     HermesExtractor,
+    KiloCodeExtractor,
     OpenCodeExtractor,
     PiExtractor,
+    RooCodeExtractor,
     VSCodeCopilotExtractor,
     WarpExtractor,
 ]

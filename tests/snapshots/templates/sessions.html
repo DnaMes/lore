@@ -770,6 +770,12 @@
                                 <span class="w-2 h-2 rounded-full" style="background:#6366F1"></span>Command Code
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="hermes" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#14B8A6"></span>Hermes
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="cline" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full" style="background:#F59E0B"></span>Cline
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="roo-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full" style="background:#8B5CF6"></span>Roo Code
+                            </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="kilo-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                                <span class="w-2 h-2 rounded-full" style="background:#10B981"></span>Kilo Code
                             </button>
                             <button type="button" data-action="run-sync" data-sync-action="reload" data-sync-full="true" class="w-full text-left px-3 py-2 text-[11px] hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-500 italic" title="Force full rebuild (slow). Use when incremental sync misses changes.">
                                 <span class="w-2 h-2 rounded-full bg-amber-400"></span>Full rebuild (slow)
@@ -878,7 +884,7 @@
     <form method="get" data-autosubmit="true" class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-8">
         <select name="tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
             <option value="">All Tools</option>
-            <option value="claude-code" >Claude</option><option value="cursor" >Cursor</option><option value="gemini-cli" >Gemini</option><option value="warp" >Warp</option><option value="codex" >Codex</option><option value="vscode-copilot" >VSCode Copilot</option><option value="copilot-cli" >Copilot CLI</option><option value="opencode" >OpenCode</option><option value="antigravity" >Antigravity</option><option value="aider" >Aider</option><option value="pi" >Pi</option><option value="command-code" >Command Code</option><option value="hermes" >Hermes</option>
+            <option value="claude-code" >Claude</option><option value="cursor" >Cursor</option><option value="gemini-cli" >Gemini</option><option value="warp" >Warp</option><option value="codex" >Codex</option><option value="vscode-copilot" >VSCode Copilot</option><option value="copilot-cli" >Copilot CLI</option><option value="opencode" >OpenCode</option><option value="antigravity" >Antigravity</option><option value="aider" >Aider</option><option value="pi" >Pi</option><option value="command-code" >Command Code</option><option value="hermes" >Hermes</option><option value="cline" >Cline</option><option value="roo-code" >Roo Code</option><option value="kilo-code" >Kilo Code</option>
         </select>
         <select name="tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
             <option value="">All Tags</option>

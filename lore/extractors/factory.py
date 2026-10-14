@@ -4,6 +4,7 @@ from .aider import AiderExtractor
 from .antigravity import AntigravityExtractor
 from .base import BaseExtractor
 from .claude import ClaudeCodeExtractor
+from .cline import ClineExtractor, KiloCodeExtractor, RooCodeExtractor
 from .codex import CodexExtractor
 from .commandcode import CommandCodeExtractor
 from .copilot import CopilotCLIExtractor
@@ -31,4 +32,7 @@ def get_all_extractors() -> List[BaseExtractor]:
         PiExtractor(),
         CommandCodeExtractor(),
         HermesExtractor(),
+        ClineExtractor(),
+        RooCodeExtractor(),
+        KiloCodeExtractor(),
     ]

@@ -72,6 +72,9 @@ docker compose up -d
 | **Pi** | `~/.pi/agent/sessions/` | JSONL v3 tree transcripts (also reads `~/.omp`, `~/.prime`) |
 | **Command Code** | `~/.commandcode/projects/` | v3 and flat JSONL transcripts, `.meta.json`, print-mode `.checkpoints.jsonl` |
 | **Hermes** | `~/.hermes/profiles/*/state.db`, `~/.hermes/state.db` | SQLite sessions and messages (scratch copy; never opens originals) |
+| **Cline** | VS Code `globalStorage/saoudrizwan.claude-dev/tasks/`, `~/.cline/data/sessions/` | Fixtures from the documented schema, not verified on real data |
+| **Roo Code** | VS Code `globalStorage/rooveterinaryinc.roo-cline/tasks/` | Fixtures from the documented schema, not verified on real data |
+| **Kilo Code** | VS Code `globalStorage/kilocode.kilo-code/tasks/` | Fixtures from the documented schema, not verified on real data |
 
 ---
 

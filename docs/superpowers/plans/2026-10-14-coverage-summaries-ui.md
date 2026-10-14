@@ -124,7 +124,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 - [x] done
 
 ### B2.8 Wave 2 (separate small tasks; fixtures from the documented schemas, flagged "not verified on real data" in the README row)
-- [ ] B2.8a Cline / Roo Code / Kilo (shared task JSON, VS Code globalStorage and Cline CLI)
+- [x] B2.8a Cline / Roo Code / Kilo (shared task JSON, VS Code globalStorage and Cline CLI)
 - [ ] B2.8b OpenCode v2 tables (`session_v2`, `session_message`) alongside the existing reader
 - [ ] B2.8c Goose (`sessions.db`) and Crush (`crush.db` via `projects.json`)
 - [ ] B2.8d Kimi CLI / Kimi Code (`wire.jsonl`) and Qwen Code (`chats/*.jsonl`)

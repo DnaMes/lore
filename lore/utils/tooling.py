@@ -14,6 +14,9 @@ CANONICAL_TOOLS = {
     "pi",
     "command-code",
     "hermes",
+    "cline",
+    "roo-code",
+    "kilo-code",
 }
 
 
@@ -39,6 +42,14 @@ TOOL_ALIASES = {
     "cmd": "command-code",
     "hermes": "hermes",
     "hermes-agent": "hermes",
+    "cline": "cline",
+    "claude-dev": "cline",
+    "roo": "roo-code",
+    "roo-code": "roo-code",
+    "roo-cline": "roo-code",
+    "kilo": "kilo-code",
+    "kilo-code": "kilo-code",
+    "kilocode": "kilo-code",
 }
 
 

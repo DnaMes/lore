@@ -16,6 +16,9 @@ TOOL_STYLES = {
     "pi": {"color": "#EC4899", "icon": "Pi", "name": "Pi"},
     "command-code": {"color": "#6366F1", "icon": "Cc", "name": "Command Code"},
     "hermes": {"color": "#14B8A6", "icon": "He", "name": "Hermes"},
+    "cline": {"color": "#F59E0B", "icon": "Cl", "name": "Cline"},
+    "roo-code": {"color": "#8B5CF6", "icon": "Ro", "name": "Roo Code"},
+    "kilo-code": {"color": "#10B981", "icon": "Ki", "name": "Kilo Code"},
 }
 
 

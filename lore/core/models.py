@@ -86,6 +86,9 @@ class Tool(Enum):
     PI = "pi"
     COMMAND_CODE = "command-code"
     HERMES = "hermes"
+    CLINE = "cline"
+    ROO_CODE = "roo-code"
+    KILO_CODE = "kilo-code"
 
 
 class Role(Enum):
