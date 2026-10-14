@@ -268,8 +268,12 @@
         if (!query) return;
         const q = query;
         const qLower = q.toLowerCase();
-        const roots = stream.querySelectorAll('.message-card .prose');
+        const roots = stream.querySelectorAll('.message-card .prose[data-find-index]');
         roots.forEach(function (root) {
+            const findIndex = root.dataset.findIndex;
+            const findMessage = root.dataset.findMessage;
+            if (findIndex === undefined || findMessage === undefined) return;
+            let occurrence = 0;
             const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
             const textNodes = [];
             let n;
@@ -289,6 +293,10 @@
                     }
                     const mark = document.createElement('mark');
                     mark.className = 'find-hit';
+                    mark.dataset.findIndex = findIndex;
+                    mark.dataset.findMessage = findMessage;
+                    mark.dataset.findOccurrence = String(occurrence);
+                    occurrence += 1;
                     mark.appendChild(document.createTextNode(text.slice(idx, idx + q.length)));
                     frag.appendChild(mark);
                     markNodes.push(mark);
@@ -314,8 +322,13 @@
         document.querySelectorAll('.find-hit-current').forEach(function (el) {
             el.classList.remove('find-hit-current');
         });
-        if (currentIdx < 0 || !markNodes.length) return;
-        const target = markNodes[currentIdx];
+        if (currentIdx < 0 || !matches.length) return;
+        const match = matches[currentIdx];
+        if (!match) return;
+        const sel = 'mark.find-hit[data-find-index="' + match.index + '"]' +
+            '[data-find-message="' + match.message + '"]' +
+            '[data-find-occurrence="' + match.occurrence + '"]';
+        const target = stream.querySelector(sel);
         if (target) {
             target.classList.add('find-hit-current');
             target.scrollIntoView({ block: 'center' });
