@@ -214,7 +214,18 @@ Create `~/.ai-history/config.json`:
 
 ## Caching
 
-LLM responses are cached in `~/.ai-history/llm_cache/` to:
+LLM responses are cached in `~/.lore/llm_cache/` for tasks that do not send session
+transcript text (for example aggregate statistics insights); transcript-bearing tasks such as
+`lore knowledge`, session formatting summaries, and future `lore summarize` never use the disk
+cache, and no environment variable re-enables that caching.
+
+Before any transcript text is sent to a provider, Lore runs prompt redaction so secret-shaped
+strings are replaced with markers and are not logged or transmitted.
+
+For Ollama, set `LORE_OLLAMA_NUM_CTX` (default 8192, clamped 2048–131072) to control the
+context window passed as `num_ctx` on each chat request.
+
+Cached non-transcript responses help:
 
 - Reduce API costs
 - Speed up repeated queries

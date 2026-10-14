@@ -18,8 +18,16 @@ class GeminiProvider(LLMProvider):
     def __init__(self, config: LLMConfig):
         super().__init__(config)
         self._client = None
-        self._cache_dir = Path(config.cache_dir or lore_home() / "llm_cache")
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
+        self._cache_dir: Optional[Path] = None
+
+    def _ensure_cache_dir(self) -> Optional[Path]:
+        if not self.config.cache_enabled:
+            return None
+        if self._cache_dir is None:
+            self._cache_dir = self._cache_dir_path
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+        return self._cache_dir
 
     # Gemini CLI OAuth client credentials — read from env vars or ~/.gemini/oauth_creds.json.
     # Set GEMINI_CLIENT_ID / GEMINI_CLIENT_SECRET env vars to override.
@@ -209,7 +217,10 @@ class GeminiProvider(LLMProvider):
         return hashlib.sha256(combined.encode()).hexdigest()
 
     def _load_from_cache(self, cache_key: str) -> Optional[LLMResponse]:
-        cache_file = self._cache_dir / f"{cache_key}.json"
+        cache_root = self._ensure_cache_dir()
+        if cache_root is None:
+            return None
+        cache_file = cache_root / f"{cache_key}.json"
         if cache_file.exists():
             try:
                 with open(cache_file, "r") as f:
@@ -225,7 +236,10 @@ class GeminiProvider(LLMProvider):
         return None
 
     def _save_to_cache(self, cache_key: str, response: LLMResponse):
-        cache_file = self._cache_dir / f"{cache_key}.json"
+        cache_root = self._ensure_cache_dir()
+        if cache_root is None:
+            return
+        cache_file = cache_root / f"{cache_key}.json"
         try:
             with open(cache_file, "w") as f:
                 json.dump(

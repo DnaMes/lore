@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -9,13 +10,52 @@ from .base import LLMConfig, LLMProvider, LLMResponse
 
 logger = logging.getLogger(__name__)
 
+_NUM_CTX_MIN = 2048
+_NUM_CTX_MAX = 131072
+_NUM_CTX_DEFAULT = 8192
+
+
+def resolve_ollama_num_ctx(config: LLMConfig) -> int:
+    """Resolve Ollama context window size (config, then env, then default)."""
+    if config.num_ctx is not None:
+        value = config.num_ctx
+    else:
+        raw = os.environ.get("LORE_OLLAMA_NUM_CTX")
+        if raw:
+            try:
+                value = int(raw.strip())
+            except ValueError:
+                value = _NUM_CTX_DEFAULT
+        else:
+            value = _NUM_CTX_DEFAULT
+    return max(_NUM_CTX_MIN, min(_NUM_CTX_MAX, value))
+
 
 class OllamaProvider(LLMProvider):
     def __init__(self, config: LLMConfig):
         super().__init__(config)
         self._client = None
-        self._cache_dir = Path(config.cache_dir or lore_home() / "llm_cache")
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
+        self._cache_dir: Optional[Path] = None
+
+    def _ensure_cache_dir(self) -> Optional[Path]:
+        if not self.config.cache_enabled:
+            return None
+        if self._cache_dir is None:
+            self._cache_dir = self._cache_dir_path
+            self._cache_dir.mkdir(parents=True, exist_ok=True)
+        return self._cache_dir
+
+    def _chat_options(
+        self,
+        max_tokens: Optional[int],
+        temperature: Optional[float],
+    ) -> Dict[str, Any]:
+        options: Dict[str, Any] = dict(self.config.options)
+        options["num_ctx"] = resolve_ollama_num_ctx(self.config)
+        options["num_predict"] = max_tokens or self.config.max_tokens
+        options["temperature"] = temperature if temperature is not None else self.config.temperature
+        return options
 
     def _get_client(self):
         if self._client is not None:
@@ -54,12 +94,7 @@ class OllamaProvider(LLMProvider):
         response = client.chat(
             model=self.config.model,
             messages=messages,
-            options={
-                "num_predict": max_tokens or self.config.max_tokens,
-                "temperature": (
-                    temperature if temperature is not None else self.config.temperature
-                ),
-            },
+            options=self._chat_options(max_tokens, temperature),
         )
 
         content = response["message"]["content"]
@@ -106,7 +141,10 @@ class OllamaProvider(LLMProvider):
         return hashlib.sha256(combined.encode()).hexdigest()
 
     def _load_from_cache(self, cache_key: str) -> Optional[LLMResponse]:
-        cache_file = self._cache_dir / f"{cache_key}.json"
+        cache_root = self._ensure_cache_dir()
+        if cache_root is None:
+            return None
+        cache_file = cache_root / f"{cache_key}.json"
         if cache_file.exists():
             try:
                 with open(cache_file, "r") as f:
@@ -122,7 +160,10 @@ class OllamaProvider(LLMProvider):
         return None
 
     def _save_to_cache(self, cache_key: str, response: LLMResponse):
-        cache_file = self._cache_dir / f"{cache_key}.json"
+        cache_root = self._ensure_cache_dir()
+        if cache_root is None:
+            return
+        cache_file = cache_root / f"{cache_key}.json"
         try:
             with open(cache_file, "w") as f:
                 json.dump(

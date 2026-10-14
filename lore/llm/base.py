@@ -1,7 +1,9 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Any, Dict, List, Optional
+
+from ..utils.redact import redact
 
 
 class TaskType(Enum):
@@ -30,6 +32,33 @@ class LLMConfig:
     oauth_refresh_token: Optional[str] = None
     # Use Application Default Credentials (ADC)
     use_adc: bool = False
+    # Appended last so positional construction of the older fields keeps working.
+    options: Dict[str, Any] = field(default_factory=dict)
+    num_ctx: Optional[int] = None
+
+    @classmethod
+    def for_transcripts(cls, **overrides: Any) -> "LLMConfig":
+        """Config for prompts that include session transcript text.
+
+        Disk caching is always disabled. No environment variable re-enables
+        caching for transcript-bearing tasks (privacy).
+        """
+        opts = dict(overrides)
+        opts.pop("cache_enabled", None)
+        return cls(**opts, cache_enabled=False)
+
+
+def transcript_safe(provider: "LLMProvider") -> "LLMProvider":
+    """Disable the disk cache on ``provider`` before it carries transcript text."""
+    if provider.config.cache_enabled:
+        provider.config = replace(provider.config, cache_enabled=False)
+    return provider
+
+
+def prepare_prompt(text: str) -> tuple[str, int]:
+    """Redact secret-shaped strings from user prompt text before sending to a provider."""
+    result = redact(text)
+    return result.text, result.count
 
 
 @dataclass

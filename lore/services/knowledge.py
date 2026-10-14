@@ -28,6 +28,7 @@ class ExtractionReport:
     unchanged: int = 0
     skipped_no_messages: int = 0
     failed: int = 0
+    redactions: int = 0
 
 
 def run_extraction(
@@ -64,6 +65,7 @@ def run_extraction(
         if entry is None:
             report.failed += 1
             continue
+        report.redactions += entry.redactions
         save_session_knowledge(
             output_dir,
             session.session_id,

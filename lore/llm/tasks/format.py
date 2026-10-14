@@ -7,7 +7,7 @@ if TYPE_CHECKING:
     from ...core.models import UnifiedSession
 
 from ...utils.paths import lore_home
-from ..base import LLMProvider
+from ..base import LLMProvider, prepare_prompt, transcript_safe
 
 
 @dataclass
@@ -20,7 +20,8 @@ class FormattedSession:
 
 class SessionFormatter:
     def __init__(self, provider: LLMProvider, output_dir: Optional[Path] = None):
-        self.provider = provider
+        self.provider = transcript_safe(provider)
+        self.redactions = 0  # secret-like strings removed from prompts sent so far
         self.output_dir = output_dir or lore_home() / "formatted"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -103,6 +104,8 @@ Format as JSON:
 }}"""
 
         try:
+            prompt, redactions = prepare_prompt(prompt)
+            self.redactions += redactions
             response = self.provider.generate(prompt, temperature=0.3)
             content = response.content.strip()
 

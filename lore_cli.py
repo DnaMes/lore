@@ -780,13 +780,16 @@ def cmd_knowledge(args):
     print(f"Extracting knowledge from {len(sessions)} sessions...")
 
     try:
-        config = LLMConfig(
+        config = LLMConfig.for_transcripts(
             provider=args.provider,
             model=args.model or ("gemini-2.0-flash" if args.provider == "gemini" else "llama3.2"),
         )
         provider = get_provider(
-            provider=args.provider,
+            provider=config.provider,
             model=config.model,
+            cache_enabled=config.cache_enabled,
+            options=config.options,
+            num_ctx=config.num_ctx,
         )
 
         if not provider.is_available():
@@ -824,6 +827,11 @@ def cmd_knowledge(args):
         f"Extracted {report.extracted}, unchanged {report.unchanged}, "
         f"skipped (no synced messages) {report.skipped_no_messages}, failed {report.failed}"
     )
+    if report.redactions > 0:
+        print(
+            f"Redacted {report.redactions} secret-like strings before sending",
+            file=sys.stderr,
+        )
 
     if report.failed and not report.extracted:
         # Every attempted call failed (outage, quota, bad key): scripts must see it.
@@ -883,13 +891,16 @@ def cmd_format(args):
     print(f"Formatting {len(sessions)} sessions...")
 
     try:
-        config = LLMConfig(
+        config = LLMConfig.for_transcripts(
             provider=args.provider,
             model=args.model or ("gemini-2.0-flash" if args.provider == "gemini" else "llama3.2"),
         )
         provider = get_provider(
-            provider=args.provider,
+            provider=config.provider,
             model=config.model,
+            cache_enabled=config.cache_enabled,
+            options=config.options,
+            num_ctx=config.num_ctx,
         )
 
         if not provider.is_available():

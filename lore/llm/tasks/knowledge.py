@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from ...core.models import UnifiedSession
 
 from ...utils.paths import lore_home
-from ..base import LLMProvider
+from ..base import LLMProvider, prepare_prompt, transcript_safe
 
 
 @dataclass
@@ -21,6 +21,7 @@ class KnowledgeEntry:
     tools_used: List[str] = field(default_factory=list)
     project: Optional[str] = None
     timestamp: datetime = field(default_factory=datetime.now)
+    redactions: int = 0
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -60,7 +61,7 @@ class KnowledgeEntry:
 
 class KnowledgeExtractor:
     def __init__(self, provider: LLMProvider, output_dir: Optional[Path] = None):
-        self.provider = provider
+        self.provider = transcript_safe(provider)
         self.output_dir = output_dir or lore_home() / "knowledge"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -110,6 +111,7 @@ Format as JSON:
             return None
 
         prompt = self.build_prompt(session, max_messages)
+        prompt, redactions = prepare_prompt(prompt)
 
         try:
             response = self.provider.generate(prompt, temperature=0.2)
@@ -144,6 +146,7 @@ Format as JSON:
                 decisions=fields["decisions"],
                 tools_used=fields["tools_used"],
                 project=session.project_path,
+                redactions=redactions,
             )
 
         except Exception:

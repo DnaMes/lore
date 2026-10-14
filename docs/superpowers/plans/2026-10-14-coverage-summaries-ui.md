@@ -142,7 +142,7 @@ Bubble `createdAt`/`modelInfo`/`thinking`/`toolFormerData`, `composerHeaders` fo
 **Files:** `lore/llm/gemini.py`, `lore/llm/ollama.py`, `lore/llm/base.py`, `tests/test_llm_provider_privacy.py`.
 **Rules:** `LLMConfig.cache_enabled` already exists for Gemini: it is set to False for transcript-bearing tasks and a test proves no cache file is written; the Ollama provider replaces its hard-coded `options` with a passthrough that accepts `num_ctx`; `lore knowledge` and the summary task call `redact()` on the prompt text before sending and report the redaction count.
 **Done when:** tests prove no cache file is written for a transcript task and that `num_ctx` reaches the request.
-- [ ] done
+- [x] done
 
 ### B3.3 Redaction for exports and sharing
 `lore export --redact` (markdown/HTML/JSON) and every future share feature call `redact()`; plain exports stay unredacted by design because they are local files the user asked for, and the README says so.
