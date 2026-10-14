@@ -365,8 +365,9 @@ recorded from (session ids only, empty when none); `source` is always `"memory"`
 
 ### `memory_feedback`
 
-Rate a recalled memory. Input: `memory_id` (integer), `score` (integer 1 to 5) and
-optional `rater` (default `agent`, at most 64 chars, no control characters).
+Rate a **confirmed** memory (candidates and rejected rows cannot be rated). Input:
+`memory_id` (integer), `score` (integer 1 to 5) and optional `rater` (default
+`agent`, at most 64 chars, no control characters).
 
 ```json
 {"memory_id": 7, "score": 5, "rater": "cursor"}

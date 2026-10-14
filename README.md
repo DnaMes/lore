@@ -135,7 +135,7 @@ lore memory search "database performance"              # keywords + meaning when
 lore memory search "database performance" --semantic   # meaning only, no relevance floor
 lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
-lore memory rate 7 5                                    # rate a memory 1-5
+lore memory rate 7 5                                    # rate a confirmed memory 1-5
 lore memory add --title "Use PG 17" --body "..." --supersedes 7   # replaces #7; near-duplicates are listed
 
 # Semantic memory search needs the optional embedding model:
@@ -262,7 +262,7 @@ See [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md) for full inputs, outputs, a
 - `switch_to_tool`: Hand off to `lore-session switch`.
 - `memory_write`: Record a fact, decision, or lesson into shared agent memory.
 - `memory_recall`: Recall from shared memory by keyword or meaning, with provenance.
-- `memory_feedback`: Rate a recalled memory 1-5; the bounded weight is shown with it (`lore memory rate`).
+- `memory_feedback`: Rate a confirmed memory 1-5 (not candidates); the bounded weight is shown with it (`lore memory rate`).
 
 ### API reference
 

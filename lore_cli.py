@@ -1648,6 +1648,10 @@ def cmd_check(args):
 
     print("-" * 40)
     print(f"Summary: {available_count}/{len(extractors)} tools available.")
+    from lore.utils.claude_retention import retention_check_lines
+
+    for line in retention_check_lines():
+        print(line)
     if failed:
         sys.exit(1)
 

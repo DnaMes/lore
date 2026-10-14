@@ -237,11 +237,9 @@ def test_cli_list_and_search_hide_candidates(tmp_path, capsys, action):
     assert "Candidate zebra" not in out
 
 
-def test_rating_a_candidate_is_accepted_and_keeps_it_hidden(tmp_path):
-    # Pins current behaviour: record_feedback checks existence, not status.
+def test_rating_a_candidate_is_rejected(tmp_path):
     candidate = add_memory(tmp_path, "note", "Draft", "alpha", status="candidate")
-    record_feedback(tmp_path, candidate, "agent", 5)
-    assert feedback_weight(tmp_path, candidate) == (pytest.approx(0.625), 1)
-    entry = get_memory(tmp_path, candidate)
-    assert entry is not None and entry.status == "candidate" and entry.feedback_count == 1
+    with pytest.raises(ValueError, match="not confirmed"):
+        record_feedback(tmp_path, candidate, "agent", 5)
+    assert feedback_weight(tmp_path, candidate) == (0.5, 0)
     assert list_memory(tmp_path) == []

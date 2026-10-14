@@ -215,7 +215,7 @@ Find across all pages with highlight and n/N.
 
 ### B6.1 Ratings only on confirmed memories
 `record_feedback` raises `ValueError` unless the memory is confirmed; update the test that pins the old behaviour; docs.
-- [ ] done
+- [x] done
 
 ### B6.2 `lore improve` **[R]** (after B4.3b)
 `lore/services/improve.py` per the 2026-10-13 design 3.2 with `embed_memories`, `extract_knowledge`, `distill_lessons` and a new `from_summaries` stage (outcome, decisions, errors → candidates with `memory_sources`); stage report table and `--json`; model output only ever creates candidates.
@@ -233,7 +233,7 @@ Per the 2026-10-13 design 4.1; never another project's memory.
 
 ### B7.1 Retention warning in `lore check`
 Read the Claude Code settings for `cleanupPeriodDays` (read-only); warn when the default 30 days applies and print the setting to raise it. Never write the user's settings.
-- [ ] done
+- [x] done
 
 ### B7.2 Cost columns
 Per-session tokens and cost from stored usage and an offline price table (`lore/utils/pricing.py`, fixture-tested, unknown model → no cost, never a guess); show in list/detail and `lore list`.

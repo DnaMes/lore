@@ -215,9 +215,10 @@ def register(server, deps: MCPToolDeps) -> None:
 
     server.register_tool(
         "memory_feedback",
-        "Rate a recalled memory from 1 (wrong or unhelpful) to 5 (right and useful). "
-        "One rating per rater and memory; a new rating replaces the old one. The "
-        "resulting weight is shown with the memory in memory_recall.",
+        "Rate a confirmed memory from 1 (wrong or unhelpful) to 5 (right and useful). "
+        "Candidate and rejected memories cannot be rated. One rating per rater and "
+        "memory; a new rating replaces the old one. The resulting weight is shown with "
+        "the memory in memory_recall.",
         {
             "type": "object",
             "properties": {

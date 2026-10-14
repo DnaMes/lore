@@ -82,7 +82,8 @@ def record_feedback(output_dir: Path, memory_id: int, rater: str, score: int) ->
 
     Raises:
         ValueError: if the score is not an integer 1-5, the rater is empty, over
-            64 chars or holds control characters, or the memory does not exist.
+            64 chars or holds control characters, the memory does not exist, or
+            its status is not ``confirmed``.
     """
     _check_id(memory_id, "memory_id")
     if isinstance(score, bool) or not isinstance(score, int) or not 1 <= score <= 5:
@@ -98,23 +99,22 @@ def record_feedback(output_dir: Path, memory_id: int, rater: str, score: int) ->
     conn = _connect(output_dir)
     try:
         try:
-            conn.execute(
+            cur = conn.execute(
                 """
                 INSERT INTO memory_feedback (memory_id, rater, score, created)
-                SELECT id, ?, ?, ? FROM memory WHERE id = ?
+                SELECT id, ?, ?, ? FROM memory WHERE id = ? AND status = 'confirmed'
                 ON CONFLICT(memory_id, rater) DO UPDATE SET
                     score = excluded.score, created = excluded.created
                 """,
                 (rater, score, datetime.now(timezone.utc).isoformat(timespec="seconds"), memory_id),
             )
-            exists = conn.execute(
-                "SELECT 1 FROM memory_feedback WHERE memory_id = ? AND rater = ?",
-                (memory_id, rater),
-            ).fetchone()
         except sqlite3.IntegrityError as exc:
             raise ValueError(f"could not record feedback: {exc}") from exc
-        if exists is None:
-            raise ValueError(f"memory {memory_id} does not exist")
+        if cur.rowcount < 1:
+            row = conn.execute("SELECT status FROM memory WHERE id = ?", (memory_id,)).fetchone()
+            if row is None:
+                raise ValueError(f"memory {memory_id} does not exist")
+            raise ValueError(f"memory {memory_id} is {row['status']}, not confirmed")
     finally:
         conn.close()
 
