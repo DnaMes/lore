@@ -268,6 +268,22 @@ Create `~/.ai-history/config.json`:
 }
 ```
 
+## Timeouts
+
+`LLMConfig` defaults to 60 s per call. The two hosted providers wait longer
+because they need it: **jev** walks a delegate lane chain (default **180 s**)
+and **openrouter** talks to a free-tier endpoint (default **90 s**).
+
+`LORE_LLM_TIMEOUT` (integer seconds) overrides both — and only those two;
+`gemini` and `ollama` keep their defaults so a global variable never changes a
+local setup. An explicit `timeout=` argument passed to `get_provider()` wins
+over the env var. An unparsable value (empty, `0`, negative, `soon`) is ignored
+with a warning on stderr and the provider default applies.
+
+```bash
+LORE_LLM_TIMEOUT=240 lore summarize --provider jev --allow-cloud --dry-run
+```
+
 ## Output Locations
 
 - **Stats**: `~/.ai-history/stats/stats.json`
@@ -322,7 +338,8 @@ lore analyze --provider jev --allow-cloud --limit 5
 
 System prompts are prefixed to stdin (`system`, blank line, user prompt). The broker
 timeout follows `DELEGATE_TIMEOUT_SECONDS` (default 300s) inside `delegate`; Lore’s
-`LLMConfig.timeout` wraps each lane attempt.
+timeout wraps each lane attempt — **180 s by default**, overridable with
+`LORE_LLM_TIMEOUT` (see [Timeouts](#timeouts)).
 
 `max_tokens` and `temperature` are **ignored** by this provider — the broker decides
 the limits per lane, so Lore passes neither through. `LLMResponse.model` is

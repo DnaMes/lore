@@ -1,4 +1,5 @@
 import os
+import sys
 from typing import Optional
 
 from .base import LLMConfig, LLMProvider
@@ -6,6 +7,38 @@ from .gemini import GeminiProvider
 from .jev import DEFAULT_MODEL_LABEL, JevProvider
 from .ollama import OllamaProvider
 from .openrouter import DEFAULT_MODEL, OpenRouterProvider
+
+# Hosted providers wait longer than the 60 s LLMConfig default: a delegate hop
+# chain and a free-tier OpenRouter model both routinely exceed it.
+HOSTED_DEFAULT_TIMEOUTS = {"openrouter": 90, "jev": 180}
+TIMEOUT_ENV_VAR = "LORE_LLM_TIMEOUT"
+
+
+def _resolve_timeout(provider: str, kwargs: dict) -> dict:
+    """Apply ``LORE_LLM_TIMEOUT`` and the hosted defaults to ``kwargs``.
+
+    Only ``openrouter`` and ``jev`` are affected — local providers keep
+    ``LLMConfig.timeout``. An explicit ``timeout`` argument wins over the env
+    var, and an unparsable value falls back to the provider default with a
+    warning on stderr instead of failing the call.
+    """
+    default = HOSTED_DEFAULT_TIMEOUTS.get(provider)
+    if default is None or "timeout" in kwargs:
+        return kwargs
+    raw = os.environ.get(TIMEOUT_ENV_VAR)
+    if raw is None:
+        return {**kwargs, "timeout": default}
+    try:
+        seconds = int(raw)
+        if seconds <= 0:
+            raise ValueError
+    except ValueError:
+        print(
+            f"warning: ignoring invalid {TIMEOUT_ENV_VAR}={raw!r}; using {default}s",
+            file=sys.stderr,
+        )
+        return {**kwargs, "timeout": default}
+    return {**kwargs, "timeout": seconds}
 
 
 def get_provider(
@@ -39,7 +72,7 @@ def get_provider(
             provider="openrouter",
             model=model or default_model,
             api_key=api_key,
-            **kwargs,
+            **_resolve_timeout(provider, kwargs),
         )
         return OpenRouterProvider(config)
 
@@ -47,7 +80,7 @@ def get_provider(
         config = LLMConfig(
             provider="jev",
             model=model or DEFAULT_MODEL_LABEL,
-            **kwargs,
+            **_resolve_timeout(provider, kwargs),
         )
         return JevProvider(config)
 
