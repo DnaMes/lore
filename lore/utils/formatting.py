@@ -404,4 +404,4 @@ def escape_snippet_html(text: str) -> Markup:
     ``«``/``»`` in the source text.
     """
     escaped = str(escape(text or ""))
-    return Markup(escaped.replace("«", "<mark>").replace("»", "</mark>"))
+    return Markup(escaped.replace("«", "<mark>").replace("»", "</mark>"))  # nosec B704
