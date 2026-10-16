@@ -77,7 +77,7 @@ I checked which tools the leaders support that Lore's README does not list (Lore
 - Zed
 - Windsurf
 - Pi
-- OpenClaw/Hermes
+- Hermes
 - Factory Droid
 - OpenHands
 - Junie

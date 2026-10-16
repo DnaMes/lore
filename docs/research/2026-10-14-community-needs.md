@@ -91,7 +91,6 @@ Research date: 2026-10-14. Reddit was not directly readable: WebFetch and WebSea
 
 | Tool | Stars |
 |---|---|
-| openclaw | 392k |
 | hermes-agent | 253k |
 | opencode (anomalyco) | 213k |
 | claude-code | 151k |
@@ -120,7 +119,7 @@ Star counts are a hype proxy, not usage.
 5. Gemini CLI and Antigravity.
 6. OpenCode.
 7. Pi, which is strong in r/LocalLLaMA and r/LocalLLM ("I love Pi", ~4 months ago): https://www.reddit.com/r/LocalLLaMA/comments/1th5t1b/
-8. Hermes and openclaw. r/hermesagent says "session history are yours, on your machine" (1 week ago), but one r/LocalLLaMA thread doubts openclaw virality is organic.
+8. Hermes. r/hermesagent says "session history are yours, on your machine" (1 week ago).
 9. Cline, Kilo, Roo, Zed, Aider, Goose, Crush, Qwen Code, Kimi.
 10. Windsurf, Kiro and Droid, the weakest signals. The r/windsurf thread "Windsurf gone, what's next" (~6 months ago) explains the Windsurf weakness. One user said they "used Droid for a bit... felt the same".
 
