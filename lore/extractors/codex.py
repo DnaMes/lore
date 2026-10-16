@@ -271,6 +271,8 @@ class CodexExtractor(BaseExtractor):
         seen_ids: Set[str] = set()
         for session_file in self._iter_rollout_paths():
             self._count("files_matched")
+            if self._source_unchanged(session_file):
+                continue
             try:
                 if session_file.stat().st_size > _MAX_FILE_BYTES:
                     continue

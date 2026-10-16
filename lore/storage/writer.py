@@ -213,6 +213,21 @@ _SESSION_INSERT = """
 """
 
 
+def _session_fts_rowids(conn: sqlite3.Connection) -> Dict[str, List[int]]:
+    """Map every session id to its FTS rowids with one scan of ``search_index``.
+
+    ``entity_id`` is UNINDEXED, so each ``DELETE ... WHERE entity_id = ?`` reads
+    the whole FTS table (~0.3 s at 6000 sessions). A writer that rewrites many
+    sessions in one transaction resolves rowids here once and deletes by rowid.
+    """
+    rows: Dict[str, List[int]] = {}
+    for rowid, entity_id in conn.execute(
+        "SELECT rowid, entity_id FROM search_index WHERE entity_type = 'session'"
+    ):
+        rows.setdefault(entity_id, []).append(rowid)
+    return rows
+
+
 def _replace_session_fts(
     conn: sqlite3.Connection,
     session_id: str,
@@ -220,13 +235,22 @@ def _replace_session_fts(
     project: Optional[str],
     title: str,
     body: str,
+    fts_rows: Optional[Dict[str, List[int]]] = None,
 ) -> None:
-    """Replace only one session's FTS row inside the active transaction."""
-    conn.execute(
-        "DELETE FROM search_index WHERE entity_type = 'session' AND entity_id = ?",
-        (session_id,),
-    )
-    conn.execute(
+    """Replace only one session's FTS row inside the active transaction.
+
+    ``fts_rows`` is the writer's :func:`_session_fts_rowids` map, kept current
+    here; without it the old row is found by a full scan of the FTS table.
+    """
+    if fts_rows is None:
+        conn.execute(
+            "DELETE FROM search_index WHERE entity_type = 'session' AND entity_id = ?",
+            (session_id,),
+        )
+    else:
+        for rowid in fts_rows.pop(session_id, ()):
+            conn.execute("DELETE FROM search_index WHERE rowid = ?", (rowid,))
+    cursor = conn.execute(
         """
         INSERT INTO search_index (
             entity_type, entity_id, tool, project, title, body
@@ -234,10 +258,17 @@ def _replace_session_fts(
         """,
         (session_id, tool, project or "", title, body),
     )
+    if fts_rows is not None:
+        fts_rows[session_id] = [int(cursor.lastrowid or 0)]
 
 
 def _rebuild_session_fts(
-    conn: sqlite3.Connection, session_id: str, tool: str, project: Optional[str], title: str
+    conn: sqlite3.Connection,
+    session_id: str,
+    tool: str,
+    project: Optional[str],
+    title: str,
+    fts_rows: Optional[Dict[str, List[int]]] = None,
 ) -> None:
     """Rebuild one session's FTS row as title + its stored message bodies."""
     body_parts = [title]
@@ -249,12 +280,16 @@ def _rebuild_session_fts(
         if content
     )
     _replace_session_fts(
-        conn, session_id, tool, project, title, "\n".join(p for p in body_parts if p)
+        conn, session_id, tool, project, title, "\n".join(p for p in body_parts if p), fts_rows
     )
 
 
 def _refresh_complete_session(
-    conn: sqlite3.Connection, entry: Dict, title: str, previous_title: str
+    conn: sqlite3.Connection,
+    entry: Dict,
+    title: str,
+    previous_title: str,
+    fts_rows: Optional[Dict[str, List[int]]] = None,
 ) -> None:
     """Refresh metadata of a session whose message rows are already complete.
 
@@ -296,10 +331,14 @@ def _refresh_complete_session(
     # Heals a row still at the migration defaults when the entry carries a version.
     _store_entry_contract_columns(conn, entry)
     if title != previous_title:
-        _rebuild_session_fts(conn, session_id, entry.get("tool") or "", entry.get("project"), title)
+        _rebuild_session_fts(
+            conn, session_id, entry.get("tool") or "", entry.get("project"), title, fts_rows
+        )
 
 
-def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
+def _write_reused_entry(
+    conn: sqlite3.Connection, entry: Dict, fts_rows: Optional[Dict[str, List[int]]] = None
+) -> None:
     """Write a metadata-only row from a pre-built index dict.
 
     Incremental sync hands the IndexBuilder pre-built dicts for unchanged
@@ -317,7 +356,9 @@ def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
         "SELECT messages_synced, title FROM sessions WHERE id = ?", (session_id,)
     ).fetchone()
     if existing and existing[0]:
-        _refresh_complete_session(conn, entry, title, previous_title=existing[1] or "")
+        _refresh_complete_session(
+            conn, entry, title, previous_title=existing[1] or "", fts_rows=fts_rows
+        )
         return
     conn.execute(
         _SESSION_INSERT,
@@ -351,6 +392,7 @@ def _write_reused_entry(conn: sqlite3.Connection, entry: Dict) -> None:
         entry.get("project"),
         title,
         entry.get("search_text") or "",
+        fts_rows,
     )
 
 
@@ -359,6 +401,7 @@ def _write_full_session(
     session: UnifiedSession,
     title: str,
     session_extras: Dict,
+    fts_rows: Optional[Dict[str, List[int]]] = None,
 ) -> Tuple[str, Optional[str], Optional[int]]:
     """Write one full session (row + message rows + FTS) into the v2 store.
 
@@ -369,10 +412,6 @@ def _write_full_session(
     """
     source_mtime_ns = _source_mtime_ns(session.source_path, session.source_mtime_ns)
     conn.execute("DELETE FROM messages WHERE session_id = ?", (session.session_id,))
-    conn.execute(
-        "DELETE FROM search_index WHERE entity_type = 'session' AND entity_id = ?",
-        (session.session_id,),
-    )
     conn.execute(
         _SESSION_INSERT,
         (
@@ -434,7 +473,13 @@ def _write_full_session(
     # One FTS row per session: title + concatenated message bodies.
     fts_body = "\n".join(p for p in body_parts if p)
     _replace_session_fts(
-        conn, session.session_id, session.tool.value, session.project_path, title, fts_body
+        conn,
+        session.session_id,
+        session.tool.value,
+        session.project_path,
+        title,
+        fts_body,
+        fts_rows,
     )
     return (session.session_id, fts_body, source_mtime_ns)
 
@@ -444,13 +489,14 @@ def _write_reused_full_session(
     session: UnifiedSession,
     title: str,
     session_extras: Dict,
+    fts_rows: Optional[Dict[str, List[int]]] = None,
 ) -> Tuple[bool, Tuple[str, Optional[str], Optional[int]]]:
     """Update reused metadata without rewriting messages when they are complete."""
     row = conn.execute(
         "SELECT messages_synced, parser_version FROM sessions WHERE id = ?", (session.session_id,)
     ).fetchone()
     if not row or not row[0]:
-        return False, _write_full_session(conn, session, title, session_extras)
+        return False, _write_full_session(conn, session, title, session_extras, fts_rows)
     stored_parser_version = int(row[1] or 0)
 
     source_mtime_ns = _source_mtime_ns(session.source_path, session.source_mtime_ns)
@@ -492,7 +538,13 @@ def _write_reused_full_session(
     )
     fts_body = "\n".join(body_parts)
     _replace_session_fts(
-        conn, session.session_id, session.tool.value, session.project_path, title, fts_body
+        conn,
+        session.session_id,
+        session.tool.value,
+        session.project_path,
+        title,
+        fts_body,
+        fts_rows,
     )
     return True, (session.session_id, None, source_mtime_ns)
 
@@ -540,15 +592,21 @@ class StreamingV2Writer:
         self.count = 0
         self._embed_inputs: List[Tuple[str, Optional[str], Optional[int]]] = []
         self._begun = False
+        # Filled by begin(); None keeps the per-delete scan for a writer never begun.
+        self._fts_rows: Optional[Dict[str, List[int]]] = None
 
     def begin(self) -> None:
-        self.conn.execute("BEGIN")
+        # IMMEDIATE: the rowid scan below is a read, and a deferred transaction that
+        # reads first cannot upgrade to a write if another writer committed meanwhile
+        # (SQLITE_BUSY ignores busy_timeout there). Taking the lock up front waits instead.
+        self.conn.execute("BEGIN IMMEDIATE")
         self._begun = True
+        self._fts_rows = _session_fts_rowids(self.conn)
 
     def add_full(self, session: UnifiedSession) -> None:
         title = self.titles.get(session.session_id) or session.title or ""
         triple = _write_full_session(
-            self.conn, session, title, self.extras.get(session.session_id, {})
+            self.conn, session, title, self.extras.get(session.session_id, {}), self._fts_rows
         )
         # Queue only what embed_sessions will actually embed. The full body
         # (all message text) would otherwise stay pinned until finalize().
@@ -558,7 +616,7 @@ class StreamingV2Writer:
         self.count += 1
 
     def add_reused_entry(self, entry: Dict) -> None:
-        _write_reused_entry(self.conn, entry)
+        _write_reused_entry(self.conn, entry, self._fts_rows)
         entry_id = entry.get("id")
         if entry_id:
             # text=None: keep the stored vector, never (re)embed a reused row.
@@ -569,7 +627,7 @@ class StreamingV2Writer:
         """Preserve complete reused messages while refreshing session metadata."""
         title = self.titles.get(session.session_id) or session.title or ""
         preserved, triple = _write_reused_full_session(
-            self.conn, session, title, self.extras.get(session.session_id, {})
+            self.conn, session, title, self.extras.get(session.session_id, {}), self._fts_rows
         )
         if preserved:
             self._embed_inputs.append((session.session_id, None, None))

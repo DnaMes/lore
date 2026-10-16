@@ -382,3 +382,26 @@ def test_parse_function_call_bad_json_args(monkeypatch, tmp_path):
     sessions = list(extractor.extract_sessions())
     # Should still yield a session with the tool call message
     assert len(sessions) == 1
+
+
+# ---------------------------------------------------------------------------
+# Pre-parse source skip (#112): codex was the one big extractor that ignored it
+# ---------------------------------------------------------------------------
+
+
+def test_codex_unchanged_rollout_is_skipped_before_parsing(monkeypatch, tmp_path):
+    rollout, _ = _make_session_file(tmp_path, _minimal_session_records())
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    extractor = CodexExtractor()
+    assert [s.session_id for s in extractor.extract_sessions()] == ["test-session-01"]
+
+    extractor = CodexExtractor()
+    extractor.known_source_mtimes = {str(rollout): rollout.stat().st_mtime_ns}
+    extractor.known_source_parser_versions = {str(rollout): extractor.PARSER_VERSION}
+    assert list(extractor.extract_sessions()) == []
+    assert extractor.skipped_sources == {str(rollout)}
+
+    rollout.touch()
+    extractor.known_source_mtimes = {str(rollout): 1}
+    assert [s.session_id for s in extractor.extract_sessions()] == ["test-session-01"]

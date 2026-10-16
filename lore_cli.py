@@ -427,7 +427,20 @@ def cmd_export(args):
             extractor.known_source_mtimes = known_mtimes
             extractor.known_source_parser_versions = known_versions
             extractor.skipped_sources = set()
-            skipped_by_id: dict[str, dict] | None = None
+            skipped_by_id: dict[str, dict] = {}
+            skipped_seen = -1
+            # Ids a freshly parsed copy replaced; they never come back as reused.
+            replaced_ids: set[str] = set()
+
+            def reusable_view() -> dict[str, dict]:
+                """Prior entries of the skipped sources, minus the replaced ids."""
+                return {
+                    sid: entry
+                    for sid, entry in _reusable_entries(
+                        extractor, prior_by_path, ignored_ids
+                    ).items()
+                    if sid not in replaced_ids
+                }
 
             for session in extractor.extract_sessions():
                 stamp_parser_version(extractor, session)
@@ -435,17 +448,20 @@ def cmd_export(args):
                 if args.project and session.project_path != args.project:
                     continue
 
-                # An extractor scans every source before its first yield, so the
-                # skipped set is complete here.
-                if skipped_by_id is None:
-                    skipped_by_id = _reusable_entries(extractor, prior_by_path, ignored_ids)
+                # A streaming extractor (codex) skips sources while it yields, so
+                # the skipped set grows during the loop: refresh the view whenever
+                # it did, else a later skipped source would lose its entry.
+                if len(extractor.skipped_sources) != skipped_seen:
+                    skipped_seen = len(extractor.skipped_sources)
+                    skipped_by_id = reusable_view()
                 prior = skipped_by_id.get(session.session_id)
                 if prior is not None:
                     # Same id also arrived from a changed copy elsewhere: the newer
                     # one wins, never both (the index id is unique).
                     if str(prior.get("updated") or "") > session.last_updated.isoformat():
                         continue
-                    del skipped_by_id[session.session_id]
+                replaced_ids.add(session.session_id)
+                skipped_by_id.pop(session.session_id, None)
 
                 _tag_git_info(session, git_info_cache)
                 exported += 1
@@ -472,9 +488,7 @@ def cmd_export(args):
 
                 yield export_target
 
-            if skipped_by_id is None:
-                skipped_by_id = _reusable_entries(extractor, prior_by_path, ignored_ids)
-            reused_entries.extend(skipped_by_id.values())
+            reused_entries.extend(reusable_view().values())
             finished_extractors.append(extractor)
 
     def all_sessions_stream():

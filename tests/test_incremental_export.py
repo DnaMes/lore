@@ -183,3 +183,49 @@ def test_home_scan_survives_unreadable_entries(tmp_path, monkeypatch):
     finally:
         locked.chmod(0o700)
     assert tmp_path / ".claude" / "projects" in found
+
+
+def test_streaming_extractor_keeps_entries_skipped_after_its_first_yield(tmp_path, monkeypatch):
+    """Codex yields lazily: a changed first rollout must not drop the skipped ones after it."""
+    from lore.extractors.codex import CodexExtractor
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _discover_cached.cache_clear()
+    day = tmp_path / ".codex" / "sessions" / "2025" / "06" / "15"
+    day.mkdir(parents=True)
+
+    def rollout(name: str) -> Path:
+        records = [
+            {
+                "type": "session_meta",
+                "timestamp": "2025-06-15T10:00:00",
+                "payload": {"id": name, "cwd": "/home/u/app", "cli_version": "1"},
+            }
+        ]
+        for i in range(3):
+            for role in ("user", "assistant"):
+                records.append(
+                    {
+                        "type": "message",
+                        "timestamp": f"2025-06-15T10:0{i}:00",
+                        "payload": {"role": role, "content": f"{name} {role} {i}", "id": f"{role}{i}"},
+                    }
+                )
+        path = day / f"rollout-{name}.jsonl"
+        _write(path, records)
+        return path
+
+    paths = [rollout(name) for name in ("sess-a", "sess-b", "sess-c")]
+    extractor = CodexExtractor()
+    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+
+    first = _export(tmp_path)
+    assert _ids(first) == ["sess-a", "sess-b", "sess-c"]
+
+    first_listed = next(iter(extractor._iter_rollout_paths()))
+    stat = first_listed.stat()
+    os.utime(first_listed, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000_000))
+    assert first_listed in paths
+
+    second = _export(tmp_path)
+    assert _ids(second) == ["sess-a", "sess-b", "sess-c"]
