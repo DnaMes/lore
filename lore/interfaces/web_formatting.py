@@ -23,6 +23,7 @@ _COMPARE_STRIP_RE = re.compile(r"[\W_]+", re.UNICODE)
 
 _markdown_local = threading.local()
 
+
 def _get_markdown_converter():
     if not hasattr(_markdown_local, "converter"):
         _markdown_local.converter = markdown.Markdown(extensions=["fenced_code", "tables", "nl2br"])
