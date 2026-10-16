@@ -1,26 +1,37 @@
-# Continue — Lore nightly and AI-stack merge
+# Continue — Lore: lore-sync resource fix shipped, backlog Wave 2 next
 
 ## Verify state before trusting this document
 
-Run `git status --short --branch`, `git log --oneline -5`, and `git worktree list` in Lore. Check current Forgejo PR states and the AI-Workstation stack state before acting. Read `HANDOFF.md` for the source of truth; do not rely on this prompt over newer Git or tracker state.
+Run `git status --short --branch`, `git log --oneline -6` and `git ls-remote github main` in
+`/home/dnames/projects/ai-stack/lore`, and `git status --short` in the parent `ai-stack`. Read
+`HANDOFF.md` (newest section at the top) for the source of truth. The repo may have moved on; do not
+trust this prompt over current Git state. Preserve other sessions' dirty files.
+
+## What just happened
+
+The owner reported Lore eating resources. Three root causes were found and fixed (all pushed,
+review-gate APPROVE: lore `cd9256b`, `892cbe5`; ai-stack `4ea810e`):
+
+1. `lore-sync` full-scanned the FTS5 table (`entity_id UNINDEXED`) twice per rewritten session; fixed
+   with rowid deletes in `lore/storage/writer.py` (`BEGIN IMMEDIATE`). Live sync: 75 s cold, 14 s steady
+   (was 28+ min / timeout).
+2. The codex extractor now takes the pre-parse source skip; `lore_cli.cmd_export` refreshes its reusable
+   view when `skipped_sources` grows (a first attempt had dropped 1678 codex index entries).
+3. Tests ran against the real HOME (one test 33 min); `tests/conftest.py` now isolates HOME. Full suite:
+   2742 passed, 24 skipped, 0 failed in 3m40s.
 
 ## Immediate next step
 
-The user asked to merge all work and leave no branches. All five Skill Assistant PRs are merged: `claude-setup#217`, `codex-setup#1`, `opencode#9`, `harness#18`, and `ai-stack#20`. All five `feat/153-skill-assistant` remote refs were deleted and verified absent. Do not claim the entire AI stack is branch-free; separate autosync, harness, and pilot branches remain outside this task.
+Nothing is broken. Optional follow-ups, in order: rebuild the `lore-app` Docker image (production
+decision), make `TitleGenerator._cache_title` stop rewriting the whole cache per title, then resume
+`docs/NEXT-SESSION-issue-backlog.md` Wave 2 (#172 -> #173 -> #174 -> #171 -> #175). Use
+`systemctl --user start lore-sync.service` to re-check the sync (expect ~14 s).
 
-## Current Lore nightly result
+## Rules that bit this session
 
-The 2026-09-23 Lore/Forgejo nightly made no source or tracker changes. Three Claude windows failed before invocation because GNU `timeout` rejected `4h55m`; MiniMax Forgejo batch 1 hit Token Plan error 2056 and batches 2–5 had no output. The preliminary OpenCode audit was superseded. Lore has 51 open issues, no open PRs, and only remote `main`. Local Lore is clean on `main`; its temporary AI-Workstation worktree was removed. The AI-Workstation Lore checkout remains at its previously inspected commit; GitHub advanced after that inspection. The final nightly report is on AI-Workstation at `~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
-
-## Preserve unrelated state
-
-AI-Workstation's `ai-stack` checkout is 17 commits behind `origin/main` and has unrelated modified submodule pointers plus an untracked `docs/night-ops/.../HALT.md`. Preserve them. Its independent `autosync/*`, `feat/5-harness-rollout`, `fix/9-harness-ecc-remediation`, and `herdr-pilot` branches are outside the #153 merge; classify before any cleanup. Do not claim the entire AI stack is branch-free after removing only #153 branches.
-
-## Test evidence and limits
-
-The prior implementation handoff records 50 Codex tests, 33 Claude pipeline tests plus shell profile checks, 6 OpenCode tests, 1 Harness test, and 1 Antigravity test passed. This session did not rerun them. Forgejo reported no status contexts or branch protections; the changes had earlier independent review and focused test evidence.
-
-The final nightly report is at `~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
+Never write `WHERE entity_id = ?` against FTS5 in a loop; no py-spy/strace here (ptrace denied), use
+`/proc/PID/io`, `EXPLAIN QUERY PLAN` and `pytest -o faulthandler_timeout=25`; do not run pytest without
+the HOME isolation fixture.
 
 ---
 

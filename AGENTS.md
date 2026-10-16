@@ -190,15 +190,13 @@ Conventions before editing the vault: skill `obsidian-keeper`.
 <!-- parachute:begin -->
 ## Session handoff (context-parachute)
 
-**2026-09-24 — current task complete:** the Lore/Forgejo nightly made no changes; its
-three Claude windows failed on invalid `timeout 4h55m` and MiniMax stopped at provider
-error 2056. Lore is clean on `main`, with 51 open issues and no open PRs.
-The temporary Lore AI-Workstation worktree is removed.
-
-All Skill Assistant PRs are merged (`claude-setup#217`, `codex-setup#1`, `opencode#9`,
-`harness#18`, `ai-stack#20`) and all five `feat/153-skill-assistant` remote refs are
-deleted. Preserve the ai-stack checkout's unrelated dirty submodules, `HALT.md`, and
-separate branches. Details and verified state: `HANDOFF.md`.
+**2026-10-16 — current task complete:** the lore-sync resource blocker is fixed and pushed
+(lore `cd9256b`, `892cbe5`; ai-stack `4ea810e`). Root cause: per-session `DELETE ... WHERE entity_id = ?`
+full-scanned the FTS5 table; the writer now deletes by rowid inside `BEGIN IMMEDIATE`. Sync is 75 s
+cold / 14 s steady (was 28+ min), the suite runs 3m40s with 0 failures (tests now isolate HOME).
+Never loop `WHERE entity_id = ?` on FTS5. Next: Wave 2 of `docs/NEXT-SESSION-issue-backlog.md`;
+optional `lore-app` image rebuild. Preserve other sessions' dirty files in `ai-stack`.
+Details and verified state: `HANDOFF.md`.
 
 Ready-to-paste prompts: `.parachute/continue.md` (any agent) ·
 `.parachute/continue-claude.md` (fresh Claude session after `/clear`).

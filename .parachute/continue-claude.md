@@ -1,41 +1,30 @@
-# Continue — Fresh Claude session: Lore nightly and AI-stack merge
+# Continue — Fresh Claude session: Lore after the lore-sync resource fix
 
-Run `/clear`, then paste this prompt into a fresh session if needed.
+Run `/clear`, then paste this prompt into a fresh session.
 
 ## Verify before acting
 
-The workspace and remote state may have moved. Run `git status --short --branch`,
-`git log --oneline -5`, and `git worktree list` in Lore. Read `HANDOFF.md`
-for the source of truth, and re-query remote PR and branch state before acting.
+Run `git status --short --branch`, `git log --oneline -6` and `git ls-remote github main` in Lore, then
+read the newest section of `HANDOFF.md`. Re-check live state before claiming anything: other sessions
+leave dirty files in the parent `ai-stack`; preserve them.
 
-## Completed Skill Assistant merge
+## State
 
-All five PRs are merged: `claude-setup#217`, `codex-setup#1`, `opencode#9`,
-`harness#18`, and `ai-stack#20`. All five remote refs named
-`feat/153-skill-assistant` were deleted and verified absent. Do not claim the
-entire AI stack is branch-free; preserve and separately classify unrelated
-autosync, harness, and pilot branches.
+lore-sync root cause fixed and shipped (lore `cd9256b`, `892cbe5`; ai-stack `4ea810e`, all
+review-gate APPROVE): FTS5 `entity_id` is UNINDEXED, so per-session deletes full-scanned the table.
+The writer now deletes by rowid inside `BEGIN IMMEDIATE`; codex takes the #112 source skip; tests
+isolate HOME. Measured: sync 75 s cold / 14 s steady (was 28+ min), suite 3m40s with 2742 passed,
+0 failed (was 44 min).
 
-## Nightly run result
+## Next
 
-The 2026-09-23 Lore/Forgejo nightly made no source or tracker changes. Three Claude
-windows failed before invocation because GNU `timeout` rejected `4h55m`. MiniMax
-batch 1 hit Token Plan error 2056; batches 2–5 returned no report. A preliminary
-OpenCode Lore audit was superseded. Lore has 51 open issues, no open PRs, and only
-remote `main`; the local checkout is clean on `main`. The AI-Workstation Lore
-checkout remains at its previously inspected commit; GitHub advanced after that
-inspection. The temporary Lore worktree was removed. The final nightly report is at
-`ai-workstation:~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
+1. Optional: rebuild the `lore-app` Docker image (production, ask first is not required for local build
+   but deploying is).
+2. Optional: fix the O(n^2) `TitleGenerator._cache_title` rewrite.
+3. Resume `docs/NEXT-SESSION-issue-backlog.md` Wave 2: #172 -> #173 -> #174 -> #171 -> #175.
 
-## Boundaries and test evidence
-
-AI-Workstation's `ai-stack` checkout is 17 commits behind `origin/main` and has
-unrelated dirty submodule pointers plus an untracked
-`docs/night-ops/.../HALT.md`. Preserve them. The prior handoff records focused
-results: Codex 50 tests, Claude pipeline 33 plus shell profile checks, OpenCode 6,
-Harness 1, Antigravity 1; this session did not rerun tests. Forgejo reported no
-status contexts or branch protection. Separate stack branches remain outside this
-task.
+Commits go through `git-ops` (the main thread is hook-blocked from git writes). Verify with commands and
+report observed output, not assumptions.
 
 ---
 
