@@ -41,7 +41,7 @@ Facts verified this session (do not re-derive):
   bash/edit/write, `cmd --yolo`). Session transcripts are untrusted text. NEVER send transcript
   text to those lanes. `--type auto` can pick `agy`; the owner forbids new automation around
   `agy` (Google account policy). Jev provider stays on the text-only allowlist.
-- OpenCode Go (`go` lane) expires 2026-10-22 per `docs/roles.md`; do not build on it.
+- OpenCode Go (`go` lane) is a kept subscription with no end date; it is an ordinary subscription lane.
 - `delegate "..." --type auto --role summary` worked from the main session and returned in ~11 s;
   inside a delegated builder it fails with "recursive delegation is forbidden". Run live Jev smoke
   tests from the main session only.
