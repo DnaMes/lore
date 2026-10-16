@@ -6,6 +6,19 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
+def _isolated_home(tmp_path_factory, monkeypatch):
+    """Point HOME at an empty directory so no test reads or writes the real one.
+
+    Extractors, ``lore_home()`` and the title cache all resolve ``~``. Without
+    this, a web test that rebuilt the index parsed every real Claude/Codex
+    session and rewrote the real ``~/.lore/title_cache`` once per session
+    (one test ran 33 minutes at 100% CPU). Tests that need their own home set
+    ``HOME`` themselves; that runs after this fixture and wins.
+    """
+    monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("home")))
+
+
+@pytest.fixture(autouse=True)
 def _relax_min_user_prompts_for_tests(monkeypatch):
     """Production default MIN_USER_PROMPTS=3 filters out the tiny 1-2 message
     fixtures most extractor tests rely on. The threshold change is a product

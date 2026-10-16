@@ -105,6 +105,8 @@ def client(monkeypatch):
     monkeypatch.setattr(web, "load_index", lambda: _index_payload())
     monkeypatch.setattr(web, "load_sessions_for_tool", lambda _tool=None: [_live_session()])
     monkeypatch.setattr(web, "load_noise_rules", lambda: _FIXED_NOISE_RULES)
+    # The sessions page embeds today's date in its quick-range links.
+    monkeypatch.setattr(web, "sessions_list_now", lambda: datetime(2026, 10, 14, 12, 0, 0))
     with web.app.test_client() as c:
         yield c
 
