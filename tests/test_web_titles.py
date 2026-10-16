@@ -320,7 +320,7 @@ def test_session_detail_prefers_markdown_by_default(monkeypatch, tmp_path):
         "sessions": [
             {
                 "id": session_id,
-                "tool": "warp",
+                "tool": "cursor",
                 "title": "stale title",
                 "created": "2026-03-01T10:00:00",
                 "updated": "2026-03-01T10:01:00",
@@ -352,7 +352,7 @@ def test_session_detail_live_mode_prefers_live_extractor(monkeypatch, tmp_path):
         "sessions": [
             {
                 "id": session_id,
-                "tool": "warp",
+                "tool": "cursor",
                 "title": "stale title",
                 "created": "2026-03-01T10:00:00",
                 "updated": "2026-03-01T10:01:00",
@@ -367,7 +367,7 @@ def test_session_detail_live_mode_prefers_live_extractor(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "load_index", lambda: idx)
 
     live_session = UnifiedSession(
-        tool=Tool.WARP,
+        tool=Tool.CURSOR,
         session_id=session_id,
         created_at=datetime(2026, 3, 1, 10, 0, 0),
         last_updated=datetime(2026, 3, 1, 10, 1, 0),
@@ -398,7 +398,7 @@ def test_session_detail_live_mode_prefers_live_extractor(monkeypatch, tmp_path):
 
 
 def test_session_detail_prefers_live_when_markdown_has_no_assistant(monkeypatch, tmp_path):
-    session_id = "ses-warp-stale-md"
+    session_id = "ses-cursor-stale-md"
     markdown_file = tmp_path / "session.md"
     markdown_file.write_text(
         "# stale-md\n\n## Conversation\n\n> user only\n",
@@ -409,7 +409,7 @@ def test_session_detail_prefers_live_when_markdown_has_no_assistant(monkeypatch,
         "sessions": [
             {
                 "id": session_id,
-                "tool": "warp",
+                "tool": "cursor",
                 "title": "stale title",
                 "created": "2026-03-01T10:00:00",
                 "updated": "2026-03-01T10:01:00",
@@ -425,7 +425,7 @@ def test_session_detail_prefers_live_when_markdown_has_no_assistant(monkeypatch,
     monkeypatch.setattr(web, "resolve_export_path", lambda _value: markdown_file)
 
     live_session = UnifiedSession(
-        tool=Tool.WARP,
+        tool=Tool.CURSOR,
         session_id=session_id,
         created_at=datetime(2026, 3, 1, 10, 0, 0),
         last_updated=datetime(2026, 3, 1, 10, 1, 0),
@@ -446,7 +446,7 @@ def test_session_detail_prefers_live_when_markdown_has_no_assistant(monkeypatch,
                 timestamp=datetime(2026, 3, 1, 10, 0, 35),
             ),
         ],
-        title="live warp title",
+        title="live cursor title",
     )
     monkeypatch.setattr(web, "load_sessions_for_tool", lambda _tool=None: [live_session])
 
@@ -456,7 +456,7 @@ def test_session_detail_prefers_live_when_markdown_has_no_assistant(monkeypatch,
     body = response.get_data(as_text=True)
     assert response.status_code == 200
     assert "Das System wird in 60 Minuten heruntergefahren." in body
-    assert "live warp title" in body
+    assert "live cursor title" in body
 
 
 def test_dashboard_renders_all_known_tools_even_when_stats_empty(monkeypatch):
@@ -553,7 +553,7 @@ def test_export_session_builds_markdown_from_live_indexed_session(monkeypatch, t
         "sessions": [
             {
                 "id": session_id,
-                "tool": "warp",
+                "tool": "cursor",
                 "export_path": None,
             }
         ],
@@ -561,7 +561,7 @@ def test_export_session_builds_markdown_from_live_indexed_session(monkeypatch, t
     index_path.write_text(json.dumps(index_payload), encoding="utf-8")
 
     live_session = UnifiedSession(
-        tool=Tool.WARP,
+        tool=Tool.CURSOR,
         session_id=session_id,
         created_at=datetime(2026, 3, 1, 10, 0, 0),
         last_updated=datetime(2026, 3, 1, 10, 1, 0),

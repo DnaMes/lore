@@ -356,10 +356,6 @@ def _default_noise_rules() -> dict:
         "antigravity": {
             "antigravity_summarize_file_operations": True,
         },
-        "warp": {
-            "warp_drop_toolu_noise": True,
-            "warp_summarize_file_operations": True,
-        },
     }
 
 

@@ -1,6 +1,6 @@
 # Lore — Agent Guidelines
 
-Local-first AI chat history manager for Claude Code, Cursor, VSCode Copilot, Gemini CLI, Warp, Codex, OpenCode. Product/CLI = **Lore**; the Python import package stays `lore`.
+Local-first AI chat history manager for Claude Code, Cursor, VSCode Copilot, Gemini CLI, Codex, OpenCode. Product/CLI = **Lore**; the Python import package stays `lore`.
 
 ## Project Structure
 

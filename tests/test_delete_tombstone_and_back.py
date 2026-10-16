@@ -13,13 +13,13 @@ def test_delete_remembers_tombstone_and_redirects_back(monkeypatch, tmp_path):
                 "stats": {
                     "total_sessions": 1,
                     "total_messages": 1,
-                    "by_tool": {"warp": 1},
+                    "by_tool": {"cursor": 1},
                     "by_project": {},
                 },
                 "sessions": [
                     {
                         "id": "ses-del-1",
-                        "tool": "warp",
+                        "tool": "cursor",
                         "messages": 1,
                         "project": None,
                         "export_path": None,
@@ -37,10 +37,10 @@ def test_delete_remembers_tombstone_and_redirects_back(monkeypatch, tmp_path):
     web.clear_index_cache()
 
     with web.app.test_client() as client:
-        response = client.post("/session/ses-del-1/delete", data={"next": "/projects?tool=warp"})
+        response = client.post("/session/ses-del-1/delete", data={"next": "/projects?tool=cursor"})
 
     assert response.status_code == 302
-    assert response.headers["Location"].endswith("/projects?tool=warp")
+    assert response.headers["Location"].endswith("/projects?tool=cursor")
 
     deleted_payload = json.loads(deleted_path.read_text(encoding="utf-8"))
     assert "ses-del-1" in deleted_payload["session_ids"]
@@ -56,20 +56,20 @@ def test_load_index_filters_tombstoned_sessions(monkeypatch, tmp_path):
                 "stats": {
                     "total_sessions": 2,
                     "total_messages": 2,
-                    "by_tool": {"warp": 2},
+                    "by_tool": {"cursor": 2},
                     "by_project": {},
                 },
                 "sessions": [
                     {
                         "id": "ses-keep",
-                        "tool": "warp",
+                        "tool": "cursor",
                         "title": "Keep",
                         "messages": 1,
                         "prompts": 1,
                     },
                     {
                         "id": "ses-delete",
-                        "tool": "warp",
+                        "tool": "cursor",
                         "title": "Delete",
                         "messages": 1,
                         "prompts": 1,

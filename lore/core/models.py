@@ -78,7 +78,7 @@ class Tool(Enum):
     VSCODE_COPILOT = "vscode-copilot"
     COPILOT_CLI = "copilot-cli"
     GEMINI_CLI = "gemini-cli"
-    WARP = "warp"
+    WARP = "warp"  # legacy: no extractor; keeps already-ingested rows loadable
     CODEX = "codex"
     OPENCODE = "opencode"
     ANTIGRAVITY = "antigravity"

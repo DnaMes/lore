@@ -53,10 +53,6 @@ DEFAULT_NOISE_RULES: Dict[str, Dict[str, bool]] = {
     "antigravity": {
         "antigravity_summarize_file_operations": True,
     },
-    "warp": {
-        "warp_drop_toolu_noise": True,
-        "warp_summarize_file_operations": True,
-    },
 }
 
 
@@ -316,7 +312,6 @@ def _format_message_for_tool(
         "copilot-cli": "copilot_summarize_file_operations",
         "gemini-cli": "gemini_summarize_file_operations",
         "antigravity": "antigravity_summarize_file_operations",
-        "warp": "warp_summarize_file_operations",
     }
     summarize_rule = summarize_rules.get(tool)
     if role == "assistant" and summarize_rule and _rule_enabled(noise_rules, summarize_rule, False):
@@ -324,14 +319,6 @@ def _format_message_for_tool(
 
     if tool == "opencode" and _rule_enabled(noise_rules, "opencode_summarize_unset_env_vars", True):
         text = _summarize_unset_env_vars(text)
-
-    if (
-        tool == "warp"
-        and role == "assistant"
-        and _rule_enabled(noise_rules, "warp_drop_toolu_noise", True)
-    ):
-        if text.lower().startswith("toolu_"):
-            return ""
 
     text = format_message_with_rules(text, tool=tool)
     return _normalize_message_text(text)

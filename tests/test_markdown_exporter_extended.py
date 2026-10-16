@@ -328,7 +328,7 @@ def test_generate_markdown_with_token_stats(tmp_path):
 def test_export_different_tools(tmp_path):
     """Exports for different tools go into different subdirectories."""
     exporter = MarkdownExporter(tmp_path)
-    tools = [Tool.CLAUDE_CODE, Tool.WARP, Tool.GEMINI_CLI, Tool.CODEX]
+    tools = [Tool.CLAUDE_CODE, Tool.CURSOR, Tool.GEMINI_CLI, Tool.CODEX]
     paths = []
     for i, tool in enumerate(tools):
         session = _make_session(
@@ -340,6 +340,6 @@ def test_export_different_tools(tmp_path):
 
     tool_dirs = {p.parent.name for p in paths}
     assert "claude-code" in tool_dirs
-    assert "warp" in tool_dirs
+    assert "cursor" in tool_dirs
     assert "gemini-cli" in tool_dirs
     assert "codex" in tool_dirs

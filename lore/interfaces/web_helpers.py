@@ -6,7 +6,6 @@ TOOL_STYLES = {
     "claude-code": {"color": "#C084FC", "icon": "C", "name": "Claude"},
     "cursor": {"color": "#3B82F6", "icon": "Cu", "name": "Cursor"},
     "gemini-cli": {"color": "#60A5FA", "icon": "G", "name": "Gemini"},
-    "warp": {"color": "#2DD4BF", "icon": "W", "name": "Warp"},
     "codex": {"color": "#22C55E", "icon": "X", "name": "Codex"},
     "vscode-copilot": {"color": "#0ea5e9", "icon": "Co", "name": "VSCode Copilot"},
     "copilot-cli": {"color": "#0284c7", "icon": "Gh", "name": "Copilot CLI"},

@@ -62,7 +62,7 @@ class MessageFormatter:
 
     Usage:
         formatter = MessageFormatter()
-        clean_content = formatter.format_message(content, tool="warp")
+        clean_content = formatter.format_message(content, tool="claude")
     """
 
     # Language detection patterns for code blocks
@@ -149,17 +149,6 @@ class MessageFormatter:
         """Compile regex patterns for performance."""
         # Tool-specific artifact patterns to clean
         raw_patterns: Dict[str, List[Any]] = {
-            "warp": [
-                (r"\bpath=null\s+start=null\s*", ""),
-                (r"\bpath=null\s*", ""),
-                (r"\bstart=null\s*", ""),
-                (
-                    r"\$[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\s*",
-                    "",
-                ),
-                (r"\(\$[0-9a-fA-F-]+\)\s*", ""),
-                (r"\n{3,}", "\n\n"),
-            ],
             "claude": [
                 (r"<thinking>.*?</thinking>", "", re.DOTALL),
                 (r"\[thinking\].*?\[/thinking\]", "", re.DOTALL),

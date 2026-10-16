@@ -59,7 +59,6 @@ def _provider_formatters() -> dict:
     return {
         "claude-code": ["strip_command_xml_tags"],
         "opencode": ["strip_local_command_caveat_in_user_messages"],
-        "warp": ["drop_toolu_noise_only_assistant_chunks"],
         "default": ["normalize_newlines", "trim_whitespace"],
     }
 

@@ -50,14 +50,6 @@ def test_opencode_display_formatter_strips_caveat_prefix_for_user():
     assert "Please fix this pipeline" in session.messages[0].content
 
 
-def test_warp_display_formatter_drops_toolu_noise_messages():
-    session = _session(Tool.WARP, [_msg(Role.ASSISTANT, "toolu_abc123")])
-
-    normalize_session_messages_for_display(session)
-
-    assert session.messages[0].content == ""
-
-
 def test_opencode_assistant_file_update_noise_is_summarized():
     session = _session(
         Tool.OPENCODE,

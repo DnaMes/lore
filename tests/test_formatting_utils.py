@@ -41,13 +41,6 @@ def test_format_message_strips_trailing_whitespace():
 # ---------------------------------------------------------------------------
 
 
-def test_format_message_cleans_warp_null_path():
-    content = "Some output path=null start=null more text"
-    result = format_message(content, tool="warp")
-    assert "path=null" not in result
-    assert "start=null" not in result
-
-
 def test_format_message_cleans_claude_thinking_tags():
     content = "Before <thinking>internal thought</thinking> After"
     result = format_message(content, tool="claude")

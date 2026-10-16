@@ -10,7 +10,6 @@ Supported tools:
 - Cursor
 - VSCode Copilot
 - Gemini CLI
-- Warp Terminal
 - Codex CLI
 
 Usage:
@@ -62,7 +61,6 @@ TOOL_EXECUTABLES = {
     "claude-code": "claude",
     "gemini-cli": "gemini",
     "codex": "codex",
-    "warp": "warp",
     "pi": "pi",
 }
 
@@ -688,7 +686,6 @@ def cmd_reindex(args):
         "codex",
         "cursor",
         "gemini-cli",
-        "warp",
         "pi",
     ]
 

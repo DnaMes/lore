@@ -4,7 +4,7 @@ CANONICAL_TOOLS = {
     "claude-code",
     "gemini-cli",
     "codex",
-    "warp",
+    "warp",  # legacy: rows ingested before the extractor was removed
     "cursor",
     "vscode-copilot",
     "copilot-cli",

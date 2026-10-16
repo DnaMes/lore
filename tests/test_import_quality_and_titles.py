@@ -200,4 +200,4 @@ def test_is_low_quality_title_catches_wrapped_caveat():
     assert is_low_quality_title("<local-command-stdout></local-command-stdout>")
     # Real titles survive.
     assert not is_low_quality_title("Refactor auth middleware")
-    assert not is_low_quality_title("live title for a warp session")
+    assert not is_low_quality_title("live title for a cursor session")

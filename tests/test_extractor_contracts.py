@@ -29,7 +29,6 @@ from lore.extractors.opencode import OpenCodeExtractor
 from lore.extractors.pi import PiExtractor
 from lore.extractors.qwen import QwenExtractor
 from lore.extractors.vscode import VSCodeCopilotExtractor
-from lore.extractors.warp import WarpExtractor
 from lore.extractors.zed import ZedExtractor
 
 # ---------------------------------------------------------------------------
@@ -58,7 +57,6 @@ ALL_EXTRACTOR_CLASSES = [
     PiExtractor,
     RooCodeExtractor,
     VSCodeCopilotExtractor,
-    WarpExtractor,
 ]
 
 # Convenience IDs for pytest output
@@ -216,7 +214,8 @@ def test_all_tool_enum_values_have_at_least_one_extractor():
     for cls in ALL_EXTRACTOR_CLASSES:
         claimed_tools.add(cls().tool)
 
-    uncovered = set(Tool) - claimed_tools
+    # WARP is a legacy value kept only so already-ingested rows still load.
+    uncovered = set(Tool) - claimed_tools - {Tool.WARP}
     assert not uncovered, (
         f"The following Tool enum values have no extractor: {[t.value for t in uncovered]}"
     )

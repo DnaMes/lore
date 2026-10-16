@@ -121,7 +121,7 @@ def test_unparseable_timestamp_skipped():
 def test_created_used_when_updated_missing():
     rec = {
         "id": "x",
-        "tool": "warp",
+        "tool": "cursor",
         "project": "/p",
         "messages": 2,
         "prompts": 1,

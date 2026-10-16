@@ -34,7 +34,7 @@ def _write_index(index_path, sessions):
 def _meta(session_id: str, title: str = "Session", thread_id=None) -> dict:
     return {
         "id": session_id,
-        "tool": "warp",
+        "tool": "cursor",
         "title": title,
         "thread_id": thread_id,
         "created": "2026-01-01T00:00:00",

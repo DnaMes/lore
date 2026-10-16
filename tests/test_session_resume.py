@@ -86,10 +86,10 @@ def test_resume_cursor_not_supported(monkeypatch):
 
 
 def test_resume_unknown_tool_not_supported(monkeypatch):
-    monkeypatch.setattr(web, "load_index", lambda: _index_with_session("ses-warp-xyz1", "warp"))
+    monkeypatch.setattr(web, "load_index", lambda: _index_with_session("ses-cursor-xyz1", "cursor"))
 
     with web.app.test_client() as client:
-        resp = client.post("/api/sessions/ses-warp-xyz1/resume")
+        resp = client.post("/api/sessions/ses-cursor-xyz1/resume")
 
     assert resp.status_code == 200
     data = resp.get_json()

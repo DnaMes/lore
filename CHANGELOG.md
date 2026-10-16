@@ -4,6 +4,10 @@ All notable changes to this project are documented here.
 The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
+### Removed
+- **Warp extractor.** Lore no longer imports chat history from the Warp terminal (`lore/extractors/warp.py`,
+  its noise rules, formatter and docker mount are gone). Sessions already ingested keep loading: the `warp`
+  source value stays readable as a legacy tool.
 
 ## [2.3.0] - 2026-05-18
 ### Changed

@@ -82,7 +82,7 @@ Sourced from surveying 7 competing tools: claude-code-history-viewer (1.2k★), 
 - [ ] **#39** Project-level cost attribution — pairs with #34; lets devs justify AI spend.
 - [ ] **#40** Noise filter web UI — drag-and-drop rules with live preview.
 - [ ] **#41** MCP-over-HTTP transport — `--transport streamable-http` so Cursor/remote MCP hosts can query history without running a local process.
-- [ ] **#42** Warp Block deeper import — verify Warp coverage, add block-level extraction.
+- [-] **#42** ~~Warp Block deeper import~~ — dropped: the Warp extractor was removed (2026-10-16).
 - [ ] **#43** `lore digest` — weekly summary CLI command (sessions, cost, top projects). Habit-forming, trivial to ship.
 - [ ] **#51** **Aider extractor** — `~/.aider/` chat logs. `jhlee0409/CCHV` already ships this; gap for users who run both. (4h)
 - [ ] **#52** **File watcher / auto-sync daemon** — `inotify`/`watchdog` that indexes on JSONL append so the dashboard is always live without manual Sync. SpecStory's `specstory watch` analog. (1 day)

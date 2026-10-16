@@ -237,7 +237,7 @@ def test_write_sessions_with_reused_entries(tmp_path):
     reused = [
         {
             "id": "old-1",
-            "tool": "warp",
+            "tool": "cursor",
             "project": "/p2",
             "thread_id": "t1",
             "title": "Reused Session",
@@ -328,7 +328,7 @@ def test_reused_entry_marked_not_messages_synced(tmp_path):
     reused = [
         {
             "id": "old-1",
-            "tool": "warp",
+            "tool": "cursor",
             "title": "Reused session realistic title",
             "created": "2026-01-01",
             "updated": "2026-01-01",

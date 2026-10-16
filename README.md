@@ -66,7 +66,6 @@ On a session detail page, use **Find** (or press `/`) to search the full transcr
 | **GitHub Copilot (VS Code)** | VS Code extension storage | Session logs from the Copilot Chat panel |
 | **Copilot CLI** | Shell history / log files | Terminal Copilot sessions |
 | **Gemini CLI** | `~/.gemini/` | Set `GEMINI_PROJECT_ROOTS` for path resolution |
-| **Warp** | `~/.warp/` | AI session blocks from the Warp terminal |
 | **Codex** | `~/.codex/` | OpenAI Codex CLI sessions |
 | **OpenCode** | `~/.opencode/`, `opencode.db` | JSON storage plus SQLite `session` / `session_v2` (scratch copy) |
 | **Antigravity** | Varies | Experimental tool support |
@@ -89,7 +88,7 @@ On a session detail page, use **Find** (or press `/`) to search the full transcr
 
 ## 🎯 Features
 
-- **Unified History**: See all chats from Claude Code, Cursor, Gemini CLI, Codex, VSCode Copilot, Warp, and more in one place.
+- **Unified History**: See all chats from Claude Code, Cursor, Gemini CLI, Codex, VSCode Copilot, and more in one place.
 - **Shared Agent Memory**: A cross-tool knowledge store agents write to and recall from — facts, decisions, and lessons with provenance, searchable by keyword or by meaning.
 - **Smart Context Switching**: Seamlessly move a session from one tool to another (e.g., Claude -> Gemini) when hitting rate limits.
 - **Modern Web Dashboard**: A polished, SpecStory-inspired UI with Markdown rendering, code highlighting, and full-text search.

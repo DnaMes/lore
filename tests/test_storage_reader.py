@@ -160,7 +160,7 @@ def test_load_index_falls_back_when_v2_missing(tmp_path, monkeypatch):
     # Write only a JSON index — no v2 db.
     (tmp_path / "index.json").write_text(
         '{"version":"1.0.0","stats":{},"sessions":'
-        '[{"id":"jsononly","tool":"warp","title":"t",'
+        '[{"id":"jsononly","tool":"cursor","title":"t",'
         '"created":"2026-01-01","updated":"2026-01-01","messages":1}]}',
         encoding="utf-8",
     )
@@ -237,7 +237,7 @@ def test_load_index_falls_back_when_v2_stale(tmp_path, monkeypatch):
     # Rewrite index.json newer, with a different session id.
     (tmp_path / "index.json").write_text(
         '{"version":"1.0.0","stats":{},"sessions":'
-        '[{"id":"jsonsess","tool":"warp","title":"t",'
+        '[{"id":"jsonsess","tool":"cursor","title":"t",'
         '"created":"2026-01-01","updated":"2026-01-01","messages":1}]}',
         encoding="utf-8",
     )

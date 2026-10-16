@@ -5,7 +5,6 @@ from lore.extractors.copilot import CopilotCLIExtractor
 from lore.extractors.cursor import CursorExtractor
 from lore.extractors.gemini import GeminiCLIExtractor
 from lore.extractors.vscode import VSCodeCopilotExtractor
-from lore.extractors.warp import WarpExtractor
 
 
 def test_directory_extractors_discover_nested_home_locations(monkeypatch, tmp_path):
@@ -52,18 +51,13 @@ def test_db_extractors_discover_nested_home_locations(monkeypatch, tmp_path):
     nested = home / "archives" / "backup"
 
     cursor_db = nested / ".config" / "Cursor" / "User" / "globalStorage" / "state.vscdb"
-    warp_db = nested / ".local" / "state" / "warp-terminal" / "warp.sqlite"
     cursor_db.parent.mkdir(parents=True, exist_ok=True)
-    warp_db.parent.mkdir(parents=True, exist_ok=True)
     cursor_db.touch()
-    warp_db.touch()
 
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("LORE_HOME_SCAN_DEPTH", "6")
     monkeypatch.setenv("LORE_HOME_SCAN_LIMIT", "32")
 
     cursor = CursorExtractor()
-    warp = WarpExtractor()
 
     assert cursor_db.resolve() in {path.resolve() for path in cursor.db_paths}
-    assert warp_db.resolve() in {path.resolve() for path in warp.db_paths}

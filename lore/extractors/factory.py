@@ -19,7 +19,6 @@ from .opencode import OpenCodeExtractor
 from .pi import PiExtractor
 from .qwen import QwenExtractor
 from .vscode import VSCodeCopilotExtractor
-from .warp import WarpExtractor
 from .zed import ZedExtractor
 
 
@@ -28,7 +27,6 @@ def get_all_extractors() -> List[BaseExtractor]:
         ClaudeCodeExtractor(),
         GeminiCLIExtractor(),
         CodexExtractor(),
-        WarpExtractor(),
         CursorExtractor(),
         VSCodeCopilotExtractor(),
         CopilotCLIExtractor(),

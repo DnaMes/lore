@@ -22,4 +22,4 @@ def test_session_switch_mapping():
     assert to_session_switch_tool("gemini") == "gemini"
     assert to_session_switch_tool("gemini-cli") == "gemini"
     assert to_session_switch_tool("claude-code") == "claude"
-    assert to_session_switch_tool("warp") is None
+    assert to_session_switch_tool("zed") is None

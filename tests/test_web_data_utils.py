@@ -31,7 +31,7 @@ def test_sanitize_next_url_valid_path():
 
 
 def test_sanitize_next_url_valid_with_query():
-    assert _sanitize_next_url("/sessions?tool=warp") == "/sessions?tool=warp"
+    assert _sanitize_next_url("/sessions?tool=cursor") == "/sessions?tool=cursor"
 
 
 def test_sanitize_next_url_rejects_http():
@@ -128,7 +128,7 @@ def test_apply_deleted_filter_no_deleted(monkeypatch, tmp_path):
 
     payload = {
         "sessions": [
-            {"id": "sess-1", "tool": "warp", "messages": 5, "project": "/proj/a"},
+            {"id": "sess-1", "tool": "cursor", "messages": 5, "project": "/proj/a"},
             {"id": "sess-2", "tool": "claude-code", "messages": 3, "project": "/proj/b"},
         ],
         "stats": {},
@@ -145,7 +145,7 @@ def test_apply_deleted_filter_removes_deleted(monkeypatch, tmp_path):
 
     payload = {
         "sessions": [
-            {"id": "sess-bad", "tool": "warp", "messages": 5},
+            {"id": "sess-bad", "tool": "cursor", "messages": 5},
             {"id": "sess-good", "tool": "claude-code", "messages": 3},
         ],
         "stats": {},
@@ -165,8 +165,8 @@ def test_apply_deleted_filter_updates_stats(monkeypatch, tmp_path):
 
     payload = {
         "sessions": [
-            {"id": "sess-del", "tool": "warp", "messages": 10, "project": "/proj"},
-            {"id": "sess-ok", "tool": "warp", "messages": 5, "project": "/proj"},
+            {"id": "sess-del", "tool": "cursor", "messages": 10, "project": "/proj"},
+            {"id": "sess-ok", "tool": "cursor", "messages": 5, "project": "/proj"},
         ],
         "stats": {},
     }
@@ -174,7 +174,7 @@ def test_apply_deleted_filter_updates_stats(monkeypatch, tmp_path):
     stats = result["stats"]
     assert stats["total_sessions"] == 1
     assert stats["total_messages"] == 5
-    assert stats["by_tool"]["warp"] == 1
+    assert stats["by_tool"]["cursor"] == 1
 
     web_data._load_deleted_session_ids_cached.cache_clear()
 

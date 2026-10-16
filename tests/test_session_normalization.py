@@ -46,7 +46,7 @@ def test_should_import_normalizes_title_source_and_thread_id():
 def test_should_import_normalizes_fallback_title_when_no_user_text():
     extractor = DummyExtractor()
     session = UnifiedSession(
-        tool=Tool.WARP,
+        tool=Tool.CURSOR,
         session_id="ses-normalize-2",
         created_at=datetime(2026, 3, 4, 12, 0, 0),
         last_updated=datetime(2026, 3, 4, 12, 5, 0),
@@ -61,7 +61,7 @@ def test_should_import_normalizes_fallback_title_when_no_user_text():
     )
 
     assert extractor.should_import_session(session) is False
-    assert session.title == "Warp Session 2026-03-04"
+    assert session.title == "Cursor Session 2026-03-04"
     assert session.title_source == TitleSource.FALLBACK
     assert session.thread_id is not None
 

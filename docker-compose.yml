@@ -37,7 +37,6 @@ services:
       - ${HOME}/.codex:/home/ai/.codex:ro
       - ${HOME}/.config/Cursor:/home/ai/.config/Cursor:ro
       - ${HOME}/.config/Code:/home/ai/.config/Code:ro
-      - ${HOME}/.local/state/warp-terminal:/home/ai/.local/state/warp-terminal:ro
       - ${HOME}/.local/share/opencode/storage:/home/ai/.local/share/opencode/storage:ro
       - ${HOME}/.local/share/opencode:/home/ai/.local/share/opencode:ro
       - ${HOME}/.copilot:/home/ai/.copilot:ro

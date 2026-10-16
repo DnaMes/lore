@@ -150,7 +150,6 @@ lore-web
 - Codex CLI (`~/.codex/sessions/`)
 - Cursor (`~/.config/Cursor/`)
 - VSCode Copilot (`~/.config/Code/`)
-- Warp (`~/.local/state/warp-terminal/`)
 
 ### 2. Context Transfer
 

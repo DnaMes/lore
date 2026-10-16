@@ -106,13 +106,13 @@ def test_build_index_session_entry_fields(tmp_path):
 def test_build_index_stats_computed(tmp_path):
     builder = IndexBuilder(tmp_path)
     s1 = _make_session("s1", Tool.CLAUDE_CODE, project_path="/proj/a")
-    s2 = _make_session("s2", Tool.WARP, project_path="/proj/b")
+    s2 = _make_session("s2", Tool.CURSOR, project_path="/proj/b")
     builder.build_index([s1, s2], {})
 
     data = json.loads((tmp_path / "index.json").read_text())
     assert data["stats"]["total_sessions"] == 2
     assert "claude-code" in data["stats"]["by_tool"]
-    assert "warp" in data["stats"]["by_tool"]
+    assert "cursor" in data["stats"]["by_tool"]
 
 
 def test_build_index_keyword_index_populated(tmp_path):
@@ -130,7 +130,7 @@ def test_build_index_with_reused_entries(tmp_path):
     reused = [
         {
             "id": "old-session",
-            "tool": "warp",
+            "tool": "cursor",
             "project": "/some/project",
             "thread_id": None,
             "title": "Old session title",
@@ -328,12 +328,12 @@ def test_compute_stats_from_entries_empty(tmp_path):
 def test_compute_stats_from_entries_groups_by_tool(tmp_path):
     builder = IndexBuilder(tmp_path)
     entries = [
-        {"tool": "warp", "project": "/p1", "messages": 3},
-        {"tool": "warp", "project": "/p2", "messages": 5},
+        {"tool": "cursor", "project": "/p1", "messages": 3},
+        {"tool": "cursor", "project": "/p2", "messages": 5},
         {"tool": "claude-code", "project": None, "messages": 2},
     ]
     stats = builder._compute_stats_from_entries(entries)
-    assert stats["by_tool"]["warp"] == 2
+    assert stats["by_tool"]["cursor"] == 2
     assert stats["by_tool"]["claude-code"] == 1
     assert stats["total_messages"] == 10
 
@@ -372,7 +372,7 @@ def test_build_index_multiple_tools(tmp_path):
     builder = IndexBuilder(tmp_path)
     sessions = [
         _make_session(f"s{i}", tool, project_path=f"/proj/{i}")
-        for i, tool in enumerate([Tool.CLAUDE_CODE, Tool.WARP, Tool.GEMINI_CLI, Tool.CODEX])
+        for i, tool in enumerate([Tool.CLAUDE_CODE, Tool.CURSOR, Tool.GEMINI_CLI, Tool.CODEX])
     ]
     builder.build_index(sessions, {})
 

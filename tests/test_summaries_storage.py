@@ -290,7 +290,7 @@ def test_web_delete_removes_summary_and_knowledge(monkeypatch, store, tmp_path):
                     "by_tool": {},
                     "by_project": {},
                 },
-                "sessions": [{"id": SID, "tool": "warp", "messages": 1, "export_path": None}],
+                "sessions": [{"id": SID, "tool": "cursor", "messages": 1, "export_path": None}],
             }
         ),
         encoding="utf-8",

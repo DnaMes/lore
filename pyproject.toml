@@ -12,7 +12,7 @@ license = {text = "MIT"}
 authors = [
     {name = "André Semek", email = "erdna1982@gmail.com"}
 ]
-keywords = ["ai", "chat-history", "session-management", "claude", "gemini", "cursor", "codex", "warp", "opencode"]
+keywords = ["ai", "chat-history", "session-management", "claude", "gemini", "cursor", "codex", "opencode"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",

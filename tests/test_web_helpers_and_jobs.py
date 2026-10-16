@@ -139,7 +139,7 @@ def _sessions():
         },
         {
             "id": "s2",
-            "tool": "warp",
+            "tool": "cursor",
             "created": "2025-03-20T12:00:00",
             "keywords": ["bash"],
         },
@@ -196,14 +196,14 @@ def test_filter_sessions_date_range():
 
 
 def test_filter_sessions_skips_missing_created():
-    sessions = [{"id": "x", "tool": "warp", "keywords": []}]
+    sessions = [{"id": "x", "tool": "cursor", "keywords": []}]
     start = datetime(2025, 1, 1)
     result = filter_sessions(sessions, start=start)
     assert len(result) == 0
 
 
 def test_filter_sessions_skips_invalid_created():
-    sessions = [{"id": "x", "tool": "warp", "created": "INVALID", "keywords": []}]
+    sessions = [{"id": "x", "tool": "cursor", "created": "INVALID", "keywords": []}]
     start = datetime(2025, 1, 1)
     result = filter_sessions(sessions, start=start)
     assert len(result) == 0
