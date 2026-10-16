@@ -7,6 +7,7 @@ for the web interface.
 import html
 import json
 import re
+import threading
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
@@ -19,6 +20,13 @@ from lore.utils.text_processing import strip_ansi
 from .web_data import threadsafe_lru_cache
 
 _COMPARE_STRIP_RE = re.compile(r"[\W_]+", re.UNICODE)
+
+_markdown_local = threading.local()
+
+def _get_markdown_converter():
+    if not hasattr(_markdown_local, "converter"):
+        _markdown_local.converter = markdown.Markdown(extensions=["fenced_code", "tables", "nl2br"])
+    return _markdown_local.converter
 
 
 def _normalize_compare_text(value: Optional[str]) -> str:
@@ -405,7 +413,9 @@ def _format_message_content_cached(raw_content: str) -> str:
     )
 
     if markdown:
-        content = markdown.markdown(content, extensions=["fenced_code", "tables", "nl2br"])
+        converter = _get_markdown_converter()
+        content = converter.convert(content)
+        converter.reset()
         content = nh3.clean(
             content,
             tags=SANITIZE_TAGS | {"code"},
