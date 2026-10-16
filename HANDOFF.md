@@ -160,18 +160,10 @@ contexts and no branch protections. Prior focused results are recorded in the
 older stack handoff (Codex 50, Claude pipeline 33 plus shell profile checks,
 OpenCode 6, Harness 1, Antigravity 1); they were not rerun here.
 
-On AI-Workstation, Lore's local `main` ref was at `b0e84a2` at last inspection,
-while the canonical submodule checkout remains detached at `9ffb3ee`; the
-`ai-stack` superproject records `d3953c1`. GitHub `main` has since advanced past
-`b0e84a2`; the AI-Workstation checkout has not been updated to the docs-only
-closeout. The superproject is 17 commits behind
-`origin/main` and has unrelated dirty submodule pointers plus an untracked
-`docs/night-ops/.../HALT.md`. Preserve those paths. Its other branches
-(`autosync/*`, `feat/5-harness-rollout`, `fix/9-harness-ecc-remediation`,
-`herdr-pilot`) are separate salvaged/ongoing stack work and were not merged or
-deleted as part of this Lore/#153 task.
-
-The failed run's final report is `ai-workstation:~/nightly-runs/issue-run-20260923/FINAL-REPORT.md`.
+ai-workstation retired 2026-09-28. Historical note: its Lore `main` was last
+seen at `b0e84a2` while the canonical submodule stayed detached at `9ffb3ee`.
+The failed run's final report lived at
+`ai-workstation:~/nightly-runs/issue-run-20260923/FINAL-REPORT.md` (host gone).
 Raw issue snapshots and superseded local preliminary reports were cleaned up.
 Before rerunning the issue work, fix the timeout duration format and compare
 quota reset timestamps at stable precision; do not use a metered fallback.
