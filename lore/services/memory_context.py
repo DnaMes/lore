@@ -11,7 +11,9 @@ from __future__ import annotations
 import html
 import json
 import math
+import os
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -238,29 +240,31 @@ def _truncate_line_to_tokens(line: str, max_tokens: int) -> str:
     return trimmed
 
 
-def _fit_context_lines(entries: list[MemoryEntry], budget: int) -> tuple[list[MemoryEntry], int]:
-    """Return entries whose lines fit ``budget`` (token estimate) and how many were cut."""
+def _fit_context_lines(entries: list[MemoryEntry], budget: int) -> tuple[list[str], int]:
+    """Return rendered, redacted lines that fit ``budget`` (token estimate) and the cut count.
+
+    Redaction runs before truncation so a secret cannot be split into a partial token.
+    """
     capped_budget = max(1, budget)
-    included: list[MemoryEntry] = []
+    lines: list[str] = []
     used_tokens = 0
     for entry in entries:
-        line = _format_context_line(entry)
-        prefix = "\n" if included else ""
+        line = _sanitize_free_text(_format_context_line(entry))
+        prefix = "\n" if lines else ""
         next_tokens = _token_estimate(prefix + line)
-        if included and used_tokens + next_tokens > capped_budget:
+        if lines and used_tokens + next_tokens > capped_budget:
             break
-        if not included and next_tokens > capped_budget:
+        if not lines and next_tokens > capped_budget:
+            # The first entry is forced in; truncate it so it fits the budget.
             line = _truncate_line_to_tokens(line, capped_budget)
-            next_tokens = _token_estimate(line)
-            if next_tokens == 0:
+            if not line:
                 break
-            included.append(entry)
-            used_tokens += next_tokens
+            lines.append(line)
             break
-        included.append(entry)
+        lines.append(line)
         used_tokens += next_tokens
-    cut = len(entries) - len(included)
-    return included, cut
+    cut = len(entries) - len(lines)
+    return lines, cut
 
 
 def render_context_memories(
@@ -276,21 +280,18 @@ def render_context_memories(
     if output_format == "json":
         return _render_json(entries, budget)
 
-    included, cut = _fit_context_lines(entries, budget)
-    if cut:
-        # The footer line counts against the budget too: refit with room for it.
-        reserve = _token_estimate("\n" + _more_line(len(entries)))
-        budget = max(1, budget - reserve)
-        included, cut = _fit_context_lines(entries, budget)
-    if not included:
-        return ""
-    lines = [_format_context_line(e) for e in included]
-    if len(included) == 1 and _token_estimate(lines[0]) > max(1, budget):
-        lines = [_truncate_line_to_tokens(lines[0], max(1, budget))]
-    text = "\n".join(lines)
-    if cut:
-        text = f"{text}\n{_more_line(cut)}"
-    return _sanitize_free_text(text)
+    capped = max(1, budget)
+    lines, cut = _fit_context_lines(entries, capped)
+    if not cut:
+        return "\n".join(lines)
+    # Reserve footer room at its longest possible length (cut <= len(entries)) so the
+    # refit below cannot grow the footer.
+    reserve = _token_estimate("\n" + _more_line(len(entries)))
+    if capped <= reserve:
+        # Budget too small for the footer too: the budget wins, so drop the footer.
+        return "\n".join(lines)
+    lines, cut = _fit_context_lines(entries, capped - reserve)
+    return "\n".join([*lines, _more_line(cut)])
 
 
 def _render_json(entries: list[MemoryEntry], budget: int) -> str:
@@ -298,10 +299,17 @@ def _render_json(entries: list[MemoryEntry], budget: int) -> str:
     capped = max(1, budget)
     for count in range(len(entries), 0, -1):
         payload = {
-            "entries": [_entry_record(e) for e in entries[:count]],
+            "entries": [
+                {
+                    **rec,
+                    "title": _sanitize_free_text(rec["title"]),
+                    "first_sentence": _sanitize_free_text(rec["first_sentence"]),
+                }
+                for rec in (_entry_record(e) for e in entries[:count])
+            ],
             "cut": len(entries) - count,
         }
-        raw = _sanitize_free_text(json.dumps(payload, indent=2, ensure_ascii=False))
+        raw = json.dumps(payload, indent=2, ensure_ascii=False)
         if _token_estimate(raw) <= capped:
             return raw
     return ""
@@ -324,6 +332,8 @@ def build_memory_context(
             scope_tool=scope_tool,
             limit=limit,
         )
-    except Exception:  # noqa: BLE001 - hooks must not fail on missing or broken stores
+        return render_context_memories(entries, budget=budget, output_format=output_format)
+    except Exception as exc:  # noqa: BLE001 - hooks must not fail on missing or broken stores
+        if os.environ.get("LORE_DEBUG", "").strip() == "1":
+            print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return ""
-    return render_context_memories(entries, budget=budget, output_format=output_format)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from argparse import Namespace
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -89,6 +90,15 @@ def test_select_excludes_broad_ancestor_scopes(tmp_path, monkeypatch):
     assert selected[0].id == deep_id
 
 
+def test_select_excludes_sibling_project_scope(tmp_path):
+    scope_x = "/home/dnames/projects/x"
+    scope_y = "/home/dnames/projects/y"
+    add_memory(tmp_path, "fact", "only for x", "body", scope_project=scope_x)
+
+    selected = select_context_memories(tmp_path, scope_project=scope_y)
+    assert selected == []
+
+
 def test_select_includes_descendant_scope_at_related_tier(tmp_path):
     parent = Path("/tmp/monorepo/root/pkg")
     child = parent / "subapp"
@@ -158,13 +168,38 @@ def test_cli_show_known_memory(tmp_path, capsys):
         "Show body",
         tags=["alpha", "beta"],
         source_session="sess-abc",
+        scope_project="/tmp/proj",
+        scope_tool="cursor",
     )
     lore_cli.cmd_memory(_show_args(tmp_path, mid))
     out = capsys.readouterr().out
+    assert "Status: confirmed" in out
+    assert "Kind: lesson" in out
+    assert "Scope project: /tmp/proj" in out
+    assert "Scope tool: cursor" in out
     assert "Show title" in out
     assert "Show body" in out
     assert "Tags: alpha, beta" in out
     assert "sess-abc" in out
+
+
+def test_cli_show_supersession_links(tmp_path, capsys):
+    old = add_memory(tmp_path, "fact", "old rule", "body", scope_project="/p")
+    new = add_memory(
+        tmp_path,
+        "fact",
+        "new rule",
+        "body",
+        scope_project="/p",
+        supersedes=old,
+    )
+    lore_cli.cmd_memory(_show_args(tmp_path, old))
+    out_old = capsys.readouterr().out
+    assert f"superseded by #{new}" in out_old
+
+    lore_cli.cmd_memory(_show_args(tmp_path, new))
+    out_new = capsys.readouterr().out
+    assert f"supersedes #{old}" in out_new
 
 
 def test_cli_show_unknown_memory_exits_one(tmp_path, capsys):
@@ -309,6 +344,69 @@ def test_render_text_lines_start_with_dash_bracket_or_paren(tmp_path):
     text = render_context_memories(ranked, budget=12)
     for line in text.splitlines():
         assert line.startswith("- [") or line.startswith("(")
+
+
+@pytest.mark.parametrize("budget", [8, 12])
+def test_render_tiny_budget_forced_entry_fits_without_footer(tmp_path, budget):
+    # The footer alone exceeds these budgets; the budget wins and the footer is dropped.
+    mid = add_memory(tmp_path, "fact", "huge", "word " * 80 + "end.")
+    _touch_updated(tmp_path, mid, "2026-03-01T00:00:00+00:00")
+    for i in range(6):
+        extra = add_memory(tmp_path, "fact", f"extra{i}", "short.")
+        _touch_updated(tmp_path, extra, "2025-01-01T00:00:00+00:00")
+    ranked = select_context_memories(tmp_path, limit=7)
+    text = render_context_memories(ranked, budget=budget)
+    assert len(text) <= budget * 4
+    assert text.startswith(f"- [fact #{mid}]")
+    assert "more; recall with" not in text
+
+
+@pytest.mark.parametrize("budget", [30, 40, 60])
+def test_render_single_forced_entry_with_footer_fits_budget(tmp_path, budget):
+    body = "word " * 80 + "end."
+    mid = add_memory(tmp_path, "fact", "huge", body)
+    _touch_updated(tmp_path, mid, "2026-03-01T00:00:00+00:00")
+    for i in range(6):
+        extra = add_memory(tmp_path, "fact", f"extra{i}", "short.")
+        _touch_updated(tmp_path, extra, "2025-01-01T00:00:00+00:00")
+    ranked = select_context_memories(tmp_path, limit=7)
+    assert ranked[0].id == mid
+    text = render_context_memories(ranked, budget=budget)
+    assert "more; recall with" in text
+    assert len(text) <= budget * 4
+    # The forced entry is shrunk to make room for the footer, but keeps its id.
+    assert text.splitlines()[0].startswith(f"- [fact #{mid}]")
+
+
+def test_render_redacts_before_truncation(tmp_path):
+    # Budget 8 (32 chars) cuts the secret so only a short prefix survives truncation.
+    secret = "sk-" + "a" * 24
+    add_memory(tmp_path, "fact", "t", f"prefix {secret} suffix")
+    ranked = select_context_memories(tmp_path, limit=1)
+    text = render_context_memories(ranked, budget=8)
+    assert secret not in text
+    assert "sk-" not in text
+
+
+def test_build_memory_context_debug_logs_exception(tmp_path, capsys, monkeypatch):
+    monkeypatch.setenv("LORE_DEBUG", "1")
+    with patch(
+        "lore.services.memory_context.select_context_memories",
+        side_effect=RuntimeError("boom"),
+    ):
+        assert build_memory_context(tmp_path) == ""
+    err = capsys.readouterr().err
+    assert "RuntimeError: boom" in err
+
+
+def test_build_memory_context_silent_without_debug(tmp_path, capsys, monkeypatch):
+    monkeypatch.delenv("LORE_DEBUG", raising=False)
+    with patch(
+        "lore.services.memory_context.select_context_memories",
+        side_effect=RuntimeError("boom"),
+    ):
+        assert build_memory_context(tmp_path) == ""
+    assert capsys.readouterr().err == ""
 
 
 def test_render_first_entry_over_budget_still_present(tmp_path):
