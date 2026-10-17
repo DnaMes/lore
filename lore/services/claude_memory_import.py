@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import sqlite3
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -21,6 +22,7 @@ from ..extractors.claude import ClaudeCodeExtractor
 from ..storage.memory import add_memory
 from ..storage.writer import v2_db_path
 from ..utils.redact import redact
+from .memory_dedupe import confirmed_memories, memory_key
 
 # Claude auto-memory type -> closest accepted memory kind.
 KIND_BY_TYPE = {
@@ -60,6 +62,7 @@ class ImportReport:
     new: int = 0
     updated: int = 0
     already: int = 0
+    duplicates: int = 0
     failed: int = 0
     redactions: int = 0
     notes: List[str] = field(default_factory=list)
@@ -193,6 +196,8 @@ def import_claude_memory(output_dir: Path, root: Path, *, apply: bool = False) -
     """
     report = ImportReport(root=root)
     existing = _existing_imports(output_dir)
+    active = {entry.id: entry for entry in confirmed_memories(output_dir)}
+    known_content = Counter(memory_key(entry.title, entry.body) for entry in active.values())
     scope_cache: Dict[str, Optional[str]] = {}
 
     for path in sorted(root.glob("*/memory/*.md")):
@@ -216,14 +221,24 @@ def import_claude_memory(output_dir: Path, root: Path, *, apply: bool = False) -
         if prev is not None and prev[1] == item.sha256:
             report.already += 1
             continue
+        key = memory_key(item.title, item.body)
+        if known_content[key] > 0:
+            report.duplicates += 1
+            continue
         if apply:
-            _write(output_dir, item, prev, report)
+            if not _write(output_dir, item, prev, report):
+                continue
         elif prev is None:
             report.new += 1
             report.redactions += item.redactions
         else:
             report.updated += 1
             report.redactions += item.redactions
+        if item.status == "confirmed":
+            previous = active.get(prev[0]) if prev else None
+            if previous is not None and previous.scope_project == item.scope_project:
+                known_content[memory_key(previous.title, previous.body)] -= 1
+            known_content[key] += 1
     return report
 
 
@@ -232,7 +247,7 @@ def _write(
     item: ImportItem,
     prev: Optional[Tuple[int, str, str]],
     report: ImportReport,
-) -> None:
+) -> bool:
     """Write one item; on a changed file, supersede the previous import when allowed."""
     kwargs = dict(
         kind=item.kind,
@@ -266,9 +281,10 @@ def _write(
     except ValueError as exc:
         report.failed += 1
         report.notes.append(f"note: skipped {item.path.name}: {exc}")
-        return
+        return False
     if prev is None:
         report.new += 1
     else:
         report.updated += 1
     report.redactions += item.redactions
+    return True

@@ -1366,6 +1366,25 @@ def cmd_memory(args):
         record_feedback,
     )
 
+    if action == "dedupe":
+        from lore.services.memory_dedupe import dedupe_memories
+
+        try:
+            groups = dedupe_memories(output_dir, apply=args.apply)
+        except (sqlite3.Error, ValueError) as exc:
+            print(f"Could not deduplicate memory: {exc}", file=sys.stderr)
+            sys.exit(1)
+        mode = "apply" if args.apply else "dry run, nothing written (pass --apply to reject)"
+        print(f"Memory dedupe ({mode})")
+        for group in groups:
+            rejected = ", ".join(f"#{memory_id}" for memory_id in group.rejected_ids)
+            print(f"{group.title}: keep #{group.kept_id}; reject {rejected}")
+        count = sum(len(group.rejected_ids) for group in groups)
+        print(
+            f"{len(groups)} duplicate groups. {'Rejected' if args.apply else 'Would reject'}: {count}"
+        )
+        return
+
     if action == "import-claude":
         from lore.services.claude_memory_import import import_claude_memory
 
@@ -1388,7 +1407,8 @@ def cmd_memory(args):
         verb = "Wrote" if args.apply else "Would write"
         print(
             f"{verb}: {report.new} new, {report.updated} updated (supersedes the previous "
-            f"import), {report.already} already imported, {report.failed} failed."
+            f"import), {report.already} already imported, {report.duplicates} duplicates, "
+            f"{report.failed} failed."
         )
         print(f"Redactions {'applied' if args.apply else 'to apply'}: {report.redactions}")
         for note in report.notes:
@@ -2002,6 +2022,13 @@ Examples:
         action="store_true",
         help="rank by meaning only (default: keywords plus meaning when the "
         "'semantic' extra is installed)",
+    )
+
+    mem_dedupe = memory_sub.add_parser(
+        "dedupe", help="Reject exact confirmed memory duplicates (dry run unless --apply)"
+    )
+    mem_dedupe.add_argument(
+        "--apply", action="store_true", help="mark duplicates rejected (default: dry run)"
     )
 
     mem_import = memory_sub.add_parser(

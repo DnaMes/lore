@@ -952,32 +952,36 @@ def supersede_memory(
     )
 
 
-def set_memory_status(output_dir: Path, memory_id: int, status: str) -> bool:
-    """Review a candidate: ``candidate -> confirmed`` or ``candidate -> rejected``.
+def set_memory_status(
+    output_dir: Path, memory_id: int, status: str, *, from_status: str = "candidate"
+) -> bool:
+    """Review a candidate, or explicitly reject/restore a duplicate via ``from_status``.
 
     Rejected rows are kept, never deleted. Returns True when the status changed
     and False when the memory does not exist.
 
     Raises:
-        ValueError: if ``status`` is not ``confirmed``/``rejected`` or the memory
-            is not currently a candidate.
+        ValueError: if ``status`` is not ``confirmed``/``rejected``, ``from_status``
+            is invalid, or the memory is not currently in the expected source status.
     """
     if status not in ("confirmed", "rejected"):
         raise ValueError(f"invalid target status {status!r}; expected 'confirmed' or 'rejected'")
+    if from_status not in MEMORY_STATUSES or from_status == status:
+        raise ValueError(f"invalid source status {from_status!r} for target {status!r}")
     if not _id_in_range(memory_id):
         return False
     conn = _connect(output_dir)
     try:
         cur = conn.execute(
-            "UPDATE memory SET status = ?, updated = ? WHERE id = ? AND status = 'candidate'",
-            (status, _now(), memory_id),
+            "UPDATE memory SET status = ?, updated = ? WHERE id = ? AND status = ?",
+            (status, _now(), memory_id, from_status),
         )
         if cur.rowcount > 0:
             return True
         row = conn.execute("SELECT status FROM memory WHERE id = ?", (memory_id,)).fetchone()
         if row is None:
             return False
-        raise ValueError(f"memory {memory_id} is {row['status']}, only candidates can be reviewed")
+        raise ValueError(f"memory {memory_id} is {row['status']}, expected {from_status}")
     finally:
         conn.close()
 
