@@ -129,6 +129,19 @@ def test_second_apply_writes_nothing(tmp_path):
     assert len(list_memory(_store(tmp_path), limit=50, status=None)) == before
 
 
+def test_relative_and_absolute_source_path_no_duplicate(tmp_path, monkeypatch):
+    root = _make_tree(tmp_path)
+    store = _store(tmp_path)
+    import_claude_memory(store, root.resolve(), apply=True)
+    before = len(list_memory(store, limit=50, status=None))
+
+    monkeypatch.chdir(tmp_path)
+    report = import_claude_memory(store, Path("claude-projects"), apply=True)
+
+    assert (report.new, report.updated, report.already) == (0, 0, 3)
+    assert len(list_memory(store, limit=50, status=None)) == before
+
+
 def test_edited_file_supersedes_previous_import(tmp_path):
     root = _make_tree(tmp_path)
     import_claude_memory(_store(tmp_path), root, apply=True)

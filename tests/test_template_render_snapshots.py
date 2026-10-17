@@ -101,7 +101,14 @@ _FIXED_NOISE_RULES = {
 
 
 @pytest.fixture()
-def client(monkeypatch):
+def client(monkeypatch, tmp_path):
+    # INDEX_PATH/OUTPUT_DIR are bound at import from the real ~/.lore; patch for hermetic renders.
+    fake_output = tmp_path / ".lore"
+    fake_output.mkdir()
+    fake_index = fake_output / "index.json"
+    fake_index.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(web, "OUTPUT_DIR", fake_output)
+    monkeypatch.setattr(web, "INDEX_PATH", fake_index)
     monkeypatch.setattr(web, "load_index", lambda: _index_payload())
     monkeypatch.setattr(web, "load_sessions_for_tool", lambda _tool=None: [_live_session()])
     monkeypatch.setattr(web, "load_noise_rules", lambda: _FIXED_NOISE_RULES)

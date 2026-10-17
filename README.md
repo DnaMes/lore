@@ -134,6 +134,8 @@ lore memory search "database performance"              # keywords + meaning when
 lore memory search "database performance" --semantic   # meaning only, no relevance floor
 lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
+lore memory context --project /path/to/repo --budget 2000   # prompt block for agents
+lore memory show 7                                        # one entry by id
 lore memory rate 7 5                                    # rate a confirmed memory 1-5
 lore memory add --title "Use PG 17" --body "..." --supersedes 7   # replaces #7; near-duplicates are listed
 lore memory import-claude                                # dry run: count Claude auto-memory files to import

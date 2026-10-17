@@ -1337,18 +1337,34 @@ def cmd_digest(args):
 
 def cmd_memory(args):
     """Manage the shared cross-tool memory store (issue #44 / #33)."""
+    output_dir = Path(args.output_dir).expanduser()
+    action = args.memory_action
+
+    if action == "context":
+        from lore.services.memory_context import build_memory_context
+
+        project = getattr(args, "project", None)
+        scope = Path(project).expanduser().resolve() if project else Path.cwd().resolve()
+        text = build_memory_context(
+            output_dir,
+            scope_project=scope,
+            scope_tool=getattr(args, "tool", None),
+            limit=args.limit,
+            budget=args.budget,
+            output_format=args.format,
+        )
+        if text:
+            print(text)
+        return
+
     from lore.storage import (
         MEMORY_KINDS,
         add_memory,
         feedback_weight,
-        find_similar_memories,
         list_memory,
         recall_memory,
         record_feedback,
     )
-
-    output_dir = Path(args.output_dir).expanduser()
-    action = args.memory_action
 
     if action == "import-claude":
         from lore.services.claude_memory_import import import_claude_memory
@@ -1379,6 +1395,31 @@ def cmd_memory(args):
             print(note)
         return
 
+    if action == "show":
+        from lore.storage import get_memory
+
+        entry = get_memory(output_dir, args.memory_id)
+        if entry is None:
+            print(f"Error: memory #{args.memory_id} does not exist.", file=sys.stderr)
+            sys.exit(1)
+        print(entry.title)
+        print()
+        print(entry.body)
+        if entry.tags:
+            print()
+            print(f"Tags: {', '.join(entry.tags)}")
+        if entry.sources:
+            print()
+            print("Provenance:")
+            for src in entry.sources:
+                session_id = src.get("session_id") or ""
+                note = src.get("note")
+                line = f"  session {session_id}"
+                if note:
+                    line += f" — {note}"
+                print(line)
+        return
+
     if action == "rate":
         try:
             record_feedback(output_dir, args.memory_id, args.rater, args.score)
@@ -1398,6 +1439,8 @@ def cmd_memory(args):
             sys.exit(1)
         supersedes = getattr(args, "supersedes", None)
         try:
+            from lore.storage import find_similar_memories
+
             # Before the insert, so the new memory cannot match itself.
             similar = find_similar_memories(
                 output_dir,
@@ -1983,6 +2026,31 @@ Examples:
     mem_import.add_argument(
         "--root", help="Claude projects directory (default: ~/.claude/projects)"
     )
+
+    mem_show = memory_sub.add_parser("show", help="Show one memory in full")
+    mem_show.add_argument("memory_id", type=int, help="memory id")
+
+    mem_context = memory_sub.add_parser(
+        "context", help="Render a budgeted memory block for agent context"
+    )
+    mem_context.add_argument(
+        "--project",
+        help="project scope (default: current working directory, resolved)",
+    )
+    mem_context.add_argument(
+        "--budget",
+        type=int,
+        default=2000,
+        help="token budget estimate (ceil(chars/4); default: 2000)",
+    )
+    mem_context.add_argument("--tool", help="optional tool scope filter")
+    mem_context.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="output format (default: text)",
+    )
+    mem_context.add_argument("--limit", type=int, default=40, help="max memories to consider")
 
     mem_rate = memory_sub.add_parser("rate", help="Rate a memory from 1 to 5")
     mem_rate.add_argument("memory_id", type=int, help="memory id")

@@ -5,6 +5,8 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
 ### Added
+- `lore memory context` builds a token-budgeted prompt block from shared memory for a project path.
+- `lore memory show` prints one memory entry by id (metadata and body).
 - `lore memory import-claude` seeds shared memory from Claude Code auto-memory files
   (`~/.claude/projects/*/memory/*.md`). Dry run by default; `--apply` writes. Idempotent by
   file path and content hash, edited files supersede their previous import, and text is

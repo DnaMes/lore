@@ -133,10 +133,16 @@ def _existing_imports(output_dir: Path) -> Dict[str, Tuple[int, str, str]]:
     for memory_id, status, metadata_json in rows:
         try:
             info = json.loads(metadata_json)[IMPORT_KEY]
-            latest[str(info["path"])] = (int(memory_id), str(info["sha256"]), str(status))
-        except (ValueError, KeyError, TypeError):
+            path_key = str(Path(str(info["path"])).resolve())
+            latest[path_key] = (int(memory_id), str(info["sha256"]), str(status))
+        except (ValueError, KeyError, TypeError, OSError):
             continue
     return latest
+
+
+def _source_path_key(path: Path) -> str:
+    """Canonical import source path (relative and absolute forms match)."""
+    return str(path.resolve())
 
 
 def _plan_file(
@@ -206,7 +212,7 @@ def import_claude_memory(output_dir: Path, root: Path, *, apply: bool = False) -
             continue
         report.by_type[item.mtype] = report.by_type.get(item.mtype, 0) + 1
 
-        prev = existing.get(str(path))
+        prev = existing.get(_source_path_key(path))
         if prev is not None and prev[1] == item.sha256:
             report.already += 1
             continue
@@ -236,7 +242,13 @@ def _write(
         scope_project=item.scope_project,
         scope_tool="claude",
         tags=[item.mtype, "claude-memory"],
-        metadata={IMPORT_KEY: {"path": str(item.path), "sha256": item.sha256, "type": item.mtype}},
+        metadata={
+            IMPORT_KEY: {
+                "path": _source_path_key(item.path),
+                "sha256": item.sha256,
+                "type": item.mtype,
+            }
+        },
         status=item.status,
     )
     try:
