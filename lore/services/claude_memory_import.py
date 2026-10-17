@@ -222,7 +222,9 @@ def import_claude_memory(output_dir: Path, root: Path, *, apply: bool = False) -
             report.already += 1
             continue
         key = memory_key(item.title, item.body)
-        if known_content[key] > 0:
+        # A changed, already-imported file must still supersede its old import (and refresh
+        # the sha), even when its content now matches another memory.
+        if prev is None and known_content[key] > 0:
             report.duplicates += 1
             continue
         if apply:

@@ -5,11 +5,17 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from ..storage.memory import MemoryEntry, _load_entries, set_memory_status
 from ..storage.writer import v2_db_path
+
+
+def _updated_utc(value: str) -> datetime:
+    """Parse a stored timestamp; naive values are treated as UTC so mixed rows compare."""
+    parsed = datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
 
 
 def memory_key(title: str, body: str) -> tuple[str, str]:
@@ -61,7 +67,7 @@ def dedupe_memories(output_dir: Path, *, apply: bool = False) -> list[DuplicateG
             key=lambda entry: (
                 entry.feedback_weight,
                 len(entry.scope_project or ""),
-                datetime.fromisoformat(entry.updated),
+                _updated_utc(entry.updated),
                 entry.id,
             ),
         )

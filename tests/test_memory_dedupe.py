@@ -219,3 +219,22 @@ def test_import_tracks_content_superseded_during_the_run(
     assert report.updated == 1
     assert report.new == (0 if retained_copy else 1)
     assert report.duplicates == (1 if retained_copy else 0)
+
+
+def test_changed_import_matching_other_memory_still_supersedes_and_refreshes_sha(
+    tmp_path: Path,
+) -> None:
+    store = tmp_path / "store"
+    root = tmp_path / "claude"
+    path = _import_file(root, body="first body")
+    import_claude_memory(store, root, apply=True)
+    add_memory(store, "fact", "Risk Posture", "second body", scope_project="/elsewhere")
+    path.write_text(
+        "---\nname: Risk Posture\ntype: feedback\n---\n\nsecond body\n", encoding="utf-8"
+    )
+
+    first = import_claude_memory(store, root, apply=True)
+    second = import_claude_memory(store, root, apply=True)
+
+    assert (first.updated, first.duplicates) == (1, 0)
+    assert (second.already, second.updated, second.duplicates) == (1, 0, 0)
