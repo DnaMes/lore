@@ -93,19 +93,16 @@ Updated after the second session of 2026-05-06.
 
 ## Decision pending: where do issues go?
 
-`tools/create_issues.sh` is ready for both targets:
+A one-shot bulk issue script used in 2026-05 was removed 2026-10-17. Targets were:
 
 1. **Forgejo** at `100.119.46.15:3000` (Tailscale-only, token at `~/.config/forgejo/token`):
-   ```
-   tools/create_issues.sh forgejo
-   ```
    Run from a Tailscale-connected machine. The repo `erdna/ai-history` already exists.
 
 2. **GitHub** (no public repo exists yet):
    ```
    gh repo create DnaMes/ai-history --public --source=. --remote=github --push
-   tools/create_issues.sh github DnaMes ai-history
    ```
+   Then create issues with `gh issue create` per backlog item.
 
 ---
 
@@ -116,7 +113,7 @@ Updated after the second session of 2026-05-06.
 | `docs/ROADMAP.md` | Full prioritized backlog (60+ items) |
 | `docs/REVIEW.md` | Multi-agent review synthesis |
 | `docs/API_REFERENCE.md` | MCP + HTTP API docs |
-| `tools/create_issues.sh` | Bulk issue creator |
+| (removed 2026-10-17) | One-shot bulk issue script used in 2026-05 |
 | `lore/interfaces/web_formatting.py` | XSS fix location |
 | `lore/interfaces/mcp.py` | MCP server (445 LOC, needs decomposition #25b) |
 | `lore/interfaces/api_payloads.py` | Shared serializers (new) |
@@ -137,5 +134,5 @@ Updated after the second session of 2026-05-06.
 
 > Read docs/SESSION-HANDOFF.md and pick up from there. P0 blockers are
 > fixed. Next priority: CSRF (#3) on web.py POST routes, then tighten
-> validate_session_id (#15), then decide Forgejo vs GitHub and run
-> tools/create_issues.sh.
+> validate_session_id (#15), then decide Forgejo vs GitHub and open backlog
+> items via `gh issue create` (bulk script removed 2026-10-17).

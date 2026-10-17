@@ -4,7 +4,7 @@ Date: 2026-05-06
 Reviewers (parallel subagents): code-reviewer, security-auditor, architect-reviewer, performance-engineer, qa-expert, researcher.
 Source: 1672 sessions in `~/.ai-history/index.json` (19 MB), 78 MB SQLite, ~12 K LOC across `lore/`.
 
-This document summarizes the findings. The actionable backlog is in `docs/ROADMAP.md`. The issue creation script is in `tools/create_issues.sh`.
+This document summarizes the findings. The actionable backlog is in `docs/ROADMAP.md`. Bulk issue creation was a one-shot script used in 2026-05, removed 2026-10-17.
 
 ---
 
@@ -102,7 +102,7 @@ See ROADMAP.md items #34-#43 for the full feature backlog.
 ## How to use this review
 
 1. **Triage**: open `docs/ROADMAP.md`, agree on what's P0 / P1 / P2 / P3 for the public release.
-2. **Issues**: run `tools/create_issues.sh github <owner> <repo>` (or `forgejo` once on the Tailscale network) to create one issue per backlog item with proper labels.
+2. **Issues**: bulk creation used a one-shot script in 2026-05 (removed 2026-10-17); use `gh issue create` per backlog item with proper labels.
 3. **Sequence**: ship the P0 fixes, tag v2.1, *then* go public. The Postgres ghost stack (#1a) and the XSS bypass (#2) are the two items that absolutely must land first.
 4. **Track**: re-run the multi-agent review every quarter. Prompts are documented in this file's git history.
 

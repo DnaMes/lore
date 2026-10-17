@@ -79,8 +79,8 @@ Umsetzen (impactreichstes zuerst):
 3. Achsenweise umsetzen, jede Achse Tests grün + verify (echte App-Outputs/Screenshots via
    browser-qa oder playwright für UX).
 4. Findings, die NICHT diese Session umgesetzt werden → GitHub-Issues:
-   `gh issue create -R DnaMes/lore -t "..." -b "..."` (Bulk: `tools/create_issues.sh github
-   DnaMes lore` — Forgejo-Pfad NICHT nutzen).
+   `gh issue create -R DnaMes/lore -t "..." -b "..."` (Bulk: a one-shot script used in
+   2026-05, removed 2026-10-17 — Forgejo-Pfad NICHT nutzen).
 5. `HANDOFF.md` + Docs am Ende aktualisieren.
 
 **Fan out Subagents** für parallele unabhängige Arbeit (Extractor-Verify ∥ UX-Audit ∥
