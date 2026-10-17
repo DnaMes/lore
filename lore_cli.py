@@ -1843,7 +1843,7 @@ Examples:
     parser.add_argument(
         "--output-dir",
         default=str(lore_home()),
-        help="Output directory (default: ~/.lore — migrates from ~/.ai-history if present)",
+        help="Output directory (default: ~/.lore)",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")

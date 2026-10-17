@@ -318,16 +318,16 @@ Run deterministic route/API hardening probes against a local or deployed web URL
 lore-web-probe --base-url http://127.0.0.1:5000
 
 # Deployed target protected by Basic auth
-export AI_HISTORY_WEB_PROBE_PASSWORD='your-password'
+export LORE_WEB_PROBE_PASSWORD='your-password'
 lore-web-probe \
   --base-url https://your-deployed-host.example.com \
   --user admin \
-  --password-env AI_HISTORY_WEB_PROBE_PASSWORD
+  --password-env LORE_WEB_PROBE_PASSWORD
 
 
 # Increase timeout/retries when remote index fallback is slow
 lore-web-probe --base-url https://your-deployed-host.example.com --user admin \
-  --password-env AI_HISTORY_WEB_PROBE_PASSWORD --timeout-seconds 30 --timeout-retries 2
+  --password-env LORE_WEB_PROBE_PASSWORD --timeout-seconds 30 --timeout-retries 2
 ```
 
 Probe output now includes a `build_info` object fetched from `/api/build-info` (status,
@@ -338,14 +338,14 @@ gateway/proxy normalization does not mask application-level validation behavior.
 You can query it directly:
 
 ```bash
-curl -u admin:"$AI_HISTORY_WEB_PROBE_PASSWORD" \
+curl -u admin:"$LORE_WEB_PROBE_PASSWORD" \
   https://your-deployed-host.example.com/api/build-info
 ```
 
 Note: `/export/<session_id>` first serves linked markdown from `index.json`. If the session
 is indexed but the markdown file is missing, it now regenerates markdown from the live
 session for that tool. For unknown session ids, it returns `404` directly to avoid
-expensive scans unless you explicitly set `AI_HISTORY_EXPORT_FALLBACK_SCAN=true`.
+expensive scans unless you explicitly set `LORE_EXPORT_FALLBACK_SCAN=true`.
 
 Exit codes:
 
@@ -492,23 +492,23 @@ curl http://127.0.0.1:5000/api/metrics?format=prom
 
 ```bash
 # Master switch
-export AI_HISTORY_RATE_LIMIT_ENABLED=true
+export LORE_RATE_LIMIT_ENABLED=true
 
 # Shared window in seconds
-export AI_HISTORY_RATE_LIMIT_WINDOW_SECONDS=60
+export LORE_RATE_LIMIT_WINDOW_SECONDS=60
 
 # Per-endpoint budgets per window
-export AI_HISTORY_RATE_LIMIT_MAX_API_REQUESTS=240
-export AI_HISTORY_RATE_LIMIT_SEARCH_PER_WINDOW=180
-export AI_HISTORY_RATE_LIMIT_AUDIT_PER_WINDOW=20
-export AI_HISTORY_RATE_LIMIT_RELOAD_PER_WINDOW=12
+export LORE_RATE_LIMIT_MAX_API_REQUESTS=240
+export LORE_RATE_LIMIT_SEARCH_PER_WINDOW=180
+export LORE_RATE_LIMIT_AUDIT_PER_WINDOW=20
+export LORE_RATE_LIMIT_RELOAD_PER_WINDOW=12
 ```
 
 ### Logging mode
 
 ```bash
 # Optional JSON request logs for easier ingestion
-export AI_HISTORY_JSON_REQUEST_LOGS=true
+export LORE_JSON_REQUEST_LOGS=true
 ```
 
 When enabled, API/error requests are logged as JSON objects with method, path, status, duration, and request id.
@@ -533,11 +533,11 @@ docker compose ps
 Example `.env` values for deployment:
 
 ```bash
-AI_HISTORY_RATE_LIMIT_ENABLED=true
-AI_HISTORY_RATE_LIMIT_WINDOW_SECONDS=60
-AI_HISTORY_RATE_LIMIT_MAX_API_REQUESTS=240
-AI_HISTORY_RATE_LIMIT_SEARCH_PER_WINDOW=180
-AI_HISTORY_RATE_LIMIT_AUDIT_PER_WINDOW=20
-AI_HISTORY_RATE_LIMIT_RELOAD_PER_WINDOW=12
-AI_HISTORY_JSON_REQUEST_LOGS=false
+LORE_RATE_LIMIT_ENABLED=true
+LORE_RATE_LIMIT_WINDOW_SECONDS=60
+LORE_RATE_LIMIT_MAX_API_REQUESTS=240
+LORE_RATE_LIMIT_SEARCH_PER_WINDOW=180
+LORE_RATE_LIMIT_AUDIT_PER_WINDOW=20
+LORE_RATE_LIMIT_RELOAD_PER_WINDOW=12
+LORE_JSON_REQUEST_LOGS=false
 ```

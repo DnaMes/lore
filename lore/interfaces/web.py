@@ -681,7 +681,7 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["X-AI-History-Revision"] = _current_revision()
+    response.headers["X-Lore-Revision"] = _current_revision()
     response.headers["X-Request-ID"] = getattr(g, "request_id", "")
     peek_max_age = getattr(g, "peek_cache_max_age", None)
     if peek_max_age is not None:

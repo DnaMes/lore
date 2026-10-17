@@ -9,36 +9,12 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-_LEGACY_HOME_NAME = ".ai-history"
 _HOME_NAME = ".lore"
-_migration_done = False
 
 
 def lore_home() -> Path:
-    """Return Lore's data directory (``~/.lore``), migrating once if needed.
-
-    The tool was renamed from "lore" to "Lore". On first call, if the
-    new ``~/.lore`` directory does not exist but the legacy ``~/.ai-history``
-    does, the legacy directory is renamed in place — so an existing install
-    keeps its index, memory and exports without the user doing anything.
-
-    The migration is one-shot and idempotent: once ``~/.lore`` exists (or no
-    legacy dir is present) it is a plain path lookup.
-    """
-    global _migration_done
-    new_home = Path.home() / _HOME_NAME
-    if not _migration_done and not new_home.exists():
-        legacy = Path.home() / _LEGACY_HOME_NAME
-        if legacy.exists() and legacy.is_dir():
-            try:
-                legacy.rename(new_home)
-            except OSError:
-                # Cross-device or permission failure — fall back to the
-                # legacy location rather than losing the user's data.
-                _migration_done = True
-                return legacy
-    _migration_done = True
-    return new_home
+    """Return Lore's data directory (``~/.lore``)."""
+    return Path.home() / _HOME_NAME
 
 
 def secure_dir(path: Path) -> Path:

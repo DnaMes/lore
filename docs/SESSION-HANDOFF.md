@@ -131,7 +131,7 @@ Updated after the second session of 2026-05-06.
 - User role: tech lead / hobbyist, multi-tool AI session aggregator.
 - Forgejo (Tailscale-only) for private repos; GitHub for public OSS.
 - Test runner: `.venv/bin/python -m pytest tests/`. Currently 129/129.
-- `~/.ai-history/` is the canonical output dir.
+- `~/.lore/` is the canonical output dir.
 
 ## Next-session opening prompt suggestion
 

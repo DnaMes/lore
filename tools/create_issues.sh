@@ -202,7 +202,7 @@ create_issue "[#7] Replace CSP unsafe-inline with nonces" \
 create_issue "[#8] Only trust X-Forwarded-For when TRUSTED_PROXY env is set" \
 "\`web_utils.py:75\` reads \`X-Forwarded-For\` unconditionally. Any client can spoof this and bypass rate limits.
 
-**Fix:** Only read \`X-Forwarded-For\` when \`AI_HISTORY_TRUSTED_PROXY=1\` env var is set. Otherwise use \`request.remote_addr\`.
+**Fix:** Only read \`X-Forwarded-For\` when \`TRUSTED_PROXY=1\` env var is set. Otherwise use \`request.remote_addr\`.
 
 **Estimated effort:** 30m" "p1,security"
 

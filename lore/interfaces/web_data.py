@@ -206,13 +206,6 @@ def resolve_export_path(path_value: Optional[str]) -> Optional[Path]:
     if result:
         return result
 
-    marker = "/.ai-history/"
-    raw_text = str(path_value)
-    idx = raw_text.find(marker)
-    if idx != -1:
-        relative_tail = raw_text[idx + len(marker) :]
-        return _safe(OUTPUT_DIR / relative_tail)
-
     return None
 
 

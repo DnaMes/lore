@@ -10,6 +10,9 @@ The version is the single source of truth in `lore/__init__.py`.
   file path and content hash, edited files supersede their previous import, and text is
   redacted before writing.
 ### Removed
+- Legacy `ai-history` compatibility removed: the `AI_HISTORY_*` env prefix, the `~/.ai-history`
+  auto-migration and the `X-AI-History-Revision` response header are gone. Use `LORE_*` env names,
+  `~/.lore` as the data dir and `X-Lore-Revision`.
 - **Warp extractor.** Lore no longer imports chat history from the Warp terminal (`lore/extractors/warp.py`,
   its noise rules, formatter and docker mount are gone). Sessions already ingested keep loading: the `warp`
   source value stays readable as a legacy tool.

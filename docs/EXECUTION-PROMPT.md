@@ -7,7 +7,7 @@
 ---
 
 Du bist CEO/Tech-Lead von "lore" (`/home/dnames/projects/lab/ai/lore`) — cross-tool
-AI-Session-Archiv + Shared-Memory, Flask+SQLite+MCP, Package `ai_history`, Produkt=Lore,
+AI-Session-Archiv + Shared-Memory, Flask+SQLite+MCP, Package `lore`, Produkt=Lore,
 Datadir `~/.lore`, v2.3.0, Remote GitHub `DnaMes/lore` (Forgejo ist tot — nur GitHub).
 Docker = 1 Service, gunicorn `--workers 1` (RELOAD_JOBS in-memory, NICHT auf >1 erhöhen
 ohne persistenten JobStore).

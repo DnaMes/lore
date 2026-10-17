@@ -195,7 +195,7 @@ def test_list_row_checkboxes_outside_link_with_aria_label(list_client):
 
 
 def test_bulk_delete_tombstones_and_sanitises_next(monkeypatch, tmp_path):
-    fake_output = tmp_path / ".ai-history"
+    fake_output = tmp_path / ".lore"
     fake_output.mkdir()
     index_path = fake_output / "index.json"
     deleted_path = fake_output / "deleted_sessions.json"
@@ -252,7 +252,7 @@ def test_bulk_delete_empty_list_400():
 
 
 def test_bulk_delete_invalid_id_no_partial(monkeypatch, tmp_path):
-    fake_output = tmp_path / ".ai-history"
+    fake_output = tmp_path / ".lore"
     fake_output.mkdir()
     index_path = fake_output / "index.json"
     deleted_path = fake_output / "deleted_sessions.json"
@@ -318,7 +318,7 @@ def test_bulk_delete_purges_summaries(monkeypatch, tmp_path):
     from lore.storage.summaries import summary_fingerprint
     from lore.storage.writer import v2_db_path
 
-    fake_output = tmp_path / ".ai-history"
+    fake_output = tmp_path / ".lore"
     fake_output.mkdir()
     initialise(v2_db_path(fake_output))
     index_path = fake_output / "index.json"
@@ -367,7 +367,7 @@ def test_bulk_tag_applies_tag(monkeypatch, tmp_path):
     from lore.storage import get_session_tags, initialise
     from lore.storage.writer import v2_db_path
 
-    fake_output = tmp_path / ".ai-history"
+    fake_output = tmp_path / ".lore"
     fake_output.mkdir()
     initialise(v2_db_path(fake_output))
     index_path = fake_output / "index.json"
@@ -408,7 +408,7 @@ def test_bulk_tag_applies_tag(monkeypatch, tmp_path):
 def test_bulk_tag_invalid_tag_400_no_partial(monkeypatch, tmp_path):
     from lore.storage import get_session_tags
 
-    fake_output = tmp_path / ".ai-history"
+    fake_output = tmp_path / ".lore"
     fake_output.mkdir()
     index_path = fake_output / "index.json"
     index_path.write_text(

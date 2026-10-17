@@ -266,7 +266,7 @@ lore analyze --provider ollama --model llama3.2
 
 ## Configuration
 
-Create `~/.ai-history/config.json`:
+Create `~/.lore/config.json`:
 
 ### API Key Method
 
@@ -327,9 +327,9 @@ LORE_LLM_TIMEOUT=240 lore summarize --provider jev --allow-cloud --dry-run
 
 ## Output Locations
 
-- **Stats**: `~/.ai-history/stats/stats.json`
-- **Knowledge**: `~/.ai-history/knowledge/knowledge_base.json`
-- **Formatted**: `~/.ai-history/formatted/*.md`
+- **Stats**: `~/.lore/stats/stats.json`
+- **Knowledge**: `~/.lore/knowledge/knowledge_base.json`
+- **Formatted**: `~/.lore/formatted/*.md`
 
 ## Caching
 

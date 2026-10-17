@@ -7,7 +7,7 @@ Local-first AI chat history manager. See AGENTS.md for full developer guidelines
 - `lore/extractors/` — one class per AI tool, all inherit `BaseExtractor`
 - `lore/interfaces/web.py` — Flask routes; data layer in `web_data.py`; jobs in `web_jobs.py`
 - `lore/interfaces/web_templates.py` — all HTML/CSS/JS as Python strings (Tailwind CDN, no build step)
-- `~/.ai-history/` — all persistent output (index.json, SQLite FTS, exported markdown)
+- `~/.lore/` — all persistent output (index.json, SQLite FTS, exported markdown)
 
 ## Critical Constraints
 

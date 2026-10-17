@@ -14,7 +14,7 @@ This is a local-first AI chat history manager. See AGENTS.md for full guidelines
 
 ## Output Directory
 
-All persistent data: `~/.ai-history/` (`OUTPUT_DIR` in `web_data.py`)
+All persistent data: `~/.lore/` (`OUTPUT_DIR` in `web_data.py`)
 - `index.json` — flat session index
 - `index.sqlite` — FTS search
 - `projects/` — exported markdown sessions

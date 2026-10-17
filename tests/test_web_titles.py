@@ -195,7 +195,7 @@ def test_security_headers_include_referrer_and_stricter_csp():
     assert "frame-ancestors 'none'" in csp
     assert "form-action 'self'" in csp
     assert response.headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
-    assert response.headers.get("X-AI-History-Revision")
+    assert response.headers.get("X-Lore-Revision")
 
 
 def test_api_build_info_exposes_revision_and_hardening(monkeypatch):
@@ -490,7 +490,7 @@ def test_session_delete_removes_index_entry_and_export(monkeypatch, tmp_path):
 
     session_id = "test-session-1"
     # export_path must live inside OUTPUT_DIR so resolve_export_path accepts it
-    fake_output_dir = tmp_path / ".ai-history"
+    fake_output_dir = tmp_path / ".lore"
     fake_output_dir.mkdir()
     export_path = fake_output_dir / "session.md"
     export_path.write_text("# Session", encoding="utf-8")

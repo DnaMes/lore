@@ -162,9 +162,6 @@ python3 -c "from lore.extractors.claude import ClaudeCodeExtractor; print(list(C
 # Check tools
 lore check
 
-# Debug logging
-AI_HISTORY_DEBUG=1 lore list
-
 # Docker debugging
 docker compose logs -f app
 docker exec -it lore-app bash
