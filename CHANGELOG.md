@@ -4,7 +4,15 @@ All notable changes to this project are documented here.
 The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
+### Changed
+- `lore memory context` no longer treats `/`, the user home directory, or other overly broad
+  ancestor `scope_project` paths as related to a working project (descendant scopes unchanged).
 ### Added
+- `lore memory dedupe [--apply]` groups active confirmed memories by normalized title and
+  body hash. Dry run by default; keeps the highest feedback weight, then longest project
+  scope, then newest update, and reversibly rejects the rest without deleting rows (AB#1606).
+- `lore memory import-claude` skips duplicate normalized title/body content already confirmed
+  in any scope, including duplicates within one run, and reports the duplicate count.
 - `lore memory context` builds a token-budgeted prompt block from shared memory for a project path.
 - `lore memory show` prints one memory entry by id (metadata and body).
 - `lore memory import-claude` seeds shared memory from Claude Code auto-memory files

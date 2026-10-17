@@ -136,12 +136,19 @@ lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
 lore memory context --project /path/to/repo --budget 2000   # prompt block for agents
 # context prints a budgeted, redacted, one-line-per-memory block for prompt injection,
-# ranked exact project > related > global; the whole output, footer included, fits the budget.
+# ranked exact project > related > global (related = descendant scope or a specific-enough
+# ancestor; /, home, and scopes with fewer than four path components are not ancestors);
+# the whole output, footer included, fits the budget.
 lore memory show 7                                        # one entry by id
 lore memory rate 7 5                                    # rate a confirmed memory 1-5
 lore memory add --title "Use PG 17" --body "..." --supersedes 7   # replaces #7; near-duplicates are listed
 lore memory import-claude                                # dry run: count Claude auto-memory files to import
 lore memory import-claude --apply                        # write them (re-runs skip unchanged files; edits supersede)
+lore memory dedupe                                      # dry run: show exact duplicate groups and kept/rejected ids
+lore memory dedupe --apply                              # mark duplicates rejected; keep every row (repeat runs reject 0)
+# Dedupe collapses whitespace and unescapes quotes; titles ignore case, bodies remain case-sensitive.
+# Keeper order: highest feedback weight, longest project path, newest update.
+# import-claude also skips identical normalized content across scopes and reports duplicates.
 
 # Semantic memory search needs the optional embedding model:
 #   pip install -e ".[semantic]"
@@ -167,6 +174,10 @@ lore threads
 # Generate derived rules (SpecStory-style)
 lore rules --limit 30
 ```
+
+`memory dedupe --apply` preserves every row and its provenance. To restore a rejected
+memory through the Python API, call `lore.storage.set_memory_status(output_dir, memory_id,
+"confirmed", from_status="rejected")` (`output_dir` is a `Path`).
 
 Claude Code recalls this block at SessionStart via the hook script `claude-hook-memory-recall.sh` in the claude submodule of ai-stack (switch `LORE_RECALL=off`, budget `LORE_RECALL_BUDGET`); Codex receives it through the session-pipeline SessionStart hook.
 
