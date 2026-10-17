@@ -1029,7 +1029,6 @@ def reject_memories_bulk(output_dir: Path, memory_ids: List[int]) -> int:
                     detail += f" (superseded_by=#{row['superseded_by']})"
                 not_confirmed.append(detail)
         if missing or not_confirmed:
-            conn.execute("ROLLBACK")
             parts: List[str] = []
             if missing:
                 parts.append("missing: " + ", ".join(f"#{memory_id}" for memory_id in missing))
@@ -1047,55 +1046,60 @@ def reject_memories_bulk(output_dir: Path, memory_ids: List[int]) -> int:
             )
             updated += cur.rowcount
         if updated != len(unique_ids):
-            conn.execute("ROLLBACK")
             raise ValueError(
                 f"concurrent change: expected to reject {len(unique_ids)} memories, updated {updated}"
             )
         conn.execute("COMMIT")
         return updated
-    except (sqlite3.Error, ValueError):
-        try:
+    except BaseException:
+        if conn.in_transaction:
             conn.execute("ROLLBACK")
-        except sqlite3.OperationalError:
-            pass
         raise
     finally:
         conn.close()
 
 
 def restore_rejected_memories_bulk(output_dir: Path, memory_ids: List[int]) -> Tuple[int, int, int]:
-    """Set still-rejected ids back to confirmed. Returns (restored, skipped, missing)."""
+    """Set still-rejected, non-superseded ids back to confirmed.
+
+    Returns (restored, skipped, missing). Reads and writes share one transaction.
+    """
     if not memory_ids:
         return (0, 0, 0)
     unique_ids = list(dict.fromkeys(memory_ids))
     conn = _connect(output_dir)
     try:
-        marks = ",".join("?" * len(unique_ids))
-        rows = conn.execute(
-            f"SELECT id, status FROM memory WHERE id IN ({marks})",
-            unique_ids,
-        ).fetchall()
-        by_id = {int(row["id"]): row["status"] for row in rows}
-        to_restore = [memory_id for memory_id in unique_ids if by_id.get(memory_id) == "rejected"]
-        missing = sum(1 for memory_id in unique_ids if memory_id not in by_id)
-        skipped = len(unique_ids) - len(to_restore) - missing
-        if not to_restore:
-            return (0, skipped, missing)
-        now = _now()
         conn.execute("BEGIN IMMEDIATE")
-        for memory_id in to_restore:
-            conn.execute(
-                "UPDATE memory SET status = 'confirmed', updated = ? WHERE id = ? AND status = 'rejected'",
+        marks = ",".join("?" * len(unique_ids))
+        rows = conn.execute(f"SELECT id FROM memory WHERE id IN ({marks})", unique_ids).fetchall()
+        missing = len(unique_ids) - len(rows)
+        now = _now()
+        restored = 0
+        for memory_id in unique_ids:
+            cur = conn.execute(
+                "UPDATE memory SET status = 'confirmed', updated = ? "
+                "WHERE id = ? AND status = 'rejected' AND superseded_by IS NULL",
                 (now, memory_id),
             )
+            restored += cur.rowcount
         conn.execute("COMMIT")
-        return (len(to_restore), skipped, missing)
-    except sqlite3.Error:
-        try:
+        return (restored, len(unique_ids) - restored - missing, missing)
+    except BaseException:
+        if conn.in_transaction:
             conn.execute("ROLLBACK")
-        except sqlite3.OperationalError:
-            pass
         raise
+    finally:
+        conn.close()
+
+
+def list_superseded_by(output_dir: Path, memory_id: int) -> List[int]:
+    """Ids of memories whose ``superseded_by`` points at ``memory_id``."""
+    conn = _connect(output_dir)
+    try:
+        rows = conn.execute(
+            "SELECT id FROM memory WHERE superseded_by = ? ORDER BY id", (memory_id,)
+        ).fetchall()
+        return [int(row["id"]) for row in rows]
     finally:
         conn.close()
 

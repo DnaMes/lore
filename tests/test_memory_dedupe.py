@@ -292,3 +292,63 @@ def test_changed_import_matching_other_memory_still_supersedes_and_refreshes_sha
 
     assert (first.updated, first.duplicates) == (1, 0)
     assert (second.already, second.updated, second.duplicates) == (1, 0, 0)
+
+
+def _duplicate_pair(store: Path) -> tuple[int, int]:
+    first = add_memory(store, "fact", "dup", "same body")
+    second = add_memory(store, "fact", "dup", "same body")
+    return first, second
+
+
+def test_two_applies_never_share_an_undo_log(tmp_path: Path) -> None:
+    from lore.services.memory_dedupe import _write_undo_log
+
+    groups, _ = dedupe_memories(tmp_path)
+    assert groups == []
+    first = _write_undo_log(tmp_path, groups)
+    second = _write_undo_log(tmp_path, groups)
+    assert first != second and first.exists() and second.exists()
+
+
+def test_failed_apply_leaves_no_undo_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import lore.services.memory_dedupe as service
+
+    _duplicate_pair(tmp_path)
+
+    def boom(*_args: object, **_kwargs: object) -> int:
+        raise ValueError("concurrent change")
+
+    monkeypatch.setattr(service, "reject_memories_bulk", boom)
+    with pytest.raises(ValueError):
+        dedupe_memories(tmp_path, apply=True)
+    assert list(tmp_path.glob("dedupe-undo-*.json")) == []
+
+
+def test_restore_skips_superseded_rows(tmp_path: Path) -> None:
+    old = add_memory(tmp_path, "fact", "topic", "old body")
+    new = add_memory(tmp_path, "fact", "topic", "new body", supersedes=old)
+    set_memory_status(tmp_path, new, "rejected", from_status="confirmed")
+    with sqlite3.connect(v2_db_path(tmp_path)) as conn:
+        conn.execute("UPDATE memory SET status = 'rejected' WHERE id = ?", (old,))
+    assert restore_rejected_memories_bulk(tmp_path, [old, new]) == (1, 1, 0)
+    assert get_memory(tmp_path, old).status == "rejected"
+    assert get_memory(tmp_path, new).status == "confirmed"
+
+
+def test_malformed_undo_log_is_a_value_error(tmp_path: Path) -> None:
+    from lore.services.memory_dedupe import restore_dedupe_undo
+
+    for text in ('{"groups": 5}', '{"groups": [{"rejected_ids": "x"}]}', "{}", "[]"):
+        log = tmp_path / "undo.json"
+        log.write_text(text, encoding="utf-8")
+        with pytest.raises(ValueError, match="malformed"):
+            restore_dedupe_undo(tmp_path, log)
+
+
+def test_list_superseded_by_queries_predecessors_directly(tmp_path: Path) -> None:
+    from lore.storage.memory import list_superseded_by
+
+    old = add_memory(tmp_path, "fact", "topic", "old body")
+    new = add_memory(tmp_path, "fact", "topic", "new body", supersedes=old)
+    assert list_superseded_by(tmp_path, new) == [old]
+    assert list_superseded_by(tmp_path, old) == []

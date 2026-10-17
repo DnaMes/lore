@@ -1384,7 +1384,7 @@ def cmd_memory(args):
 
         try:
             groups, undo_path = dedupe_memories(output_dir, apply=args.apply)
-        except (sqlite3.Error, ValueError) as exc:
+        except (OSError, sqlite3.Error, ValueError) as exc:
             print(f"Could not deduplicate memory: {exc}", file=sys.stderr)
             sys.exit(1)
         mode = "apply" if args.apply else "dry run, nothing written (pass --apply to reject)"
@@ -1445,11 +1445,10 @@ def cmd_memory(args):
             print(f"Scope tool: {entry.scope_tool}")
         if entry.superseded_by is not None:
             print(f"superseded by #{entry.superseded_by}")
-        from lore.storage import list_memory
+        from lore.storage.memory import list_superseded_by
 
-        for other in list_memory(output_dir, include_superseded=True, status=None, limit=10_000):
-            if other.superseded_by == entry.id:
-                print(f"supersedes #{other.id}")
+        for other_id in list_superseded_by(output_dir, entry.id):
+            print(f"supersedes #{other_id}")
         print(entry.title)
         print()
         print(entry.body)

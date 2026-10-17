@@ -82,7 +82,7 @@ def _plan_duplicate_groups(output_dir: Path) -> list[DuplicateGroup]:
 
 
 def _write_undo_log(output_dir: Path, groups: list[DuplicateGroup]) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
     path = output_dir / f"dedupe-undo-{stamp}.json"
     payload = {
         "groups": [
@@ -90,7 +90,9 @@ def _write_undo_log(output_dir: Path, groups: list[DuplicateGroup]) -> Path:
             for group in groups
         ]
     }
-    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    # Exclusive create: two applies must never overwrite each other's undo log.
+    with path.open("x", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, indent=2) + "\n")
     return path
 
 
@@ -104,7 +106,11 @@ def dedupe_memories(
         reject_ids = [memory_id for group in groups for memory_id in group.rejected_ids]
         if reject_ids:
             undo_path = _write_undo_log(output_dir, groups)
-            reject_memories_bulk(output_dir, reject_ids)
+            try:
+                reject_memories_bulk(output_dir, reject_ids)
+            except Exception:
+                undo_path.unlink(missing_ok=True)  # nothing was rejected: no stale log
+                raise
     return groups, undo_path
 
 
@@ -112,6 +118,9 @@ def restore_dedupe_undo(output_dir: Path, undo_file: Path) -> tuple[int, int, in
     """Restore rejections recorded in a dedupe undo log (idempotent)."""
     data = json.loads(undo_file.expanduser().read_text(encoding="utf-8"))
     reject_ids: list[int] = []
-    for group in data.get("groups", []):
-        reject_ids.extend(int(memory_id) for memory_id in group.get("rejected_ids", []))
+    try:
+        for group in data["groups"]:
+            reject_ids.extend(int(memory_id) for memory_id in group["rejected_ids"])
+    except (KeyError, TypeError, ValueError, AttributeError) as exc:
+        raise ValueError(f"malformed dedupe undo log {undo_file}: {exc!r}") from exc
     return restore_rejected_memories_bulk(output_dir, reject_ids)
