@@ -23,11 +23,12 @@ _COMPARE_STRIP_RE = re.compile(r"[\W_]+", re.UNICODE)
 
 _md_local = threading.local()
 
+
 def render_markdown_text(text: str) -> str:
     """Render markdown using a thread-local parser instance to avoid re-instantiation overhead."""
     if not markdown:
         return text
-    if not hasattr(_md_local, 'parser'):
+    if not hasattr(_md_local, "parser"):
         _md_local.parser = markdown.Markdown(extensions=["fenced_code", "tables", "nl2br"])
     else:
         _md_local.parser.reset()
