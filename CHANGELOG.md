@@ -4,6 +4,11 @@ All notable changes to this project are documented here.
 The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
+### Added
+- `lore memory import-claude` seeds shared memory from Claude Code auto-memory files
+  (`~/.claude/projects/*/memory/*.md`). Dry run by default; `--apply` writes. Idempotent by
+  file path and content hash, edited files supersede their previous import, and text is
+  redacted before writing.
 ### Removed
 - **Warp extractor.** Lore no longer imports chat history from the Warp terminal (`lore/extractors/warp.py`,
   its noise rules, formatter and docker mount are gone). Sessions already ingested keep loading: the `warp`

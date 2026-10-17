@@ -1350,6 +1350,35 @@ def cmd_memory(args):
     output_dir = Path(args.output_dir).expanduser()
     action = args.memory_action
 
+    if action == "import-claude":
+        from lore.services.claude_memory_import import import_claude_memory
+
+        root = Path(args.root).expanduser() if args.root else Path.home() / ".claude" / "projects"
+        if not root.is_dir():
+            print(f"Error: no Claude projects directory at {root}", file=sys.stderr)
+            sys.exit(1)
+        try:
+            report = import_claude_memory(output_dir, root, apply=args.apply)
+        except sqlite3.OperationalError:
+            print("Could not write memory: database is busy, try again", file=sys.stderr)
+            sys.exit(1)
+        mode = "apply" if args.apply else "dry run, nothing written (pass --apply to write)"
+        print(f"Claude memory import ({mode}) from {report.root}")
+        print(f"Scanned {report.scanned} files.")
+        types = ", ".join(f"{k} {v}" for k, v in sorted(report.by_type.items())) or "none"
+        print(f"Importable by type: {types}")
+        skipped = ", ".join(f"{k} {v}" for k, v in sorted(report.skipped.items())) or "none"
+        print(f"Skipped: {skipped}")
+        verb = "Wrote" if args.apply else "Would write"
+        print(
+            f"{verb}: {report.new} new, {report.updated} updated (supersedes the previous "
+            f"import), {report.already} already imported, {report.failed} failed."
+        )
+        print(f"Redactions {'applied' if args.apply else 'to apply'}: {report.redactions}")
+        for note in report.notes:
+            print(note)
+        return
+
     if action == "rate":
         try:
             record_feedback(output_dir, args.memory_id, args.rater, args.score)
@@ -1930,6 +1959,29 @@ Examples:
         action="store_true",
         help="rank by meaning only (default: keywords plus meaning when the "
         "'semantic' extra is installed)",
+    )
+
+    mem_import = memory_sub.add_parser(
+        "import-claude",
+        help="Import Claude Code auto-memory files (dry run unless --apply)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Seed the memory store from ~/.claude/projects/<slug>/memory/*.md.\n\n"
+            "Type mapping: user -> fact, feedback -> lesson, project -> fact, "
+            "reference -> link.\n"
+            "Files with a missing or unknown type, or no usable name/description, are\n"
+            "imported as candidates (kind note). MEMORY.md indexes, files without\n"
+            "frontmatter and empty bodies are skipped.\n\n"
+            "Re-running writes nothing for unchanged files; an edited file is written as\n"
+            "a new memory that supersedes the previous import. Titles and bodies are\n"
+            "redacted before writing."
+        ),
+    )
+    mem_import.add_argument(
+        "--apply", action="store_true", help="write to the store (default: dry run)"
+    )
+    mem_import.add_argument(
+        "--root", help="Claude projects directory (default: ~/.claude/projects)"
     )
 
     mem_rate = memory_sub.add_parser("rate", help="Rate a memory from 1 to 5")

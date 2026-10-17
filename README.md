@@ -136,6 +136,8 @@ lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
 lore memory rate 7 5                                    # rate a confirmed memory 1-5
 lore memory add --title "Use PG 17" --body "..." --supersedes 7   # replaces #7; near-duplicates are listed
+lore memory import-claude                                # dry run: count Claude auto-memory files to import
+lore memory import-claude --apply                        # write them (re-runs skip unchanged files; edits supersede)
 
 # Semantic memory search needs the optional embedding model:
 #   pip install -e ".[semantic]"
