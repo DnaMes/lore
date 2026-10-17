@@ -1,0 +1,3 @@
+## 2024-10-17 - Thread-local Markdown Parser Optimization
+**Learning:** In Python web applications using the `markdown` library (like Flask), `markdown.markdown()` is convenient but slow because it instantiates a new `Markdown` parser object, re-parses extensions, and builds a fresh processing pipeline for *every single call*. While the `Markdown` instance is not thread-safe and cannot be instantiated globally, it can be cached in a `threading.local()` object.
+**Action:** Use a thread-local `Markdown` instance with `.reset()` and `.convert()` instead of the module-level `markdown.markdown()` function to reduce overhead, especially when parsing small to medium blocks of text frequently (e.g., rendering many chat messages).

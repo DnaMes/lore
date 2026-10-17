@@ -100,6 +100,7 @@ from .web_formatting import (
     format_tool_calls,
     group_sessions_for_list,
     is_automated_origin,
+    render_markdown_text,
     sanitize_rendered_html,
     session_date_range_chips,
     session_day_iso,
@@ -1645,7 +1646,7 @@ def session_detail(session_id):
     def _render_markdown(path_value):
         md_text = Path(path_value).read_text(encoding="utf-8")
         if markdown:
-            html_content = markdown.markdown(md_text, extensions=["fenced_code", "tables", "nl2br"])
+            html_content = render_markdown_text(md_text)
             html_content = nh3.clean(
                 html_content,
                 tags=SANITIZE_TAGS,
@@ -2090,7 +2091,7 @@ def rules():
         with open(rules_path, "r", encoding="utf-8") as f:
             rules_text = f.read()
     if rules_text and markdown:
-        rules_text = markdown.markdown(rules_text, extensions=["fenced_code", "tables", "nl2br"])
+        rules_text = render_markdown_text(rules_text)
         rules_text = nh3.clean(
             rules_text,
             tags=SANITIZE_TAGS,
