@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from argparse import Namespace
+from pathlib import Path
 
 import pytest
 
@@ -61,6 +62,48 @@ def test_select_skips_retired_markers(tmp_path):
 
     titles = [e.title for e in select_context_memories(tmp_path)]
     assert titles == ["fine", "prefix ok"]
+
+
+def test_select_excludes_broad_ancestor_scopes(tmp_path, monkeypatch):
+    fake_home = tmp_path / "home" / "dnames"
+    fake_home.mkdir(parents=True)
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: fake_home.resolve()))
+
+    work = Path("/tmp/a/b/c/d")
+    deep_ancestor = Path("/tmp/a/b/c")
+    shallow_ancestor = Path("/tmp")
+
+    add_memory(tmp_path, "fact", "root scoped", "body", scope_project="/")
+    add_memory(tmp_path, "fact", "home scoped", "body", scope_project=str(fake_home))
+    add_memory(tmp_path, "fact", "shallow scoped", "body", scope_project=str(shallow_ancestor))
+    deep_id = add_memory(
+        tmp_path,
+        "fact",
+        "deep ancestor",
+        "body",
+        scope_project=str(deep_ancestor),
+    )
+
+    selected = select_context_memories(tmp_path, scope_project=str(work))
+    assert [e.title for e in selected] == ["deep ancestor"]
+    assert selected[0].id == deep_id
+
+
+def test_select_includes_descendant_scope_at_related_tier(tmp_path):
+    parent = Path("/tmp/monorepo/root/pkg")
+    child = parent / "subapp"
+    parent_lesson = add_memory(
+        tmp_path,
+        "lesson",
+        "parent lesson",
+        "body",
+        scope_project=str(parent),
+    )
+    add_memory(tmp_path, "fact", "child fact", "body", scope_project=str(child))
+
+    ordered = select_context_memories(tmp_path, scope_project=str(parent))
+    assert [e.title for e in ordered] == ["parent lesson", "child fact"]
+    assert ordered[0].id == parent_lesson
 
 
 def test_select_ranking_project_scope_weight_kind_recency(tmp_path):

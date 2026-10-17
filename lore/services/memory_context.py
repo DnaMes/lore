@@ -1,4 +1,10 @@
-"""Select memories for agent context blocks (metadata ranking only, no embeddings)."""
+"""Select memories for agent context blocks (metadata ranking only, no embeddings).
+
+Project tiers: 0 = exact ``scope_project``, 1 = related path (descendant scope always;
+ancestor scope only when specific enough), 2 = global (no ``scope_project``).
+Ancestor scopes equal to ``/``, ``Path.home()``, or with ``len(path.parts) < 4`` are
+excluded so home-wide or filesystem-root memories do not attach to every project.
+"""
 
 from __future__ import annotations
 
@@ -35,6 +41,14 @@ def _resolve_project_path(scope_project: str | Path | None) -> Path | None:
     return Path(normalized).expanduser().resolve()
 
 
+def _ancestor_scope_too_broad(scope: Path) -> bool:
+    if scope == Path("/"):
+        return True
+    if scope == Path.home():
+        return True
+    return len(scope.parts) < 4
+
+
 def _paths_related(project: Path, scope_project: str) -> bool:
     try:
         other = Path(scope_project).expanduser().resolve()
@@ -43,13 +57,17 @@ def _paths_related(project: Path, scope_project: str) -> bool:
     if project == other:
         return True
     try:
-        return project.is_relative_to(other) or other.is_relative_to(project)
+        if other.is_relative_to(project):
+            return True
+        if project.is_relative_to(other):
+            return not _ancestor_scope_too_broad(other)
+        return False
     except ValueError:
         return False
 
 
 def _project_tier(entry: MemoryEntry, project: Path | None) -> int | None:
-    """0 = exact project, 1 = ancestor/descendant project, 2 = global; None = excluded."""
+    """0 = exact project, 1 = related project, 2 = global; None = excluded."""
     if project is None:
         return 2 if entry.scope_project is None else None
     if entry.scope_project is None:
