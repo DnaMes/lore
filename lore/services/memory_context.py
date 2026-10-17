@@ -49,14 +49,14 @@ def _paths_related(project: Path, scope_project: str) -> bool:
 
 
 def _project_tier(entry: MemoryEntry, project: Path | None) -> int | None:
-    """0 = project-scoped, 1 = global; None = excluded."""
+    """0 = exact project, 1 = ancestor/descendant project, 2 = global; None = excluded."""
     if project is None:
-        return 1 if entry.scope_project is None else None
+        return 2 if entry.scope_project is None else None
     if entry.scope_project is None:
-        return 1
-    if _paths_related(project, entry.scope_project):
-        return 0
-    return None
+        return 2
+    if not _paths_related(project, entry.scope_project):
+        return None
+    return 0 if Path(entry.scope_project).expanduser().resolve() == project else 1
 
 
 def _tool_matches(entry: MemoryEntry, scope_tool: str | None) -> bool:
@@ -69,9 +69,9 @@ def _has_retired_marker(entry: MemoryEntry) -> bool:
     return _RETIRED_MARKER_RE.search(f"{entry.title}\n{entry.body}") is not None
 
 
-def _rank_key(entry: MemoryEntry, tier: int) -> tuple[float, float, int, str, int]:
+def _rank_key(entry: MemoryEntry, tier: int) -> tuple[float, float, str, float, int]:
     kind_rank = _KIND_PRIORITY.get(entry.kind, _DEFAULT_KIND_PRIORITY)
-    return (-float(tier), entry.feedback_weight, -float(kind_rank), entry.updated, entry.id)
+    return (-float(tier), entry.feedback_weight, entry.updated, -float(kind_rank), entry.id)
 
 
 def select_context_memories(
@@ -255,18 +255,17 @@ def render_context_memories(
     if not entries:
         return ""
 
+    if output_format == "json":
+        return _render_json(entries, budget)
+
     included, cut = _fit_context_lines(entries, budget)
+    if cut:
+        # The footer line counts against the budget too: refit with room for it.
+        reserve = _token_estimate("\n" + _more_line(len(entries)))
+        budget = max(1, budget - reserve)
+        included, cut = _fit_context_lines(entries, budget)
     if not included:
         return ""
-
-    if output_format == "json":
-        payload: dict[str, Any] = {
-            "entries": [_entry_record(e) for e in included],
-            "cut": cut,
-        }
-        raw = json.dumps(payload, indent=2, ensure_ascii=False)
-        return _sanitize_free_text(raw)
-
     lines = [_format_context_line(e) for e in included]
     if len(included) == 1 and _token_estimate(lines[0]) > max(1, budget):
         lines = [_truncate_line_to_tokens(lines[0], max(1, budget))]
@@ -274,6 +273,20 @@ def render_context_memories(
     if cut:
         text = f"{text}\n{_more_line(cut)}"
     return _sanitize_free_text(text)
+
+
+def _render_json(entries: list[MemoryEntry], budget: int) -> str:
+    """Drop trailing entries until the serialized JSON fits the token budget."""
+    capped = max(1, budget)
+    for count in range(len(entries), 0, -1):
+        payload = {
+            "entries": [_entry_record(e) for e in entries[:count]],
+            "cut": len(entries) - count,
+        }
+        raw = _sanitize_free_text(json.dumps(payload, indent=2, ensure_ascii=False))
+        if _token_estimate(raw) <= capped:
+            return raw
+    return ""
 
 
 def build_memory_context(

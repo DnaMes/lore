@@ -152,13 +152,14 @@ def _add_ranked(tmp_path, title: str, body: str = "body.", **kwargs) -> int:
 
 
 def test_render_respects_budget(tmp_path):
-    for i in range(3):
+    for i in range(8):
         add_memory(tmp_path, "fact", f"t{i}", "one.", status="confirmed")
-    ranked = select_context_memories(tmp_path, limit=3)
-    text = render_context_memories(ranked, budget=12)
+    ranked = select_context_memories(tmp_path, limit=8)
+    text = render_context_memories(ranked, budget=40)
     memory_lines = [ln for ln in text.splitlines() if ln.startswith("- [")]
-    assert len(memory_lines) == 2
-    assert "(1 more" in text
+    assert 1 <= len(memory_lines) < 8
+    assert "more; recall with" in text
+    assert len(text) <= 40 * 4  # the footer counts against the budget
 
 
 def test_render_more_line_absent_when_not_cut(tmp_path):
@@ -295,3 +296,19 @@ def test_first_sentence_stops_at_paragraph_break() -> None:
 
     body = "User chose medium risk for routing\n\nUser explicitly chose **medium** when asked."
     assert _first_sentence(body) == "User chose medium risk for routing"
+
+
+@pytest.mark.parametrize("output_format", ["text", "json"])
+def test_render_whole_output_fits_budget(tmp_path, output_format):
+    for i in range(30):
+        add_memory(
+            tmp_path,
+            "fact",
+            f"title {i}",
+            "A reasonably long first sentence for sizing.",
+            status="confirmed",
+        )
+    ranked = select_context_memories(tmp_path, limit=30)
+    for budget in (40, 120, 400):
+        out = render_context_memories(ranked, budget=budget, output_format=output_format)
+        assert len(out) <= budget * 4
