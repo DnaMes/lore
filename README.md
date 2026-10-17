@@ -135,6 +135,8 @@ lore memory search "database performance" --semantic   # meaning only, no releva
 lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
 lore memory context --project /path/to/repo --budget 2000   # prompt block for agents
+# context prints a budgeted, redacted, one-line-per-memory block for prompt injection,
+# ranked exact project > related > global; the whole output, footer included, fits the budget.
 lore memory show 7                                        # one entry by id
 lore memory rate 7 5                                    # rate a confirmed memory 1-5
 lore memory add --title "Use PG 17" --body "..." --supersedes 7   # replaces #7; near-duplicates are listed
@@ -165,6 +167,8 @@ lore threads
 # Generate derived rules (SpecStory-style)
 lore rules --limit 30
 ```
+
+Claude Code recalls this block at SessionStart via the hook script `claude-hook-memory-recall.sh` in the claude submodule of ai-stack (switch `LORE_RECALL=off`, budget `LORE_RECALL_BUDGET`); Codex receives it through the session-pipeline SessionStart hook.
 
 `lore check --deep` reads every source of each available tool and prints how many
 sources matched, how many sessions were parsed, which were skipped and why, and how
