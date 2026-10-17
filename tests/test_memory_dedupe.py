@@ -10,7 +10,9 @@ import pytest
 import lore.storage.embeddings as embeddings
 import lore_cli
 from lore.services.claude_memory_import import import_claude_memory
+from lore.services.memory_dedupe import dedupe_memories
 from lore.storage import add_memory, get_memory, list_memory, record_feedback, set_memory_status
+from lore.storage.memory import reject_memories_bulk, restore_rejected_memories_bulk
 from lore.storage.writer import v2_db_path
 
 
@@ -90,7 +92,11 @@ def test_apply_keeps_rows_and_is_idempotent_and_reversible(
 
     _run_cli(tmp_path, "--apply")
 
-    assert "Rejected: 2" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "Rejected: 2" in out
+    undo_line = next(line for line in out.splitlines() if line.startswith("Undo log:"))
+    undo_path = Path(undo_line.split(":", 1)[1].strip())
+    assert undo_path.is_file()
     entries = list_memory(tmp_path, status=None)
     assert len(entries) == 3
     assert sorted(entry.status for entry in entries) == ["confirmed", "rejected", "rejected"]
@@ -98,10 +104,12 @@ def test_apply_keeps_rows_and_is_idempotent_and_reversible(
     _run_cli(tmp_path, "--apply")
     out = capsys.readouterr().out
     assert "0 duplicate groups" in out and "Rejected: 0" in out
-    rejected = next(entry.id for entry in entries if entry.status == "rejected")
-    assert set_memory_status(tmp_path, rejected, "confirmed", from_status="rejected")
-    assert len(list_memory(tmp_path)) == 2
+    _run_cli(tmp_path, "--restore", str(undo_path))
+    assert "Restored: 2" in capsys.readouterr().out
+    assert len(list_memory(tmp_path)) == 3
     assert {entry.id for entry in list_memory(tmp_path, status=None)} == set(ids)
+    _run_cli(tmp_path, "--restore", str(undo_path))
+    assert "Restored: 0" in capsys.readouterr().out
 
 
 def test_excludes_candidates_rejected_and_superseded(
@@ -120,6 +128,52 @@ def test_excludes_candidates_rejected_and_superseded(
     assert get_memory(tmp_path, old).superseded_by == active
     assert get_memory(tmp_path, candidate).status == "candidate"
     assert get_memory(tmp_path, rejected).status == "rejected"
+
+
+def test_reject_memories_bulk_is_atomic(tmp_path: Path) -> None:
+    first = add_memory(tmp_path, "fact", "A", "one")
+    second = add_memory(tmp_path, "fact", "B", "two")
+    third = add_memory(tmp_path, "fact", "C", "three")
+    set_memory_status(tmp_path, third, "rejected", from_status="confirmed")
+
+    with pytest.raises(ValueError, match="not active confirmed"):
+        reject_memories_bulk(tmp_path, [first, second, third])
+
+    assert {entry.id for entry in list_memory(tmp_path)} == {first, second}
+
+
+def test_restore_rejected_memories_bulk_counts(tmp_path: Path) -> None:
+    add_memory(tmp_path, "fact", "Rule", "Body")
+    add_memory(tmp_path, "fact", "Rule", "Body")
+    groups, undo_path = dedupe_memories(tmp_path, apply=True)
+    assert undo_path is not None
+    rejected_id = groups[0].rejected_ids[0]
+    kept_id = groups[0].kept_id
+
+    restored, skipped, missing = restore_rejected_memories_bulk(
+        tmp_path, [rejected_id, kept_id, 999_999]
+    )
+    assert (restored, skipped, missing) == (1, 1, 1)
+    assert get_memory(tmp_path, rejected_id).status == "confirmed"
+
+
+def test_set_memory_status_rejects_invalid_from_status(tmp_path: Path) -> None:
+    memory_id = add_memory(tmp_path, "fact", "Rule", "Body")
+    with pytest.raises(ValueError, match="expected one of"):
+        set_memory_status(tmp_path, memory_id, "rejected", from_status="superseded")
+
+
+def test_keeper_priority_mixed_naive_and_aware_updated(tmp_path: Path) -> None:
+    older = add_memory(tmp_path, "fact", "Rule", "Body")
+    newer = add_memory(tmp_path, "fact", "Rule", "Body")
+    _set_updated(tmp_path, older, "2026-10-17T10:00:00")
+    _set_updated(tmp_path, newer, "2026-10-17T11:00:00+00:00")
+
+    groups, _ = dedupe_memories(tmp_path, apply=True)
+
+    assert len(groups) == 1
+    assert groups[0].kept_id == newer
+    assert older in groups[0].rejected_ids
 
 
 def test_missing_store_dry_run_creates_nothing(

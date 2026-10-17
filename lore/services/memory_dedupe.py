@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..storage.memory import MemoryEntry, _load_entries, set_memory_status
+from ..storage.memory import (
+    MemoryEntry,
+    _load_entries,
+    reject_memories_bulk,
+    restore_rejected_memories_bulk,
+)
 from ..storage.writer import v2_db_path
 
 
@@ -52,8 +58,7 @@ class DuplicateGroup:
     rejected_ids: list[int]
 
 
-def dedupe_memories(output_dir: Path, *, apply: bool = False) -> list[DuplicateGroup]:
-    """Plan duplicate rejections; apply them only when explicitly requested."""
+def _plan_duplicate_groups(output_dir: Path) -> list[DuplicateGroup]:
     by_key: dict[tuple[str, str], list[MemoryEntry]] = {}
     for entry in confirmed_memories(output_dir):
         by_key.setdefault(memory_key(entry.title, entry.body), []).append(entry)
@@ -72,11 +77,41 @@ def dedupe_memories(output_dir: Path, *, apply: bool = False) -> list[DuplicateG
             ),
         )
         rejected_ids = [entry.id for entry in entries if entry.id != kept.id]
-        if apply:
-            for memory_id in rejected_ids:
-                if not set_memory_status(
-                    output_dir, memory_id, "rejected", from_status="confirmed"
-                ):
-                    raise ValueError(f"memory {memory_id} no longer exists")
         groups.append(DuplicateGroup(title, kept.id, rejected_ids))
     return groups
+
+
+def _write_undo_log(output_dir: Path, groups: list[DuplicateGroup]) -> Path:
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    path = output_dir / f"dedupe-undo-{stamp}.json"
+    payload = {
+        "groups": [
+            {"title": group.title, "kept_id": group.kept_id, "rejected_ids": group.rejected_ids}
+            for group in groups
+        ]
+    }
+    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def dedupe_memories(
+    output_dir: Path, *, apply: bool = False
+) -> tuple[list[DuplicateGroup], Path | None]:
+    """Plan duplicate rejections; apply them atomically only when explicitly requested."""
+    groups = _plan_duplicate_groups(output_dir)
+    undo_path: Path | None = None
+    if apply and groups:
+        reject_ids = [memory_id for group in groups for memory_id in group.rejected_ids]
+        if reject_ids:
+            undo_path = _write_undo_log(output_dir, groups)
+            reject_memories_bulk(output_dir, reject_ids)
+    return groups, undo_path
+
+
+def restore_dedupe_undo(output_dir: Path, undo_file: Path) -> tuple[int, int, int]:
+    """Restore rejections recorded in a dedupe undo log (idempotent)."""
+    data = json.loads(undo_file.expanduser().read_text(encoding="utf-8"))
+    reject_ids: list[int] = []
+    for group in data.get("groups", []):
+        reject_ids.extend(int(memory_id) for memory_id in group.get("rejected_ids", []))
+    return restore_rejected_memories_bulk(output_dir, reject_ids)

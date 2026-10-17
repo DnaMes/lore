@@ -5,6 +5,8 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
 ### Changed
+- `lore memory dedupe --apply` rejects all planned duplicates in one transaction, writes a JSON
+  undo log under the store, and `lore memory dedupe --restore FILE` reverses still-rejected rows.
 - `lore memory context` no longer treats `/`, the user home directory, or other overly broad
   ancestor `scope_project` paths as related to a working project (descendant scopes unchanged).
 ### Added
@@ -14,7 +16,7 @@ The version is the single source of truth in `lore/__init__.py`.
 - `lore memory import-claude` skips duplicate normalized title/body content already confirmed
   in any scope, including duplicates within one run, and reports the duplicate count.
 - `lore memory context` builds a token-budgeted prompt block from shared memory for a project path.
-- `lore memory show` prints one memory entry by id (metadata and body).
+- `lore memory show` prints one memory entry by id (status, kind, scope, supersession links, body).
 - `lore memory import-claude` seeds shared memory from Claude Code auto-memory files
   (`~/.claude/projects/*/memory/*.md`). Dry run by default; `--apply` writes. Idempotent by
   file path and content hash, edited files supersede their previous import, and text is

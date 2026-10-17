@@ -1367,10 +1367,23 @@ def cmd_memory(args):
     )
 
     if action == "dedupe":
-        from lore.services.memory_dedupe import dedupe_memories
+        from lore.services.memory_dedupe import dedupe_memories, restore_dedupe_undo
+
+        if args.restore:
+            undo_path = Path(args.restore).expanduser()
+            if not undo_path.is_file():
+                print(f"Error: undo log not found at {undo_path}", file=sys.stderr)
+                sys.exit(1)
+            try:
+                restored, skipped, missing = restore_dedupe_undo(output_dir, undo_path)
+            except (OSError, json.JSONDecodeError, sqlite3.Error, ValueError) as exc:
+                print(f"Could not restore dedupe undo: {exc}", file=sys.stderr)
+                sys.exit(1)
+            print(f"Restored: {restored}; already not rejected: {skipped}; missing: {missing}")
+            return
 
         try:
-            groups = dedupe_memories(output_dir, apply=args.apply)
+            groups, undo_path = dedupe_memories(output_dir, apply=args.apply)
         except (sqlite3.Error, ValueError) as exc:
             print(f"Could not deduplicate memory: {exc}", file=sys.stderr)
             sys.exit(1)
@@ -1383,6 +1396,8 @@ def cmd_memory(args):
         print(
             f"{len(groups)} duplicate groups. {'Rejected' if args.apply else 'Would reject'}: {count}"
         )
+        if undo_path is not None:
+            print(f"Undo log: {undo_path}")
         return
 
     if action == "import-claude":
@@ -1422,6 +1437,19 @@ def cmd_memory(args):
         if entry is None:
             print(f"Error: memory #{args.memory_id} does not exist.", file=sys.stderr)
             sys.exit(1)
+        print(f"Status: {entry.status}")
+        print(f"Kind: {entry.kind}")
+        if entry.scope_project:
+            print(f"Scope project: {entry.scope_project}")
+        if entry.scope_tool:
+            print(f"Scope tool: {entry.scope_tool}")
+        if entry.superseded_by is not None:
+            print(f"superseded by #{entry.superseded_by}")
+        from lore.storage import list_memory
+
+        for other in list_memory(output_dir, include_superseded=True, status=None, limit=10_000):
+            if other.superseded_by == entry.id:
+                print(f"supersedes #{other.id}")
         print(entry.title)
         print()
         print(entry.body)
@@ -2029,6 +2057,11 @@ Examples:
     )
     mem_dedupe.add_argument(
         "--apply", action="store_true", help="mark duplicates rejected (default: dry run)"
+    )
+    mem_dedupe.add_argument(
+        "--restore",
+        metavar="FILE",
+        help="restore rejections from a dedupe undo log written by --apply",
     )
 
     mem_import = memory_sub.add_parser(

@@ -952,6 +952,9 @@ def supersede_memory(
     )
 
 
+_SETTABLE_FROM_STATUSES = MEMORY_STATUSES
+
+
 def set_memory_status(
     output_dir: Path, memory_id: int, status: str, *, from_status: str = "candidate"
 ) -> bool:
@@ -962,11 +965,16 @@ def set_memory_status(
 
     Raises:
         ValueError: if ``status`` is not ``confirmed``/``rejected``, ``from_status``
-            is invalid, or the memory is not currently in the expected source status.
+            is not ``candidate``/``confirmed``/``rejected``, or the memory is not
+            currently in the expected source status.
     """
     if status not in ("confirmed", "rejected"):
         raise ValueError(f"invalid target status {status!r}; expected 'confirmed' or 'rejected'")
-    if from_status not in MEMORY_STATUSES or from_status == status:
+    if from_status not in _SETTABLE_FROM_STATUSES:
+        raise ValueError(
+            f"invalid source status {from_status!r}; expected one of {_SETTABLE_FROM_STATUSES}"
+        )
+    if from_status == status:
         raise ValueError(f"invalid source status {from_status!r} for target {status!r}")
     if not _id_in_range(memory_id):
         return False
@@ -982,6 +990,112 @@ def set_memory_status(
         if row is None:
             return False
         raise ValueError(f"memory {memory_id} is {row['status']}, expected {from_status}")
+    finally:
+        conn.close()
+
+
+def reject_memories_bulk(output_dir: Path, memory_ids: List[int]) -> int:
+    """Mark active confirmed memories rejected in one transaction.
+
+    Every id must exist, be ``confirmed``, and not superseded. Raises
+    ``ValueError`` with details on missing or changed ids; no row is updated
+    on failure.
+    """
+    if not memory_ids:
+        return 0
+    unique_ids = list(dict.fromkeys(memory_ids))
+    for memory_id in unique_ids:
+        if not _id_in_range(memory_id):
+            raise ValueError(f"memory id {memory_id} out of range")
+
+    conn = _connect(output_dir)
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        marks = ",".join("?" * len(unique_ids))
+        rows = conn.execute(
+            f"SELECT id, status, superseded_by FROM memory WHERE id IN ({marks})",
+            unique_ids,
+        ).fetchall()
+        by_id = {int(row["id"]): row for row in rows}
+        missing = [memory_id for memory_id in unique_ids if memory_id not in by_id]
+        not_confirmed: List[str] = []
+        for memory_id in unique_ids:
+            if memory_id not in by_id:
+                continue
+            row = by_id[memory_id]
+            if row["status"] != "confirmed" or row["superseded_by"] is not None:
+                detail = f"#{memory_id} is {row['status']!r}"
+                if row["superseded_by"] is not None:
+                    detail += f" (superseded_by=#{row['superseded_by']})"
+                not_confirmed.append(detail)
+        if missing or not_confirmed:
+            conn.execute("ROLLBACK")
+            parts: List[str] = []
+            if missing:
+                parts.append("missing: " + ", ".join(f"#{memory_id}" for memory_id in missing))
+            if not_confirmed:
+                parts.append("not active confirmed: " + ", ".join(not_confirmed))
+            raise ValueError("; ".join(parts))
+
+        now = _now()
+        updated = 0
+        for memory_id in unique_ids:
+            cur = conn.execute(
+                "UPDATE memory SET status = 'rejected', updated = ? "
+                "WHERE id = ? AND status = 'confirmed' AND superseded_by IS NULL",
+                (now, memory_id),
+            )
+            updated += cur.rowcount
+        if updated != len(unique_ids):
+            conn.execute("ROLLBACK")
+            raise ValueError(
+                f"concurrent change: expected to reject {len(unique_ids)} memories, updated {updated}"
+            )
+        conn.execute("COMMIT")
+        return updated
+    except (sqlite3.Error, ValueError):
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.OperationalError:
+            pass
+        raise
+    finally:
+        conn.close()
+
+
+def restore_rejected_memories_bulk(output_dir: Path, memory_ids: List[int]) -> Tuple[int, int, int]:
+    """Set still-rejected ids back to confirmed. Returns (restored, skipped, missing)."""
+    if not memory_ids:
+        return (0, 0, 0)
+    unique_ids = list(dict.fromkeys(memory_ids))
+    conn = _connect(output_dir)
+    try:
+        marks = ",".join("?" * len(unique_ids))
+        rows = conn.execute(
+            f"SELECT id, status FROM memory WHERE id IN ({marks})",
+            unique_ids,
+        ).fetchall()
+        by_id = {int(row["id"]): row["status"] for row in rows}
+        to_restore = [memory_id for memory_id in unique_ids if by_id.get(memory_id) == "rejected"]
+        missing = sum(1 for memory_id in unique_ids if memory_id not in by_id)
+        skipped = len(unique_ids) - len(to_restore) - missing
+        if not to_restore:
+            return (0, skipped, missing)
+        now = _now()
+        conn.execute("BEGIN IMMEDIATE")
+        for memory_id in to_restore:
+            conn.execute(
+                "UPDATE memory SET status = 'confirmed', updated = ? WHERE id = ? AND status = 'rejected'",
+                (now, memory_id),
+            )
+        conn.execute("COMMIT")
+        return (len(to_restore), skipped, missing)
+    except sqlite3.Error:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.OperationalError:
+            pass
+        raise
     finally:
         conn.close()
 
