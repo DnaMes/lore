@@ -179,7 +179,7 @@ lore rules --limit 30
 memory through the Python API, call `lore.storage.set_memory_status(output_dir, memory_id,
 "confirmed", from_status="rejected")` (`output_dir` is a `Path`).
 
-Claude Code recalls this block at SessionStart via the hook script `claude-hook-memory-recall.sh` in the claude submodule of ai-stack (switch `LORE_RECALL=off`, budget `LORE_RECALL_BUDGET`); Codex receives it through the session-pipeline SessionStart hook.
+Claude Code recalls this block at SessionStart via the hook script `claude-hook-memory-recall.sh` in the claude submodule of ai-stack (switch `LORE_RECALL=off`, budget `LORE_RECALL_BUDGET`); Codex receives it through the session-pipeline SessionStart hook; Kimi gets it once per session on the first prompt (`kimi-hook-memory-recall.sh`, a `UserPromptSubmit` hook, because Kimi discards SessionStart output).
 
 `lore check --deep` reads every source of each available tool and prints how many
 sources matched, how many sessions were parsed, which were skipped and why, and how
