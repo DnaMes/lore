@@ -98,6 +98,7 @@ from .web_formatting import (
     format_session_duration,
     format_session_row_time,
     format_tool_calls,
+    get_markdown_instance,
     group_sessions_for_list,
     is_automated_origin,
     sanitize_rendered_html,
@@ -1645,7 +1646,9 @@ def session_detail(session_id):
     def _render_markdown(path_value):
         md_text = Path(path_value).read_text(encoding="utf-8")
         if markdown:
-            html_content = markdown.markdown(md_text, extensions=["fenced_code", "tables", "nl2br"])
+            md = get_markdown_instance()
+            md.reset()
+            html_content = md.convert(md_text)
             html_content = nh3.clean(
                 html_content,
                 tags=SANITIZE_TAGS,
@@ -2090,7 +2093,9 @@ def rules():
         with open(rules_path, "r", encoding="utf-8") as f:
             rules_text = f.read()
     if rules_text and markdown:
-        rules_text = markdown.markdown(rules_text, extensions=["fenced_code", "tables", "nl2br"])
+        md = get_markdown_instance()
+        md.reset()
+        rules_text = md.convert(rules_text)
         rules_text = nh3.clean(
             rules_text,
             tags=SANITIZE_TAGS,
