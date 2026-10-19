@@ -7,6 +7,7 @@ for the web interface.
 import html
 import json
 import re
+import threading
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
@@ -302,6 +303,19 @@ SANITIZE_ATTRS = {
 SANITIZE_URL_SCHEMES = {"http", "https", "mailto"}
 
 
+_markdown_local = threading.local()
+
+def convert_markdown(text: str) -> str:
+    """Convert text to HTML using a thread-local Markdown parser instance."""
+    if not markdown:
+        return text
+    if not hasattr(_markdown_local, "parser"):
+        _markdown_local.parser = markdown.Markdown(extensions=["fenced_code", "tables", "nl2br"])
+    else:
+        _markdown_local.parser.reset()
+    return _markdown_local.parser.convert(text)
+
+
 def sanitize_rendered_html(rendered_html: str) -> str:
     """Sanitize HTML content for safe display."""
     return nh3.clean(
@@ -405,7 +419,7 @@ def _format_message_content_cached(raw_content: str) -> str:
     )
 
     if markdown:
-        content = markdown.markdown(content, extensions=["fenced_code", "tables", "nl2br"])
+        content = convert_markdown(content)
         content = nh3.clean(
             content,
             tags=SANITIZE_TAGS | {"code"},
