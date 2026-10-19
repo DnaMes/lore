@@ -23,8 +23,8 @@ from lore.storage.embeddings import (
 from lore.storage.schema import ensure_session_vec_table, initialise, open_connection
 
 requires_vec = pytest.mark.skipif(
-    not sqlite_vec_available(),
-    reason="optional 'semantic' extra (sqlite-vec) not installed",
+    not sqlite_vec_available() or not hasattr(sqlite3.Connection, "enable_load_extension"),
+    reason="optional 'semantic' extra (sqlite-vec) not installed or sqlite3 lacks enable_load_extension",
 )
 
 
