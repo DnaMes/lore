@@ -305,6 +305,7 @@ SANITIZE_URL_SCHEMES = {"http", "https", "mailto"}
 
 _markdown_local = threading.local()
 
+
 def convert_markdown(text: str) -> str:
     """Convert text to HTML using a thread-local Markdown parser instance."""
     if not markdown:
