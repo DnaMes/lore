@@ -8,6 +8,7 @@ stubbed, so keyword-only environments still exercise the fallback.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 
 import pytest
@@ -19,8 +20,9 @@ from lore.storage import semantic_search_sessions, v2_db_path, write_sessions
 from lore.storage.embeddings import embeddings_available, sqlite_vec_available
 
 requires_vectors = pytest.mark.skipif(
-    not (sqlite_vec_available() and embeddings_available()),
-    reason="needs the 'semantic' extra (sqlite-vec + fastembed)",
+    not (sqlite_vec_available() and embeddings_available())
+    or not hasattr(sqlite3.Connection, "enable_load_extension"),
+    reason="needs the 'semantic' extra (sqlite-vec + fastembed) and sqlite3 with enable_load_extension",
 )
 
 
