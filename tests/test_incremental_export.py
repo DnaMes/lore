@@ -208,7 +208,11 @@ def test_streaming_extractor_keeps_entries_skipped_after_its_first_yield(tmp_pat
                     {
                         "type": "message",
                         "timestamp": f"2025-06-15T10:0{i}:00",
-                        "payload": {"role": role, "content": f"{name} {role} {i}", "id": f"{role}{i}"},
+                        "payload": {
+                            "role": role,
+                            "content": f"{name} {role} {i}",
+                            "id": f"{role}{i}",
+                        },
                     }
                 )
         path = day / f"rollout-{name}.jsonl"
