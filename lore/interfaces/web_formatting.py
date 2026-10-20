@@ -7,6 +7,7 @@ for the web interface.
 import html
 import json
 import re
+import threading
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
@@ -314,6 +315,17 @@ def sanitize_rendered_html(rendered_html: str) -> str:
     )
 
 
+_md_local = threading.local()
+
+
+def _get_markdown_parser() -> "markdown.Markdown":
+    if not hasattr(_md_local, "parser"):
+        _md_local.parser = markdown.Markdown(extensions=["fenced_code", "tables", "nl2br"])
+    else:
+        _md_local.parser.reset()
+    return _md_local.parser
+
+
 @threadsafe_lru_cache(maxsize=4096)
 def _format_message_content_cached(raw_content: str) -> str:
     """Format message content with caching for performance."""
@@ -405,7 +417,7 @@ def _format_message_content_cached(raw_content: str) -> str:
     )
 
     if markdown:
-        content = markdown.markdown(content, extensions=["fenced_code", "tables", "nl2br"])
+        content = _get_markdown_parser().convert(content)
         content = nh3.clean(
             content,
             tags=SANITIZE_TAGS | {"code"},

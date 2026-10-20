@@ -1,0 +1,4 @@
+
+## 2025-02-18 - Caching Python Markdown Parser instance
+**Learning:** `markdown.Markdown(extensions=[...])` initialization is extremely expensive and instantiating it per request (or inside a cached message formatting utility) slows down text-heavy endpoints significantly in this codebase. However, a single parser instance is NOT thread-safe, so it cannot simply be an `@lru_cache` or global variable. The correct pattern requires a `threading.local()` wrapper storing the instance. Additionally, `markdown` is an *optional* dependency in this project, meaning type hints must be quoted (e.g. `-> "markdown.Markdown"`) or else it will `AttributeError` at module load time on setups without markdown installed.
+**Action:** When optimizing CPU-bound third-party library usage in multithreaded (Flask) endpoints, use `threading.local()` for stateful un-thread-safe objects instead of globals. Always quote typing hints for optional dependencies to avoid startup crashes.
