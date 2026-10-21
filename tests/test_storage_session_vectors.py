@@ -8,6 +8,7 @@ a no-op (0 vectors, no crash) when sqlite-vec or fastembed is unavailable.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 
 import pytest
@@ -19,8 +20,9 @@ from lore.storage.schema import initialise
 from lore.storage.session_vectors import embed_sessions
 
 requires_vectors = pytest.mark.skipif(
-    not (sqlite_vec_available() and embeddings_available()),
-    reason="needs the 'semantic' extra (sqlite-vec + fastembed)",
+    not (sqlite_vec_available() and embeddings_available())
+    or not hasattr(sqlite3.Connection, "enable_load_extension"),
+    reason="needs the 'semantic' extra (sqlite-vec + fastembed) and sqlite3 extension support",
 )
 
 
