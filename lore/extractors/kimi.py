@@ -70,7 +70,7 @@ def _clean_str(value: Any) -> Optional[str]:
 
 
 def _md5_workdir(path: str) -> str:
-    return hashlib.md5(path.encode("utf-8")).hexdigest()
+    return hashlib.md5(path.encode("utf-8"), usedforsecurity=False).hexdigest()  # nosec B324
 
 
 def _tool_failed(content: str) -> bool:
