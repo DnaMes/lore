@@ -474,7 +474,10 @@ def test_search_falls_back_on_unmigrated_store(tmp_path):
     assert hits[0]["session"]["parser_version"] == 0
 
 
-@pytest.mark.skipif(not sqlite_vec_available(), reason="needs sqlite-vec")
+@pytest.mark.skipif(
+    not sqlite_vec_available() or not hasattr(sqlite3.Connection, "enable_load_extension"),
+    reason="needs sqlite-vec and sqlite3 extension support",
+)
 def test_semantic_search_falls_back_on_unmigrated_store(tmp_path, monkeypatch):
     conn = _v16_store(tmp_path)
     try:
