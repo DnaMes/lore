@@ -1507,16 +1507,16 @@
         </div>
     </div>
     <form method="get" data-autosubmit="true" class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-8">
-        <select name="tool" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <select name="tool" aria-label="Tool filter" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
             <option value="">All Tools</option>
             <option value="claude-code" >Claude</option><option value="cursor" >Cursor</option><option value="gemini-cli" >Gemini</option><option value="codex" >Codex</option><option value="vscode-copilot" >VSCode Copilot</option><option value="copilot-cli" >Copilot CLI</option><option value="opencode" >OpenCode</option><option value="antigravity" >Antigravity</option><option value="aider" >Aider</option><option value="pi" >Pi</option><option value="command-code" >Command Code</option><option value="hermes" >Hermes</option><option value="cline" >Cline</option><option value="roo-code" >Roo Code</option><option value="kilo-code" >Kilo Code</option><option value="goose" >Goose</option><option value="crush" >Crush</option><option value="kimi" >Kimi</option><option value="qwen" >Qwen Code</option><option value="zed" >Zed</option><option value="factory-droid" >Factory Droid</option>
         </select>
-        <select name="tag" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <select name="tag" aria-label="Tag filter" data-auto-submit class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
             <option value="">All Tags</option>
             
         </select>
-        <input type="date" name="start" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
-        <input type="date" name="end" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <input type="date" name="start" aria-label="Start date" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
+        <input type="date" name="end" aria-label="End date" data-auto-submit value="" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300 transition-all">
         <button type="submit" class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">Apply</button>
     </form>
 
