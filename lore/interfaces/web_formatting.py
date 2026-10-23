@@ -33,6 +33,7 @@ def _get_markdown_parser():
         _thread_local.md = markdown.Markdown(extensions=["fenced_code", "tables", "nl2br"])
     return _thread_local.md
 
+
 _COMPARE_STRIP_RE = re.compile(r"[\W_]+", re.UNICODE)
 
 
