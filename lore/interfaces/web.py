@@ -93,6 +93,7 @@ from .web_formatting import (
     SANITIZE_ATTRS,
     SANITIZE_TAGS,
     SANITIZE_URL_SCHEMES,
+    _get_markdown_parser,
     format_compact_token_count,
     format_message_content,
     format_session_duration,
@@ -1645,7 +1646,7 @@ def session_detail(session_id):
     def _render_markdown(path_value):
         md_text = Path(path_value).read_text(encoding="utf-8")
         if markdown:
-            html_content = markdown.markdown(md_text, extensions=["fenced_code", "tables", "nl2br"])
+            html_content = _get_markdown_parser().reset().convert(md_text)
             html_content = nh3.clean(
                 html_content,
                 tags=SANITIZE_TAGS,
@@ -2090,7 +2091,7 @@ def rules():
         with open(rules_path, "r", encoding="utf-8") as f:
             rules_text = f.read()
     if rules_text and markdown:
-        rules_text = markdown.markdown(rules_text, extensions=["fenced_code", "tables", "nl2br"])
+        rules_text = _get_markdown_parser().reset().convert(rules_text)
         rules_text = nh3.clean(
             rules_text,
             tags=SANITIZE_TAGS,
