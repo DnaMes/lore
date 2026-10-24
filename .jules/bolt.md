@@ -1,0 +1,3 @@
+## 2024-05-13 - [Performance] Cache Markdown parser instances using threading.local()
+**Learning:** The `markdown` library's `Markdown` parser instance is not thread-safe. To optimize performance in multithreaded environments (like Flask web interfaces), you can't just create a single global parser instance. Recreating it on every single markdown content call creates unnecessary overhead, reducing throughput.
+**Action:** Use `threading.local()` to store reusable `Markdown` instances and always call `.reset().convert(text)` to safely re-use the parser within the same thread instead of running `markdown.markdown()` globally.
