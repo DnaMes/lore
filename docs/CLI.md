@@ -766,6 +766,10 @@ passed. `claude` is continued with `--continue`, and the manual tools
 
 The Gemini handoff needs a Gemini CLI that supports `--include-directories` and `@path`
 references; it gets read access to the one private folder of this handoff only.
+Google has retired the standalone Gemini CLI for individual accounts (it answers
+`IneligibleTierError` and points to Antigravity, seen 2026-10-26); the Gemini handoff and
+`--provider gemini-cli` titles then fail, and `codex` or the local `ollama` provider are the
+working choices. Other Gemini CLI account types were not tested.
 
 ```text
 usage: lore_session_cli.py [-h] {list,switch,continue} ...
