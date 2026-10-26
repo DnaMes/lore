@@ -62,15 +62,61 @@ diff itself (it is already capped by `MAX_DIFF_CHARS`) instead of the stat, and 
 treat an APPROVE for this repo as "no finding raised", not as "line-level reviewed". Do not hold
 Lore commits back over it.
 
-### 2026-10-26 doc pass
+### 2026-10-26 doc pass — done in the release commit
 
-Archive stale docs: move UMBAU, ROADMAP, PLAN-hybrid-search, REVIEW, SESSION-HANDOFF, NEXT-SESSION-*, EXECUTION-PROMPT into docs/archive/. Recommended decision: move (git mv), keep research, superpowers, plans and audits as records. AB#1762
+Shipped together on 2026-10-26: the archive move of UMBAU, ROADMAP, PLAN-hybrid-search,
+REVIEW, SESSION-HANDOFF, NEXT-SESSION-*, EXECUTION-PROMPT into `docs/archive/`; the new
+`docs/CLI.md`, `docs/CONFIGURATION.md`, `docs/PRIVACY.md` and the README rewrite; the cloud
+opt-in gate (`require_cloud_opt_in` in `lore/services/summarize_cli.py`, used by analyze,
+format, knowledge, improve and summarize); and a standalone `docker-compose.yml` with the
+maintainer's Traefik setup in `docker-compose.traefik.example.yml`.
 
-Verify API_REFERENCE, LLM_INTEGRATION, DEPLOYMENT, browser-tools against the code and move homelab-specific hosts out of DEPLOYMENT. Recommended decision: verify, then archive what no longer matches. AB#1763
+## Backlog sweep 2026-10-26 — deferral decisions
 
-Commit the cloud opt-in gate (LORE_ALLOW_CLOUD, require_cloud_opt_in in lore/services/summarize_cli.py, lore_cli.py _cloud_optin_error) together with the new docs (docs/CLI.md, docs/CONFIGURATION.md, docs/PRIVACY.md, README.md, CHANGELOG.md). They are uncommitted in the working tree; docs describe the gate. Recommended decision: commit both in one lore commit after the tests pass, then bump the ai-stack submodule pointer. No AB item yet.
+The sweep (`docs/triage/LEDGER.md`) verified 44 open issues against the code. Two were
+closed as already done (#176, #192), one as obsolete (#191: no PyPI publication, so
+install-from-clone is the only documented path and the distribution stays `lore`).
+The following are confirmed gaps, not guesses, and are deliberately **not** in this
+session's scope. Each stays open with its `deferred` label.
 
-Docker: docker-compose.yml still carries the maintainer's Traefik labels and DNS entries (see docs/DOCKER.md). Recommended decision: keep them only in docker-compose.traefik.example.yml and make the default file standalone. No AB item yet.
+- **Capture and identity spine (#151, #153, #154, #155, #156, #157, #158, #160)** — one
+  design, several migrations: an append-only source-revision store, a canonical message
+  envelope, namespaced session identity and stable message evidence references. The
+  archived plan already says these need a written spec each before any migration.
+  **Recommended decision:** write `docs/superpowers/specs/2026-XX-source-revision-store-design.md`
+  and the identity/envelope spec, run both through the review gate, then implement in the
+  order #151 → #154 → #155 → #160; #153, #156, #157 and #158 follow on top of them.
+- **Backup, bundle import and health (#161, #162, #163)** — `lore backup`/`restore` on the
+  SQLite online-backup API, a per-source health table and portable bundle import. #161 is
+  the one with real data-loss risk today (there is no way to take a consistent backup).
+  **Recommended decision:** implement #161 first and alone, with a restore-verification
+  test that compares counts, identities, FTS rows and annotations.
+- **Export and reading experience (#165, #166, #167, #168, #169, #170)** — the exporters
+  were never migrated to the canonical tool-call envelope the web path already uses, so
+  Markdown/HTML exports show "Unknown Tool" and drop results. These are additive and
+  independent of the migrations.
+  **Recommended decision:** #166 first (export the stored `tool_events`), then #165 and
+  #169 (full Markdown, AI-independent), then #168/#167/#170 as the reading contract.
+- **Query and analysis (#171, #172, #173, #174, #175, #177, #178, #179, #180)** — the
+  archived plan fixes the order #172 → #173 → #174 → #171 → #175; #177/#178/#179/#180
+  follow the analysis pipeline.
+  **Recommended decision:** keep the planned order; #174 (filter before limit) is the one
+  that makes the search API worth freezing for #29.
+- **Native-CLI adapters and analysis groundwork (#181, #182, #183, #184, #186, #187, #188,
+  #189, #190)** — no adapter layer exists yet; every one of these needs #180's provider
+  boundary first, and #188/#189 need a written metric vocabulary.
+  **Recommended decision:** #180, then #181/#182/#184 (native CLIs, native auth only), then
+  #186/#187 on top of the job table from #179. #183 ships only the contract note and a
+  stub until the Antigravity CLI contract can be confirmed offline.
+- **#119 (split `web.py`)** — still 2700 lines, and the archived plan puts it last because
+  every other web item touches the file.
+  **Recommended decision:** do it after the #165-#170 export/reading work, one blueprint per
+  commit, keeping the late-import patch targets that ~15 test files rely on.
+- **#194 (browser interaction checks)** — `tools/playwright_e2e_regression.py` is not a
+  pytest fixture yet.
+  **Recommended decision:** wrap it as a `@pytest.mark.browser` test that skips when
+  Playwright is unavailable, then add the release-checklist section to `docs/DOCKER.md`.
+
 
 ## Deferred roadmap (label `deferred` on GitHub)
 
