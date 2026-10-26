@@ -222,6 +222,17 @@ def cmd_list(args):
 
             sessions.append(session)
 
+    if args.tag:
+        from lore.storage import all_tags_by_session
+
+        user_tags = all_tags_by_session(Path(args.output_dir).expanduser())
+        wanted = args.tag.strip().lower()
+        sessions = [
+            s
+            for s in sessions
+            if wanted in [str(tag).lower() for tag in user_tags.get(s.session_id, [])]
+        ]
+
     # Sort by date
     sessions.sort(key=lambda s: make_naive(s.last_updated), reverse=True)
 
@@ -1397,6 +1408,17 @@ def cmd_search(args):
         project=args.project,
         include_automated=_include_automated(args),
     )
+    if getattr(args, "tag", None):
+        from lore.storage import all_tags_by_session
+
+        user_tags = all_tags_by_session(output_dir)
+        wanted = args.tag.strip().lower()
+        results = [
+            result
+            for result in results
+            if wanted
+            in [str(tag).lower() for tag in user_tags.get(str(result["session"].get("id")), [])]
+        ]
 
     if not results:
         print("No results found.")
@@ -2100,6 +2122,9 @@ Examples:
     list_parser = subparsers.add_parser("list", help="List all sessions")
     list_parser.add_argument("--tool", help="Filter by tool")
     list_parser.add_argument("--project", help="Filter by project path")
+    list_parser.add_argument(
+        "--tag", help="Filter by a saved tag/bookmark (session_tags) or an index keyword"
+    )
     list_parser.add_argument("--since", help="Filter by date (e.g., 7d, 2w)")
     list_parser.add_argument("--format", choices=["table", "json"], default="table")
     list_parser.add_argument("--limit", type=int, help="Limit number of results")
@@ -2142,6 +2167,7 @@ Examples:
     search_parser.add_argument("query", help="Search query")
     search_parser.add_argument("--tool", help="Search only specific tool")
     search_parser.add_argument("--project", help="Search only specific project")
+    search_parser.add_argument("--tag", help="Search only sessions with this saved tag/bookmark")
     _add_automated_flag(search_parser)
 
     # stats command

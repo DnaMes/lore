@@ -46,6 +46,7 @@ from .search import search_sessions, semantic_search_sessions
 from .tags import (
     BOOKMARK_TAG,
     add_session_tag,
+    all_tags_by_session,
     get_session_tags,
     get_tags_for_sessions,
     list_all_tags,
@@ -59,6 +60,7 @@ __all__ = [
     "MemoryEntry",
     "add_memory",
     "add_session_tag",
+    "all_tags_by_session",
     "apply_migrations",
     "current_version",
     "delete_memory",

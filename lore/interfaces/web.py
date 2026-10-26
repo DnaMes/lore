@@ -1036,6 +1036,19 @@ def _index_mtime():
         return None
 
 
+def _user_tags_by_session():
+    """Saved tags of the whole index, keyed by session id (#173).
+
+    The tag filter has to see the user's own tags, which live in the v2
+    ``session_tags`` table, not in the flat index keywords. The read is one
+    query and only happens when a tag filter is active, so it is deliberately
+    not cached: a tag edit must take effect on the next request.
+    """
+    from ..storage import all_tags_by_session
+
+    return all_tags_by_session(OUTPUT_DIR)
+
+
 @threadsafe_lru_cache(maxsize=128)
 def _filtered_sorted_session_ids(tool, tag, start, end, index_mtime, include_automated=False):
     """Apply list filters and sort newest-first.
@@ -1047,8 +1060,14 @@ def _filtered_sorted_session_ids(tool, tag, start, end, index_mtime, include_aut
     all_s = load_index().get("sessions", [])
     start_dt = parse_date_param(start)
     end_dt = parse_date_param(end, end=True)
+    user_tags = _user_tags_by_session() if tag else None
     filtered = filter_sessions(
-        all_s, tool=tool or None, tag=tag or None, start=start_dt, end=end_dt
+        all_s,
+        tool=tool or None,
+        tag=tag or None,
+        start=start_dt,
+        end=end_dt,
+        user_tags=user_tags,
     )
     hidden = 0
     if not include_automated and not tag:
@@ -1108,7 +1127,11 @@ def sessions():
         {str(s.get("id")): s.get("updated") or s.get("created") for s in first_page},
     )
 
-    tags = compute_top_tags(_visible_index().get("sessions", []), limit=12)
+    from ..storage import list_all_tags
+
+    tags = compute_top_tags(
+        _visible_index().get("sessions", []), limit=12, user_tag_counts=list_all_tags(OUTPUT_DIR)
+    )
     return render(
         "sessions",
         automated_hidden=_filtered_automated_hidden(tool, tag, start, end),
@@ -1252,7 +1275,11 @@ def projects():
     filtered = _origin_scoped(filtered, tag, hidden)
 
     projects = build_projects_payload(filtered, project_label)
-    tags = compute_top_tags(_visible_index().get("sessions", []), limit=12)
+    from ..storage import list_all_tags
+
+    tags = compute_top_tags(
+        _visible_index().get("sessions", []), limit=12, user_tag_counts=list_all_tags(OUTPUT_DIR)
+    )
     return render(
         "projects",
         automated_hidden=hidden[0] if hidden else 0,

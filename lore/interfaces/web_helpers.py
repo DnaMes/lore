@@ -50,14 +50,25 @@ def parse_date_param(value: Optional[str], *, end: bool = False) -> Optional[dat
     return parse_date_bound(value, end=end)
 
 
-def filter_sessions(sessions, tool=None, tag=None, start=None, end=None):
+def filter_sessions(sessions, tool=None, tag=None, start=None, end=None, user_tags=None):
+    """Apply the list filters to index-shaped session dicts.
+
+    ``tag`` matches a session's saved tags (``session_tags``, user-editable,
+    #173) as well as the LLM-generated ``keywords`` carried in the index, so a
+    bookmarked session is findable by the name the user gave it. ``user_tags``
+    is the ``{session_id: [tag, ...]}`` mapping from
+    :func:`lore.storage.all_tags_by_session`; a session matches when either
+    source contains the tag.
+    """
     filtered = []
     for session in sessions:
         if tool and session.get("tool") != tool:
             continue
         if tag:
+            normalized = str(tag).strip().lower()
+            saved = (user_tags or {}).get(str(session.get("id")), [])
             keywords = session.get("keywords") or []
-            if tag not in keywords:
+            if normalized not in [str(item).lower() for item in saved] and tag not in keywords:
                 continue
         if start or end:
             created_raw = session.get("created")

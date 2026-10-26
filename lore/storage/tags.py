@@ -100,6 +100,25 @@ def get_tags_for_sessions(output_dir: Path, session_ids: List[str]) -> Dict[str,
     return out
 
 
+def all_tags_by_session(output_dir: Path) -> Dict[str, List[str]]:
+    """Every session's user tags: ``{session_id: [tag, ...]}`` in one query.
+
+    Used by the list and search filters, which need the tags of the whole index
+    rather than of a known page (#173). Sessions without tags are omitted.
+    """
+    conn = _connect(output_dir)
+    try:
+        rows = conn.execute(
+            "SELECT session_id, tag FROM session_tags ORDER BY session_id, tag"
+        ).fetchall()
+    finally:
+        conn.close()
+    out: Dict[str, List[str]] = {}
+    for session_id, tag in rows:
+        out.setdefault(str(session_id), []).append(tag)
+    return out
+
+
 def list_all_tags(output_dir: Path) -> Dict[str, int]:
     """Return ``{tag: session_count}`` across all user-tagged sessions."""
     conn = _connect(output_dir)

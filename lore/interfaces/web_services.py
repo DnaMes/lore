@@ -56,11 +56,24 @@ DEFAULT_NOISE_RULES: Dict[str, Dict[str, bool]] = {
 }
 
 
-def compute_top_tags(all_sessions: List[Dict[str, Any]], limit: int = 12) -> List[str]:
+def compute_top_tags(
+    all_sessions: List[Dict[str, Any]],
+    limit: int = 12,
+    user_tag_counts: Optional[Dict[str, int]] = None,
+) -> List[str]:
+    """Most used tags for the filter dropdown.
+
+    ``user_tag_counts`` (``{tag: session_count}`` from
+    :func:`lore.storage.list_all_tags`) is merged in and ranked first, so a tag
+    the user saved is selectable even when no LLM keyword repeats it (#173).
+    """
     tag_counts: Dict[str, int] = {}
     for session in all_sessions:
         for keyword in session.get("keywords", [])[:30]:
             tag_counts[keyword] = tag_counts.get(keyword, 0) + 1
+    for tag, count in (user_tag_counts or {}).items():
+        # User tags outrank keyword noise of the same frequency.
+        tag_counts[tag] = tag_counts.get(tag, 0) + int(count) + 1
     return [
         keyword
         for keyword, _ in sorted(tag_counts.items(), key=lambda item: item[1], reverse=True)[:limit]

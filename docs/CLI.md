@@ -88,15 +88,16 @@ go to stderr.
 Mode: read-only
 
 ```text
-usage: lore list [-h] [--tool TOOL] [--project PROJECT] [--since SINCE]
-                 [--format {table,json}] [--limit LIMIT] [--offset OFFSET]
-                 [--include-automated]
+usage: lore list [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
+                 [--since SINCE] [--format {table,json}] [--limit LIMIT]
+                 [--offset OFFSET] [--include-automated]
 
 options:
   -h, --help            show this help message and exit
   --tool TOOL           Filter by tool
   --project PROJECT     Filter by project path
-  --since SINCE         Filter by date (e.g., 7d, 2w)
+  --tag TAG             Filter by a saved tag/bookmark (session_tags) or an
+                        index keyword
   --format {table,json}
   --limit LIMIT         Limit number of results
   --offset OFFSET       Offset for pagination
@@ -155,7 +156,7 @@ Mode: read-only
 Prints `Found N result` (singular for one hit) with each score to three decimals. With no index yet it says to run `lore export --all` first.
 
 ```text
-usage: lore search [-h] [--tool TOOL] [--project PROJECT]
+usage: lore search [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
                    [--include-automated]
                    query
 

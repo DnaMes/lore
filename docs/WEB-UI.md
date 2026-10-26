@@ -52,6 +52,12 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
   included; a timestamp carrying an offset (`+02:00`, `Z`) is converted to the local
   wall clock instead of being compared naively. The CLI and MCP surfaces use the same
   helper (`lore.utils.datetime.parse_date_bound`, `datetime_in_range`).
+
+  The `tag` filter matches the user's saved tags/bookmarks (the `session_tags`
+  table behind `/api/sessions/<id>/tags`) as well as the LLM-generated index
+  keywords, and the dropdown lists both. A saved tag is therefore selectable
+  immediately after it is set, and it survives a sync, a session rewrite and a
+  reindex — the tags are keyed to the session id, not to the derived rows.
 - `/projects`: Overview grouping recorded sessions by workspace and repository path.
 - `/threads`: Cross-session threads overview for grouped multi-session conversations.
 - `/thread/<thread_id>`: Thread detail page presenting an interactive session timeline and message history.

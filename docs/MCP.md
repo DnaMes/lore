@@ -18,8 +18,8 @@ Read versus write:
 
 | name | purpose | writes |
 |------|---------|--------|
-| `search_history` | Search across all AI chat sessions. `scope` limits matches to a message-role subset: `user_only`, `assistant_only` or `tool_results`. | no |
-| `list_sessions` | List AI chat sessions with optional filters (`tool`, `project`, `thread_id`, `since`, `limit`, `include_automated`). | no |
+| `search_history` | Search across all AI chat sessions. `scope` limits matches to a message-role subset: `user_only`, `assistant_only` or `tool_results`; `tag` keeps only sessions carrying that saved tag/bookmark (or index keyword). | no |
+| `list_sessions` | List AI chat sessions with optional filters (`tool`, `project`, `thread_id`, `tag`, `since`, `limit`, `include_automated`). | no |
 | `get_session` | Get a single session by id, optionally with messages and user tags. | no |
 | `get_session_messages` | Get live session messages by session id. | no |
 | `list_recent_sessions` | List recently updated sessions. | no |

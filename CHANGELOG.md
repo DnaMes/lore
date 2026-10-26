@@ -11,6 +11,9 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Fixed
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
+### Added
+- `lore list --tag` and `lore search --tag`, plus a `tag` parameter on the MCP tools `search_history` and `list_sessions`: the tag filter now matches the user's saved tags/bookmarks (`session_tags`) as well as the LLM-generated index keywords, and the sessions dropdown lists both.
+
 ### Changed
 - Markdown rendering reuses one parser per thread (`thread_local_markdown_parser`) instead of building a parser for every conversion: measured 1.37x faster on 1 KB and 1.27x on 10 KB messages, with identical output (cluster of PRs #202-#215).
 

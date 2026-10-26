@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from ...services.index import (
     InvalidFlagError,
@@ -22,6 +23,22 @@ from ..api_payloads import serialize_index_session_summary, serialize_search_res
 from .deps import MCPToolDeps
 
 
+def _saved_tags(deps: MCPToolDeps) -> dict:
+    """Saved tags (``session_tags``) for every session, keyed by session id (#173)."""
+    from ...storage import all_tags_by_session
+
+    return all_tags_by_session(Path(str(deps.index_path)).parent)
+
+
+def _matches_tag(session: dict, wanted: str, saved: dict) -> bool:
+    """True when ``wanted`` is one of the session's saved tags or index keywords."""
+    normalized = wanted.strip().lower()
+    for tag in saved.get(str(session.get("id")), []):
+        if str(tag).lower() == normalized:
+            return True
+    return any(str(keyword).lower() == normalized for keyword in session.get("keywords") or [])
+
+
 def register(server, deps: MCPToolDeps) -> None:
     """Register the search tool group on ``server``."""
 
@@ -33,6 +50,7 @@ def register(server, deps: MCPToolDeps) -> None:
         project_filter = args.get("project") or None
         limit = deps.normalize_limit(args.get("limit"), default=10)
         scope = str(args.get("scope") or "all").strip().lower()
+        tag_filter = (args.get("tag") or "").strip() or None
         try:
             include_automated = parse_bool_flag(
                 args.get("include_automated"), name="include_automated"
@@ -63,11 +81,17 @@ def register(server, deps: MCPToolDeps) -> None:
             )
         except ValueError as exc:
             return str(exc)
+        if tag_filter:
+            saved = _saved_tags(deps)
+            results = [
+                result for result in results if _matches_tag(result["session"], tag_filter, saved)
+            ]
         payload = {
             "query": query,
             "tool": tool_filter,
             "project": project_filter,
             "scope": scope,
+            "tag": tag_filter,
             "count": len(results),
             "results": [serialize_search_result(result) for result in results],
         }
@@ -84,6 +108,10 @@ def register(server, deps: MCPToolDeps) -> None:
                 "tool": {"type": "string"},
                 "project": {"type": "string"},
                 "limit": {"type": "integer"},
+                "tag": {
+                    "type": "string",
+                    "description": "Only sessions carrying this saved tag/bookmark (or index keyword).",
+                },
                 "scope": {
                     "type": "string",
                     "enum": ["all", "user_only", "assistant_only", "tool_results"],
@@ -104,6 +132,7 @@ def register(server, deps: MCPToolDeps) -> None:
         tool_filter = normalize_tool_name(args.get("tool") or "") or None
         project_filter = args.get("project") or None
         thread_filter = args.get("thread_id") or None
+        tag_filter = (args.get("tag") or "").strip() or None
         since = args.get("since")
         limit = deps.normalize_limit(args.get("limit"), default=20)
         try:
@@ -129,7 +158,10 @@ def register(server, deps: MCPToolDeps) -> None:
                 return "Invalid since parameter."
 
         hidden = 0
+        saved = _saved_tags(deps) if tag_filter else {}
         for session in deps.ensure_index().get("sessions", []):
+            if tag_filter and not _matches_tag(session, tag_filter, saved):
+                continue
             if tool_filter and session.get("tool") != tool_filter:
                 continue
             if project_filter and project_filter not in str(session.get("project") or ""):
@@ -169,6 +201,10 @@ def register(server, deps: MCPToolDeps) -> None:
                 "tool": {"type": "string"},
                 "project": {"type": "string"},
                 "thread_id": {"type": "string"},
+                "tag": {
+                    "type": "string",
+                    "description": "Only sessions carrying this saved tag/bookmark (or index keyword).",
+                },
                 "since": {"type": "string"},
                 "limit": {"type": "integer"},
                 "include_automated": {
