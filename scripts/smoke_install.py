@@ -505,6 +505,13 @@ def step_web(ctx: Ctx) -> list[Result]:
                 time.sleep(2)
         finally:
             if proc.poll() is None:  # the server child never outlives this step
+                if os.name == "nt":
+                    # lore-web.exe is a launcher that runs python as a child: end the whole tree
+                    subprocess.run(
+                        ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                        capture_output=True,
+                        check=False,
+                    )
                 proc.terminate()
                 try:
                     proc.wait(timeout=10)
