@@ -25,6 +25,7 @@ Usage:
     lore run TOOL [-- ARGS...]
     lore threads
     lore metrics [--json] [--include-inferred]
+    lore rules export --recommendations [--json] | activate <id> | evaluate <id>
     lore summarize [--session ID] [--since 30d] [--provider ollama] [--dry-run]
 """
 
@@ -64,7 +65,17 @@ from lore.utils.paths import (
     restrict_file,
     secure_dir,
 )
-from lore.utils.rules import extract_rules
+from lore.utils.rules import (
+    activate_recommendation,
+    build_recommendations,
+    extract_rules,
+    format_recommendations,
+    load_recommendations,
+    merge_recommendations,
+    recommendations_path,
+    record_evaluation,
+    save_recommendations,
+)
 from lore.utils.tooling import normalize_tool_name
 
 TOOL_EXECUTABLES = {
@@ -2147,21 +2158,33 @@ def cmd_threads(args):
         print(f"{thread_id:<45} {meta['count']:>8}  {title}")
 
 
-def cmd_rules(args):
-    output_dir = Path(args.output_dir).expanduser()
-    rules_path = output_dir / "rules.md"
-
+def _load_sessions_from_extractors(args):
+    """Extract every available tool's sessions (read-only, never touches the index)."""
     sessions = []
     for extractor in get_all_extractors():
         if not extractor.is_available():
             continue
         sessions.extend(extractor.extract_sessions())
+    return filter_automated(sessions, _include_automated(args))
 
-    sessions = filter_automated(sessions, _include_automated(args))
-    rules = extract_rules(sessions, max_rules=args.limit)
+
+def _actor_name(args) -> str:
+    """Who an activation/evaluation is recorded against: ``--by``, else ``$USER``."""
+    explicit = getattr(args, "by", None)
+    if explicit:
+        return explicit
+    return os.environ.get("USER") or os.environ.get("USERNAME") or "unknown"
+
+
+def _rules_write_markdown(args) -> int:
+    """``lore rules`` — the plain rule list, unchanged."""
+    output_dir = Path(args.output_dir).expanduser()
+    rules_path = output_dir / "rules.md"
+
+    rules = extract_rules(_load_sessions_from_extractors(args), max_rules=args.limit)
     if not rules:
         print("No rules extracted.")
-        return
+        return 0
 
     lines = ["# Project Rules", ""]
     for rule in rules:
@@ -2171,16 +2194,97 @@ def cmd_rules(args):
     with open(rules_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
     print(f"Rules saved to: {rules_path}")
+    return 0
 
 
-def _load_sessions_from_extractors(args):
-    """Extract every available tool's sessions (read-only, never touches the index)."""
-    sessions = []
-    for extractor in get_all_extractors():
-        if not extractor.is_available():
-            continue
-        sessions.extend(extractor.extract_sessions())
-    return filter_automated(sessions, _include_automated(args))
+def _rules_export(args) -> int:
+    """``lore rules export --recommendations`` — write/print the recommendation store."""
+    if not getattr(args, "recommendations", False):
+        print(
+            "lore rules export writes harness recommendations only; "
+            "pass --recommendations to select them.",
+            file=sys.stderr,
+        )
+        return 1
+
+    path = recommendations_path(Path(args.output_dir).expanduser())
+    existing = load_recommendations(path)
+    fresh = build_recommendations(
+        _load_sessions_from_extractors(args), max_recommendations=args.limit
+    )
+    merged = merge_recommendations(existing, fresh)
+    payload = save_recommendations(path, merged)
+    if args.json:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(format_recommendations(merged))
+        print(f"Saved {len(merged)} recommendation(s) to: {path}")
+    return 0
+
+
+def _rules_activate(args) -> int:
+    """``lore rules activate <id>`` — flip one recommendation to active and record who/when."""
+    path = recommendations_path(Path(args.output_dir).expanduser())
+    recommendations = load_recommendations(path)
+    actor = _actor_name(args)
+    try:
+        recommendation = activate_recommendation(recommendations, args.recommendation_id, by=actor)
+    except KeyError as exc:
+        print(f"Cannot activate: {exc.args[0]}", file=sys.stderr)
+        return 1
+    save_recommendations(path, recommendations)
+    print(
+        f"Activated {recommendation.id} ({recommendation.scope}:"
+        f"{recommendation.scope_target}) by {actor} at {recommendation.activated_at}"
+    )
+    print("No harness configuration was modified; applying it stays manual.")
+    return 0
+
+
+def _rules_evaluate(args) -> int:
+    """``lore rules evaluate <id> --verdict ...`` — append to the history, change nothing else."""
+    path = recommendations_path(Path(args.output_dir).expanduser())
+    recommendations = load_recommendations(path)
+    actor = _actor_name(args)
+    try:
+        recommendation = record_evaluation(
+            recommendations,
+            args.recommendation_id,
+            args.verdict,
+            by=actor,
+            note=args.note or "",
+        )
+    except KeyError as exc:
+        print(f"Cannot evaluate: {exc.args[0]}", file=sys.stderr)
+        return 1
+    save_recommendations(path, recommendations)
+    print(
+        f"Recorded {args.verdict} on {recommendation.id} by {actor} "
+        f"({len(recommendation.history)} entr(y/ies) in history)"
+    )
+    return 0
+
+
+def _rules_review(args) -> int:
+    """``lore rules review`` — read-only listing of the stored recommendations."""
+    path = recommendations_path(Path(args.output_dir).expanduser())
+    print(format_recommendations(load_recommendations(path)))
+    return 0
+
+
+_RULES_ACTIONS = {
+    "export": _rules_export,
+    "activate": _rules_activate,
+    "evaluate": _rules_evaluate,
+    "review": _rules_review,
+}
+
+
+def cmd_rules(args):
+    action = getattr(args, "rules_action", None)
+    if action is None:
+        return _rules_write_markdown(args)
+    return _RULES_ACTIONS[action](args)
 
 
 def cmd_metrics(args):
@@ -2805,10 +2909,49 @@ Examples:
     # threads command
     _add_automated_flag(subparsers.add_parser("threads", help="List threads"))
 
-    # rules command
-    rules_parser = subparsers.add_parser("rules", help="Generate derived rules")
+    # rules command — bare `lore rules` keeps writing rules.md; the subcommands
+    # manage the evidence-backed recommendation store (#189).
+    rules_parser = subparsers.add_parser(
+        "rules", help="Generate derived rules, or export/activate harness recommendations"
+    )
     rules_parser.add_argument("--limit", type=int, default=30, help="Max rules to extract")
     _add_automated_flag(rules_parser)
+    rules_sub = rules_parser.add_subparsers(dest="rules_action")
+
+    rules_export = rules_sub.add_parser(
+        "export", help="Export evidence-backed harness recommendations (inactive by default)"
+    )
+    rules_export.add_argument(
+        "--recommendations",
+        action="store_true",
+        help="Select the recommendation export (the only export format)",
+    )
+    rules_export.add_argument(
+        "--json", action="store_true", help="Print the machine-readable JSON instead of the summary"
+    )
+    rules_export.add_argument("--limit", type=int, default=30, help="Max recommendations to build")
+    _add_automated_flag(rules_export)
+
+    rules_activate = rules_sub.add_parser(
+        "activate", help="Activate one recommendation and record who/when"
+    )
+    rules_activate.add_argument("recommendation_id", help="Recommendation id (rec-...)")
+    rules_activate.add_argument("--by", help="Who activates it (default: $USER)")
+
+    rules_evaluate = rules_sub.add_parser(
+        "evaluate", help="Append an accepted/corrected/contradicted verdict"
+    )
+    rules_evaluate.add_argument("recommendation_id", help="Recommendation id (rec-...)")
+    rules_evaluate.add_argument(
+        "--verdict",
+        choices=["accepted", "corrected", "contradicted"],
+        required=True,
+        help="Review verdict; appended to history, never replacing earlier entries",
+    )
+    rules_evaluate.add_argument("--note", help="Why (free text, stored with the entry)")
+    rules_evaluate.add_argument("--by", help="Who reviewed it (default: $USER)")
+
+    rules_sub.add_parser("review", help="List stored recommendations (read-only)")
 
     # metrics command — evidence-backed workflow metrics (#188)
     metrics_parser = subparsers.add_parser(

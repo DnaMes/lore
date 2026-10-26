@@ -482,12 +482,19 @@ options:
 
 ## rules
 
-Extract reusable rules from session prompts.
+Extract reusable rules from session prompts, or manage the evidence-backed
+harness recommendations built from them.
 
-Writes: `rules.md` in the output directory.
+Mode: bare `lore rules` writes `rules.md` (read-only otherwise) and reads no
+other file. `rules export` / `rules activate` / `rules evaluate` write
+`recommendations.json`; `rules review` is read-only. Nothing in this command
+modifies a harness configuration — recommendations stay inactive until a human
+activates them, and even activation only flips a stored flag. See
+[RECOMMENDATIONS.md](RECOMMENDATIONS.md) for the field-by-field contract.
 
 ```text
 usage: lore rules [-h] [--limit LIMIT] [--include-automated]
+                  {export,activate,evaluate,review} ...
 
 options:
   -h, --help           show this help message and exit
@@ -495,6 +502,65 @@ options:
   --include-automated  Also include automated (exec/cron/subagent) sessions,
                        hidden by default
 ```
+
+### export
+
+Build recommendations from the archive and merge them into the store. New ones
+are `inactive`; an existing id keeps its activation and evaluation history, and
+evidence links are unioned rather than replaced.
+
+```text
+usage: lore rules export [-h] [--recommendations] [--json] [--limit LIMIT]
+                         [--include-automated]
+
+options:
+  -h, --help           show this help message and exit
+  --recommendations    Select the recommendation export (the only export
+                       format)
+  --json               Print the machine-readable JSON instead of the summary
+  --limit LIMIT        Max recommendations to build
+  --include-automated  Also include automated (exec/cron/subagent) sessions,
+                       hidden by default
+```
+
+### activate
+
+```text
+usage: lore rules activate [-h] [--by BY] recommendation_id
+
+positional arguments:
+  recommendation_id  Recommendation id (rec-...)
+
+options:
+  -h, --help         show this help message and exit
+  --by BY            Who activates it (default: $USER)
+```
+
+Records actor and UTC timestamp, sets `state: active`, exits `1` for an unknown
+id.
+
+### evaluate
+
+```text
+usage: lore rules evaluate [-h] --verdict {accepted,corrected,contradicted}
+                           [--note NOTE] [--by BY] recommendation_id
+
+options:
+  -h, --help            show this help message and exit
+  --verdict ...         Review verdict; appended to history, never replacing
+                        earlier entries
+  --note NOTE           Why (free text, stored with the entry)
+  --by BY               Who reviewed it (default: $USER)
+```
+
+### review
+
+```text
+usage: lore rules review [-h]
+```
+
+Read-only listing: id, state, scope, generation request, evidence permalinks and
+the evaluation history.
 
 ## prune
 

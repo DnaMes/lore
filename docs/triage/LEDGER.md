@@ -650,3 +650,105 @@ NOT VERIFIED: no real Claude Code or Codex CLI archive was re-ingested in this r
 the fixtures are hand-written from the documented rollout/transcript shapes. The
 Markdown/HTML exporters still render from `content` + `tool_calls` and do not yet
 render `content_blocks`; that is a reader change outside #156/#157.
+## Round 11 — workflow analysis (#188) and harness recommendations (#189)
+
+Both items were "decide-first": the deliverable is a written, testable contract
+plus a working implementation, not a metric dashboard.
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #188 evidence-backed workflow analysis | CLOSED | `ee799ef` | `lore/services/workflow_metrics.py`, `lore metrics` in `lore_cli.py`, `docs/WORKFLOW-ANALYSIS.md`, `tests/test_workflow_metrics.py`; `pytest tests/test_workflow_metrics.py -o addopts="" -q` -> 18 passed |
+| #189 export reviewed harness recommendations | CLOSED | (this commit) | `lore/utils/rules.py` (`build_recommendations`, `merge_recommendations`, `activate_recommendation`, `record_evaluation`, store helpers), `lore rules export/activate/evaluate/review`, `docs/RECOMMENDATIONS.md`, `tests/test_recommendation_export.py`; `pytest tests/test_recommendation_export.py -o addopts="" -q` -> 21 passed |
+
+### #188 — what was decided
+
+Three classes, never mixed: `observed` (a field that exists: `origin`, tool-event
+statuses), `computed` (a deterministic derivation: means, median, ratio) and
+`inferred` (a keyword heuristic about outcomes, produced only with
+`--include-inferred`). Every result carries the source fields it reads and
+`covered_sessions/total_sessions`; a missing field yields `value: null`,
+`coverage: 0.0` and a caveat starting with `no data:`, so absence can never be
+read as a confident zero. `MetricResult.__add__` raises on a cross-class sum, so
+an inference cannot be folded into a measurement even by accident. The set is
+fixed and small — no composite score, no git/session correlation (the issue asks
+for ambiguity over invented causation, so no correlation claim is made at all).
+
+Observed on the real archive (read-only run, 3m25s of extraction, output to a
+throwaway dir):
+
+```
+$ lore --output-dir /tmp/lore-analysis-metrics metrics --json
+{ "metric_kinds": ["observed", "computed", "inferred"], "metrics": [
+  {"name": "sessions_by_origin", "kind": "observed", "covered_sessions": 40,
+   "total_sessions": 279, "coverage": 0.1434, "value": {"interactive": 40},
+   "caveats": ["239 session(s) store origin='unknown' and are excluded from the
+                breakdown rather than counted as interactive"]},
+  {"name": "prompts_per_session", "kind": "computed", "covered_sessions": 279,
+   "total_sessions": 279, "coverage": 1.0, "value": 96.8996}, ... ]}
+```
+
+That is the contract working on real data: 86 % of the archive has no recorded
+`origin`, so the metric reports coverage 0.14 and says so instead of presenting
+"interactive: 40" as the whole picture.
+
+### #189 — what was decided
+
+A recommendation is a candidate harness rule with `scope` (project/tool/global,
+derived from the evidence — project scope needs every supporting session to name
+the same `project_path`), `evidence` links (`session:<id>#m<seq>` plus the
+redacted quote), a `generation` request (`local` / `sentence-keyword-v1` /
+`rules-extract-v1`), `state` (`inactive` until explicitly activated) and an
+append-only `history` of accepted/corrected/contradicted entries. Export merges
+into the store: evidence is unioned by permalink and activation/history survive,
+so re-running the generator never loses a review. Corrections and contradictions
+append; nothing is rewritten or deleted. `lore rules activate` records actor and
+UTC time and does nothing else — no harness file is read or written, which
+`test_export_does_not_modify_harness_configuration` pins byte for byte.
+
+Observed end-to-end on the real archive (same throwaway output dir as above):
+
+```
+$ lore --output-dir /tmp/lore-rec-demo rules export --recommendations
+## rec-2dc484e06228 [inactive] tool:codex
+The final answer must always be fully self-contained: ...
+generation: local / sentence-keyword-v1 / rules-extract-v1
+evidence:
+  - session:01a0a950-41d7-74d1-8095-04ee46b2c89e#m115 (codex): The final answer ...
+Saved 30 recommendation(s) to: /tmp/lore-rec-demo/recommendations.json
+rc=0   # -rw------- 1 dnames dnames 46690 recommendations.json
+
+$ lore --output-dir /tmp/lore-rec-demo rules activate rec-2dc484e06228 --by andre
+Activated rec-2dc484e06228 (tool:codex) by andre at 2026-10-26T23:34:22+00:00
+No harness configuration was modified; applying it stays manual.
+rc=0
+
+$ lore --output-dir /tmp/lore-rec-demo rules evaluate rec-2dc484e06228 \
+    --verdict corrected --note "only for codex final answers" --by andre
+Recorded corrected on rec-2dc484e06228 by andre (1 entr(y/ies) in history)
+rc=0
+# stored state: state=active, activated_by=andre, 39 evidence links kept,
+# history=[{verdict: corrected, by: andre, at: ..., note: ...}], 29 of 30 inactive
+```
+
+Combined focused suite: `pytest tests/test_workflow_metrics.py
+tests/test_recommendation_export.py tests/test_utils_misc.py
+tests/test_cli_dispatch.py -o addopts="" -q` -> 92 passed;
+`ruff check lore/ lore_cli.py tests/...` clean, `ruff format` clean.
+
+### NOT VERIFIED
+
+- **No git/session correlation metric exists**, so the #188 acceptance line
+  "git/session correlation reports ambiguity and missing data" is met by *not
+  making the claim*: `git_branch`/`git_commit` are per-extractor best effort and
+  nothing in this round joins them to workflow numbers. A correlation metric
+  would need its own coverage contract; it is deliberately out of scope.
+- **Metric vocabulary is not extensible via configuration** — adding a metric is
+  a code change plus a documented definition, which is the point, but it means
+  the five-metric set is what a user gets.
+- **`lore metrics` and `lore rules export` re-run every extractor** (~3.5 min on
+  this 279-session host, read-only): neither reads the v2 store, so they cannot
+  drift from what the extractors would produce, and neither is fast.
+- **No real activation applied to a harness** was performed — deliberately. The
+  review→apply step remains manual and unverified by this round.
+- **`lore rules export` without `--recommendations`** exits 1 with a hint rather
+  than guessing at another export format; no other format exists today.
