@@ -340,6 +340,60 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
             ON session_summaries(session_id);
         """,
     ),
+    (
+        19,
+        "immutable source revisions and artifacts (#151)",
+        # Append-only capture of what an extractor read, before/independent of
+        # what it made of it. Uniqueness on (source_identity, content_sha256)
+        # makes a re-sync of unchanged bytes a no-op; different bytes become a
+        # new revision_seq instead of overwriting the earlier evidence.
+        """
+        CREATE TABLE IF NOT EXISTS source_revisions (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_identity TEXT    NOT NULL,
+            tool            TEXT    NOT NULL,
+            source_path     TEXT    NOT NULL,
+            content_sha256  TEXT    NOT NULL,
+            byte_size       INTEGER NOT NULL,
+            encoding        TEXT    NOT NULL DEFAULT 'zlib',
+            content         BLOB    NOT NULL,
+            source_mtime_ns INTEGER,
+            source_inode    INTEGER,
+            revision_seq    INTEGER NOT NULL,
+            captured_at     TEXT    NOT NULL,
+            decode_status   TEXT    NOT NULL DEFAULT 'parsed',
+            decode_note     TEXT,
+            media_type      TEXT
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_source_revisions_identity_sha
+            ON source_revisions(source_identity, content_sha256);
+        CREATE INDEX IF NOT EXISTS idx_source_revisions_identity
+            ON source_revisions(source_identity, revision_seq DESC);
+        CREATE INDEX IF NOT EXISTS idx_source_revisions_path
+            ON source_revisions(source_path);
+
+        CREATE TABLE IF NOT EXISTS source_artifacts (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            revision_id   INTEGER NOT NULL REFERENCES source_revisions(id) ON DELETE CASCADE,
+            artifact_key  TEXT    NOT NULL,
+            content_sha256 TEXT   NOT NULL,
+            byte_size     INTEGER NOT NULL,
+            encoding      TEXT    NOT NULL DEFAULT 'zlib',
+            content       BLOB    NOT NULL,
+            media_type    TEXT,
+            decode_status TEXT    NOT NULL DEFAULT 'unparsed',
+            decode_note   TEXT,
+            captured_at   TEXT    NOT NULL,
+            UNIQUE(revision_id, artifact_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_artifacts_revision
+            ON source_artifacts(revision_id);
+
+        ALTER TABLE sessions ADD COLUMN source_revision_id INTEGER;
+        CREATE INDEX IF NOT EXISTS idx_sessions_source_revision
+            ON sessions(source_revision_id);
+        """,
+    ),
 ]
 
 

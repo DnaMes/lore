@@ -23,6 +23,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from ..core.models import MESSAGE_KINDS, ORIGINS, RELATIONS, UnifiedMessage, UnifiedSession
 from .schema import initialise
 from .session_vectors import _MAX_EMBED_CHARS, embed_sessions
+from .source_revisions import capture_session_source
 
 logger = logging.getLogger(__name__)
 
@@ -481,7 +482,39 @@ def _write_full_session(
         fts_body,
         fts_rows,
     )
+    _link_source_revision(conn, session, source_mtime_ns)
     return (session.session_id, fts_body, source_mtime_ns)
+
+
+def _link_source_revision(
+    conn: sqlite3.Connection,
+    session: UnifiedSession,
+    source_mtime_ns: Optional[int],
+) -> None:
+    """Capture the session's source file as an immutable revision (#151).
+
+    Best effort by design: a failed capture must never fail a sync. The revision
+    id lands on the session row so readers can show the raw evidence behind a
+    parsed session (and re-parse it later with a fixed parser).
+    """
+    try:
+        result = capture_session_source(
+            conn,
+            tool=session.tool.value,
+            source_path=session.source_path,
+            parsed_mtime_ns=source_mtime_ns,
+        )
+    except Exception as exc:  # noqa: BLE001 - capture never breaks a sync
+        logger.warning(
+            "Source capture skipped for %s: %s", getattr(session, "source_path", None), exc
+        )
+        return
+    if result.revision_id is None:
+        return
+    conn.execute(
+        "UPDATE sessions SET source_revision_id = ? WHERE id = ?",
+        (result.revision_id, session.session_id),
+    )
 
 
 def _write_reused_full_session(
@@ -546,6 +579,7 @@ def _write_reused_full_session(
         fts_body,
         fts_rows,
     )
+    _link_source_revision(conn, session, source_mtime_ns)
     return True, (session.session_id, None, source_mtime_ns)
 
 
