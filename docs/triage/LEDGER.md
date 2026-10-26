@@ -236,6 +236,13 @@ Round 4 — roles, states and the memory repair:
 
 Full suite after round 4: **exit=0**, coverage 86.77 %.
 
+Round 5 — reading contract and Antigravity coverage:
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #170 reading contract | CLOSED | `484ae74` | `docs/READING-CONTRACT.md` (each rule tied to its implementation) + `tests/test_a11y_reading_contract.py`: 15 checks over every page (language, one h1, no heading jumps, skip-link target, unique ids, names on links/buttons/controls, live regions, theme variables, no fixed heights, focus ring or a replacing `:focus-visible`); browser/zoom/contrast pass explicitly left to #194 |
+| #158 Antigravity coverage | PARTIAL (open) | `096bd01` | availability needs readable data, coverage counters (`transcripts_*`, `task_artifacts_*`, `unsupported_artifacts`), `lore check --deep` inspects a data directory even when the tool is "not found"; `pytest -k "antigravity or check or discovery"` -> 101 passed, 1 skipped. Remaining: preserving undecoded `.pb` blobs as source artifacts, which needs #151 |
+
 Remaining after round 4: **30 open issues** — 2 owner-deferred (#29, #48), 25 Archive
 epic gaps and 3 independent ones (#119, #194, #197). Done so far: the Wave 2 chain
 (#172, #173, #174, #171, #175), the export/reading block (#166, #165, #169, #167),
