@@ -15,6 +15,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      # The runner image ships an old setuptools; the audit covers the whole environment,
+      # so bring the tooling current first and audit what the project really pulls in.
+      - run: python -m pip install --upgrade pip setuptools wheel
       - run: pip install pip-audit
       - run: pip install .
       - run: pip-audit
