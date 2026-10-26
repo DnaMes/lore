@@ -57,9 +57,10 @@ def test_is_self_contained() -> None:
 
 
 def test_code_block_rendered_as_pre() -> None:
+    """Full Markdown (#169): a fenced block becomes <pre><code class="language-…">."""
     html_doc = render_session_html(_make_session())
-    assert "<pre><code>" in html_doc
-    assert "print(&#x27;hello&#x27;)" in html_doc
+    assert "<pre><code" in html_doc
+    assert "print('hello')" in html_doc
 
 
 def test_tool_call_rendered() -> None:
@@ -85,10 +86,13 @@ def test_html_in_content_is_escaped() -> None:
         title="<img src=x onerror=alert(1)>",
     )
     html_doc = render_session_html(session)
-    assert "<script>alert" not in html_doc
-    assert "&lt;script&gt;" in html_doc
-    assert "<img src=x onerror" not in html_doc
-    assert "&lt;img src=x" in html_doc
+    # The content is rendered as Markdown and then sanitized with the shared
+    # allowlist (#169): scripts and event handlers are removed outright, which is
+    # stricter than escaping them into visible text.
+    assert "<script" not in html_doc
+    assert "<img" not in html_doc
+    # The title is escaped, so its payload stays visible text, never markup.
+    assert "&lt;img src=x onerror=alert(1)&gt;" in html_doc
 
 
 def test_valid_html_document() -> None:

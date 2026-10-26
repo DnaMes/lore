@@ -13,6 +13,8 @@ import html
 import re
 
 from ..core.models import Role, UnifiedSession
+from ..utils.html_sanitize import sanitize_html
+from ..utils.markdown_render import render_markdown
 from .tool_calls import canonical_tool_calls, tool_call_html
 
 _INLINE_CSS = """\
@@ -100,32 +102,24 @@ footer.session {
 }
 """
 
-_CODE_FENCE_RE = re.compile(r"```([^\n`]*)\n(.*?)```", re.DOTALL)
-
 
 def _render_content(content: str) -> str:
-    """Render escaped message text, turning ```fenced``` blocks into <pre>."""
+    """Render message text as full Markdown and sanitize it (#169).
+
+    The export used to understand only paragraphs and ``` fences, so headings,
+    tables, lists, blockquotes and inline markup appeared as literal text in a
+    standalone file that no longer has a renderer. It now uses the same
+    thread-local Markdown pipeline as the web UI and the same allowlist
+    (:mod:`lore.utils.html_sanitize`), so a shared page shows what the UI shows —
+    offline, with scripts and event handlers stripped.
+    """
     if not content:
         return ""
-
-    parts: list[str] = []
-    last = 0
-    for match in _CODE_FENCE_RE.finditer(content):
-        prefix = content[last : match.start()]
-        if prefix.strip():
-            parts.append(_render_paragraphs(prefix))
-        code = match.group(2)
-        parts.append(f"<pre><code>{html.escape(code)}</code></pre>")
-        last = match.end()
-
-    tail = content[last:]
-    if tail.strip() or not parts:
-        parts.append(_render_paragraphs(tail))
-
-    return "\n".join(p for p in parts if p)
+    return sanitize_html(render_markdown(content))
 
 
 def _render_paragraphs(text: str) -> str:
+    """Escaped paragraph fallback, used only when ``markdown`` is unavailable."""
     """Escape text and split blank-line-separated blocks into <p> elements."""
     blocks = [b for b in re.split(r"\n\s*\n", text) if b.strip()]
     if not blocks:

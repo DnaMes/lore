@@ -7,7 +7,6 @@ for the web interface.
 import html
 import json
 import re
-import threading
 from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
@@ -15,43 +14,18 @@ import markdown
 import nh3
 
 from lore.core.models import AUTOMATED_ORIGINS
+from lore.utils.html_sanitize import SANITIZE_ATTRS as _SHARED_SANITIZE_ATTRS
+from lore.utils.html_sanitize import SANITIZE_TAGS as _SHARED_SANITIZE_TAGS
+from lore.utils.html_sanitize import SANITIZE_URL_SCHEMES as _SHARED_SANITIZE_URL_SCHEMES
+from lore.utils.html_sanitize import sanitize_html
+from lore.utils.markdown_render import MARKDOWN_EXTENSIONS as MARKDOWN_EXTENSIONS
+from lore.utils.markdown_render import render_markdown as render_markdown
+from lore.utils.markdown_render import (
+    thread_local_markdown_parser as thread_local_markdown_parser,
+)
 from lore.utils.text_processing import strip_ansi
 
-from .web_data import threadsafe_lru_cache
-
 _COMPARE_STRIP_RE = re.compile(r"[\W_]+", re.UNICODE)
-
-MARKDOWN_EXTENSIONS = ("fenced_code", "tables", "nl2br")
-
-# ``markdown.Markdown`` keeps parser state and is not thread-safe, while
-# ``markdown.markdown()`` builds a fresh parser (and processing pipeline) on
-# every call. One parser per thread keeps the isolation and drops the rebuild
-# cost: measured 1.27-1.37x faster than the module-level helper on 1 KB and
-# 10 KB messages (see tests/test_markdown_renderer.py for the contract).
-_MARKDOWN_LOCAL = threading.local()
-
-
-def thread_local_markdown_parser() -> "markdown.Markdown":
-    """Return this thread's reusable Markdown parser, creating it on first use."""
-    parser = getattr(_MARKDOWN_LOCAL, "parser", None)
-    if parser is None:
-        parser = markdown.Markdown(extensions=list(MARKDOWN_EXTENSIONS))
-        _MARKDOWN_LOCAL.parser = parser
-    return parser
-
-
-def render_markdown(text: str) -> str:
-    """Render Markdown with the thread-local parser, or escape when it is unavailable.
-
-    Equivalent to ``markdown.markdown(text, extensions=MARKDOWN_EXTENSIONS)``
-    but reuses the parser; ``reset()`` clears footnotes and other per-document
-    state before each conversion. Without the optional ``markdown`` package the
-    text is HTML-escaped with newlines preserved, matching the previous
-    behaviour of every call site.
-    """
-    if not markdown:
-        return html.escape(text).replace("\n", "<br>")
-    return thread_local_markdown_parser().reset().convert(text)
 
 
 def _normalize_compare_text(value: Optional[str]) -> str:
@@ -288,66 +262,19 @@ def is_automated_origin(origin: Optional[str]) -> bool:
     return origin in AUTOMATED_ORIGINS
 
 
-# HTML sanitization constants (nh3 requires sets, not lists)
-SANITIZE_TAGS = {
-    "p",
-    "br",
-    "strong",
-    "em",
-    "u",
-    "code",
-    "pre",
-    "a",
-    "ul",
-    "ol",
-    "li",
-    "h1",
-    "h2",
-    "h3",
-    "h4",
-    "h5",
-    "h6",
-    "blockquote",
-    "table",
-    "thead",
-    "tbody",
-    "tr",
-    "th",
-    "td",
-    "hr",
-    "div",
-    "span",
-    # Used by tool-call / thinking collapsible blocks generated internally
-    "details",
-    "summary",
-}
-
-SANITIZE_ATTRS = {
-    "a": {"href", "title"},
-    "code": {"class"},
-    "pre": {"class"},
-    "span": {"class"},
-    "div": {"class"},
-    "details": {"class"},
-    "summary": {"class"},
-}
-
-SANITIZE_URL_SCHEMES = {"http", "https", "mailto"}
+# The allowlist lives in lore.utils.html_sanitize so the standalone HTML export
+# applies exactly the same rules (#169). These bindings stay for callers that
+# import them from here; the tag set is frozen so a caller cannot widen it.
+SANITIZE_TAGS = frozenset(_SHARED_SANITIZE_TAGS)
+SANITIZE_ATTRS = _SHARED_SANITIZE_ATTRS
+SANITIZE_URL_SCHEMES = _SHARED_SANITIZE_URL_SCHEMES
 
 
 def sanitize_rendered_html(rendered_html: str) -> str:
     """Sanitize HTML content for safe display."""
-    return nh3.clean(
-        rendered_html or "",
-        tags=SANITIZE_TAGS,
-        attributes=SANITIZE_ATTRS,
-        url_schemes=SANITIZE_URL_SCHEMES,
-        strip_comments=True,
-        link_rel=None,
-    )
+    return sanitize_html(rendered_html)
 
 
-@threadsafe_lru_cache(maxsize=4096)
 def _format_message_content_cached(raw_content: str) -> str:
     """Format message content with caching for performance."""
     from lore.utils.text_processing import (

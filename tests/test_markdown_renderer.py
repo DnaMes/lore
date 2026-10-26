@@ -13,7 +13,6 @@ import threading
 import markdown
 import pytest
 
-from lore.interfaces import web_formatting
 from lore.interfaces.web_formatting import (
     MARKDOWN_EXTENSIONS,
     render_markdown,
@@ -66,7 +65,9 @@ def test_state_does_not_leak_between_documents():
 
 
 def test_missing_markdown_package_falls_back_to_escaped_text(monkeypatch):
-    monkeypatch.setattr(web_formatting, "markdown", None)
+    from lore.utils import markdown_render
+
+    monkeypatch.setattr(markdown_render, "markdown", None)
     assert render_markdown("<b>x</b>\ny") == "&lt;b&gt;x&lt;/b&gt;<br>y"
 
 

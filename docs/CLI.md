@@ -144,6 +144,8 @@ Export one session as a standalone HTML file.
 
 Writes: the file given by `--output`, or `<session-id>.html` in the current directory (created with mode 0600).
 
+The page renders full Markdown — headings, lists, tables, blockquotes, inline code, emphasis and links — with the same thread-local pipeline the web UI uses, then sanitises the result with the shared allowlist (`lore/utils/html_sanitize.py`): scripts, event handlers, `javascript:` URLs and tags outside the list are removed, while their text stays. The stylesheet is inline and no remote asset is referenced, so the file opens correctly offline.
+
 ```text
 usage: lore export-html [-h] [--output OUTPUT] [--redact] session_id
 
