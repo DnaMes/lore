@@ -16,7 +16,7 @@ from lore.services.summarize import (
     summarize_session,
     validate_summary,
 )
-from lore.storage.summaries import get_summary, list_summaries
+from lore.storage.summaries import get_summary, list_summaries, save_summary
 from lore.storage.writer import v2_db_path, write_sessions
 from tests.test_summarize_pipeline import (
     FAKE_KEY,
@@ -368,3 +368,38 @@ def test_transient_error_detection_is_not_a_substring_match():
     assert transient(RuntimeError("request timed out"))
     assert not transient(RuntimeError("could not generate a response"))
     assert not transient(RuntimeError("accurate migration failed"))
+
+
+def test_chunked_cache_hit_without_coverage_is_not_fully_valid(tmp_path: Path, chunk_limits: None):
+    out = tmp_path / "out"
+    _build_store(out, _long_session("old"))
+    assert (
+        summarize_session(AutoProvider(), out, "old", model_label=MODEL, sleep=lambda _s: None)
+        == "written"
+    )
+    row = get_summary(out, "session", "session:old")
+    assert row is not None and "coverage" in row["payload"]
+    expected = row["payload"]["coverage"]
+    # Pre-#178 cached summary: fingerprint still matches, coverage key missing.
+    legacy = {k: v for k, v in row["payload"].items() if k != "coverage"}
+    save_summary(
+        out,
+        level="session",
+        scope_key="session:old",
+        session_id="old",
+        fingerprint=row["fingerprint"],
+        model=row["model"],
+        prompt_version=row["prompt_version"],
+        compressor_version=row["compressor_version"],
+        payload=legacy,
+        input_tokens=row["input_tokens"],
+        output_tokens=row["output_tokens"],
+    )
+    assert "coverage" not in get_summary(out, "session", "session:old")["payload"]
+
+    second = AutoProvider()
+    outcome = summarize_session(second, out, "old", model_label=MODEL, sleep=lambda _s: None)
+
+    assert outcome == "unchanged"
+    assert second.prompts == []
+    assert get_summary(out, "session", "session:old")["payload"]["coverage"] == expected

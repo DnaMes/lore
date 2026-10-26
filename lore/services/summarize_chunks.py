@@ -79,10 +79,14 @@ def sample_chunks(
 
 
 def _seq_bounds(blocks: tuple[CompressedBlock, ...]) -> tuple[Optional[int], Optional[int]]:
-    seqs = [int(m.group(1)) for b in blocks for m in _SEQ_RE.finditer(b.text)]
-    if not seqs:
+    """Span of a chunk from the structured anchors, never from message content (#178).
+
+    Scanning the text for ``[seq=N]`` would let a quoted marker inside a message
+    (e.g. a user pasting ``[seq=99999]``) widen the reported seq_range.
+    """
+    if not blocks:
         return None, None
-    return min(seqs), max(seqs)
+    return blocks[0].first_seq, blocks[-1].last_seq
 
 
 def chunk_coverage(

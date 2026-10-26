@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import sys
+import tempfile
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -136,7 +137,13 @@ class OpenRouterProvider(LLMProvider):
                 eff_temperature,
                 base_url,
             )
-            cache_identity = self.cache_identity(prompt, system_prompt)
+            cache_identity = self._resolved_cache_identity(
+                prompt,
+                system_prompt,
+                eff_max_tokens,
+                eff_temperature,
+                base_url,
+            )
             cached = self._load_from_cache(cache_key)
             if cached:
                 return cached
@@ -288,6 +295,25 @@ class OpenRouterProvider(LLMProvider):
 
         return {"content": content, "tokens_used": tokens_used, "cost": cost}
 
+    def _resolved_cache_identity(
+        self,
+        prompt: str,
+        system_prompt: Optional[str],
+        max_tokens: int,
+        temperature: float,
+        base_url: str,
+    ) -> Dict[str, Any]:
+        """Cache identity with model, sampling params and base URL resolved for this call."""
+        payload = self.cache_identity(prompt, system_prompt)
+        payload["model"] = resolve_openrouter_model(self.config)
+        payload["params"] = {
+            **payload["params"],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "base_url": base_url,
+        }
+        return payload
+
     def _get_cache_key(
         self,
         prompt: str,
@@ -302,16 +328,9 @@ class OpenRouterProvider(LLMProvider):
         proxy overrides), so the key has to use those resolved values rather than
         the configured ones (#186).
         """
-        import json
-
-        payload = self.cache_identity(prompt, system_prompt)
-        payload["model"] = resolve_openrouter_model(self.config)
-        payload["params"] = {
-            **payload["params"],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "base_url": base_url,
-        }
+        payload = self._resolved_cache_identity(
+            prompt, system_prompt, max_tokens, temperature, base_url
+        )
         return hashlib.sha256(
             json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
         ).hexdigest()
@@ -340,8 +359,11 @@ class OpenRouterProvider(LLMProvider):
         if cache_root is None:
             return
         cache_file = cache_root / f"{cache_key}.json"
+        tmp_path: Optional[Path] = None
         try:
-            with open(cache_file, "w") as f:
+            fd, tmp_name = tempfile.mkstemp(dir=cache_root, prefix=f".{cache_key}.", suffix=".tmp")
+            tmp_path = Path(tmp_name)
+            with os.fdopen(fd, "w") as f:
                 json.dump(
                     {
                         "content": response.content,
@@ -351,6 +373,14 @@ class OpenRouterProvider(LLMProvider):
                     },
                     f,
                 )
+            os.replace(tmp_path, cache_file)  # atomic: concurrent workers cannot see half a file
+            tmp_path = None
             restrict_file(cache_file)
         except OSError as exc:
             logger.debug("Could not write OpenRouter cache entry: %s", exc)
+        finally:
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
