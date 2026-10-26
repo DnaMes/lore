@@ -10,6 +10,8 @@ import pytest
 
 from lore.core.models import Role, Tool, UnifiedSession
 from lore.extractors.codex import CodexExtractor
+from lore.storage.reader import load_session_messages_v2
+from lore.storage.writer import write_sessions
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -60,8 +62,8 @@ def home(monkeypatch, tmp_path):
     return tmp_path
 
 
-def test_parser_version_is_three(home):
-    assert CodexExtractor.PARSER_VERSION == 3
+def test_parser_version_is_four(home):
+    assert CodexExtractor.PARSER_VERSION == 4
 
 
 def test_function_call_and_output_completed(home):
@@ -657,3 +659,277 @@ def test_zst_skipped_line_bytes_count_toward_decode_limit(home, monkeypatch):
     path.write_bytes(zstd.ZstdCompressor().compress(plain.encode("utf-8")))
     _, sessions = _extract(home)
     assert not any("should not appear" in (m.content or "") for s in sessions for m in s.messages)
+
+
+# ---------------------------------------------------------------------------
+# Canonical message envelope (#156)
+# ---------------------------------------------------------------------------
+
+
+def _function_call(
+    call_id: str,
+    name: str,
+    arguments: dict,
+    ts: str = "2025-06-15T10:40:00",
+) -> dict:
+    return {
+        "type": "response_item",
+        "timestamp": ts,
+        "payload": {
+            "type": "function_call",
+            "name": name,
+            "arguments": json.dumps(arguments),
+            "call_id": call_id,
+        },
+    }
+
+
+def _function_output(
+    call_id: str,
+    output: str,
+    ts: str = "2025-06-15T10:40:05",
+    metadata: dict | None = None,
+) -> dict:
+    payload: dict = {"type": "function_call_output", "call_id": call_id, "output": output}
+    if metadata is not None:
+        payload["metadata"] = metadata
+    return {"type": "response_item", "timestamp": ts, "payload": payload}
+
+
+@pytest.fixture
+def paired_session(home):
+    records = [
+        _meta(),
+        _user_import_gate(),
+        _function_call("call-read-1", "read_file", {"path": "/tmp/foo.txt"}),
+        _function_output("call-read-1", "file contents here"),
+    ]
+    _rollout(home, records)
+    _, sessions = _extract(home)
+    return sessions[0]
+
+
+def test_paired_call_and_result_tool_calls_literal(paired_session):
+    s = paired_session
+    assert [m.role for m in s.messages] == [Role.USER, Role.ASSISTANT, Role.TOOL]
+    assistant = s.messages[1]
+    assert assistant.status == "ok"
+    assert assistant.tool_calls == [
+        {
+            "id": "call-read-1",
+            "tool": "read_file",
+            "input": {"path": "/tmp/foo.txt"},
+            "status": "ok",
+            "output": "file contents here",
+        }
+    ]
+    assert assistant.tool_events == [
+        {"name": "read_file", "status": "completed", "duration_ms": None, "is_error": False}
+    ]
+    assert s.messages[2].status == "ok"
+
+
+def test_paired_tool_call_survives_v2_roundtrip(tmp_path, paired_session):
+    output_dir = tmp_path / "state"
+    output_dir.mkdir(parents=True)
+    write_sessions(output_dir / "index_v2.sqlite", [paired_session])
+
+    loaded = load_session_messages_v2(output_dir, paired_session.session_id)
+    assert loaded is not None
+    by_id = {message.message_id: message for message in loaded if message.message_id}
+    got = by_id["call-read-1"]
+    assert got.content == paired_session.messages[1].content
+    assert got.status == "ok"
+    assert got.tool_calls == paired_session.messages[1].tool_calls
+    assert got.tool_events == paired_session.messages[1].tool_events
+
+
+def test_failed_call_keeps_error_duration_and_truncation(home):
+    records = [
+        _meta(),
+        _user_import_gate(),
+        _function_call("call-sh-1", "shell_command", {"command": "false"}),
+        _function_output(
+            "call-sh-1",
+            "command failed",
+            metadata={
+                "exit_code": 2,
+                "error": "exit status 2",
+                "duration_ms": 15,
+                "truncated": True,
+            },
+        ),
+    ]
+    _rollout(home, records)
+    _, sessions = _extract(home)
+    assistant = next(m for m in sessions[0].messages if m.role == Role.ASSISTANT)
+    assert assistant.status == "failed"
+    assert assistant.tool_calls == [
+        {
+            "id": "call-sh-1",
+            "tool": "shell_command",
+            "input": {"command": "false"},
+            "status": "failed",
+            "output": "command failed",
+            "error": "exit status 2",
+            "duration_ms": 15,
+            "exit_code": 2,
+            "truncated": True,
+        }
+    ]
+    assert assistant.tool_events == [
+        {"name": "shell_command", "status": "failed", "duration_ms": 15, "is_error": True}
+    ]
+
+
+def test_interleaved_calls_keep_their_own_results(home):
+    records = [
+        _meta(),
+        _user_import_gate(),
+        _function_call("c1", "alpha", {"n": 1}, "2025-06-15T10:41:00"),
+        _function_call("c2", "beta", {"n": 2}, "2025-06-15T10:41:01"),
+        _function_output("c2", "beta output", "2025-06-15T10:41:02"),
+        _function_output("c1", "alpha output", "2025-06-15T10:41:03"),
+    ]
+    _rollout(home, records)
+    _, sessions = _extract(home)
+    s = sessions[0]
+    assert [m.role for m in s.messages] == [
+        Role.USER,
+        Role.ASSISTANT,
+        Role.ASSISTANT,
+        Role.TOOL,
+        Role.TOOL,
+    ]
+    calls = {m.message_id: m for m in s.messages if m.role == Role.ASSISTANT}
+    assert calls["c1"].tool_calls == [
+        {
+            "id": "c1",
+            "tool": "alpha",
+            "input": {"n": 1},
+            "status": "ok",
+            "output": "alpha output",
+        }
+    ]
+    assert calls["c2"].tool_calls == [
+        {
+            "id": "c2",
+            "tool": "beta",
+            "input": {"n": 2},
+            "status": "ok",
+            "output": "beta output",
+        }
+    ]
+
+
+def test_cancelled_call_keeps_status_and_source_event(home):
+    records = [
+        _meta(),
+        _user_import_gate(),
+        _function_call("c-cancel", "shell", {"cmd": "sleep 99"}),
+        {
+            "type": "event_msg",
+            "timestamp": "2025-06-15T10:42:00",
+            "payload": {"type": "turn_aborted", "reason": "user cancelled"},
+        },
+    ]
+    _rollout(home, records)
+    _, sessions = _extract(home)
+    assistant = next(m for m in sessions[0].messages if m.role == Role.ASSISTANT)
+    assert assistant.status == "cancelled"
+    assert assistant.tool_calls == [
+        {
+            "id": "c-cancel",
+            "tool": "shell",
+            "input": {"cmd": "sleep 99"},
+            "status": "cancelled",
+            "error": "user cancelled",
+        }
+    ]
+    assert assistant.tool_events == [
+        {"name": "shell", "status": "cancelled", "duration_ms": None, "is_error": False}
+    ]
+    assert assistant.extensions == {
+        "codex": {
+            "unknown_events": [
+                {
+                    "record_type": "event_msg",
+                    "type": "turn_aborted",
+                    "payload": {"type": "turn_aborted", "reason": "user cancelled"},
+                    "timestamp": "2025-06-15T10:42:00",
+                }
+            ]
+        }
+    }
+
+
+def test_orphan_result_keeps_tool_role_and_unmatched_status(home):
+    records = [
+        _meta(),
+        _user_import_gate(),
+        _function_output("ghost", "orphan output"),
+    ]
+    _rollout(home, records)
+    _, sessions = _extract(home)
+    s = sessions[0]
+    assert [m.role for m in s.messages] == [Role.USER, Role.TOOL]
+    result = s.messages[1]
+    assert result.content == "orphan output"
+    assert result.status == "unmatched"
+    assert result.tool_calls == []
+    assert result.extensions == {"codex": {"unmatched": True, "call_id": "ghost"}}
+
+
+def test_unknown_event_types_attach_with_original_names(home):
+    records = [
+        _meta(),
+        _user_import_gate(),
+        {"type": "world_state", "timestamp": "2025-06-15T10:43:00", "payload": {"phase": 1}},
+        _function_call("c-unknown", "shell", {"cmd": "ls"}),
+        {
+            "type": "response_item",
+            "timestamp": "2025-06-15T10:43:01",
+            "payload": {"type": "mystery_item", "x": 1},
+        },
+        {
+            "type": "event_msg",
+            "timestamp": "2025-06-15T10:43:02",
+            "payload": {"type": "task_started", "turn": 2},
+        },
+    ]
+    _rollout(home, records)
+    extractor, sessions = _extract(home)
+    s = sessions[0]
+    user = s.messages[0]
+    assistant = next(m for m in s.messages if m.role == Role.ASSISTANT)
+    assert user.extensions == {
+        "codex": {
+            "unknown_events": [
+                {
+                    "record_type": "record",
+                    "type": "world_state",
+                    "payload": {"phase": 1},
+                    "timestamp": "2025-06-15T10:43:00",
+                }
+            ]
+        }
+    }
+    assert assistant.extensions == {
+        "codex": {
+            "unknown_events": [
+                {
+                    "record_type": "response_item",
+                    "type": "mystery_item",
+                    "payload": {"type": "mystery_item", "x": 1},
+                    "timestamp": "2025-06-15T10:43:01",
+                },
+                {
+                    "record_type": "event_msg",
+                    "type": "task_started",
+                    "payload": {"type": "task_started", "turn": 2},
+                    "timestamp": "2025-06-15T10:43:02",
+                },
+            ]
+        }
+    }
+    assert extractor.discovery["records_unknown"] == 3

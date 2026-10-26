@@ -37,6 +37,40 @@ _MAX_PATH_CHARS = 4096
 # would lower user_prompt_count and could drop a genuine session.
 _WRAPPED_TAGS = ("environment_context", "user_instructions", "user_action")
 _AGENTS_HEADER = re.compile(r"^# AGENTS\.md instructions for \S")
+_CANCELLED_EVENT_TYPES = frozenset({"turn_aborted", "task_aborted", "turn_cancelled"})
+
+
+def _tool_event_status(status: str) -> str:
+    if status == "cancelled":
+        return "cancelled"
+    if status == "failed":
+        return "failed"
+    return "completed"
+
+
+def _result_outcome(meta: Any) -> Dict[str, Any]:
+    """Map Codex result metadata onto a call status, error and truncation."""
+    outcome: Dict[str, Any] = {"status": "ok", "is_error": False}
+    if not isinstance(meta, dict):
+        return outcome
+    exit_code = meta.get("exit_code")
+    if isinstance(exit_code, int) and not isinstance(exit_code, bool) and exit_code != 0:
+        outcome["is_error"] = True
+        outcome["exit_code"] = exit_code
+    if meta.get("error") or meta.get("is_error"):
+        outcome["is_error"] = True
+    if "error" in meta:
+        outcome["error"] = meta["error"]
+    duration = meta.get("duration_ms")
+    if isinstance(duration, (int, float)):
+        outcome["duration_ms"] = int(duration)
+    if bool(meta.get("cancelled") or meta.get("canceled") or meta.get("aborted")):
+        outcome["status"] = "cancelled"
+    elif outcome["is_error"]:
+        outcome["status"] = "failed"
+    if "truncated" in meta:
+        outcome["truncated"] = bool(meta["truncated"])
+    return outcome
 
 
 def _safe_ts(value: Any, fallback: datetime) -> datetime:
@@ -204,7 +238,7 @@ def _format_token_usage(raw: Any) -> Optional[Dict[str, int]]:
 class CodexExtractor(BaseExtractor):
     """Extract chat history from OpenAI Codex CLI."""
 
-    PARSER_VERSION = 3
+    PARSER_VERSION = 4
     AUTOMATED_BYPASSES_PROMPT_FLOOR = True
 
     def __init__(self) -> None:
@@ -375,8 +409,9 @@ class CodexExtractor(BaseExtractor):
         file_mtime = datetime.fromtimestamp(path.stat().st_mtime)
         current_model: Optional[str] = None
         turn_cwd: Optional[str] = None
-        pending_calls: Dict[str, List[Tuple[int, str]]] = {}
+        pending_calls: Dict[str, List[Tuple[int, str, Dict[str, Any]]]] = {}
         last_assistant_idx = -1
+        last_message_idx = -1
         unknown_seen: Set[str] = set()
         session_total_tokens: Optional[int] = None
 
@@ -388,11 +423,47 @@ class CodexExtractor(BaseExtractor):
                 last_updated = ts
 
         def append_message(msg: UnifiedMessage) -> int:
-            nonlocal last_assistant_idx
+            nonlocal last_assistant_idx, last_message_idx
             messages.append(msg)
+            last_message_idx = len(messages) - 1
             if msg.role == Role.ASSISTANT:
-                last_assistant_idx = len(messages) - 1
-            return len(messages) - 1
+                last_assistant_idx = last_message_idx
+            return last_message_idx
+
+        def attach_codex_extension(event: Dict[str, Any], ts: datetime) -> None:
+            nonlocal last_message_idx
+            if last_message_idx < 0:
+                append_message(UnifiedMessage(role=Role.INFO, content="", timestamp=ts))
+            owner = messages[last_message_idx]
+            extensions = owner.extensions if isinstance(owner.extensions, dict) else {}
+            codex = extensions.get("codex")
+            if not isinstance(codex, dict):
+                codex = {}
+            events = codex.get("unknown_events")
+            if not isinstance(events, list):
+                events = []
+            events.append(event)
+            codex["unknown_events"] = events
+            extensions["codex"] = codex
+            owner.extensions = extensions
+
+        def record_unknown_event(
+            category: str,
+            type_name: Any,
+            payload: Any,
+            raw_timestamp: Any,
+            ts: datetime,
+        ) -> None:
+            self._mark_unknown(f"{category}:{type_name}", unknown_seen)
+            attach_codex_extension(
+                {
+                    "record_type": category,
+                    "type": type_name,
+                    "payload": payload,
+                    "timestamp": raw_timestamp,
+                },
+                ts,
+            )
 
         def attach_tool_result(
             call_id: Optional[str],
@@ -400,13 +471,27 @@ class CodexExtractor(BaseExtractor):
             meta: Any,
             ts: datetime,
             default_name: str = "tool",
+            truncated: bool = False,
         ) -> None:
-            if output_text:
-                append_message(UnifiedMessage(role=Role.TOOL, content=output_text, timestamp=ts))
+            outcome = _result_outcome(meta)
+            if truncated:
+                outcome["truncated"] = True
+            tool_idx = append_message(
+                UnifiedMessage(role=Role.TOOL, content=output_text, timestamp=ts)
+            )
             queue = pending_calls.get(call_id) if call_id else None
             if not call_id or not queue:
+                details: Dict[str, Any] = {"unmatched": True}
+                if call_id:
+                    details["call_id"] = call_id
+                if outcome["is_error"]:
+                    details["is_error"] = True
+                if "error" in outcome:
+                    details["error"] = outcome["error"]
+                messages[tool_idx].status = "unmatched"
+                messages[tool_idx].extensions = {"codex": details}
                 return
-            idx, registered_name = queue.pop(0)
+            idx, registered_name, call = queue.pop(0)
             if not queue:
                 del pending_calls[call_id]
             if idx < 0 or idx >= len(messages):
@@ -414,30 +499,43 @@ class CodexExtractor(BaseExtractor):
             assistant = messages[idx]
             if assistant.role != Role.ASSISTANT:
                 return
-            is_error = False
-            duration_ms: Optional[int] = None
-            if isinstance(meta, dict):
-                exit_code = meta.get("exit_code")
-                if isinstance(exit_code, (int, float)) and int(exit_code) != 0:
-                    is_error = True
-                if meta.get("error") or meta.get("is_error"):
-                    is_error = True
-                dur = meta.get("duration_ms")
-                if isinstance(dur, (int, float)):
-                    duration_ms = int(dur)
-            name = registered_name or default_name
+            call["output"] = output_text
+            call["status"] = outcome["status"]
+            for key in ("error", "duration_ms", "exit_code"):
+                if key in outcome:
+                    call[key] = outcome[key]
+            if outcome.get("truncated"):
+                call["truncated"] = True
+            assistant.status = outcome["status"]
+            messages[tool_idx].status = outcome["status"]
             event = {
-                "name": name,
-                "status": "failed" if is_error else "completed",
-                "duration_ms": duration_ms,
-                "is_error": is_error,
+                "name": registered_name or default_name,
+                "status": _tool_event_status(outcome["status"]),
+                "duration_ms": outcome.get("duration_ms"),
+                "is_error": bool(outcome["is_error"]),
             }
             assistant.tool_events = list(assistant.tool_events) + [event]
 
-        def register_tool_call(call_id: Optional[str], idx: int, name: Any) -> None:
+        def register_tool_call(
+            call_id: Optional[str],
+            idx: int,
+            name: Any,
+            call: Dict[str, Any],
+        ) -> None:
             if call_id:
                 tool_name = name if isinstance(name, str) and name else "tool"
-                pending_calls.setdefault(call_id, []).append((idx, tool_name[:80]))
+                pending_calls.setdefault(call_id, []).append((idx, tool_name[:80], call))
+
+        def cancel_pending_calls(reason: Any, ts: datetime) -> None:
+            for queue in pending_calls.values():
+                for idx, _tool_name, call in queue:
+                    if call.get("status") != "pending":
+                        continue
+                    call["status"] = "cancelled"
+                    if isinstance(reason, str) and reason:
+                        call["error"] = reason
+                    if 0 <= idx < len(messages):
+                        messages[idx].status = "cancelled"
 
         rollout_lines = self._open_rollout_lines(path)
         if rollout_lines is None:
@@ -474,27 +572,24 @@ class CodexExtractor(BaseExtractor):
                 elif payload_type == "reasoning":
                     self._handle_reasoning(payload, timestamp, append_message)
                 elif payload_type == "function_call":
-                    idx = self._handle_function_call(payload, timestamp, append_message)
-                    register_tool_call(
-                        _clean_call_id(payload.get("call_id")), idx, payload.get("name")
-                    )
+                    idx, call = self._handle_function_call(payload, timestamp, append_message)
+                    register_tool_call(call.get("id"), idx, call.get("tool"), call)
                 elif payload_type == "custom_tool_call":
-                    idx = self._handle_custom_tool_call(payload, timestamp, append_message)
-                    register_tool_call(
-                        _clean_call_id(payload.get("call_id")), idx, payload.get("name")
-                    )
+                    idx, call = self._handle_custom_tool_call(payload, timestamp, append_message)
+                    register_tool_call(call.get("id"), idx, call.get("tool"), call)
                 elif payload_type == "function_call_output":
                     call_id = _clean_call_id(payload.get("call_id"))
-                    output_text = self._coerce_output_text(payload.get("output"))
+                    output_text, truncated = self._coerce_output(payload.get("output"))
                     attach_tool_result(
                         call_id,
                         output_text,
                         payload.get("metadata"),
                         timestamp,
+                        truncated=truncated,
                     )
                 elif payload_type == "custom_tool_call_output":
                     call_id = _clean_call_id(payload.get("call_id"))
-                    output_text = self._coerce_output_text(payload.get("output"))
+                    output_text, truncated = self._coerce_output(payload.get("output"))
                     name = payload.get("name")
                     default_name = name if isinstance(name, str) else "tool"
                     attach_tool_result(
@@ -503,11 +598,14 @@ class CodexExtractor(BaseExtractor):
                         payload.get("metadata"),
                         timestamp,
                         default_name=default_name,
+                        truncated=truncated,
                     )
                 elif payload_type == "agent_message":
                     self._handle_agent_message(payload, timestamp, append_message)
                 else:
-                    self._mark_unknown(f"response_item:{payload_type}", unknown_seen)
+                    record_unknown_event(
+                        "response_item", payload_type, payload, record.get("timestamp"), timestamp
+                    )
             elif record_type == "event_msg":
                 payload = record.get("payload")
                 if isinstance(payload, dict) and payload.get("type") == "token_count":
@@ -521,7 +619,12 @@ class CodexExtractor(BaseExtractor):
                             messages[last_assistant_idx].tokens = last_usage
                 else:
                     sub = payload.get("type") if isinstance(payload, dict) else ""
-                    self._mark_unknown(f"event_msg:{sub}", unknown_seen)
+                    if sub in _CANCELLED_EVENT_TYPES:
+                        reason = payload.get("reason") or payload.get("message")
+                        cancel_pending_calls(reason, timestamp)
+                    record_unknown_event(
+                        "event_msg", sub, payload, record.get("timestamp"), timestamp
+                    )
             elif record_type == "turn_context":
                 payload = record.get("payload")
                 if isinstance(payload, dict):
@@ -545,16 +648,10 @@ class CodexExtractor(BaseExtractor):
                                 kind="compaction_summary",
                             )
                         )
-            elif record_type in (
-                "session_meta",
-                "response_item",
-                "event_msg",
-                "turn_context",
-                "compacted",
-            ):
-                pass
             else:
-                self._mark_unknown(f"record:{record_type}", unknown_seen)
+                record_unknown_event(
+                    "record", record_type, record.get("payload"), record.get("timestamp"), timestamp
+                )
 
         if created_at is None:
             created_at = file_mtime
@@ -567,17 +664,30 @@ class CodexExtractor(BaseExtractor):
 
         # Calls whose output never arrived keep an explicit status instead of vanishing.
         for queue in pending_calls.values():
-            for idx, tool_name in queue:
+            for idx, tool_name, call in queue:
                 if 0 <= idx < len(messages):
                     owner = messages[idx]
+                    cancelled = call.get("status") == "cancelled"
+                    if not cancelled:
+                        call["status"] = "unmatched"
+                        owner.status = "unmatched"
                     owner.tool_events = list(owner.tool_events) + [
                         {
                             "name": tool_name,
-                            "status": "no_result",
+                            "status": "cancelled" if cancelled else "no_result",
                             "duration_ms": None,
                             "is_error": False,
                         }
                     ]
+
+        # A call without a native id can never be paired; it is still visible.
+        for message in messages:
+            if message.role != Role.ASSISTANT:
+                continue
+            for call in message.tool_calls:
+                if call.get("status") == "pending":
+                    call["status"] = "unmatched"
+                    message.status = "unmatched"
 
         origin, relation, parent_session_id = _origin_from_session_meta(metadata)
         session = UnifiedSession(
@@ -607,19 +717,23 @@ class CodexExtractor(BaseExtractor):
         return session
 
     @staticmethod
-    def _coerce_output_text(value: Any) -> str:
+    def _coerce_output(value: Any) -> Tuple[str, bool]:
         if isinstance(value, str):
             text = value
         elif value is None:
-            return ""
+            return "", False
         else:
             try:
                 text = json.dumps(value, ensure_ascii=False, default=str)
             except (TypeError, ValueError):
-                return ""
+                return "", False
         if len(text) > _MAX_TOOL_OUTPUT_CHARS:
-            text = text[:_MAX_TOOL_OUTPUT_CHARS] + "\n[truncated]"
-        return text
+            return text[:_MAX_TOOL_OUTPUT_CHARS] + "\n[truncated]", True
+        return text, False
+
+    @staticmethod
+    def _coerce_output_text(value: Any) -> str:
+        return CodexExtractor._coerce_output(value)[0]
 
     def _handle_legacy_message(
         self,
@@ -697,7 +811,7 @@ class CodexExtractor(BaseExtractor):
 
     def _handle_function_call(
         self, payload: Dict[str, Any], timestamp: datetime, append_message
-    ) -> int:
+    ) -> Tuple[int, Dict[str, Any]]:
         func_name = payload.get("name", "unknown")
         if not isinstance(func_name, str):
             func_name = "unknown"
@@ -711,19 +825,25 @@ class CodexExtractor(BaseExtractor):
         if not isinstance(func_args, dict):
             func_args = {"raw": func_args}
         content = self._format_tool_call_content(func_name, func_args)
-        call_id = payload.get("call_id")
-        return append_message(
+        call_id = _clean_call_id(payload.get("call_id"))
+        call: Dict[str, Any] = {"tool": func_name, "input": func_args, "status": "pending"}
+        if call_id:
+            call["id"] = call_id
+        idx = append_message(
             UnifiedMessage(
                 role=Role.ASSISTANT,
                 content=content,
                 timestamp=timestamp,
-                message_id=_clean_call_id(call_id),
+                message_id=call_id,
+                status="pending",
+                tool_calls=[call],
             )
         )
+        return idx, call
 
     def _handle_custom_tool_call(
         self, payload: Dict[str, Any], timestamp: datetime, append_message
-    ) -> int:
+    ) -> Tuple[int, Dict[str, Any]]:
         tool_name = payload.get("name", "tool")
         if not isinstance(tool_name, str):
             tool_name = "tool"
@@ -735,15 +855,25 @@ class CodexExtractor(BaseExtractor):
             content = f"[Tool: {tool_name}] {preview}"
         else:
             content = self._format_tool_call_content(tool_name, {})
-        call_id = payload.get("call_id")
-        return append_message(
+        call_id = _clean_call_id(payload.get("call_id"))
+        call: Dict[str, Any] = {
+            "tool": tool_name,
+            "input": tool_input if tool_input is not None else {},
+            "status": "pending",
+        }
+        if call_id:
+            call["id"] = call_id
+        idx = append_message(
             UnifiedMessage(
                 role=Role.ASSISTANT,
                 content=content,
                 timestamp=timestamp,
-                message_id=_clean_call_id(call_id),
+                message_id=call_id,
+                status="pending",
+                tool_calls=[call],
             )
         )
+        return idx, call
 
     @staticmethod
     def _handle_agent_message(payload: Dict[str, Any], timestamp: datetime, append_message) -> None:
