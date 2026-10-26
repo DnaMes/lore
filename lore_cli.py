@@ -261,14 +261,19 @@ def cmd_list(args):
                 title = title[:37] + "..."
             print(f"{s.tool.value:<15} {date_str:<12} {s.message_count:>8}  {title}")
 
+    # JSON mode keeps stdout to the array alone; the summary goes to stderr.
+    info = sys.stderr if args.format == "json" else sys.stdout
     if limit:
-        print(f"\nShowing {len(sessions)} of {total_sessions} sessions (offset: {offset})")
+        print(
+            f"\nShowing {len(sessions)} of {total_sessions} sessions (offset: {offset})",
+            file=info,
+        )
         if offset + limit < total_sessions:
-            print(f"  → Use --offset {offset + limit} --limit {limit} to see more")
+            print(f"  → Use --offset {offset + limit} --limit {limit} to see more", file=info)
     else:
-        print(f"\nTotal: {total_sessions} sessions")
+        print(f"\nTotal: {total_sessions} sessions", file=info)
     if hidden_line:
-        print(f"{hidden_line} (use --include-automated to show them)")
+        print(f"{hidden_line} (use --include-automated to show them)", file=info)
 
 
 def _tag_git_info(session, cache: dict) -> None:
@@ -438,17 +443,10 @@ def cmd_export(args):
     finished_extractors: list = []
     prior_by_id = {str(e["id"]): e for e in prior_sessions if e.get("id")}
     filtered_run = bool(tool_filter or args.project)
-    pruned_ids: list[str] = []
 
     def _preserve_prior(seen_ids: set[str]) -> list[dict]:
-        """Prior rows not seen this run; other tools' rows always survive a filter."""
-        return preserve_unobserved_index_entries(
-            prior_by_id,
-            seen_ids,
-            ignored_ids=ignored_ids,
-            tool_filter=tool_filter,
-            pruned=pruned_ids,
-        )
+        """Prior rows not seen this run; only ignored ids are left out."""
+        return preserve_unobserved_index_entries(prior_by_id, seen_ids, ignored_ids=ignored_ids)
 
     def export_stream():
         """Export each matching session, then yield it — one at a time.
@@ -541,7 +539,7 @@ def cmd_export(args):
             finished_extractors.append(extractor)
 
         # Sources deleted after the last export (retention cleanup) are never
-        # skipped or re-yielded; keep their prior rows unless pruned/orphaned.
+        # skipped or re-yielded; keep their prior rows unless ignored.
         # A filtered run preserves in all_sessions_stream instead (full view).
         if not filtered_run:
             reused_entries.extend(_preserve_prior(observed_ids))
@@ -576,11 +574,6 @@ def cmd_export(args):
         print("\nBuilding index...")
         index_builder.build_index(
             all_sessions_stream(), merged_paths, reused_entries=reused_entries
-        )
-    if pruned_ids:
-        print(
-            f"Dropped {len(pruned_ids)} index entries whose export and source are both gone.",
-            file=sys.stderr,
         )
     print(f"Index saved to: {index_builder.index_path}")
     record_discovery(output_dir, finished_extractors)
@@ -681,18 +674,43 @@ def cmd_export_html(args):
     return 0
 
 
-def _confined_export_path(export_path: str | Path, export_root: Path) -> Path | None:
-    """Resolve ``export_path`` and return it only when it stays under ``export_root``.
+# Export files are named "<date>_<title>_<id>.md" inside "projects/", so none of
+# these prefixes can belong to an export. Store and control files never can.
+_PROTECTED_NAME_PREFIXES = (
+    "index",
+    "ignored",
+    "deleted_sessions",
+    "title_cache",
+    "memory",
+    "memories",
+    "opencode_state",
+    "rules",
+)
 
-    Follows symlinks via ``Path.resolve``; a link that escapes the archive root
-    yields ``None`` so prune never deletes outside files.
+
+def _confined_export_path(export_path: str | Path, export_root: Path) -> Path | None:
+    """Return the resolved export file prune may delete, or ``None`` to refuse.
+
+    Deletable means a regular ``.md`` file under ``export_root``, not directly in
+    its top level (where index and control files live), and not a store or
+    control file. A symlink at the entry is refused outright; parent directories
+    are resolved, so a link chain that leaves the root is refused as well.
     """
     root = export_root.expanduser().resolve()
+    raw = Path(export_path).expanduser()
     try:
-        resolved = Path(export_path).expanduser().resolve()
+        if raw.is_symlink():
+            return None
+        resolved = raw.resolve()
     except (OSError, RuntimeError):
         return None
-    if not resolved.is_relative_to(root):
+    if not resolved.is_relative_to(root) or resolved.parent == root:
+        return None
+    if resolved.suffix != ".md" or resolved.name.endswith(("-wal", "-shm")):
+        return None
+    if resolved.name.startswith(_PROTECTED_NAME_PREFIXES):
+        return None
+    if not resolved.is_file() or resolved.is_symlink():
         return None
     return resolved
 
@@ -746,7 +764,7 @@ def cmd_prune(args):
         ignored.add(session_id)
         removed.append(session_id)
         export_path = s.get("export_path")
-        if not export_path:
+        if not export_path or not os.path.lexists(Path(export_path).expanduser()):
             continue
         confined = _confined_export_path(export_path, output_dir)
         if confined is None:
@@ -757,8 +775,7 @@ def cmd_prune(args):
             skipped_paths += 1
             continue
         try:
-            if confined.exists():
-                confined.unlink()
+            confined.unlink()
         except OSError:
             pass
 
@@ -776,7 +793,15 @@ def cmd_prune(args):
         if s.get("export_path") and s.get("id") not in ignored:
             export_paths[s.get("id")] = s.get("export_path")
 
-    IndexBuilder(output_dir).build_index(sessions, export_paths)
+    # Keep entries whose source is not extracted now (other offline sessions);
+    # only the ids in ``ignored`` leave the index.
+    prior_by_id = {str(s["id"]): s for s in index.get("sessions", []) if s.get("id")}
+    kept = preserve_unobserved_index_entries(
+        prior_by_id,
+        {s.session_id for s in sessions},
+        ignored_ids=ignored,
+    )
+    IndexBuilder(output_dir).build_index(sessions, export_paths, reused_entries=kept)
     print(f"Pruned {len(removed)} sessions and rebuilt index.")
     if skipped_paths:
         print(
@@ -895,6 +920,7 @@ def cmd_analyze(args):
             provider = get_provider(
                 provider=args.provider,
                 model=config.model,
+                allow_cloud=bool(getattr(args, "allow_cloud", False)),
             )
             if provider.is_available():
                 print(f"Using {args.provider} ({config.model}) for insights...")
@@ -962,6 +988,7 @@ def cmd_improve(args):
         stages=stages,
         dry_run=bool(getattr(args, "dry_run", False)),
         include_automated=_include_automated(args),
+        allow_cloud=bool(getattr(args, "allow_cloud", False)),
     )
 
     if args.json:
@@ -1050,6 +1077,7 @@ def cmd_knowledge(args):
             cache_enabled=config.cache_enabled,
             options=config.options,
             num_ctx=config.num_ctx,
+            allow_cloud=bool(getattr(args, "allow_cloud", False)),
         )
 
         if not provider.is_available():
@@ -1167,6 +1195,7 @@ def cmd_format(args):
             cache_enabled=config.cache_enabled,
             options=config.options,
             num_ctx=config.num_ctx,
+            allow_cloud=bool(getattr(args, "allow_cloud", False)),
         )
 
         if not provider.is_available():
@@ -1766,6 +1795,7 @@ def cmd_generate_titles(args):
         strategy=strategy,
         provider=provider,
         model=getattr(args, "model", None),
+        allow_cloud=allow_cloud,
     )
     if strategy in (TitleStrategy.SMART, TitleStrategy.AUTO):
         # Titles send a transcript excerpt: say where they go before the first

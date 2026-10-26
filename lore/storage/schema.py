@@ -459,16 +459,23 @@ def _run_migration_sql(conn: sqlite3.Connection, sql: str) -> None:
 def apply_migrations(conn: sqlite3.Connection) -> int:
     """Apply every pending migration in order. Returns the new current version.
 
-    Each migration runs inside its own transaction; a failing migration rolls
-    back and re-raises, leaving the DB at the last successfully applied
-    version. Idempotent — running it twice is a no-op, and a half-applied
-    ALTER TABLE migration can be safely re-run.
+    Guarantee (NOT a full rollback): the DDL of a migration runs in autocommit
+    mode, before the bookkeeping transaction, so it is NOT rolled back. If a
+    step fails part-way, the DDL already executed stays applied, while the
+    ``schema_version`` row for that migration is never written. The version is
+    bumped only after the DDL and the bookkeeping insert both succeed.
+
+    Recovery: every migration step is idempotent (``CREATE ... IF NOT EXISTS``,
+    and ``ALTER TABLE ... ADD COLUMN`` guarded by ``_run_migration_sql``), so a
+    failed run is safe to re-run. The re-run skips what already exists, finishes
+    the remaining DDL, and records the version. Running it on an up-to-date DB
+    is a no-op.
     """
     applied = current_version(conn)
     for version, description, sql in MIGRATIONS:
         if version <= applied:
             continue
-        # Run the DDL first (autocommit, ALTER-idempotent), then record the
+        # Run the DDL first (autocommit, idempotent per step), then record the
         # bookkeeping insert in its own short transaction. executescript's
         # implicit COMMIT would otherwise close a BEGIN started here.
         try:

@@ -1,8 +1,8 @@
-"""Index entries survive filesystem trouble; only confirmed-gone rows are pruned.
+"""Index entries survive every filesystem state; only explicit removals drop them.
 
-- An unreadable or unmounted archive must never remove index rows (P1).
-- Only an entry whose export and source are both positively absent, and that
-  was not seen this run, is dropped, and the drop is reported on stderr.
+- Preservation never inspects the filesystem: a gone, unmounted or unreadable
+  export or source keeps its index row (P1).
+- Only ids in ``ignored.json`` (pruned sessions) or tombstones leave the index.
 - A filtered export (``--tool``) keeps the rows of every other tool (P2).
 """
 
@@ -57,84 +57,41 @@ def _deny_under(monkeypatch, denied: Path) -> None:
     monkeypatch.setattr(os, "stat", fake_stat)
 
 
-def test_permission_denied_parent_keeps_entry(tmp_path, monkeypatch):
-    """A missing-looking file under an unreadable dir is unknown, so it is kept."""
+def test_gone_unreadable_or_unmounted_entries_are_kept(tmp_path, monkeypatch):
+    """Permission-denied and unmounted paths never cost an index row."""
     locked = tmp_path / "locked"
-    export = locked / "out" / "sess-x.md"
-    source = locked / "src" / "sess-x.jsonl"
+    _deny_under(monkeypatch, locked)
     existing = {
         "sess-x": {
             "id": "sess-x",
             "tool": "claude-code",
-            "export_path": str(export),
-            "source_path": str(source),
-        }
-    }
-    _deny_under(monkeypatch, locked)
-    pruned: list[str] = []
-
-    kept = preserve_unobserved_index_entries(existing, set(), pruned=pruned)
-
-    assert [entry["id"] for entry in kept] == ["sess-x"]
-    assert pruned == []
-
-
-def test_permission_error_on_existing_file_keeps_entry(tmp_path, monkeypatch):
-    """A file that exists but cannot be stat'ed is unknown, never absent."""
-    locked = tmp_path / "locked"
-    export = locked / "sess-y.md"
-    source = locked / "sess-y.jsonl"
-    locked.mkdir()
-    export.write_text("x", encoding="utf-8")
-    existing = {
-        "sess-y": {
-            "id": "sess-y",
-            "tool": "claude-code",
-            "export_path": str(export),
-            "source_path": str(source),
-        }
-    }
-    _deny_under(monkeypatch, locked)
-    pruned: list[str] = []
-
-    kept = preserve_unobserved_index_entries(existing, set(), pruned=pruned)
-
-    assert [entry["id"] for entry in kept] == ["sess-y"]
-    assert pruned == []
-
-
-def test_unmounted_archive_keeps_entry(tmp_path):
-    """Missing mount point (parent absent too) is not positive absence."""
-    existing = {
+            "export_path": str(locked / "out" / "sess-x.md"),
+            "source_path": str(locked / "src" / "sess-x.jsonl"),
+        },
         "sess-m": {
             "id": "sess-m",
             "tool": "claude-code",
             "export_path": str(tmp_path / "unplugged" / "out" / "sess-m.md"),
             "source_path": str(tmp_path / "unplugged" / "src" / "sess-m.jsonl"),
-        }
+        },
     }
-    pruned: list[str] = []
 
-    kept = preserve_unobserved_index_entries(existing, set(), pruned=pruned)
+    kept = preserve_unobserved_index_entries(existing, set())
 
-    assert [entry["id"] for entry in kept] == ["sess-m"]
-    assert pruned == []
+    assert sorted(entry["id"] for entry in kept) == ["sess-m", "sess-x"]
 
 
-def test_both_confirmed_missing_is_dropped_and_reported(env, capsys):
-    """Export and source confirmed gone and unseen -> dropped with a stderr count."""
+def test_both_gone_entry_is_kept_after_export(env, capsys):
+    """Export and source gone and unseen -> still kept; no implicit garbage collection."""
     tmp_path, project = env
     first = _export(tmp_path)
-    entry = _by_id(first)["sess-b"]
-    Path(entry["export_path"]).unlink()
+    Path(_by_id(first)["sess-b"]["export_path"]).unlink()
     (project / "sess-b.jsonl").unlink()
 
     second = _export(tmp_path)
 
-    assert "sess-b" not in _by_id(second)
-    assert sorted(_by_id(second)) == ["sess-a", "sess-c"]
-    err = capsys.readouterr().err
-    assert "Dropped 1 index entries whose export and source are both gone." in err
+    assert sorted(_by_id(second)) == ["sess-a", "sess-b", "sess-c"]
+    assert "Dropped" not in capsys.readouterr().err
 
 
 def test_missing_export_with_existing_source_is_kept(env, capsys):
@@ -179,8 +136,8 @@ def test_filtered_export_keeps_other_tools_entries(env):
     assert sorted(_by_id(filtered)) == sorted([*_by_id(first), "codex-1"])
 
 
-def test_filtered_export_still_prunes_gone_entries_of_filtered_tool(env, capsys):
-    """Entries of the filtered tool follow the same confirmed-gone rule."""
+def test_filtered_export_keeps_gone_entries_of_filtered_tool(env, capsys):
+    """A --tool run does not garbage-collect the filtered tool's gone entries either."""
     tmp_path, project = env
     first = _export(tmp_path)
     Path(_by_id(first)["sess-c"]["export_path"]).unlink()
@@ -188,31 +145,25 @@ def test_filtered_export_still_prunes_gone_entries_of_filtered_tool(env, capsys)
 
     filtered = _export(tmp_path, tool="claude-code")
 
-    assert "sess-c" not in _by_id(filtered)
-    assert "Dropped 1 index entries whose export and source are both gone." in (
-        capsys.readouterr().err
-    )
+    assert "sess-c" in _by_id(filtered)
+    assert "Dropped" not in capsys.readouterr().err
 
 
-def test_ignored_id_is_not_resurrected_by_preserve(tmp_path):
-    """ignored_ids wins for any tool, including the filter's other tools."""
-    export = tmp_path / "gone.md"
-    source = tmp_path / "gone.jsonl"
+def test_ignored_and_tombstoned_ids_are_removed_by_preserve(tmp_path):
+    """Only ignored ids (pruned) and tombstones leave; everything else stays."""
     existing = {
-        "pruned-1": {"id": "pruned-1", "tool": "codex", "export_path": str(export)},
-        "pruned-2": {
-            "id": "pruned-2",
-            "tool": "claude-code",
-            "export_path": str(export),
-            "source_path": str(source),
-        },
+        "pruned-1": {"id": "pruned-1", "tool": "codex", "export_path": str(tmp_path / "a.md")},
+        "pruned-2": {"id": "pruned-2", "tool": "claude-code"},
+        "tombstone": {"id": "tombstone", "tool": "claude-code"},
+        "observed": {"id": "observed", "tool": "claude-code"},
+        "offline": {"id": "offline", "tool": "codex", "source_path": str(tmp_path / "gone")},
     }
 
     kept = preserve_unobserved_index_entries(
         existing,
-        set(),
+        {"observed"},
         ignored_ids={"pruned-1", "pruned-2"},
-        tool_filter="claude-code",
+        deleted_ids={"tombstone"},
     )
 
-    assert kept == []
+    assert [entry["id"] for entry in kept] == ["offline"]

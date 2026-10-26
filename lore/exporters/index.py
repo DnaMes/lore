@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
 from ..core.models import UnifiedSession
+from ..storage.reader import load_ignored_session_ids
 
 logger = logging.getLogger(__name__)
 
@@ -360,25 +361,9 @@ class IndexBuilder:
         return conn
 
     def _load_ignored(self) -> set:
-        ignore_path = self.output_dir / "ignored.json"
-        if not ignore_path.exists():
-            return set()
-        try:
-            data = json.loads(ignore_path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                values = data.get("session_ids", [])
-            else:
-                values = data
-            return set(values or [])
-        except (OSError, json.JSONDecodeError, TypeError) as exc:
-            # A corrupt/unreadable ignore list must not silently un-prune
-            # sessions (#116) — warn so the operator can fix the file.
-            logger.warning(
-                "Could not load ignored.json (%s); previously pruned "
-                "sessions may reappear in the next rebuild",
-                exc,
-            )
-            return set()
+        # Single source of truth: the shared hardened loader in lore.storage.reader
+        # (never raises; warns once per process on unreadable or malformed files).
+        return load_ignored_session_ids(self.output_dir)
 
 
 _CONTRACT_ENTRY_DEFAULTS: Dict[str, Any] = {

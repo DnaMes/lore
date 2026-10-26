@@ -714,16 +714,16 @@ def test_cli_list_hides_automated_and_reports_the_count(store, monkeypatch, caps
     extractor = FixtureExtractor(_fixture_sessions())
     monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
     lore_cli.cmd_list(_cli_args(store))
-    out = capsys.readouterr().out
-    listed = json.loads(out[: out.rindex("]") + 1])
+    captured = capsys.readouterr()
+    listed = json.loads(captured.out)
     assert {row["session_id"] for row in listed} == VISIBLE
-    assert "2 automated sessions hidden" in out
+    assert "2 automated sessions hidden" in captured.err
 
     lore_cli.cmd_list(_cli_args(store, include_automated=True))
-    out = capsys.readouterr().out
-    listed = json.loads(out[: out.rindex("]") + 1])
+    captured = capsys.readouterr()
+    listed = json.loads(captured.out)
     assert {row["session_id"] for row in listed} == VISIBLE | AUTOMATED
-    assert "automated sessions hidden" not in out
+    assert "automated sessions hidden" not in captured.err
 
 
 def test_cli_stats_threads_and_digest_hide_automated(store, capsys):

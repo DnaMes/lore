@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -173,20 +174,45 @@ def _compute_stats(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+# Set once per process: the first unreadable/malformed ignored.json warns, later
+# reads stay quiet so list/search do not spam stderr on every call.
+_IGNORED_JSON_WARNED = False
+
+
+def _warn_ignored_json_once(reason: str) -> None:
+    global _IGNORED_JSON_WARNED
+    if _IGNORED_JSON_WARNED:
+        return
+    _IGNORED_JSON_WARNED = True
+    print(
+        f"Warning: could not read ignored.json ({reason}); pruned sessions may be visible again.",
+        file=sys.stderr,
+    )
+
+
 def load_ignored_session_ids(output_dir: Path) -> set[str]:
-    """Session ids listed in ``ignored.json`` (pruned); rows stay in SQLite."""
+    """Session ids listed in ``ignored.json`` (pruned); rows stay in SQLite.
+
+    Accepts a JSON list or ``{"session_ids": [...]}``. Any read, decode or shape
+    failure returns an empty set and warns once per process (never raises), so
+    the caller does not crash; non-string entries are skipped with the same warning.
+    """
     ignore_path = output_dir / "ignored.json"
-    if not ignore_path.exists():
-        return set()
     try:
+        if not ignore_path.exists():
+            return set()
         data = json.loads(ignore_path.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            values = data.get("session_ids", [])
-        else:
-            values = data
-        return {str(v) for v in (values or []) if v is not None}
-    except (OSError, json.JSONDecodeError, TypeError):
+    except (UnicodeDecodeError, ValueError, OSError) as exc:
+        _warn_ignored_json_once(str(exc))
         return set()
+    values = data.get("session_ids", []) if isinstance(data, dict) else data
+    if not isinstance(values, list):
+        _warn_ignored_json_once(f"expected a list of session ids, got {type(values).__name__}")
+        return set()
+    skipped = sum(1 for v in values if not isinstance(v, str))
+    if skipped:
+        _warn_ignored_json_once(f"skipped {skipped} non-string entries")
+    return {v for v in values if isinstance(v, str)}
 
 
 def ignored_json_stat(output_dir: Path) -> tuple[int, int]:

@@ -12,8 +12,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
-import stat
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
@@ -210,72 +208,30 @@ def _source_fingerprints(prior_entries: dict[str, dict]) -> tuple[dict[str, int]
     return mtimes, {path: versions[path] for path in mtimes}
 
 
-def _path_existence(path_value: object) -> Optional[bool]:
-    """Tri-state existence of ``path_value``.
-
-    ``True``: the path exists. ``False``: absence is positively known, i.e. the
-    path itself raised FileNotFoundError while its parent directory exists.
-    ``None``: unknown (any other OSError, an empty or unreadable parent, an
-    unmounted drive). Only ``False`` may justify dropping an index entry.
-    """
-    if not path_value:
-        return False
-    path = Path(str(path_value)).expanduser()
-    try:
-        os.stat(path)
-        return True
-    except FileNotFoundError:
-        pass
-    except OSError:
-        return None
-    try:
-        parent_mode = os.stat(path.parent).st_mode
-    except OSError:
-        return None
-    return False if stat.S_ISDIR(parent_mode) else None
-
-
 def preserve_unobserved_index_entries(
     existing_by_id: dict[str, dict],
     observed_ids: set[str],
     *,
     ignored_ids: Optional[set[str]] = None,
     deleted_ids: Optional[set[str]] = None,
-    tool_filter: Optional[str] = None,
-    pruned: Optional[list[str]] = None,
 ) -> list[dict]:
-    """Prior index entries not re-observed this run, minus pruned ones.
+    """Prior index entries not re-observed this run, minus explicit removals.
 
     Keeps every previous entry whose id was not seen again, unless it is listed
-    in ``ignored_ids`` / ``deleted_ids``. An entry is pruned only when it has a
-    recorded export path, that export and its source are both positively known
-    to be absent, and it was not observed. Any other filesystem error keeps it.
-    Entries with no recorded export path are kept even when the source
-    disappeared (web sync has no markdown yet).
-
-    With ``tool_filter``, entries of other tools are always kept untouched.
-    Pruned ids are appended to ``pruned`` when that list is given.
+    in ``ignored_ids`` (pruned sessions, ignored.json) or ``deleted_ids``
+    (tombstones). Nothing is dropped because its export or source looks gone:
+    an unreadable, unmounted or temporarily missing source must never cost an
+    index row. Only ``cmd_prune`` removes entries, and it records them as ignored.
     """
     ignored = ignored_ids or set()
     deleted = deleted_ids or set()
-    kept: list[dict] = []
-    for session_id, prior in existing_by_id.items():
-        if session_id in observed_ids or session_id in deleted or session_id in ignored:
-            continue
-        if tool_filter and str(prior.get("tool") or "") != tool_filter:
-            kept.append(prior)
-            continue
-        export_path = prior.get("export_path")
-        if (
-            export_path
-            and _path_existence(export_path) is False
-            and _path_existence(prior.get("source_path")) is False
-        ):
-            if pruned is not None:
-                pruned.append(session_id)
-            continue
-        kept.append(prior)
-    return kept
+    return [
+        prior
+        for session_id, prior in existing_by_id.items()
+        if session_id not in observed_ids
+        and session_id not in deleted
+        and session_id not in ignored
+    ]
 
 
 def build_search_index(
@@ -466,15 +422,14 @@ def build_search_index(
             finished.append(extractor)
 
         # An extractor can fail, be unavailable, or return only part of its
-        # source. Preserve prior derived entries that were not observed in this
-        # run (shared with cmd_export); ignored/tombstoned/fully-orphaned drop.
+        # source. Keep prior entries that were not observed in this run (shared
+        # with cmd_export); only ignored or tombstoned ids are removed.
         reused_entries.extend(
             preserve_unobserved_index_entries(
                 existing_by_id,
                 seen_ids,
                 ignored_ids=ignored_ids,
                 deleted_ids=deleted,
-                tool_filter=tool_filter,
             )
         )
 
