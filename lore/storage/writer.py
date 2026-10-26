@@ -26,7 +26,8 @@ from .envelope import ENVELOPE_VERSION, envelope_for
 from .identity import canonical_content_hash, resolve_store_id, store_identity_columns
 from .schema import initialise
 from .session_vectors import _MAX_EMBED_CHARS, embed_sessions
-from .source_revisions import capture_session_source
+from .source_health import record_capture_outcome
+from .source_revisions import capture_session_source, source_identity_for
 
 logger = logging.getLogger(__name__)
 
@@ -545,6 +546,22 @@ def _link_source_revision(
             "Source capture skipped for %s: %s", getattr(session, "source_path", None), exc
         )
         return
+    if not session.source_path:
+        return
+    # Health is recorded for every outcome, including the ones that store nothing:
+    # a credential file or an unreadable source is a fact about the archive (#162).
+    try:
+        record_capture_outcome(
+            conn,
+            tool=session.tool.value,
+            source_identity=source_identity_for(session.tool.value, session.source_path),
+            source_path=str(session.source_path),
+            status=result.status,
+            decode_status=result.decode_status,
+            decode_note=None,
+        )
+    except Exception as exc:  # noqa: BLE001 - a health row never breaks a sync
+        logger.debug("Source health row skipped: %s", exc)
     if result.revision_id is None:
         return
     conn.execute(

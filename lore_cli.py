@@ -1402,6 +1402,7 @@ def cmd_sync(args):
     print(f"Index saved to: {index_builder.index_path}")
     print(f"\nSynced {len(sessions)} sessions to {output_dir}")
     _print_skip_summary(built_extractors)
+    _record_source_health(output_dir, built_extractors)
 
 
 def _open_private_append(path: Path):
@@ -1622,6 +1623,56 @@ def cmd_stats(args):
         print(f"  {project}: {count}")
 
 
+def _print_source_health(output_dir: Path) -> None:
+    """One-line archive health summary for ``lore check`` (#162)."""
+    db_path = output_dir / "index_v2.sqlite"
+    if not db_path.exists():
+        return
+    from lore.storage.schema import open_v2_connection
+    from lore.storage.source_health import HEALTH_STATES, source_health_summary
+
+    try:
+        conn = open_v2_connection(db_path)
+        try:
+            summary = source_health_summary(conn)
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 - a health report never fails `lore check`
+        return
+    parts = [
+        f"{state}={summary['states'][state]['sources']}"
+        for state in HEALTH_STATES
+        if summary["states"][state]["sources"]
+    ]
+    print(
+        f"Archive health: {summary['sources_tracked']} source file(s) tracked"
+        + (f" ({', '.join(parts)})" if parts else "")
+    )
+    print("  Per-source detail: lore sources [--state STATE] [--json]")
+
+
+def _record_source_health(output_dir: Path, extractors) -> None:
+    """Persist the extractors' skip tallies as source-health rows (#162)."""
+    db_path = output_dir / "index_v2.sqlite"
+    if not db_path.exists():
+        return
+    from lore.storage.schema import open_v2_connection
+    from lore.storage.source_health import record_extractor_skips
+
+    try:
+        conn = open_v2_connection(db_path)
+        try:
+            for extractor in extractors:
+                record_extractor_skips(
+                    conn, extractor.tool.value, getattr(extractor, "skip_counts", {}) or {}
+                )
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:  # noqa: BLE001 - health bookkeeping never breaks a sync
+        pass
+
+
 def cmd_digest(args):
     """Print a periodic activity digest (sessions by day, tool, project)."""
     output_dir = Path(args.output_dir).expanduser()
@@ -1647,6 +1698,58 @@ def cmd_digest(args):
     )
     fmt = "markdown" if args.format == "markdown" else "text"
     print(format_digest(digest, fmt=fmt))
+
+
+def cmd_sources(args):
+    """Report per-source archive health: captured, filtered, unsupported, failed (#162)."""
+    output_dir = Path(args.output_dir).expanduser()
+    db_path = output_dir / "index_v2.sqlite"
+    if not db_path.exists():
+        print("No archive store found. Run 'lore export --all' or 'lore sync' first.")
+        sys.exit(1)
+
+    from lore.storage.schema import open_v2_connection
+    from lore.storage.source_health import (
+        HEALTH_STATES,
+        list_source_health,
+        source_health_summary,
+    )
+
+    conn = open_v2_connection(db_path)
+    try:
+        summary = source_health_summary(conn)
+        records = list_source_health(
+            conn, state=getattr(args, "state", None), limit=int(getattr(args, "limit", 200))
+        )
+    finally:
+        conn.close()
+
+    if getattr(args, "json", False):
+        print(json.dumps({"summary": summary, "sources": records}, ensure_ascii=False, indent=2))
+        return
+
+    print("Archive source health")
+    print("-" * 40)
+    for state in HEALTH_STATES:
+        entry = summary["states"][state]
+        print(
+            f"{state:<12} sources={entry['sources']:<6} "
+            f"sessions={entry['sessions_captured']:<6} "
+            f"filtered={entry['sessions_filtered']:<6} "
+            f"unsupported={entry['sessions_unsupported']:<6} "
+            f"failed={entry['sessions_failed']}"
+        )
+    print(f"Sources tracked: {summary['sources_tracked']}")
+    if not records:
+        return
+    print("-" * 40)
+    for record in records:
+        detail = record["detail"] or {}
+        reason = detail.get("reason") or record["last_error"] or ""
+        print(
+            f"{record['state']:<12} {record['tool']:<16} {record['source_path']}"
+            + (f"  ({reason})" if reason else "")
+        )
 
 
 def cmd_memory(args):
@@ -2328,6 +2431,7 @@ def cmd_check(args):
 
     print("-" * 40)
     print(f"Summary: {available_count}/{len(extractors)} tools available.")
+    _print_source_health(Path(getattr(args, "output_dir", None) or lore_home()).expanduser())
     from lore.utils.claude_retention import retention_check_lines
 
     for line in retention_check_lines():
@@ -2351,6 +2455,7 @@ COMMANDS = {
     "search": cmd_search,
     "stats": cmd_stats,
     "digest": cmd_digest,
+    "sources": cmd_sources,
     "memory": cmd_memory,
     "watch": cmd_watch,
     "check": cmd_check,
@@ -2642,6 +2747,29 @@ Examples:
         help="Run every available extractor (writes nothing) and report matched sources, "
         "sessions, skips and unknown records",
     )
+
+    # sources command
+    sources_parser = subparsers.add_parser(
+        "sources",
+        help="Report per-source archive health (captured, filtered, unsupported, failed)",
+    )
+    sources_parser.add_argument(
+        "--state",
+        choices=[
+            "captured",
+            "parsed",
+            "filtered",
+            "unsupported",
+            "failed",
+            "unavailable",
+            "deleted",
+        ],
+        help="Only show sources in this state",
+    )
+    sources_parser.add_argument(
+        "--limit", type=int, default=200, help="Maximum per-source rows to print (default: 200)"
+    )
+    sources_parser.add_argument("--json", action="store_true", help="Machine-readable output")
 
     # threads command
     _add_automated_flag(subparsers.add_parser("threads", help="List threads"))

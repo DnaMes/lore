@@ -448,6 +448,29 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
             ON memory_sources(message_sha256);
         """,
     ),
+    (
+        23,
+        "per-source archive health (#162)",
+        # One row per source file: what happened to it in the archive. States are
+        # a closed set so a report cannot invent a new bucket silently.
+        """
+        CREATE TABLE IF NOT EXISTS source_health (
+            source_identity     TEXT PRIMARY KEY,
+            tool                TEXT NOT NULL,
+            source_path         TEXT NOT NULL,
+            state               TEXT NOT NULL,
+            sessions_captured   INTEGER NOT NULL DEFAULT 0,
+            sessions_filtered   INTEGER NOT NULL DEFAULT 0,
+            sessions_unsupported INTEGER NOT NULL DEFAULT 0,
+            sessions_failed     INTEGER NOT NULL DEFAULT 0,
+            last_captured_at    TEXT,
+            last_error          TEXT,
+            detail_json         TEXT
+        );
+        CREATE INDEX IF NOT EXISTS idx_source_health_state ON source_health(state);
+        CREATE INDEX IF NOT EXISTS idx_source_health_tool ON source_health(tool);
+        """,
+    ),
 ]
 
 
