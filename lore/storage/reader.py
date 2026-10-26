@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from lore.core.models import AUTOMATED_ORIGINS
 
+from .envelope import load_envelope_value, normalise_status
 from .schema import current_version, open_connection
 from .writer import v2_db_path
 
@@ -43,6 +44,20 @@ _SESSION_CONTRACT_DEFAULTS = (
 )
 _MESSAGE_CONTRACT_DEFAULTS = (
     "'text' AS kind, NULL AS parent_id, 1 AS active, NULL AS tool_events_json, NULL AS reasoning"
+)
+# Canonical message envelope columns arrive with migration 20 (#154).
+_ENVELOPE_VERSION = 20
+_MESSAGE_ENVELOPE_COLUMNS = (
+    "native_id",
+    "content_blocks_json",
+    "tool_calls_json",
+    "status",
+    "extensions_json",
+    "envelope_version",
+)
+_MESSAGE_ENVELOPE_DEFAULTS = (
+    "NULL AS native_id, NULL AS content_blocks_json, NULL AS tool_calls_json, "
+    "NULL AS status, NULL AS extensions_json, 0 AS envelope_version"
 )
 # store_meta.generated_at is written from migration 9 onward; below this a v2
 # store cannot be staleness-checked, so it is not considered usable.
@@ -454,15 +469,20 @@ def load_session_messages_v2(
         ).fetchone()
         if not synced or not synced[0]:
             return None
-        if current_version(conn) >= _CONTRACT_VERSION:
+        version = current_version(conn)
+        if version >= _CONTRACT_VERSION:
             reasoning_col = "reasoning" if include_reasoning else "NULL AS reasoning"
             message_contract = f"kind, parent_id, active, tool_events_json, {reasoning_col}"
         else:
             message_contract = _MESSAGE_CONTRACT_DEFAULTS
+        if version >= _ENVELOPE_VERSION:
+            message_envelope = ", ".join(_MESSAGE_ENVELOPE_COLUMNS)
+        else:
+            message_envelope = _MESSAGE_ENVELOPE_DEFAULTS
         rows = conn.execute(
             f"""
             SELECT seq, role, content, timestamp, model, tokens_json,
-                   {message_contract}
+                   {message_contract}, {message_envelope}
             FROM messages
             WHERE session_id = ?
             ORDER BY seq
@@ -476,39 +496,28 @@ def load_session_messages_v2(
         return None
 
     messages = []
-    for (
-        _seq,
-        role,
-        content,
-        timestamp,
-        model,
-        tokens_json,
-        kind,
-        parent_id,
-        active,
-        tool_events_json,
-        reasoning,
-    ) in rows:
+    for row in rows:
+        role = row["role"]
         try:
             role_enum = Role(role)
         except ValueError:
             role_enum = Role.USER
         ts = None
-        if timestamp:
+        if row["timestamp"]:
             try:
-                ts = datetime.fromisoformat(timestamp)
+                ts = datetime.fromisoformat(row["timestamp"])
             except ValueError:
                 ts = None
         tokens = None
-        if tokens_json:
+        if row["tokens_json"]:
             try:
-                tokens = json.loads(tokens_json)
+                tokens = json.loads(row["tokens_json"])
             except (ValueError, TypeError):
                 tokens = None
         tool_events: list = []
-        if tool_events_json:
+        if row["tool_events_json"]:
             try:
-                events = json.loads(tool_events_json)
+                events = json.loads(row["tool_events_json"])
             except (ValueError, TypeError):
                 events = []
             if not isinstance(events, list):
@@ -525,18 +534,30 @@ def load_session_messages_v2(
                 if "dropped" in ev:
                     event["dropped"] = ev["dropped"]
                 tool_events.append(event)
-        messages.append(
-            UnifiedMessage(
-                role=role_enum,
-                content=content or "",
-                timestamp=ts or datetime.fromtimestamp(0),
-                model=model,
-                tokens=tokens,
-                tool_events=tool_events,
-                reasoning=reasoning,
-                kind=kind or "text",
-                parent_id=parent_id,
-                active=bool(active),
-            )
+        message = UnifiedMessage(
+            role=role_enum,
+            content=row["content"] or "",
+            timestamp=ts or datetime.fromtimestamp(0),
+            model=row["model"],
+            tokens=tokens,
+            tool_events=tool_events,
+            reasoning=row["reasoning"],
+            kind=row["kind"] or "text",
+            parent_id=row["parent_id"],
+            active=bool(row["active"]),
         )
+        # Envelope fields (#154). A pre-migration-20 store yields the aliased
+        # defaults, so a legacy row stays readable and reports version 0.
+        # Each field is parsed independently: one damaged column must not hide
+        # the others or the message body.
+        message.message_id = row["native_id"] or None
+        content_blocks = load_envelope_value(row["content_blocks_json"])
+        tool_calls = load_envelope_value(row["tool_calls_json"])
+        extensions = load_envelope_value(row["extensions_json"])
+        message.content_blocks = content_blocks if isinstance(content_blocks, list) else None
+        message.tool_calls = tool_calls if isinstance(tool_calls, list) else []
+        message.extensions = extensions if isinstance(extensions, dict) else None
+        message.status = normalise_status(row["status"])
+        message.envelope_version = int(row["envelope_version"] or 0)
+        messages.append(message)
     return messages

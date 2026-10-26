@@ -394,6 +394,23 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
             ON sessions(source_revision_id);
         """,
     ),
+    (
+        20,
+        "canonical message envelope (#154)",
+        # The flattened ``content`` stays for FTS/export; these columns keep what
+        # the provider actually sent. envelope_version = 0 marks legacy rows so
+        # readers never present them as a complete envelope.
+        """
+        ALTER TABLE messages ADD COLUMN native_id TEXT;
+        ALTER TABLE messages ADD COLUMN content_blocks_json TEXT;
+        ALTER TABLE messages ADD COLUMN tool_calls_json TEXT;
+        ALTER TABLE messages ADD COLUMN status TEXT;
+        ALTER TABLE messages ADD COLUMN extensions_json TEXT;
+        ALTER TABLE messages ADD COLUMN envelope_version INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX IF NOT EXISTS idx_messages_native_id
+            ON messages(session_id, native_id);
+        """,
+    ),
 ]
 
 

@@ -123,6 +123,14 @@ class UnifiedMessage:
     # Compact [{name,status,duration_ms,is_error}] read back from storage; never
     # holds arguments or results, so renderers must not treat it as tool_calls.
     tool_events: List[Dict[str, Any]] = field(default_factory=list)
+    # Canonical envelope (#154). ``content_blocks`` keeps the provider's ordered
+    # typed blocks, ``status`` is the message state, ``extensions`` holds
+    # provider-specific fields nobody modelled yet, and ``envelope_version`` is 0
+    # for rows written before the envelope existed (never claim completeness).
+    content_blocks: Optional[List[Dict[str, Any]]] = None
+    status: Optional[str] = None
+    extensions: Optional[Dict[str, Any]] = None
+    envelope_version: int = 0
 
 
 class TitleSource(Enum):

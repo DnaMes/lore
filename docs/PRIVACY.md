@@ -64,7 +64,9 @@ All files created by Lore are stored under `~/.lore` unless overridden with `--o
 
 - `index.json`: Legacy JSON index of all parsed sessions and aggregate statistics.
 - `index.sqlite`: Legacy SQLite full-text search index (FTS5).
-- `index_v2.sqlite`: Unified primary store (SQLite). Contains full session messages, metadata, FTS5 full-text indices, memory tables (`memories`), deletion tombstones (`deleted_sessions`), per-session knowledge (`session_knowledge`), and vector embeddings (`memory_embeddings`, `session_embeddings`).
+- `index_v2.sqlite`: Unified primary store (SQLite). Contains full session messages, metadata, FTS5 full-text indices, memory tables (`memories`), deletion tombstones (`deleted_sessions`), per-session knowledge (`session_knowledge`), and vector embeddings (`memory_embeddings`, `session_embeddings`). Since migration 19/20 it also holds
+  - `source_revisions` / `source_artifacts`: the raw provider files and attachments an extractor read, zlib-compressed and keyed by sha256, so a parser bug can never make the input unrecoverable (#151). Append-only: a changed file becomes a new revision, the old one is kept. Credential and configuration files (`.env`, `credentials.json`, `auth.json`, keys, tokens) are never captured.
+  - the canonical message envelope columns on `messages` (`native_id`, `content_blocks_json`, `tool_calls_json`, `status`, `extensions_json`, `envelope_version`, #154). Unlike the compact `tool_events_json` (name/status only), the envelope keeps full tool arguments and results locally; nothing in it is sent anywhere unless a command explicitly calls an LLM provider.
 - `deleted_sessions.json`: List of soft-deleted session IDs (mirrored in `deleted_sessions` table in `index_v2.sqlite`).
 - `ignored.json`: Records pruned session identifiers to avoid re-indexing unwanted records.
 - `projects/`: Default target for session markdown exports organized by project slug (`projects/<slug>/<session-id>.md`).

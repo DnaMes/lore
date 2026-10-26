@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..core.models import MESSAGE_KINDS, ORIGINS, RELATIONS, UnifiedMessage, UnifiedSession
+from .envelope import ENVELOPE_VERSION, envelope_for
 from .schema import initialise
 from .session_vectors import _MAX_EMBED_CHARS, embed_sessions
 from .source_revisions import capture_session_source
@@ -447,12 +448,15 @@ def _write_full_session(
         reasoning = _scrub(message.reasoning or "")[: min(_MAX_REASONING_CHARS, reasoning_budget)]
         reasoning_budget -= len(reasoning)
         role = getattr(message.role, "value", str(message.role))
+        envelope = envelope_for(message)
         conn.execute(
             """
             INSERT INTO messages (
                 session_id, seq, role, content, timestamp, model, tokens_json,
-                kind, parent_id, active, tool_events_json, reasoning
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                kind, parent_id, active, tool_events_json, reasoning,
+                native_id, content_blocks_json, tool_calls_json, status,
+                extensions_json, envelope_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session.session_id,
@@ -467,6 +471,12 @@ def _write_full_session(
                 1 if message.active else 0,
                 _tool_events_json(message),
                 reasoning or None,
+                envelope["native_id"],
+                envelope["content_blocks_json"],
+                envelope["tool_calls_json"],
+                envelope["status"],
+                envelope["extensions_json"],
+                ENVELOPE_VERSION,
             ),
         )
         body_parts.append(content)

@@ -160,9 +160,11 @@ def test_roundtrip_preserves_every_contract_field(tmp_path):
     assert first.tool_calls == [] and first.tool_events == []
     assert (second.kind, second.parent_id, second.active) == ("compaction_summary", "m1", False)
     assert second.reasoning == "thinking about it"
-    # Compact events get their own field; ``tool_calls`` stays empty so renderers
-    # that expect full structured calls never see them.
-    assert second.tool_calls == []
+    # The canonical envelope stores the full structured calls (#154) so the
+    # archive is lossless, while ``tool_events`` stays the compact, render-only
+    # view that never carries arguments or results.
+    assert second.tool_calls == calls
+    assert second.envelope_version == 1
     assert second.tool_events == [
         {"name": "bash", "status": "error", "duration_ms": None, "is_error": True},
         {"name": "read", "status": "ok", "duration_ms": 12, "is_error": False},
