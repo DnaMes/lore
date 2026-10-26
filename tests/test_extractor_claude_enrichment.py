@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
@@ -10,6 +11,8 @@ import pytest
 
 from lore.core.models import Role, TitleSource, Tool, UnifiedSession
 from lore.extractors.claude import _MAX_REASONING_CHARS, ClaudeCodeExtractor
+from lore.storage.reader import load_session_messages_v2
+from lore.storage.writer import write_sessions
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -71,8 +74,8 @@ def _extract(home: Path, records: list[dict], sid: str = "sess-enrich") -> tuple
     return extractor, sessions[0]
 
 
-def test_parser_version_is_four():
-    assert ClaudeCodeExtractor.PARSER_VERSION == 4
+def test_parser_version_is_five():
+    assert ClaudeCodeExtractor.PARSER_VERSION == 5
 
 
 def test_title_precedence_custom_over_ai_over_legacy_summary(home):
@@ -398,3 +401,234 @@ def test_title_precedence_does_not_depend_on_record_order(home, order):
     _, session = _extract(home, records, sid)
 
     assert session.title == "Custom wins"
+
+
+# ---------------------------------------------------------------------------
+# Canonical message envelope (#157)
+# ---------------------------------------------------------------------------
+
+
+def _envelope_records(sid: str) -> list[dict]:
+    records = _import_gate(sid)
+    records.append(
+        {
+            "type": "assistant",
+            "timestamp": _ts("2025-06-15T11:00:00"),
+            "sessionId": sid,
+            "version": "2.1.0",
+            "gitBranch": "sweep/extractors",
+            "requestId": "req-1",
+            "message": {
+                "id": "msg-native-1",
+                "role": "assistant",
+                "model": "claude-sonnet-4",
+                "usage": {
+                    "input_tokens": 12,
+                    "output_tokens": 34,
+                    "cache_creation_input_tokens": 5,
+                    "cache_read_input_tokens": 6,
+                },
+                "content": [
+                    {"type": "thinking", "thinking": "internal chain", "signature": "sig-1"},
+                    {
+                        "type": "text",
+                        "text": "Let me look.",
+                        "cache_control": {"type": "ephemeral"},
+                    },
+                    {
+                        "type": "tool_use",
+                        "id": "call-1",
+                        "name": "Read",
+                        "input": {"file_path": "/x/app.py"},
+                    },
+                ],
+            },
+            "uuid": "a-envelope",
+        }
+    )
+    records.append(
+        {
+            "type": "user",
+            "timestamp": _ts("2025-06-15T11:00:05"),
+            "sessionId": sid,
+            "message": {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": "call-1",
+                        "content": "def main(): pass",
+                        "is_error": False,
+                    }
+                ],
+            },
+            "uuid": "u-envelope",
+        }
+    )
+    return records
+
+
+def test_content_blocks_ids_usage_and_extensions_literal(home):
+    sid = "sess-envelope"
+    _, session = _extract(home, _envelope_records(sid), sid)
+    assistant = next(m for m in session.messages if m.message_id == "a-envelope")
+
+    expected_blocks = [
+        {"type": "thinking", "thinking": "internal chain", "signature": "sig-1"},
+        {"type": "text", "text": "Let me look."},
+        {
+            "type": "tool_use",
+            "id": "call-1",
+            "name": "Read",
+            "input": {"file_path": "/x/app.py"},
+        },
+    ]
+    assert assistant.content_blocks == expected_blocks
+    assert assistant.reasoning == "internal chain"
+    assert assistant.model == "claude-sonnet-4"
+    assert assistant.message_id == "a-envelope"
+    assert assistant.tokens == {
+        "input": 12,
+        "output": 34,
+        "total": 46,
+        "cache_creation": 5,
+        "cache_read": 6,
+    }
+    assert assistant.extensions == {
+        "claude": {
+            "unknown_record_fields": {"requestId": "req-1"},
+            "unknown_block_fields": [
+                {
+                    "index": 1,
+                    "type": "text",
+                    "fields": {"cache_control": {"type": "ephemeral"}},
+                }
+            ],
+        }
+    }
+    assert assistant.tool_calls == [
+        {
+            "type": "tool_use",
+            "id": "call-1",
+            "name": "Read",
+            "input": {"file_path": "/x/app.py"},
+            "output": "def main(): pass",
+        }
+    ]
+
+    tool_result = next(m for m in session.messages if m.message_id == "u-envelope")
+    assert tool_result.content_blocks == [
+        {
+            "type": "tool_result",
+            "tool_use_id": "call-1",
+            "content": "def main(): pass",
+            "is_error": False,
+        }
+    ]
+
+
+def test_envelope_survives_v2_write_and_read(tmp_path, home):
+    sid = "sess-roundtrip"
+    _, session = _extract(home, _envelope_records(sid), sid)
+    assistant = next(m for m in session.messages if m.message_id == "a-envelope")
+    output_dir = tmp_path / "state"
+    output_dir.mkdir(parents=True)
+    write_sessions(output_dir / "index_v2.sqlite", [session])
+
+    loaded = load_session_messages_v2(output_dir, session.session_id, include_reasoning=True)
+    assert loaded is not None
+    got = next(m for m in loaded if m.message_id == "a-envelope")
+    assert got.content == assistant.content
+    assert got.content_blocks == assistant.content_blocks
+    assert got.tool_calls == assistant.tool_calls
+    assert got.extensions == assistant.extensions
+    assert got.reasoning == "internal chain"
+    assert got.model == "claude-sonnet-4"
+    assert got.tokens == assistant.tokens
+    assert got.status == "unknown"
+
+
+def test_image_and_document_blocks_are_descriptors_not_payloads(home):
+    sid = "sess-media"
+    image_bytes = b"png-bytes"
+    document_bytes = b"%PDF-1.7"
+    records = _import_gate(sid)
+    records.append(
+        {
+            "type": "assistant",
+            "timestamp": _ts("2025-06-15T11:05:00"),
+            "sessionId": sid,
+            "message": {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "image/png",
+                            "data": __import__("base64").b64encode(image_bytes).decode(),
+                        },
+                    },
+                    {
+                        "type": "document",
+                        "source": {
+                            "type": "base64",
+                            "media_type": "application/pdf",
+                            "data": __import__("base64").b64encode(document_bytes).decode(),
+                        },
+                    },
+                    {"type": "provider_extension", "payload": {"keep": [1, 2]}},
+                ],
+            },
+            "uuid": "a-media",
+        }
+    )
+    credential = home / ".claude" / ".credentials.json"
+    credential.parent.mkdir(parents=True, exist_ok=True)
+    credential.write_text('{"token": "do-not-import"}', encoding="utf-8")
+
+    _, session = _extract(home, records, sid)
+    msg = next(m for m in session.messages if m.message_id == "a-media")
+
+    assert msg.content_blocks == [
+        {
+            "type": "image",
+            "media_type": "image/png",
+            "source_type": "base64",
+            "byte_length": len(image_bytes),
+            "sha256": hashlib.sha256(image_bytes).hexdigest(),
+        },
+        {
+            "type": "document",
+            "media_type": "application/pdf",
+            "source_type": "base64",
+            "byte_length": len(document_bytes),
+            "sha256": hashlib.sha256(document_bytes).hexdigest(),
+        },
+        {"type": "provider_extension", "payload": {"keep": [1, 2]}},
+    ]
+    rendered = repr([(m.content, m.content_blocks, m.extensions) for m in session.messages])
+    assert "png-bytes" not in rendered
+    assert "do-not-import" not in rendered
+
+
+def test_malformed_line_does_not_lose_later_records(home):
+    sid = "sess-malformed"
+    records = _import_gate(sid)
+    records.append(
+        {
+            "type": "assistant",
+            "timestamp": _ts("2025-06-15T11:10:00"),
+            "sessionId": sid,
+            "message": {"role": "assistant", "content": "after the bad line"},
+            "uuid": "a-after",
+        }
+    )
+    project = _make_project(home)
+    lines = [json.dumps(record) for record in records]
+    lines.insert(len(lines) - 1, "{not valid json")
+    (project / f"{sid}.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    session = list(ClaudeCodeExtractor().extract_sessions())[0]
+    msg = next(m for m in session.messages if m.message_id == "a-after")
+    assert msg.content == "after the bad line"

@@ -1,3 +1,6 @@
+import base64
+import binascii
+import hashlib
 import json
 import logging
 import os
@@ -31,6 +34,163 @@ _KNOWN_NON_MESSAGE_RECORD_TYPES = frozenset(
 
 _SYSTEM_SILENT_SUBTYPES = frozenset({"compact_boundary", "turn_duration"})
 
+# Known Claude record/block fields. Everything else is provider extension data
+# and is kept under ``extensions["claude"]`` instead of being dropped (#157).
+_KNOWN_RECORD_FIELDS = frozenset(
+    {
+        "type",
+        "timestamp",
+        "sessionId",
+        "message",
+        "uuid",
+        "version",
+        "gitBranch",
+        "isCompactSummary",
+        "isMeta",
+        "isVisibleInTranscriptOnly",
+        "summary",
+        "customTitle",
+        "aiTitle",
+        "title",
+        "subtype",
+        "attachment",
+        "snapshot",
+        "operation",
+        "content",
+        "leafUuid",
+    }
+)
+_BLOCK_FIELDS = {
+    "text": frozenset({"type", "text"}),
+    "thinking": frozenset({"type", "thinking", "signature"}),
+    "tool_use": frozenset({"type", "id", "name", "input"}),
+    "tool_result": frozenset({"type", "tool_use_id", "content", "is_error"}),
+    "image": frozenset({"type", "source", "media_type"}),
+    "document": frozenset({"type", "source", "media_type"}),
+}
+
+
+def _media_descriptor(block: dict, block_type: str) -> dict:
+    """Describe an image/document block without keeping its bytes (#157).
+
+    Only inline base64 is measured. A path or URL source is never opened, so an
+    attachment pointing at a credential file cannot pull its contents in.
+    """
+    descriptor: dict = {"type": block_type}
+    source = block.get("source")
+    if isinstance(source, dict):
+        media_type = source.get("media_type") or source.get("mediaType")
+        if isinstance(media_type, str) and media_type:
+            descriptor["media_type"] = media_type
+        source_type = source.get("type")
+        if isinstance(source_type, str) and source_type:
+            descriptor["source_type"] = source_type
+        data = source.get("data")
+        if isinstance(data, str):
+            encoded = data
+            if encoded.startswith("data:") and ";base64," in encoded:
+                encoded = encoded.split(";base64,", 1)[1]
+            try:
+                decoded = base64.b64decode(encoded, validate=True)
+            except (binascii.Error, ValueError):
+                pass
+            else:
+                descriptor["byte_length"] = len(decoded)
+                descriptor["sha256"] = hashlib.sha256(decoded).hexdigest()
+    else:
+        media_type = block.get("media_type")
+        if isinstance(media_type, str) and media_type:
+            descriptor["media_type"] = media_type
+    return descriptor
+
+
+def _normalise_blocks(content) -> tuple[Optional[list], list[dict]]:
+    """Return ordered content blocks plus the unknown fields they carried.
+
+    A string content is one text block. Known block types keep only their
+    documented fields; image/document blocks become byte descriptors. Unknown
+    block types are copied verbatim because their shape is the only evidence.
+    """
+    if content is None:
+        return None, []
+    if isinstance(content, str):
+        return [{"type": "text", "text": content}], []
+    if isinstance(content, dict):
+        content = [content]
+    if not isinstance(content, list):
+        return None, []
+
+    blocks: list[dict] = []
+    unknown_fields: list[dict] = []
+    for index, item in enumerate(content):
+        if isinstance(item, str):
+            blocks.append({"type": "text", "text": item})
+            continue
+        if not isinstance(item, dict):
+            blocks.append(item)
+            continue
+        block_type = item.get("type")
+        if not isinstance(block_type, str):
+            block_type = "unknown"
+        if block_type in ("image", "document"):
+            blocks.append(_media_descriptor(item, block_type))
+            continue
+        if block_type not in _BLOCK_FIELDS:
+            blocks.append(dict(item))
+            continue
+        block: dict = {"type": block_type}
+        if block_type == "text":
+            if isinstance(item.get("text"), str):
+                block["text"] = item["text"]
+        elif block_type == "thinking":
+            if isinstance(item.get("thinking"), str):
+                block["thinking"] = item["thinking"]
+            if isinstance(item.get("signature"), str):
+                block["signature"] = item["signature"]
+        elif block_type == "tool_use":
+            if isinstance(item.get("id"), str):
+                block["id"] = item["id"]
+            if isinstance(item.get("name"), str):
+                block["name"] = item["name"]
+            if "input" in item:
+                block["input"] = item["input"]
+        else:  # tool_result
+            if isinstance(item.get("tool_use_id"), str):
+                block["tool_use_id"] = item["tool_use_id"]
+            if "content" in item:
+                raw_nested = item["content"]
+                if isinstance(raw_nested, list):
+                    nested, _ = _normalise_blocks(raw_nested)
+                    block["content"] = nested
+                else:
+                    block["content"] = raw_nested
+            if "is_error" in item:
+                block["is_error"] = bool(item["is_error"])
+        blocks.append(block)
+        extra = {key: value for key, value in item.items() if key not in _BLOCK_FIELDS[block_type]}
+        if extra:
+            unknown_fields.append({"index": index, "type": block_type, "fields": extra})
+    return blocks, unknown_fields
+
+
+def _extensions_for(record: dict, unknown_block_fields: list[dict]) -> Optional[dict]:
+    claude: dict = {}
+    unknown_record = {
+        key: value for key, value in record.items() if key not in _KNOWN_RECORD_FIELDS
+    }
+    if unknown_record:
+        claude["unknown_record_fields"] = unknown_record
+    if unknown_block_fields:
+        claude["unknown_block_fields"] = unknown_block_fields
+    return {"claude": claude} if claude else None
+
+
+def _native_message_id(record: dict, message: dict) -> Optional[str]:
+    for value in (record.get("uuid"), message.get("id")):
+        if isinstance(value, str) and value:
+            return value
+    return None
+
 
 def _parse_usage_tokens(usage) -> dict | None:
     """Map a Claude ``message.usage`` block to a UnifiedMessage tokens dict.
@@ -48,7 +208,15 @@ def _parse_usage_tokens(usage) -> dict | None:
     out = int(out) if isinstance(out, (int, float)) else 0
     if inp == 0 and out == 0:
         return None
-    return {"input": inp, "output": out, "total": inp + out}
+    tokens = {"input": inp, "output": out, "total": inp + out}
+    for source_key, target_key in (
+        ("cache_creation_input_tokens", "cache_creation"),
+        ("cache_read_input_tokens", "cache_read"),
+    ):
+        value = usage.get(source_key)
+        if isinstance(value, (int, float)):
+            tokens[target_key] = int(value)
+    return tokens
 
 
 def _stringify_tool_result(content) -> str:
@@ -83,7 +251,8 @@ class ClaudeCodeExtractor(BaseExtractor):
     # they always had (only sessions imported before are tagged, the index does not grow).
     # 3: subagent sessions also carry ``parent_session_id`` and ``relation="subagent"``.
     # 4: titles, thinking, model, compaction/meta kinds, known-record telemetry.
-    PARSER_VERSION = 4
+    # 5: canonical envelope: ordered blocks, native ids, cached usage, extensions (#157).
+    PARSER_VERSION = 5
     AUTOMATED_BYPASSES_PROMPT_FLOOR = False
 
     def __init__(self):
@@ -408,10 +577,12 @@ class ClaudeCodeExtractor(BaseExtractor):
                             kind = "injected_context"
                         else:
                             kind = "text"
+                    raw_content = msg_data.get("content", "")
                     content, tool_calls, _ = self._flatten_message_content(
-                        msg_data.get("content", ""),
+                        raw_content,
                         tool_use_by_id,
                     )
+                    content_blocks, unknown_block_fields = _normalise_blocks(raw_content)
                     timestamp = parse_timestamp(record.get("timestamp", ""))
                     if created_at is None or timestamp < created_at:
                         created_at = timestamp
@@ -428,19 +599,23 @@ class ClaudeCodeExtractor(BaseExtractor):
                             role=role,
                             content=content,
                             timestamp=timestamp,
-                            message_id=record.get("uuid"),
+                            message_id=_native_message_id(record, msg_data),
                             tool_calls=tool_calls if tool_calls else [],
                             tokens=_parse_usage_tokens(msg_data.get("usage")),
                             kind=kind,
+                            content_blocks=content_blocks,
+                            extensions=_extensions_for(record, unknown_block_fields),
                         )
                     )
                 elif record_type == "assistant":
                     msg_data = record.get("message", {})
+                    raw_content = msg_data.get("content", "")
                     content, tool_calls, reasoning = self._flatten_message_content(
-                        msg_data.get("content", ""),
+                        raw_content,
                         tool_use_by_id,
                         collect_thinking=True,
                     )
+                    content_blocks, unknown_block_fields = _normalise_blocks(raw_content)
                     model = msg_data.get("model")
                     if not isinstance(model, str):
                         model = None
@@ -460,11 +635,13 @@ class ClaudeCodeExtractor(BaseExtractor):
                             role=Role.ASSISTANT,
                             content=content,
                             timestamp=timestamp,
-                            message_id=record.get("uuid"),
+                            message_id=_native_message_id(record, msg_data),
                             tool_calls=tool_calls if tool_calls else [],
                             tokens=_parse_usage_tokens(msg_data.get("usage")),
                             reasoning=reasoning,
                             model=model,
+                            content_blocks=content_blocks,
+                            extensions=_extensions_for(record, unknown_block_fields),
                         )
                     )
                 else:
