@@ -68,6 +68,7 @@ class TitleGenerator:
         ollama_model: str = "phi3:mini",
         provider: Optional[str] = None,
         model: Optional[str] = None,
+        allow_cloud: bool = False,
     ):
         self.strategy = strategy
         self.provider = provider or "local"
@@ -77,6 +78,7 @@ class TitleGenerator:
                 f"{', '.join(TITLE_PROVIDERS)}"
             )
         self.model = model or (ollama_model if self.provider == "local" else "gemini-cli")
+        self.allow_cloud = allow_cloud
         self.cache_dir = cache_dir or lore_home() / "title_cache"
         secure_dir(self.cache_dir)
         self.cache_file = self.cache_dir / "titles.json"
@@ -247,7 +249,20 @@ class TitleGenerator:
     def _generate_llm_gemini(self, session: "UnifiedSession") -> Optional[str]:
         import subprocess
 
-        context = self._build_context(session, max_messages=6)
+        from ..llm.factory import CloudOptInRequired
+        from ..services.summarize_cli import cloud_opt_in_granted
+        from ..utils.redact import redact
+
+        # gemini-cli ships the excerpt to a cloud service: refuse without opt-in
+        # even when the caller bypassed the CLI gate (#PRIVACY.md).
+        if not cloud_opt_in_granted(self.allow_cloud):
+            raise CloudOptInRequired(
+                "provider 'gemini-cli' sends the title excerpt to the cloud; "
+                "pass allow_cloud=True, --allow-cloud or set LORE_ALLOW_CLOUD=1 to confirm"
+            )
+
+        # Secrets never leave the machine in the prompt (docs/PRIVACY.md).
+        context = redact(self._build_context(session, max_messages=6)).text
         prompt = f"""Generate a concise title (max 8 words) for this AI coding session.
 
 Tool: {session.tool.value}

@@ -388,6 +388,7 @@ def run_summarize_command(args: Namespace) -> int:
             cache_enabled=config.cache_enabled,
             options=config.options,
             num_ctx=config.num_ctx,
+            allow_cloud=bool(getattr(args, "allow_cloud", False)),
         )
     except Exception as exc:
         print(f"Error: Could not initialize LLM: {exc}", file=sys.stderr)

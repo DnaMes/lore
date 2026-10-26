@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
 
-from ..llm import LLMConfig, get_provider
+from ..llm import CloudOptInRequired, LLMConfig, get_provider
 from ..llm.tasks.knowledge import KnowledgeExtractor
 from ..services.index import load_deleted_session_ids
 from ..services.knowledge import run_extraction, sessions_for_extraction
@@ -100,6 +100,10 @@ def _wrap_stage(name: str, fn: Callable[[], StageResult]) -> StageResult:
         result = fn()
         result.duration_ms = result.duration_ms or _elapsed_ms(start)
         return result
+    except CloudOptInRequired:
+        # Missing cloud opt-in is a configuration refusal, not a stage failure:
+        # it must reach the caller instead of becoming a per-stage "errored" row.
+        raise
     except Exception as exc:
         reason = f"{type(exc).__name__}: {exc}"[:200]
         return StageResult(
@@ -401,6 +405,7 @@ def _stage_extract(
     limit: int,
     include_automated: bool,
     dry_run: bool,
+    allow_cloud: bool = False,
 ) -> StageResult:
     if dry_run:
         return StageResult("extract_knowledge", "skipped", reason="dry_run")
@@ -416,7 +421,11 @@ def _stage_extract(
             cache_enabled=config.cache_enabled,
             options=config.options,
             num_ctx=config.num_ctx,
+            allow_cloud=allow_cloud,
         )
+    except CloudOptInRequired:
+        # Opting in is a deliberate user decision: report it, never silently skip it.
+        raise
     except Exception:
         return StageResult("extract_knowledge", "skipped", reason="provider_unavailable")
 
@@ -451,8 +460,13 @@ def run_improve(
     stages: Sequence[str] | None = None,
     dry_run: bool = False,
     include_automated: bool = False,
+    allow_cloud: bool = False,
 ) -> List[StageResult]:
-    """Run improve stages in order; failures in one stage do not stop later ones."""
+    """Run improve stages in order; failures in one stage do not stop later ones.
+
+    A non-local provider without opt-in raises :class:`CloudOptInRequired` before any
+    provider is constructed.
+    """
     output_dir = output_dir.expanduser()
     selected = tuple(stages) if stages else STAGE_NAMES
     results: List[StageResult] = []
@@ -466,6 +480,7 @@ def run_improve(
             limit=limit,
             include_automated=include_automated,
             dry_run=dry_run,
+            allow_cloud=allow_cloud,
         ),
         "distill_lessons": lambda: _distill_knowledge(output_dir, dry_run=dry_run),
         "from_summaries": lambda: _from_summaries(output_dir, dry_run=dry_run),

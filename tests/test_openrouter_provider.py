@@ -179,7 +179,7 @@ def test_factory_returns_openrouter_provider(
     monkeypatch: pytest.MonkeyPatch, lore_key: str
 ) -> None:
     monkeypatch.delenv("LORE_OPENROUTER_MODEL", raising=False)
-    provider = get_provider("openrouter", api_key=lore_key)
+    provider = get_provider("openrouter", api_key=lore_key, allow_cloud=True)
     from lore.llm.openrouter import OpenRouterProvider as ORP
 
     assert isinstance(provider, ORP)
@@ -378,7 +378,7 @@ def test_paid_model_refused_when_coming_from_env(
     calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("x")))
 
     with pytest.raises(OpenRouterError):
-        get_provider("openrouter", cache_enabled=False).generate("hi")
+        get_provider("openrouter", cache_enabled=False, allow_cloud=True).generate("hi")
 
     assert calls == []
 

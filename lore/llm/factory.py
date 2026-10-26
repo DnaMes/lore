@@ -41,13 +41,45 @@ def _resolve_timeout(provider: str, kwargs: dict) -> dict:
     return {**kwargs, "timeout": seconds}
 
 
+class CloudOptInRequired(RuntimeError):
+    """A non-local provider was requested without ``--allow-cloud``/``LORE_ALLOW_CLOUD=1``."""
+
+
+# Providers the factory itself knows; anything else keeps the ValueError below so an
+# unknown name is never mistaken for an opt-in problem.
+_KNOWN_PROVIDERS = frozenset({"gemini", "ollama", "openrouter", "jev"})
+
+
+def _cloud_opt_in_error(provider: str, allow_cloud: bool) -> str | None:
+    """Return the refusal message when ``provider`` is non-local without opt-in."""
+    if provider not in _KNOWN_PROVIDERS:
+        return None
+    # Imported lazily: summarize_cli sits above the LLM layer in the dependency
+    # graph and its own imports stay provider-only.
+    from ..services.summarize_cli import cloud_opt_in_granted, provider_locality
+
+    if provider_locality(provider) != "cloud":
+        return None
+    if cloud_opt_in_granted(allow_cloud):
+        return None
+    return (
+        f"provider '{provider}' sends session text to the cloud; "
+        "pass allow_cloud=True, --allow-cloud or set LORE_ALLOW_CLOUD=1 to confirm"
+    )
+
+
 def get_provider(
     provider: str = "gemini",
     model: Optional[str] = None,
     api_key: Optional[str] = None,
+    allow_cloud: bool = False,
     **kwargs,
 ) -> LLMProvider:
     provider = provider.lower()
+
+    refusal = _cloud_opt_in_error(provider, allow_cloud)
+    if refusal:
+        raise CloudOptInRequired(refusal)
 
     if provider == "gemini":
         config = LLMConfig(

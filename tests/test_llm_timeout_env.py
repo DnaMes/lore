@@ -16,6 +16,8 @@ from lore.llm.factory import get_provider
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("LORE_LLM_TIMEOUT", raising=False)
+    # These tests construct cloud providers directly; opt in once for the suite.
+    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
 
 
 def test_jev_default_timeout_is_180() -> None:
