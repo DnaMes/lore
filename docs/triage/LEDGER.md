@@ -240,7 +240,7 @@ Round 9 — summary coverage:
 
 | Item | Status | Commit | Evidence |
 |------|--------|--------|----------|
-| #178 chunk coverage | PARTIAL (open) | `6b83f62` | `chunk_coverage()` + `coverage` payload (chunks total/used, `complete`, omitted ranges, whole-session `seq_range`, `user_turns_omitted`, revision hash); `pytest tests/test_summary_chunk_coverage.py -q` -> 6 passed, `-k "summar or chunk or coverage" -q` -> 229 passed. Remaining: budget-aware packing so a summary covers all messages when the token budget allows, sampling only as the last resort |
+| #178 chunk coverage | PARTIAL (open) | `6b83f62` | `chunk_coverage()` + `coverage` payload (chunks total/used, `complete`, omitted ranges, whole-session `seq_range`, `user_turns_omitted`, revision hash); `pytest tests/test_summary_chunk_coverage.py -q` -> 6 passed, `-k "summar or chunk or coverage" -q` -> 229 passed. Remaining: budget-aware packing so a summary covers all messages when the token budget allows. Attempted and reverted (2026-10-26): `_session_plan` and `estimate_run` compute chunk fingerprints from different `prior_summary` inputs, so raising the chunk cap makes the plan believe chunks are missing that the run already wrote (`test_dry_run_matches_calls`). Fix that alignment first, then redo the packing |
 
 Round 8 — provider cache identity:
 
