@@ -12,6 +12,9 @@ The version is the single source of truth in `lore/__init__.py`.
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
 ### Added
+- `docs/READING-CONTRACT.md`: the rules a reader can rely on (roles and execution states, theme-driven typography, keyboard and focus, live status, document structure), each tied to its implementation, plus `tests/test_a11y_reading_contract.py`, which checks the machine-decidable half over every page — language, one `h1` and no heading jumps, skip link with target, unique ids, an accessible name on every link, button and form control, live regions for async feedback, theme variables instead of hardcoded text colours, no fixed heights on transcript content, and a focus ring for every interactive component.
+
+### Added
 - `lore memory repair-index` (dry run by default, `--apply` writes, `--json` for machines) compares the memory table with the shared FTS index, reports memories whose search row is missing and index rows whose memory is gone, and repairs both in one transaction.
 
 ### Fixed

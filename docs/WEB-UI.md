@@ -40,6 +40,11 @@ gunicorn --workers 1 --threads 8 --bind 0.0.0.0:5000 --access-logfile - --error-
 
 ## Pages
 
+The rules a reader can rely on — roles, states, typography, keyboard, focus, live
+status, structure — are written down in [`READING-CONTRACT.md`](./READING-CONTRACT.md)
+and checked over every page by `tests/test_a11y_reading_contract.py`.
+
+
 User-facing interface routes defined in `lore/interfaces/web.py` are grouped into functional views:
 
 ### Dashboard and Discovery
