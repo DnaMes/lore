@@ -146,6 +146,82 @@ def test_invalid_origin_ports_are_rejected_with_403(client, origin):
     assert resp.status_code == 403
 
 
+# Non-ASCII digits (``str.isdigit`` accepts them, ``int`` does not) and other
+# non-ASCII spellings used to reach ``int()`` and 500. They must be 400/403.
+NON_ASCII_HOSTS = [
+    "localhost:\u00b2",  # superscript two
+    "localhost:\uff11\uff12",  # fullwidth 12
+    "[::1]:\u00b2",
+    "localhost:",  # empty port
+    "lo\u043aalhost:5000",  # Cyrillic k: IDN look-alike
+    "l\u00f6kal.example:5000",
+]
+
+
+@pytest.mark.parametrize("host", NON_ASCII_HOSTS)
+def test_non_ascii_or_malformed_host_is_400_not_500(client, host):
+    resp = client.get("/api/health", headers={"Host": host})
+    assert resp.status_code == 400
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://localhost:\u00b2",
+        "http://localhost:\uff11\uff12",
+        "http://[::1]:\u00b2",
+        "http://localhost:",  # empty port
+        "http://l\u00f6kal:5000",
+    ],
+)
+def test_non_ascii_or_malformed_origin_is_403_not_500(client, origin):
+    resp = client.post(
+        "/api/cache/clear",
+        headers={"Host": "localhost:5000", "Origin": origin},
+    )
+    assert resp.status_code == 403
+
+
+def test_fullwidth_port_in_origin_is_not_same_origin(client):
+    """Fullwidth ``１２`` used to parse as port 12; it must not match anything."""
+    resp = client.post(
+        "/api/cache/clear",
+        headers={"Host": "localhost:12", "Origin": "http://localhost:\uff11\uff12"},
+    )
+    assert resp.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["\u00b2", "\uff11\uff12", "\u0661", "1\u00b2", "[::1]:\u00b2", "\x00", "\ud800", "["],
+)
+def test_parsers_never_raise_on_hostile_input(value):
+    """Host/Origin helpers return None or False for malformed input, never raise."""
+    assert web_utils.parse_origin(value) is None
+    assert web_utils.parse_origin("http://" + value) is None
+    assert web_utils.host_header_allowed(value) is False
+    assert web_utils._split_host(value) is None
+
+
+@pytest.mark.parametrize("value", ["12", "1", "65535"])
+def test_ascii_port_bounds_are_accepted(value):
+    assert web_utils._parse_port(value) == int(value)
+
+
+@pytest.mark.parametrize("value", ["", "0", "65536", "\u00b2", "\uff11\uff12", "+1", " 1"])
+def test_non_ascii_or_out_of_range_ports_are_none(value):
+    assert web_utils._parse_port(value) is None
+
+
+def test_forwarded_host_non_ascii_is_400_with_proxy(client, monkeypatch):
+    monkeypatch.setenv("TRUSTED_PROXY", "1")
+    resp = client.post(
+        "/api/cache/clear",
+        headers={"Host": "localhost:5000", "X-Forwarded-Host": "localhost:\u00b2"},
+    )
+    assert resp.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # Mutation-Origin policy
 # ---------------------------------------------------------------------------

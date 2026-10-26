@@ -47,6 +47,19 @@ OUTPUT_DIR = lore_home()
 # all a direct deployment needs.
 LORE_PUBLIC_ORIGINS_ENV = "LORE_PUBLIC_ORIGINS"
 
+# Reverse-proxy trust switch. Only these values (case-insensitive, surrounding
+# whitespace ignored) enable it; unset, empty, ``0``, ``false``, ``no``, ``off``
+# and anything else leave it disabled.
+TRUSTED_PROXY_ENV = "TRUSTED_PROXY"
+_TRUSTED_PROXY_TRUE_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def trusted_proxy_enabled() -> bool:
+    """Whether ``TRUSTED_PROXY`` is set to a true value (read per call)."""
+    raw = (os.environ.get(TRUSTED_PROXY_ENV) or "").strip().lower()
+    return raw in _TRUSTED_PROXY_TRUE_VALUES
+
+
 # Hosts a browser (and the Docker healthcheck) can only mean for "this machine":
 # always a permitted ``Host`` header. ``LOOPBACK_HOSTS`` in Host-header spelling
 # — an IPv6 literal needs brackets to parse as a host.
@@ -72,10 +85,11 @@ _DEFAULT_PORTS = {"http": 80, "https": 443}
 def _parse_port(raw: str) -> Optional[int]:
     """Parse a TCP port as ``int`` in ``1..65535``; ``None`` when invalid.
 
-    Never raises — a 4500-digit string, ``0``, or ``65536`` are all ``None``
-    so Host/Origin checks can reject them as not-allowed instead of 500-ing.
+    Never raises — a 4500-digit string, ``0``, ``65536``, or non-ASCII digits
+    such as ``²`` or fullwidth ``１２`` are all ``None`` so Host/Origin checks
+    reject them as not-allowed instead of 500-ing.
     """
-    if not raw or len(raw) > 5 or not raw.isdigit():
+    if not raw or len(raw) > 5 or not raw.isascii() or not raw.isdigit():
         return None
     port = int(raw)
     if 1 <= port <= 65535:
@@ -84,6 +98,19 @@ def _parse_port(raw: str) -> Optional[int]:
 
 
 def parse_origin(origin: str) -> Optional[Tuple[str, str, Optional[int]]]:
+    """Split an Origin into ``(scheme, host, port)``; ``None`` when malformed.
+
+    Exception-proof wrapper: any malformed or non-ASCII input is ``None``.
+    """
+    if not isinstance(origin, str) or not origin.isascii() or not origin.isprintable():
+        return None
+    try:
+        return _parse_origin(origin)
+    except (ValueError, TypeError):
+        return None
+
+
+def _parse_origin(origin: str) -> Optional[Tuple[str, str, Optional[int]]]:
     """Split an Origin into ``(scheme, host, port)``; ``None`` when it is malformed.
 
     A browser Origin is exactly ``scheme://host[:port]``: a real scheme, a host,
@@ -166,6 +193,20 @@ def configured_public_origins() -> Tuple[str, ...]:
 def _split_host(value: str) -> Optional[Tuple[str, Optional[int]]]:
     """Split a ``host[:port]`` value into ``(hostname, port)``; ``None`` when malformed.
 
+    Exception-proof wrapper around :func:`_split_host_checked`; non-ASCII input
+    (IDN hostnames, non-ASCII digits) is rejected explicitly.
+    """
+    if not isinstance(value, str) or not value.isascii() or not value.isprintable():
+        return None
+    try:
+        return _split_host_checked(value)
+    except (ValueError, TypeError):
+        return None
+
+
+def _split_host_checked(value: str) -> Optional[Tuple[str, Optional[int]]]:
+    """Split a ``host[:port]`` value into ``(hostname, port)``; ``None`` when malformed.
+
     Accepts dotted hostnames and bracketed IPv6 literals with the same rules
     the ``X-Forwarded-Host`` validation from #193 uses, so the Host allowlist
     and the proxy checks agree on what a well-formed host is. Ports must be
@@ -238,7 +279,7 @@ def _is_valid_host(value: str) -> bool:
     for label in hostname.split("."):
         if not label or len(label) > 63 or label.startswith("-") or label.endswith("-"):
             return False
-        if not all(ch.isalnum() or ch == "-" for ch in label):
+        if not all(ch.isascii() and (ch.isalnum() or ch == "-") for ch in label):
             return False
     return True
 
@@ -261,7 +302,7 @@ def _is_valid_forwarded_for(hop: str) -> bool:
             return True
         return rest.startswith(":") and _parse_port(rest[1:]) is not None
     host, sep, port = hop.rpartition(":")
-    if sep and port.isdigit() and host.count(":") == 0:
+    if sep and host.count(":") == 0:
         if _parse_port(port) is None:
             return False
         hop = host  # IPv4:port
@@ -280,7 +321,7 @@ def forwarded_header_error() -> Optional[str]:
     is present is well-formed. Checked on state-changing routes, which is where
     a spoofed scheme/host would buy an attacker something.
     """
-    if not os.environ.get("TRUSTED_PROXY"):
+    if not trusted_proxy_enabled():
         return None
 
     proto = request.headers.get("X-Forwarded-Proto")
@@ -403,8 +444,8 @@ def _rate_limit_max_for_path(path: str) -> int:
 def _client_ip() -> str:
     # Only read X-Forwarded-For / X-Real-IP when running behind a trusted proxy.
     # If the app is exposed directly, these headers can be spoofed by any client.
-    # Set TRUSTED_PROXY=1 (or any non-empty value) when a reverse proxy is in front.
-    if os.environ.get("TRUSTED_PROXY"):
+    # Set TRUSTED_PROXY=1 (or true/yes/on) when a reverse proxy is in front.
+    if trusted_proxy_enabled():
         forwarded = (request.headers.get("X-Forwarded-For") or "").strip()
         if forwarded:
             return forwarded.split(",")[0].strip() or "unknown"

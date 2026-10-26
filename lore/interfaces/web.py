@@ -165,6 +165,7 @@ from .web_utils import (
     parse_origin,
     request_origin,
     save_noise_rules,
+    trusted_proxy_enabled,
 )
 
 _TEST_EXPORTS = (
@@ -222,8 +223,8 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 # Only trust X-Forwarded-For / X-Forwarded-Proto / X-Forwarded-Host when running
 # behind a known reverse proxy. Without this guard any client can spoof their IP
 # (used by the rate-limiter) or escalate http→https by injecting headers directly.
-# Set TRUSTED_PROXY=1 (or any non-empty string) when a proxy sits in front.
-if os.environ.get("TRUSTED_PROXY"):
+# Set TRUSTED_PROXY=1 (or true/yes/on) when a proxy sits in front.
+if trusted_proxy_enabled():
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)  # type: ignore[method-assign]
 
 
@@ -294,7 +295,7 @@ def _check_local_origin() -> Optional[tuple]:
     normalized = normalize_origin(*parsed)
     if normalized == request_origin():
         return None
-    if os.environ.get("TRUSTED_PROXY") and normalized in configured_public_origins():
+    if trusted_proxy_enabled() and normalized in configured_public_origins():
         return None
     return jsonify({"error": "Cross-origin request rejected"}), 403
 
