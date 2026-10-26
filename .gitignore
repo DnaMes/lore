@@ -49,3 +49,4 @@ toc-verify.js
 # OS
 .DS_Store
 Thumbs.db
+uv.lock
