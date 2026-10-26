@@ -32,6 +32,7 @@ import argparse
 import json
 import os
 import pty
+import re
 import sqlite3
 import subprocess
 import sys
@@ -1259,9 +1260,11 @@ def cmd_memory(args):
         add_memory,
         feedback_weight,
         find_similar_memories,
+        list_candidates,
         list_memory,
         recall_memory,
         record_feedback,
+        set_memory_status,
     )
 
     output_dir = Path(args.output_dir).expanduser()
@@ -1314,6 +1317,69 @@ def cmd_memory(args):
         if similar:
             listed = ", ".join(f"#{m['id']} {m['title']} ({m['similarity']:.2f})" for m in similar)
             print(f"Similar existing memories: {listed}")
+        return
+
+    if action == "review":
+        entries = list_candidates(
+            output_dir, limit=args.limit, scope_project=args.project
+        )
+        if args.json:
+            rows = []
+            for entry in entries:
+                snippet = re.sub(r"\s+", " ", entry.body.strip())[:240]
+                rows.append(
+                    {
+                        "id": entry.id,
+                        "kind": entry.kind,
+                        "title": entry.title,
+                        "scope_project": entry.scope_project,
+                        "author": entry.author,
+                        "created": entry.created,
+                        "source_sessions": [s["session_id"] for s in entry.sources],
+                        "body_snippet": snippet,
+                    }
+                )
+            print(json.dumps(rows, ensure_ascii=False, indent=2))
+            return
+        if not entries:
+            print("No memory candidates to review.")
+            return
+        for entry in entries:
+            sessions = ", ".join(s["session_id"] for s in entry.sources) or "—"
+            snippet = re.sub(r"\s+", " ", entry.body.strip())[:240]
+            scope = entry.scope_project or "global"
+            print(
+                f"#{entry.id} ({entry.kind}) {entry.title} · {scope} · "
+                f"{entry.author or 'unknown'} · {entry.created[:10]}"
+            )
+            print(f"   sources: {sessions}")
+            print(f"   {snippet}")
+            print()
+        return
+
+    if action in ("accept", "reject"):
+        target = "confirmed" if action == "accept" else "rejected"
+        reason = getattr(args, "reason", None)
+        failed = False
+        for memory_id in args.memory_ids:
+            try:
+                changed = set_memory_status(
+                    output_dir, memory_id, target, reason=reason
+                )
+            except ValueError as exc:
+                print(f"skipped #{memory_id}: {exc}")
+                failed = True
+                continue
+            except sqlite3.OperationalError:
+                print("Could not write memory: database is busy, try again", file=sys.stderr)
+                sys.exit(1)
+            if changed:
+                print(f"{action}ed #{memory_id}")
+            else:
+                print(f"not found #{memory_id}")
+                failed = True
+        if failed:
+            sys.exit(1)
         return
 
     if action == "list":
@@ -1843,6 +1909,18 @@ Examples:
     mem_rate.add_argument("memory_id", type=int, help="memory id")
     mem_rate.add_argument("score", type=int, help="1 (wrong) to 5 (right and useful)")
     mem_rate.add_argument("--rater", default="human", help="who rates (default: human)")
+
+    mem_review = memory_sub.add_parser("review", help="List memory candidates awaiting review")
+    mem_review.add_argument("--project", help="filter by project scope")
+    mem_review.add_argument("--limit", type=int, default=20, help="max results (default: 20)")
+    mem_review.add_argument("--json", action="store_true", help="machine-readable output")
+
+    mem_accept = memory_sub.add_parser("accept", help="Confirm one or more memory candidates")
+    mem_accept.add_argument("memory_ids", type=int, nargs="+", metavar="id", help="memory id")
+
+    mem_reject = memory_sub.add_parser("reject", help="Reject one or more memory candidates")
+    mem_reject.add_argument("memory_ids", type=int, nargs="+", metavar="id", help="memory id")
+    mem_reject.add_argument("--reason", help="optional rejection reason (max 280 chars)")
 
     # watch command
     watch_parser = subparsers.add_parser("watch", help="Watch for new sessions")

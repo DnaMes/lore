@@ -294,7 +294,10 @@ payload). Writes through `memory_write` and `lore memory add` are `confirmed`.
 Only `confirmed` memories are returned by `memory_recall`, `lore memory list` /
 `search` and the web `/memory` page; candidates are produced by later review
 workflows and change state only `candidate -> confirmed|rejected`. Rejected rows
-are kept.
+are kept. Review with `lore memory review`, `lore memory accept <id>` and
+`lore memory reject <id> [--reason]` (human-only; MCP has no accept/reject tools).
+On the web UI, `/memory?tab=candidates` lists the queue; `POST /memory/<id>/accept`
+and `POST /memory/<id>/reject` use the same local-origin protection as delete.
 
 ### `memory_recall`
 

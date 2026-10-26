@@ -21,6 +21,7 @@ import json
 import logging
 import math
 import os
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -467,6 +468,48 @@ def get_memory(output_dir: Path, memory_id: int) -> Optional[MemoryEntry]:
         conn.close()
 
 
+def _sanitize_reject_reason(reason: str) -> str:
+    """Trim, strip control chars, cap length for ``metadata_json['reject_reason']``."""
+    cleaned = re.sub(r"[\x00-\x1f\x7f]", "", reason.strip())
+    return cleaned[:280]
+
+
+def list_candidates(
+    output_dir: Path,
+    *,
+    limit: int = 50,
+    scope_project: Optional[str] = None,
+) -> List[MemoryEntry]:
+    """Pending review queue: ``candidate`` rows that are not superseded, oldest first."""
+    clauses = ["status = 'candidate'", "superseded_by IS NULL"]
+    params: List[Any] = []
+    if scope_project:
+        clauses.append("scope_project = ?")
+        params.append(scope_project)
+    where = " WHERE " + " AND ".join(clauses)
+    conn = _connect(output_dir)
+    try:
+        rows = conn.execute(
+            f"SELECT * FROM memory{where} ORDER BY created ASC, id ASC LIMIT ?",
+            (*params, max(1, limit)),
+        ).fetchall()
+        return _load_entries(conn, rows)
+    finally:
+        conn.close()
+
+
+def count_candidates(output_dir: Path) -> int:
+    """Number of memories awaiting human review."""
+    conn = _connect(output_dir)
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM memory WHERE status = 'candidate' AND superseded_by IS NULL"
+        ).fetchone()
+        return int(row["n"]) if row else 0
+    finally:
+        conn.close()
+
+
 def list_memory(
     output_dir: Path,
     *,
@@ -814,15 +857,24 @@ def supersede_memory(
     )
 
 
-def set_memory_status(output_dir: Path, memory_id: int, status: str) -> bool:
+def set_memory_status(
+    output_dir: Path,
+    memory_id: int,
+    status: str,
+    *,
+    reason: str | None = None,
+) -> bool:
     """Review a candidate: ``candidate -> confirmed`` or ``candidate -> rejected``.
 
-    Rejected rows are kept, never deleted. Returns True when the status changed
-    and False when the memory does not exist.
+    Rejected rows are kept, never deleted. When ``reason`` is given and
+    ``status`` is ``rejected``, it is stored in ``metadata_json['reject_reason']``
+    (merged with existing metadata). ``reason`` is ignored for ``confirmed``.
+
+    Returns True when the status changed and False when the memory does not exist.
 
     Raises:
-        ValueError: if ``status`` is not ``confirmed``/``rejected`` or the memory
-            is not currently a candidate.
+        ValueError: if ``status`` is not ``confirmed``/``rejected``, the memory
+            is not currently a candidate, or stored metadata is not a JSON object.
     """
     if status not in ("confirmed", "rejected"):
         raise ValueError(f"invalid target status {status!r}; expected 'confirmed' or 'rejected'")
@@ -830,10 +882,34 @@ def set_memory_status(output_dir: Path, memory_id: int, status: str) -> bool:
         return False
     conn = _connect(output_dir)
     try:
-        cur = conn.execute(
-            "UPDATE memory SET status = ?, updated = ? WHERE id = ? AND status = 'candidate'",
-            (status, _now(), memory_id),
-        )
+        metadata_json: str | None = None
+        if status == "rejected" and reason is not None:
+            row = conn.execute(
+                "SELECT metadata_json FROM memory WHERE id = ?", (memory_id,)
+            ).fetchone()
+            if row is None:
+                return False
+            meta: Dict[str, Any] = {}
+            if row["metadata_json"]:
+                parsed = json.loads(row["metadata_json"])
+                if not isinstance(parsed, dict):
+                    raise ValueError("memory metadata must be a JSON object")
+                meta = parsed
+            meta["reject_reason"] = _sanitize_reject_reason(reason)
+            metadata_json = json.dumps(meta, ensure_ascii=False)
+
+        now = _now()
+        if metadata_json is not None:
+            cur = conn.execute(
+                "UPDATE memory SET status = ?, updated = ?, metadata_json = ? "
+                "WHERE id = ? AND status = 'candidate'",
+                (status, now, metadata_json, memory_id),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE memory SET status = ?, updated = ? WHERE id = ? AND status = 'candidate'",
+                (status, now, memory_id),
+            )
         if cur.rowcount > 0:
             return True
         row = conn.execute("SELECT status FROM memory WHERE id = ?", (memory_id,)).fetchone()

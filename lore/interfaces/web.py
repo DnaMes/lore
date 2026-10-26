@@ -2081,10 +2081,16 @@ def memory_page():
     """Browse and search the shared agent-memory store (#33)."""
     from lore.storage import (
         MEMORY_KINDS,
+        count_candidates,
         embeddings_available,
+        list_candidates,
         list_memory,
         recall_memory,
     )
+
+    tab = request.args.get("tab", "").strip() or "memories"
+    if tab not in ("memories", "candidates"):
+        tab = "memories"
 
     query = request.args.get("q", "").strip()
     kind = request.args.get("kind", "").strip() or None
@@ -2096,7 +2102,12 @@ def memory_page():
         return "Invalid kind", 400
 
     output_dir = INDEX_PATH.parent
-    if query:
+    candidate_count = count_candidates(output_dir)
+    candidates: list = []
+    entries = []
+    if tab == "candidates":
+        candidates = [entry.to_dict() for entry in list_candidates(output_dir, limit=100)]
+    elif query:
         entries = recall_memory(
             output_dir, query, kind=kind, limit=100, semantic=True if semantic else None
         )
@@ -2109,6 +2120,9 @@ def memory_page():
         "memory",
         active="memory",
         memories=memories,
+        candidates=candidates,
+        tab=tab,
+        candidate_count=candidate_count,
         total=len(entries),
         query=query,
         kind=kind,
@@ -2117,6 +2131,36 @@ def memory_page():
         semantic_available=embeddings_available(),
         title="Memory",
     )
+
+
+def _memory_review_post(memory_id: int, target: str, *, reason: str | None = None):
+    """Accept or reject a candidate; 404/409 when the id cannot be reviewed."""
+    if (err := _check_local_origin()) is not None:
+        return err
+    from flask import abort
+
+    from lore.storage import set_memory_status
+
+    try:
+        changed = set_memory_status(
+            INDEX_PATH.parent, memory_id, target, reason=reason
+        )
+    except ValueError:
+        abort(409)
+    if not changed:
+        abort(404)
+    return redirect("/memory?tab=candidates")
+
+
+@app.route("/memory/<int:memory_id>/accept", methods=["POST"])
+def memory_accept(memory_id):
+    return _memory_review_post(memory_id, "confirmed")
+
+
+@app.route("/memory/<int:memory_id>/reject", methods=["POST"])
+def memory_reject(memory_id):
+    reason = (request.form.get("reason") or "").strip() or None
+    return _memory_review_post(memory_id, "rejected", reason=reason)
 
 
 @app.route("/memory/<int:memory_id>/delete", methods=["POST"])

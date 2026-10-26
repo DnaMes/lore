@@ -137,6 +137,9 @@ lore memory search "database performance"              # keywords + meaning when
 lore memory search "database performance" --semantic   # meaning only, no relevance floor
 lore memory search '"exact phrase"'                     # quoted phrase
 lore memory list
+lore memory review                                      # queue of generated candidates
+lore memory accept 12                                   # human-only confirm (not via MCP)
+lore memory reject 13 --reason "duplicate"              # rejected rows stay for dedupe
 lore memory rate 7 5                                    # rate a confirmed memory 1-5
 lore memory add --title "Use PG 17" --body "..." --supersedes 7   # replaces #7; near-duplicates are listed
 

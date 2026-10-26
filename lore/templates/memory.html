@@ -13,6 +13,18 @@
         </div>
     </div>
 
+    <nav class="flex gap-4 mb-6 border-b border-slate-200" aria-label="Memory views">
+        <a href="/memory"
+           class="text-sm py-2 border-b-2 {{ 'border-slate-900 text-slate-900 font-semibold' if tab == 'memories' else 'border-transparent text-slate-500' }}">
+            Memories
+        </a>
+        <a href="/memory?tab=candidates"
+           class="text-sm py-2 border-b-2 {{ 'border-slate-900 text-slate-900 font-semibold' if tab == 'candidates' else 'border-transparent text-slate-500' }}">
+            Candidates ({{ candidate_count }})
+        </a>
+    </nav>
+
+    {% if tab != 'candidates' %}
     <form method="get" class="flex flex-wrap items-center gap-3 mb-8">
         <input type="text" name="q" value="{{ query or '' }}"
                placeholder="Search memory…" aria-label="Search memory"
@@ -31,6 +43,59 @@
             Search
         </button>
     </form>
+    {% endif %}
+
+    {% if tab == 'candidates' %}
+    <div class="space-y-3">
+        {% for m in candidates %}
+        <article class="surface-card p-5">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <span class="tag-chip uppercase">{{ m.kind }}</span>
+                        {% if m.scope_project %}<span class="tag-chip">{{ project_label(m.scope_project) }}</span>{% endif %}
+                    </div>
+                    <h2 class="text-sm font-semibold text-slate-900">{{ m.title }}</h2>
+                    <p class="text-sm text-slate-600 mt-1.5 whitespace-pre-wrap">{{ m.body }}</p>
+                    <div class="text-[10px] text-slate-500 mt-3 uppercase tracking-tight">
+                        {{ m.author or 'unknown' }} · {{ m.created[:10] }}
+                    </div>
+                    {% if m.sources %}
+                    <div class="text-[10px] text-slate-500 mt-2 flex flex-wrap gap-1.5 items-center">
+                        <span class="uppercase tracking-tight">From:</span>
+                        {% for src in m.sources %}
+                        <a href="/session/{{ src.session_id|urlpath }}" class="tag-chip hover:text-slate-900"
+                           title="Session this memory was recorded from">{{ src.session_id[:16] }}</a>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="flex flex-col gap-2 shrink-0">
+                    <form action="/memory/{{ m.id }}/accept" method="POST">
+                        <button type="submit" aria-label="Accept memory {{ m.title }}"
+                                class="text-[10px] text-slate-700 hover:text-slate-900 border border-slate-200 px-2 py-1 rounded-lg bg-white transition-all">
+                            Accept
+                        </button>
+                    </form>
+                    <form action="/memory/{{ m.id }}/reject" method="POST" class="flex flex-col gap-1">
+                        <input type="text" name="reason" maxlength="280" placeholder="Reason (optional)"
+                               aria-label="Rejection reason for {{ m.title }}"
+                               class="text-[10px] bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-600 outline-none focus:border-slate-300">
+                        <button type="submit" aria-label="Reject memory {{ m.title }}"
+                                class="text-[10px] text-red-600 hover:text-red-900 border border-red-200 px-2 py-1 rounded-lg bg-white transition-all">
+                            Reject
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </article>
+        {% else %}
+        <div class="surface-card p-8 text-center">
+            <p class="text-sm text-slate-600">No memory candidates awaiting review.</p>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
 
     {% if semantic and not semantic_available %}
     <div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-6">
@@ -93,5 +158,6 @@
         </div>
         {% endfor %}
     </div>
+    {% endif %}
 </section>
 {% endblock %}

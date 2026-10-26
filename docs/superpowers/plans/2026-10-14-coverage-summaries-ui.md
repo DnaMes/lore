@@ -223,7 +223,7 @@ Find across all pages with highlight and n/N.
 
 ### B6.3 Review queue
 `lore memory review|accept|reject` and the web "Candidates" tab; rejected rows kept and used by dedupe.
-- [ ] done
+- [x] done
 
 ### B6.4 `lore context`
 Per the 2026-10-13 design 4.1; never another project's memory.
