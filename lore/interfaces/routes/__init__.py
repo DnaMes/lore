@@ -17,8 +17,8 @@ def register_blueprints(app: Flask) -> None:
     ``lore.interfaces.web`` for its seams, and ``web`` imports this package to
     register them, so the submodules must load only once ``web`` asks for them.
     """
-    from .api_v1 import bp as api_v1_bp
+    from .memory import bp as memory_bp
 
-    for blueprint in (api_v1_bp,):
+    for blueprint in (memory_bp,):
         if blueprint.name not in app.blueprints:
             app.register_blueprint(blueprint)
