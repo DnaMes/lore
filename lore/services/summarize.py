@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import re
@@ -30,6 +31,7 @@ from .summarize_chunks import (
     blocks_to_transcript,
     build_merge_user_prompt,
     build_open_threads,
+    chunk_coverage,
     chunk_fingerprint,
     chunk_max_chars,
     chunk_scope_key,
@@ -998,12 +1000,20 @@ def _process_chunked(
     if merge_cite_errs:
         return "invalid", redactions, input_tokens, output_tokens
 
+    # (#178) Coverage is explicit: which chunks were read, which were skipped and
+    # the message range the session spans. A truncated run never looks complete.
+    coverage = chunk_coverage(raw_groups, sampled_indices)
+    coverage["revision"] = hashlib.sha256(
+        "\x00".join(b.text for b in transcript.blocks).encode("utf-8")
+    ).hexdigest()
+    coverage["truncated"] = truncated
     payload = {
         **validated,
         "artifacts": artifacts,
         "compressor": _compressor_payload(transcript),
         "truncated": truncated,
         "chunks": len(selected),
+        "coverage": coverage,
         "sampled_chunks": sampled_indices if truncated else None,
         "redactions": redactions,
         "generated_with": model_label,

@@ -78,6 +78,62 @@ def sample_chunks(
     return selected, True, indices
 
 
+def _seq_bounds(blocks: tuple[CompressedBlock, ...]) -> tuple[Optional[int], Optional[int]]:
+    seqs = [int(m.group(1)) for b in blocks for m in _SEQ_RE.finditer(b.text)]
+    if not seqs:
+        return None, None
+    return min(seqs), max(seqs)
+
+
+def chunk_coverage(
+    chunks: list[tuple[CompressedBlock, ...]], selected_indices: list[int]
+) -> dict[str, Any]:
+    """What a chunked summary actually read (#178).
+
+    A sampled run used to look identical to a complete one apart from a boolean.
+    This describes the coverage precisely: how many chunks exist versus how many
+    were summarised, which contiguous runs were skipped, the message range the
+    whole session spans, and how many user turns fell into the gaps — so a reader
+    can tell a full summary from a partial one and know what is missing.
+    """
+    total = len(chunks)
+    used = len(selected_indices)
+    selected = set(selected_indices)
+    omitted: list[dict[str, int]] = []
+    run_start: Optional[int] = None
+    for index in range(total):
+        if index in selected:
+            if run_start is not None:
+                omitted.append({"from_chunk": run_start, "to_chunk": index - 1})
+                run_start = None
+            continue
+        if run_start is None:
+            run_start = index
+    if run_start is not None:
+        omitted.append({"from_chunk": run_start, "to_chunk": total - 1})
+
+    first_seq: Optional[int] = None
+    last_seq: Optional[int] = None
+    user_turns_omitted = 0
+    for index, blocks in enumerate(chunks):
+        start, end = _seq_bounds(blocks)
+        if start is not None:
+            first_seq = start if first_seq is None else min(first_seq, start)
+        if end is not None:
+            last_seq = end if last_seq is None else max(last_seq, end)
+        if index not in selected:
+            user_turns_omitted += sum(1 for b in blocks if b.is_user_turn)
+
+    return {
+        "chunks_total": total,
+        "chunks_used": used,
+        "complete": used == total,
+        "omitted_chunks": omitted,
+        "seq_range": [first_seq, last_seq],
+        "user_turns_omitted": user_turns_omitted,
+    }
+
+
 def build_open_threads(validated: dict[str, Any]) -> str:
     parts: list[str] = []
     for key in ("open_questions", "next_steps"):
