@@ -236,6 +236,12 @@ Round 4 — roles, states and the memory repair:
 
 Full suite after round 4: **exit=0**, coverage 86.77 %.
 
+Round 9 — summary coverage:
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #178 chunk coverage | PARTIAL (open) | `6b83f62` | `chunk_coverage()` + `coverage` payload (chunks total/used, `complete`, omitted ranges, whole-session `seq_range`, `user_turns_omitted`, revision hash); `pytest tests/test_summary_chunk_coverage.py -q` -> 6 passed, `-k "summar or chunk or coverage" -q` -> 229 passed. Remaining: budget-aware packing so a summary covers all messages when the token budget allows, sampling only as the last resort |
+
 Round 8 — provider cache identity:
 
 | Item | Status | Commit | Evidence |
