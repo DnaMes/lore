@@ -14,6 +14,9 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Changed
 - Antigravity availability means readable data now: a `brain/` directory alone is not "available", and `lore check --deep` still inspects such a tree and reports its coverage — sources matched, sessions parsed, skip reasons and a `Coverage:` line with Antigravity's `unsupported_artifacts`, `task_artifacts_parsed`/`transcript(s)_parsed` split instead of a bare "not found".
 
+### Changed
+- Model-provider cache keys cover the whole request identity — provider, effective model, task, prompt version, source revision/coverage scope, sampling parameters and prompt fingerprints — instead of `system|prompt` plus a model name. Entries record that identity under `request`, writes are atomic and owner-only, and the four providers no longer collide on the same text.
+
 ### Added
 - Generated memories can carry a claim (observation, hypothesis, rule) with a confidence, the source span (`session_id`, `message_id`, `revision`) and the model request that produced it, stored as a candidate by default. `claim_state` distinguishes observation, hypothesis, confirmed, rejected and superseded; review changes only the status, so the evidence survives, and `lore memory list --json` is the audit export (claim, evidence, sources).
 

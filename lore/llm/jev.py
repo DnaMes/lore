@@ -1,6 +1,5 @@
 """Jev LLM provider: text-only delegate broker lanes (local, fastcheap)."""
 
-import hashlib
 import json
 import logging
 import os
@@ -91,6 +90,7 @@ class JevProvider(LLMProvider):
         cache_key = None
         if self.config.cache_enabled:
             cache_key = self._get_cache_key(prompt, system_prompt)
+            cache_identity = self.cache_identity(prompt, system_prompt)
             cached = self._load_from_cache(cache_key)
             if cached:
                 return cached
@@ -105,7 +105,7 @@ class JevProvider(LLMProvider):
         )
 
         if self.config.cache_enabled and cache_key:
-            self._save_to_cache(cache_key, result)
+            self._save_to_cache(cache_key, result, cache_identity)
 
         return result
 
@@ -165,11 +165,9 @@ class JevProvider(LLMProvider):
             "temperature": self.config.temperature,
         }
 
-    def _get_cache_key(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        # JSON-encode the three parts: concatenating them with a separator lets a
-        # `|` inside a prompt collide with a different (system, prompt) pair.
-        parts = json.dumps([system_prompt or "", prompt, list(self._lanes)], ensure_ascii=False)
-        return hashlib.sha256(parts.encode()).hexdigest()
+    def _cache_identity_extras(self) -> dict:
+        """The lane list is part of the request: a different order can answer differently."""
+        return {"lanes": list(self._lanes)}
 
     def _load_from_cache(self, cache_key: str) -> Optional[LLMResponse]:
         cache_root = self._ensure_cache_dir()
@@ -190,7 +188,7 @@ class JevProvider(LLMProvider):
                 logger.debug("Ignoring unreadable Jev cache entry: %s", exc)
         return None
 
-    def _save_to_cache(self, cache_key: str, response: LLMResponse) -> None:
+    def _save_to_cache(self, cache_key: str, response: LLMResponse, identity=None) -> None:
         cache_root = self._ensure_cache_dir()
         if cache_root is None:
             return
@@ -205,6 +203,9 @@ class JevProvider(LLMProvider):
                         "content": response.content,
                         "model": response.model,
                         "tokens_used": response.tokens_used,
+                        # The request this result belongs to (#186): an old
+                        # entry stays auditable after the code or prompt moves on.
+                        "request": identity or {},
                     },
                     f,
                 )

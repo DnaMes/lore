@@ -136,6 +136,7 @@ class OpenRouterProvider(LLMProvider):
                 eff_temperature,
                 base_url,
             )
+            cache_identity = self.cache_identity(prompt, system_prompt)
             cached = self._load_from_cache(cache_key)
             if cached:
                 return cached
@@ -166,7 +167,7 @@ class OpenRouterProvider(LLMProvider):
         )
 
         if self.config.cache_enabled and cache_key:
-            self._save_to_cache(cache_key, result)
+            self._save_to_cache(cache_key, result, cache_identity)
 
         return result
 
@@ -295,9 +296,25 @@ class OpenRouterProvider(LLMProvider):
         temperature: float,
         base_url: str,
     ) -> str:
-        model = resolve_openrouter_model(self.config)
-        combined = f"{system_prompt or ''}|{prompt}|{model}|{base_url}|{max_tokens}|{temperature}"
-        return hashlib.sha256(combined.encode()).hexdigest()
+        """Base identity plus the *effective* request values chosen at call time.
+
+        OpenRouter resolves the model and the base URL per request (fallbacks,
+        proxy overrides), so the key has to use those resolved values rather than
+        the configured ones (#186).
+        """
+        import json
+
+        payload = self.cache_identity(prompt, system_prompt)
+        payload["model"] = resolve_openrouter_model(self.config)
+        payload["params"] = {
+            **payload["params"],
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "base_url": base_url,
+        }
+        return hashlib.sha256(
+            json.dumps(payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
 
     def _load_from_cache(self, cache_key: str) -> Optional[LLMResponse]:
         cache_root = self._ensure_cache_dir()
@@ -318,7 +335,7 @@ class OpenRouterProvider(LLMProvider):
                 logger.debug("Ignoring unreadable OpenRouter cache entry: %s", exc)
         return None
 
-    def _save_to_cache(self, cache_key: str, response: LLMResponse) -> None:
+    def _save_to_cache(self, cache_key: str, response: LLMResponse, identity=None) -> None:
         cache_root = self._ensure_cache_dir()
         if cache_root is None:
             return
@@ -330,6 +347,7 @@ class OpenRouterProvider(LLMProvider):
                         "content": response.content,
                         "model": response.model,
                         "tokens_used": response.tokens_used,
+                        "request": identity or {},
                     },
                     f,
                 )

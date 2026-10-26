@@ -409,3 +409,22 @@ timeout wraps each lane attempt — **180 s by default**, overridable with
 the limits per lane, so Lore passes neither through. `LLMResponse.model` is
 `jev/<lane>` for the lane that actually answered, and `get_model_info()["model"]`
 is the configured lane list (`LORE_JEV_LANES`).
+
+## Caching and the request identity
+
+Provider caches are keyed by `LLMProvider.cache_identity()`: a canonical dict with
+the provider class, the effective model, the task, the prompt version, the cache
+scope (the source revision or coverage the request was built from), the sampling
+parameters (temperature, max tokens, `num_ctx`, provider options, base URL) and
+SHA-256 fingerprints of the prompt and system prompt. `OpenRouter` adds the values
+it resolves per call, `jev` adds its lane list. Bumping `CACHE_KEY_VERSION`
+invalidates every entry at once.
+
+Every entry records that identity under `request`, so an old artifact stays
+auditable after the prompt or code moved on. Writes go through a temp file plus
+`os.replace` and are restricted to the owner, so concurrent workers never see a
+half-written entry, and two providers sharing one cache directory cannot answer
+for each other.
+
+Transcript-bearing prompts still disable the cache entirely (`LLMConfig.for_transcripts`);
+this key work applies to any provider call that does use it.

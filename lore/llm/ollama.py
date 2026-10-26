@@ -1,11 +1,11 @@
-import hashlib
 import json
 import logging
 import os
+import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..utils.paths import lore_home
+from ..utils.paths import lore_home, restrict_file
 from .base import LLMConfig, LLMProvider, LLMResponse
 from .gate import ensure_cloud_allowed
 
@@ -86,6 +86,7 @@ class OllamaProvider(LLMProvider):
         cache_key = None
         if self.config.cache_enabled:
             cache_key = self._get_cache_key(prompt, system_prompt)
+            cache_identity = self.cache_identity(prompt, system_prompt)
             cached = self._load_from_cache(cache_key)
             if cached:
                 return cached
@@ -113,7 +114,7 @@ class OllamaProvider(LLMProvider):
         )
 
         if self.config.cache_enabled and cache_key:
-            self._save_to_cache(cache_key, result)
+            self._save_to_cache(cache_key, result, cache_identity)
 
         return result
 
@@ -142,10 +143,6 @@ class OllamaProvider(LLMProvider):
             "temperature": self.config.temperature,
         }
 
-    def _get_cache_key(self, prompt: str, system_prompt: Optional[str] = None) -> str:
-        combined = f"{system_prompt or ''}|{prompt}|{self.config.model}"
-        return hashlib.sha256(combined.encode()).hexdigest()
-
     def _load_from_cache(self, cache_key: str) -> Optional[LLMResponse]:
         cache_root = self._ensure_cache_dir()
         if cache_root is None:
@@ -165,20 +162,35 @@ class OllamaProvider(LLMProvider):
                 logger.debug("Ignoring unreadable Ollama cache entry: %s", exc)
         return None
 
-    def _save_to_cache(self, cache_key: str, response: LLMResponse):
+    def _save_to_cache(self, cache_key: str, response: LLMResponse, identity=None):
         cache_root = self._ensure_cache_dir()
         if cache_root is None:
             return
         cache_file = cache_root / f"{cache_key}.json"
+        tmp_path: Optional[Path] = None
         try:
-            with open(cache_file, "w") as f:
+            fd, tmp_name = tempfile.mkstemp(dir=cache_root, prefix=f".{cache_key}.", suffix=".tmp")
+            tmp_path = Path(tmp_name)
+            with os.fdopen(fd, "w") as f:
                 json.dump(
                     {
                         "content": response.content,
                         "model": response.model,
                         "tokens_used": response.tokens_used,
+                        # The request this result belongs to (#186): an old
+                        # entry stays auditable after the code or prompt moves on.
+                        "request": identity or {},
                     },
                     f,
                 )
+            os.replace(tmp_path, cache_file)  # atomic: concurrent workers cannot see half a file
+            tmp_path = None
+            restrict_file(cache_file)
         except OSError as exc:
-            logger.debug("Could not write Ollama cache entry: %s", exc)
+            logger.debug("Could not write cache entry: %s", exc)
+        finally:
+            if tmp_path is not None:
+                try:
+                    tmp_path.unlink()
+                except OSError:
+                    pass
