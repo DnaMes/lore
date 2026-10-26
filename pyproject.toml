@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+# setuptools>=77: first release that accepts SPDX license strings (PEP 639).
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +9,8 @@ dynamic = ["version"]
 description = "Lore — local-first archive and shared agent memory for your AI coding sessions across Claude, Cursor, Gemini, Codex, Aider, and more"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = "MIT"
+license-files = ["LICENSE"]
 authors = [
     {name = "André Semek", email = "erdna1982@gmail.com"}
 ]
@@ -16,7 +18,6 @@ keywords = ["ai", "chat-history", "session-management", "claude", "gemini", "cur
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
@@ -47,6 +48,8 @@ dev = [
     "coverage>=7",
     "ruff>=0.6",
     "mypy>=1.8",
+    "pre-commit>=3,<5",
+    "bandit[toml]>=1.7",
     "fastembed>=0.3",
     "sqlite-vec>=0.1.9",
 ]

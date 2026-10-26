@@ -1,0 +1,40 @@
+# sdist contents for downstream packagers.
+# Wheel package-data still comes from [tool.setuptools.package-data].
+
+include README.md
+include LICENSE
+include CHANGELOG.md
+include CONTRIBUTING.md
+include SECURITY.md
+include pyproject.toml
+include lore_cli.py
+include lore_session_cli.py
+
+graft lore
+graft tests
+
+# Tracked maintainer noise: include then strip (avoids "not previously-included" warnings).
+include HANDOFF.md
+include SESSION-MANAGEMENT.md
+graft docs/triage
+graft docs/archive
+graft docs/research
+graft docs/superpowers
+graft .parachute
+graft scripts
+
+exclude HANDOFF.md
+exclude SESSION-MANAGEMENT.md
+global-include MAINT-*
+global-exclude MAINT-*
+prune docs/triage
+prune docs/archive
+prune docs/research
+prune docs/superpowers
+prune .parachute
+prune scripts
+# Gitignored locally; prune is a no-op when absent and strips them when present.
+prune .serena
+prune .specstory
+prune build
+prune lore.egg-info

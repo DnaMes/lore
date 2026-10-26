@@ -12,9 +12,14 @@ cd lore
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pre-commit install
+ruff check .
+ruff format --check .
+pytest tests/
+bandit -q -r lore
 ```
 
-The `dev` extra includes pytest, ruff, mypy, fastembed and sqlite-vec.
+The `dev` extra includes pytest, ruff, mypy, pre-commit, bandit, fastembed and
+sqlite-vec.
 
 ## Running Tests
 
@@ -35,9 +40,10 @@ pytest tests/ -v --tb=short
 ## Lint & Format
 
 ```bash
-ruff format . && ruff check --fix .
+ruff check .
+ruff format --check .
 mypy lore/ --ignore-missing-imports
-bandit -r lore/
+bandit -q -r lore
 ```
 
 Or run all pre-commit hooks at once:

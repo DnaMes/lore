@@ -16,7 +16,8 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install pip-audit
-      - run: pip-audit --requirement requirements.txt || pip-audit -r <(pip install -e . --dry-run 2>&1 | grep Collecting | awk '{print $2}')
+      - run: pip install .
+      - run: pip-audit
 
   bandit:
     runs-on: ubuntu-latest
