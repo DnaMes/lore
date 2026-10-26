@@ -20,11 +20,13 @@ def register_blueprints(app: Flask) -> None:
     from .api_v1 import bp as api_v1_bp
     from .jobs import bp as jobs_bp
     from .memory import bp as memory_bp
+    from .tags import bp as tags_bp
 
     for blueprint in (
         api_v1_bp,
         jobs_bp,
         memory_bp,
+        tags_bp,
     ):
         if blueprint.name not in app.blueprints:
             app.register_blueprint(blueprint)
