@@ -11,6 +11,12 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Fixed
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
+### Added
+- Message permalinks: `/session/<id>/m/<seq>` and `/api/v1/sessions/<id>/messages/<seq>` resolve one message with a bounded neighbour window (21 messages) read straight from the v2 rows, with 410 for a message the store does not know.
+
+### Changed
+- `/api/v1/sessions/<id>/messages` is a bounded window now (`page`, `per_page`, `at=<seq>`) and reports the session's real `total`, instead of serialising the whole live session and truncating it.
+
 ### Changed
 - Search filters constrain the candidates before the limit: `/api/search`, `/api/v1/search`, the MCP tools `search_history` and `list_sessions` and the v2 FTS and semantic paths apply tool, project, saved-tag and inclusive date filters inside the query, so a query whose best unfiltered hits live in another project, tool or date range still fills its limit. An unparsable date filter is rejected with an explicit error instead of widening the result set.
 

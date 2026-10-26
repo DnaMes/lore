@@ -43,6 +43,7 @@ from ..services.index import (
     thread_sessions,
 )
 from ..services.summarize_cli import web_summarize_enabled
+from ..storage import load_session_message_window
 from .api_payloads import (
     search_result_snippet,
     serialize_index_session_summary,
@@ -2567,8 +2568,79 @@ def api_v1_session_detail(session_id):
     return jsonify(payload)
 
 
+def _bounded_message_window(session_id: str, *, offset: int, limit: int, around_seq=None) -> dict:
+    """Message window for the paging API (#171), without parsing the transcript.
+
+    Prefers ``load_session_message_window`` (two SQL statements, bounded by
+    ``LIMIT``). Falls back to the live/exports path only when the v2 store has
+    no message rows for this session, which is the case for a session that was
+    indexed before the row backfill.
+
+    Returns ``{"source": "v2"|"live", "total": int, "offset": int,
+    "messages": [...], "found_seq": int|None}``.
+    """
+    window = load_session_message_window(
+        OUTPUT_DIR, session_id, offset=offset, limit=limit, around_seq=around_seq
+    )
+    if window is not None:
+        return {
+            "source": "v2",
+            "total": window["total"],
+            "offset": window["offset"],
+            "messages": [
+                {**message, "permalink": message_permalink(session_id, message["seq"])}
+                for message in window["messages"]
+            ],
+            "found_seq": window["found_seq"],
+        }
+
+    session_meta = _index_session_meta(session_id) or {}
+    preferred_tool = normalize_tool_name(session_meta.get("tool") or "") or None
+    session_obj = load_session_by_id(
+        session_id, preferred_tool=preferred_tool, allow_cross_tool_fallback=True
+    )
+    if not session_obj:
+        return {"source": "live", "total": 0, "offset": 0, "messages": [], "found_seq": None}
+    messages = [
+        {
+            "seq": index,
+            "role": getattr(message.role, "value", str(message.role)),
+            "content": message.content or "",
+            "timestamp": message.timestamp.isoformat() if message.timestamp else None,
+            "model": getattr(message, "model", None),
+            "kind": getattr(message, "kind", None),
+            "active": bool(getattr(message, "active", True)),
+            "permalink": message_permalink(session_id, index),
+        }
+        for index, message in enumerate(session_obj.messages, start=1)
+    ]
+    return {
+        "source": "live",
+        "total": len(messages),
+        "offset": 0,
+        "messages": messages[offset : offset + limit],
+        "found_seq": None,
+    }
+
+
+def message_permalink(session_id: str, seq: int) -> str:
+    """Stable deep link for one canonical message (#171).
+
+    The identity is ``(session_id, seq)``: ``seq`` is the stored order of the
+    message inside its session and survives a reindex, a prune/undo and a
+    restore of the archive, which a SQLite row id does not.
+    """
+    return f"/session/{session_id}/m/{int(seq)}"
+
+
 @app.route("/api/v1/sessions/<session_id>/messages")
 def api_v1_session_messages(session_id):
+    """Bounded message window: ``?page=``/``?per_page=`` (or ``?at=<seq>``).
+
+    Loads only the requested segment from the v2 message rows. ``total`` is the
+    session's real message count, so a client can page through everything; a
+    ``next_page`` is only present while more messages follow.
+    """
     if not validate_session_id(session_id):
         return jsonify({"error": "Invalid session ID"}), 400
 
@@ -2577,34 +2649,133 @@ def api_v1_session_messages(session_id):
         return jsonify({"error": "Not found"}), 404
 
     try:
-        limit = _api_limit_param(default=500, max_value=5000)
+        # ``per_page`` is the documented name; ``limit`` stays accepted for
+        # clients written against the older, truncating endpoint.
+        per_page = _api_limit_param(name="per_page", default=200, max_value=1000)
+        if not request.args.get("per_page") and request.args.get("limit"):
+            per_page = _api_limit_param(default=200, max_value=1000)
+        page = int(request.args.get("page", "1"))
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    if page < 1:
+        return jsonify({"error": "Invalid page parameter"}), 400
 
-    preferred_tool = normalize_tool_name(session_meta.get("tool") or "") or None
-    session_obj = load_session_by_id(
-        session_id,
-        preferred_tool=preferred_tool,
-        allow_cross_tool_fallback=True,
-    )
-    if not session_obj:
-        return jsonify(
-            {
-                "session_id": session_id,
-                "message_count": 0,
-                "messages": [],
-                "live": False,
-            }
+    raw_seq = (request.args.get("at") or "").strip()
+    around_seq = None
+    if raw_seq:
+        try:
+            around_seq = int(raw_seq)
+        except ValueError:
+            return jsonify({"error": "Invalid at parameter"}), 400
+
+    if around_seq is None:
+        window = _bounded_message_window(session_id, offset=(page - 1) * per_page, limit=per_page)
+    else:
+        window = _bounded_message_window(
+            session_id, offset=0, limit=per_page, around_seq=around_seq
         )
+        if window["source"] == "v2" and window["found_seq"] is None:
+            return jsonify({"error": "Message not found", "session_id": session_id}), 410
+        page = window["offset"] // per_page + 1
 
-    payload = serialize_live_session(
-        session_obj,
-        session_meta=session_meta,
-        include_messages=True,
+    payload = serialize_index_session_summary(session_meta)
+    payload.update(
+        {
+            "session_id": session_id,
+            "message_count": len(window["messages"]),
+            "total": window["total"],
+            "page": page,
+            "per_page": per_page,
+            "source": window["source"],
+            "messages": window["messages"],
+        }
     )
-    payload["messages"] = payload["messages"][:limit]
-    payload["message_count"] = len(payload["messages"])
+    pages = max(1, math.ceil(window["total"] / per_page)) if window["total"] else 1
+    if page < pages:
+        payload["next_page"] = page + 1
     return jsonify(payload)
+
+
+@app.route("/api/v1/sessions/<session_id>/messages/<int:seq>")
+def api_v1_message_permalink(session_id, seq):
+    """One canonical message with a bounded neighbour window (#171)."""
+    if not validate_session_id(session_id):
+        return jsonify({"error": "Invalid session ID"}), 400
+    session_meta = _index_session_meta(session_id)
+    if not session_meta:
+        return jsonify({"error": "Not found"}), 404
+
+    window = _bounded_message_window(session_id, offset=0, limit=21, around_seq=seq)
+    if window["source"] == "v2" and window["found_seq"] is None:
+        return (
+            jsonify(
+                {
+                    "error": "Message not found",
+                    "reason": "deleted, or not present in the stored message rows",
+                    "session_id": session_id,
+                    "seq": seq,
+                }
+            ),
+            410,
+        )
+    target = next((message for message in window["messages"] if message["seq"] == seq), None)
+    if target is None:
+        return jsonify({"error": "Message not found", "session_id": session_id}), 404
+    return jsonify(
+        {
+            "session_id": session_id,
+            "seq": seq,
+            "permalink": message_permalink(session_id, seq),
+            "message": target,
+            "context": window["messages"],
+            "total": window["total"],
+            "source": window["source"],
+        }
+    )
+
+
+@app.route("/session/<session_id>/m/<int:seq>")
+def session_message_permalink(session_id, seq):
+    """Deep link to one message with bounded context (#171).
+
+    Renders only the requested message and its neighbours instead of the whole
+    transcript, which is what makes a permalink cheap on a 20 000-message
+    session. Unknown sessions return 404; a message id the store does not know
+    (deleted, or a session whose rows were never synced) returns 410 with the
+    reason, never an empty page.
+    """
+    if not validate_session_id(session_id):
+        return "Invalid session ID", 400
+    session_meta = _index_session_meta(session_id)
+    if not session_meta:
+        return render("message_permalink_missing", session_id=session_id, seq=seq), 404
+
+    window = _bounded_message_window(session_id, offset=0, limit=21, around_seq=seq)
+    if window["source"] == "v2" and window["found_seq"] is None:
+        return render("message_permalink_missing", session_id=session_id, seq=seq), 410
+
+    target = next((message for message in window["messages"] if message["seq"] == seq), None)
+    if target is None:
+        return render("message_permalink_missing", session_id=session_id, seq=seq), 404
+
+    style = get_style(session_meta.get("tool") or "")
+    return render(
+        "message_permalink",
+        active="sessions",
+        session_id=session_id,
+        session_title=session_meta.get("display_title") or session_meta.get("title") or "",
+        seq=seq,
+        total=window["total"],
+        messages=[
+            {
+                **message,
+                "formatted_content": format_message_content(message["content"]),
+            }
+            for message in window["messages"]
+        ],
+        style=style,
+        source=window["source"],
+    )
 
 
 @app.route("/api/v1/projects")

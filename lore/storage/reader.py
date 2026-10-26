@@ -278,6 +278,102 @@ def load_index_v2(output_dir: Path) -> Dict[str, Any]:
     }
 
 
+def load_session_message_window(
+    output_dir: Path,
+    session_id: str,
+    *,
+    offset: int = 0,
+    limit: int = 50,
+    around_seq: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """Bounded window of one session's messages, read straight from the v2 rows.
+
+    This is the paging primitive the message permalinks and the messages API use
+    (#171). It never materialises the transcript: one ``COUNT(*)`` for the total
+    and one ``SELECT … ORDER BY seq LIMIT ? OFFSET ?`` for the window, so asking
+    for the last page of a 20 000-message session costs the same as the first.
+
+    ``around_seq`` centres the window on a message (``limit // 2`` before it) and
+    is how a deep link supplies surrounding context without fetching the rest.
+
+    Returns ``None`` when the store or the session's message rows are missing, so
+    the caller can fall back to the live-parse path. Otherwise::
+
+        {"total": int, "offset": int, "limit": int, "messages": [ {...}, … ],
+         "found_seq": int | None, "session_exists": bool}
+
+    Each message dict carries ``seq``, ``role``, ``content``, ``timestamp``,
+    ``model``, ``kind`` and ``active``; it deliberately omits reasoning, which is
+    opt-in and can be 20k characters per message.
+    """
+    db = v2_db_path(output_dir)
+    if not db.exists():
+        return None
+
+    window_limit = max(1, int(limit))
+    conn = open_connection(db)
+    try:
+        exists = conn.execute("SELECT 1 FROM sessions WHERE id = ?", (session_id,)).fetchone()
+        if not exists:
+            return None
+        total = int(
+            conn.execute(
+                "SELECT COUNT(*) FROM messages WHERE session_id = ?", (session_id,)
+            ).fetchone()[0]
+        )
+        if not total:
+            return None
+
+        found_seq: Optional[int] = None
+        if around_seq is not None:
+            found_seq = conn.execute(
+                "SELECT seq FROM messages WHERE session_id = ? AND seq = ?",
+                (session_id, int(around_seq)),
+            ).fetchone()
+            found_seq = int(found_seq[0]) if found_seq is not None else None
+            if found_seq is not None:
+                before = int(
+                    conn.execute(
+                        "SELECT COUNT(*) FROM messages WHERE session_id = ? AND seq < ?",
+                        (session_id, found_seq),
+                    ).fetchone()[0]
+                )
+                offset = max(0, before - window_limit // 2)
+
+        window_offset = max(0, min(int(offset), max(0, total - 1)))
+        rows = conn.execute(
+            """
+            SELECT seq, role, content, timestamp, model, kind, active
+            FROM messages
+            WHERE session_id = ?
+            ORDER BY seq
+            LIMIT ? OFFSET ?
+            """,
+            (session_id, window_limit, window_offset),
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return {
+        "total": total,
+        "offset": window_offset,
+        "limit": window_limit,
+        "found_seq": found_seq,
+        "messages": [
+            {
+                "seq": int(row["seq"]),
+                "role": row["role"],
+                "content": row["content"] or "",
+                "timestamp": row["timestamp"],
+                "model": row["model"],
+                "kind": row["kind"],
+                "active": bool(row["active"]) if row["active"] is not None else True,
+            }
+            for row in rows
+        ],
+    }
+
+
 def load_session_messages_v2(
     output_dir: Path, session_id: str, *, include_reasoning: bool = False
 ) -> Optional[list]:

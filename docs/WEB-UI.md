@@ -66,6 +66,12 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
 ### Session Details and Dynamic Fragments
 
 - `/session/<session_id>`: Detailed session view with transcript rendering, tool invocation cards, and metadata.
+- `/session/<session_id>/m/<seq>`: Message permalink. Renders that message plus a bounded
+  neighbour window (21 messages) straight from the v2 message rows — never the whole
+  transcript — so a link into a 20 000-message session stays cheap. The identity is
+  `(session_id, seq)`, which survives a reindex, a prune/undo and a restore; an unknown
+  session is a 404, a message the store does not know (deleted, or rows not synced yet)
+  is a 410 with the reason.
 - `/sessions/rows`: HTML fragment of session list table rows for client-side filtering and dynamic pagination.
 - `/sessions/<session_id>/peek`: HTML fragment displaying message previews in modal or drawer popups.
 - `/session/<session_id>/messages`: HTML fragment for lazy-loading paginated session messages.

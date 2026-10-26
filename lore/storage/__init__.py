@@ -40,7 +40,12 @@ from .memory import (
     set_memory_status,
     supersede_memory,
 )
-from .reader import load_index_v2, load_session_messages_v2, v2_is_available
+from .reader import (
+    load_index_v2,
+    load_session_message_window,
+    load_session_messages_v2,
+    v2_is_available,
+)
 from .schema import apply_migrations, current_version, initialise, open_connection
 from .search import search_sessions, semantic_search_sessions
 from .tags import (
@@ -80,6 +85,7 @@ __all__ = [
     "list_memory_sources",
     "list_session_knowledge",
     "load_index_v2",
+    "load_session_message_window",
     "load_session_messages_v2",
     "open_connection",
     "prompt_fingerprint",

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="max-w-4xl mx-auto px-8 py-10">
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-6">
+        <div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+                Message permalink
+            </div>
+            <h1 class="title-font page-headline text-slate-900 mt-2">
+                {{ session_title or session_id }}
+            </h1>
+            <p class="text-xs text-slate-500 mt-2">
+                Message {{ seq }} of {{ total }} · {{ messages|length }} messages in this window
+                {%- if source == "live" %} · read from the session source{% endif %}
+            </p>
+        </div>
+        <a href="/session/{{ session_id|urlpath }}" class="text-[11px] text-slate-500 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl transition-all bg-white">
+            Open full session
+        </a>
+    </div>
+
+    <div class="space-y-4">
+        {% for message in messages %}
+        <div id="msg-{{ message.seq }}" class="surface-card p-5{% if message.seq == seq %} border-blue-200 shadow-sm{% endif %}">
+            <div class="flex items-center justify-between mb-3">
+                <div class="flex items-center gap-2">
+                    <span class="role-badge">{{ message.role }}</span>
+                    <a href="{{ message.permalink }}" class="text-[10px] font-mono text-slate-400 hover:text-slate-700">#{{ message.seq }}</a>
+                    {% if message.kind and message.kind != "text" %}
+                    <span class="text-[10px] uppercase tracking-[0.2em] text-slate-400">{{ message.kind }}</span>
+                    {% endif %}
+                    {% if not message.active %}
+                    <span class="text-[10px] uppercase tracking-[0.2em] text-amber-600">inactive</span>
+                    {% endif %}
+                </div>
+                <span class="text-[10px] font-mono text-slate-500">{{ message.timestamp or "" }}</span>
+            </div>
+            <div class="prose max-w-none antialiased">{{ message.formatted_content | safe }}</div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <p class="text-[11px] text-slate-500 mt-4">
+        This page contains only the requested message and its neighbours, not the
+        whole transcript.
+    </p>
+</section>
+{% endblock %}
