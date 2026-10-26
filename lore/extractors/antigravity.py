@@ -184,8 +184,33 @@ class AntigravityExtractor(BaseExtractor):
     def tool(self) -> Tool:
         return Tool.ANTIGRAVITY
 
+    # Availability is decided by readable data, not by an install directory:
+    # a `brain/` tree that only holds decoded `.pb` blobs has nothing to import
+    # (#158). The scan stops at the first hit and is bounded so a huge tree
+    # cannot slow the availability check down.
+    _AVAILABILITY_SCAN_LIMIT = 200
+
     def is_available(self) -> bool:
-        return any((path / "brain").exists() for path in self.base_paths)
+        """True only when a readable conversation or task artifact exists."""
+        for base_path in self.base_paths:
+            brain_path = base_path / "brain"
+            try:
+                if brain_path.is_symlink() or not brain_path.is_dir():
+                    continue
+                children = list(brain_path.iterdir())[: self._AVAILABILITY_SCAN_LIMIT]
+            except OSError:
+                continue
+            for session_dir in children:
+                try:
+                    if not session_dir.is_dir() or session_dir.is_symlink():
+                        continue
+                except OSError:
+                    continue
+                if self._transcript_path(session_dir) is not None:
+                    return True
+                if (session_dir / "task.md").exists():
+                    return True
+        return False
 
     def source_description(self) -> str:
         return (
@@ -211,8 +236,25 @@ class AntigravityExtractor(BaseExtractor):
             return short
         return None
 
+    def has_source_data(self) -> bool:
+        """A `brain/` tree exists, even when nothing in it is decodable (#158)."""
+        return self._has_brain_dir()
+
+    def _has_brain_dir(self) -> bool:
+        """Whether any variant root has a `brain/` directory to scan."""
+        for base_path in self.base_paths:
+            try:
+                if (base_path / "brain").is_dir():
+                    return True
+            except OSError:
+                continue
+        return False
+
     def extract_sessions(self) -> Iterator[UnifiedSession]:
-        if not self.is_available():
+        # Deliberately not `is_available()`: availability answers "can anything be
+        # imported", while the scan must still run so an empty or undecodable tree
+        # reports its coverage counters instead of vanishing silently (#158).
+        if not self._has_brain_dir():
             return
 
         summaries_base = Path.home() / ".gemini" / "antigravity"
@@ -244,6 +286,7 @@ class AntigravityExtractor(BaseExtractor):
                     continue
 
                 self._count("files_matched")
+                transcript_present = self._transcript_path(session_dir) is not None
                 try:
                     session = self._parse_session_dir(session_dir, summaries)
                 except (
@@ -262,13 +305,19 @@ class AntigravityExtractor(BaseExtractor):
                     continue
 
                 if session is None:
-                    if (
-                        self._transcript_path(session_dir) is None
-                        and not (session_dir / "task.md").exists()
-                    ):
+                    transcript = self._transcript_path(session_dir)
+                    if transcript is not None:
+                        self._count("transcripts_unparsed")
+                    elif (session_dir / "task.md").exists():
+                        self._count("task_artifacts_only")
+                    else:
+                        # Nothing readable: usually undecoded conversations/*.pb
+                        # blobs. Counted, never reported as a parsed session.
+                        self._count("unsupported_artifacts")
                         self._record_skip("no_task_md")
                     continue
                 self._count("files_parsed")
+                self._count("transcripts_parsed" if transcript_present else "task_artifacts_parsed")
                 if self.should_import_session(session):
                     seen_ids.add(session_dir.name)
                     yield session

@@ -2065,6 +2065,13 @@ def _print_deep_report(extractor) -> bool:
     print(f"  Skipped: {_format_skips(extractor.skip_counts) or 'none'}")
     print(f"  Unknown records: {found['records_unknown']}")
     print(f"  Parsed files: {found['files_parsed']}")
+    # Extractors may report finer coverage (Antigravity splits transcripts from
+    # task artifacts and undecodable blobs, #158); print whatever they added.
+    from lore.extractors.base import DISCOVERY_KEYS
+
+    extra = {key: value for key, value in found.items() if key not in DISCOVERY_KEYS and value}
+    if extra:
+        print(f"  Coverage: {', '.join(f'{key}={value}' for key, value in sorted(extra.items()))}")
     if sessions == 0 and found["files_matched"] > 0:
         print(
             f"WARNING: {tool}: {found['files_matched']} source files matched "
@@ -2123,6 +2130,11 @@ def cmd_check(args):
                 failed = not _print_deep_report(extractor) or failed
             elif extractor.tool.value in last_runs:
                 _print_last_sync(last_runs[extractor.tool.value])
+        elif deep and extractor.has_source_data():
+            # A data directory with nothing readable still has a story to tell:
+            # report its coverage counters instead of only "not found" (#158).
+            print(f"  {extractor.tool.value}: data directory present, no readable input")
+            failed = not _print_deep_report(extractor) or failed
 
     print("-" * 40)
     print(f"Summary: {available_count}/{len(extractors)} tools available.")

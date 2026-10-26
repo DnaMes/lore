@@ -9,6 +9,9 @@ from ..core.models import AUTOMATED_ORIGINS, Role, TitleSource, Tool, UnifiedSes
 
 logger = logging.getLogger(__name__)
 
+# Coverage counters every extractor may report; an extractor may add its own
+# keys (e.g. Antigravity's transcript/artifact split, #158) and they survive into
+# `lore check --deep`.
 DISCOVERY_KEYS = ("files_matched", "files_parsed", "records_unknown")
 
 REEXTRACT_BUDGET_ENV = "LORE_PARSER_REEXTRACT_BUDGET"
@@ -231,6 +234,15 @@ class BaseExtractor(ABC):
         collection without paying any per-tool extraction cost.
         """
         return None
+
+    def has_source_data(self) -> bool:
+        """Whether a data directory exists, readable or not (#158).
+
+        ``is_available`` answers "can I import anything"; this answers "is there
+        something to inspect", which is what ``lore check --deep`` needs to report
+        undecodable artifacts instead of a bare "not found".
+        """
+        return self.is_available()
 
     def is_available(self) -> bool:
         """Check if the tool's data is available on this system."""

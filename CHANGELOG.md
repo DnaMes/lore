@@ -11,6 +11,9 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Fixed
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
+### Changed
+- Antigravity availability means readable data now: a `brain/` directory alone is not "available", and `lore check --deep` still inspects such a tree and reports its coverage — sources matched, sessions parsed, skip reasons and a `Coverage:` line with Antigravity's `unsupported_artifacts`, `task_artifacts_parsed`/`transcript(s)_parsed` split instead of a bare "not found".
+
 ### Added
 - `docs/READING-CONTRACT.md`: the rules a reader can rely on (roles and execution states, theme-driven typography, keyboard and focus, live status, document structure), each tied to its implementation, plus `tests/test_a11y_reading_contract.py`, which checks the machine-decidable half over every page — language, one `h1` and no heading jumps, skip link with target, unique ids, an accessible name on every link, button and form control, live regions for async feedback, theme variables instead of hardcoded text colours, no fixed heights on transcript content, and a focus ring for every interactive component.
 

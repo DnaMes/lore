@@ -63,10 +63,33 @@ def test_not_available_when_antigravity_dir_but_no_brain(monkeypatch, tmp_path):
     assert AntigravityExtractor().is_available() is False
 
 
-def test_available_when_brain_dir_exists(monkeypatch, tmp_path):
+def test_a_bare_brain_dir_is_not_available(monkeypatch, tmp_path):
+    """#158 — an install directory without readable data is not availability."""
     _brain_dir(tmp_path)
     monkeypatch.setenv("HOME", str(tmp_path))
+    assert AntigravityExtractor().is_available() is False
+
+
+def test_available_when_a_task_artifact_exists(monkeypatch, tmp_path):
+    _make_session(tmp_path, "real-session")
+    monkeypatch.setenv("HOME", str(tmp_path))
     assert AntigravityExtractor().is_available() is True
+
+
+def test_undecodable_tree_is_counted_as_unsupported(monkeypatch, tmp_path):
+    """#158 — undecoded artifacts are counted, never reported as parsed."""
+    brain = _brain_dir(tmp_path)
+    session_dir = brain / "opaque-session"
+    session_dir.mkdir(parents=True)
+    (session_dir / "conversations").mkdir()
+    (session_dir / "conversations" / "abc.pb").write_bytes(b"\x00\x01binary")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    extractor = AntigravityExtractor()
+    assert list(extractor.extract_sessions()) == []
+    assert extractor.discovery["unsupported_artifacts"] == 1
+    assert extractor.discovery["files_parsed"] == 0
+    assert extractor.is_available() is False
 
 
 def test_extract_sessions_empty_when_unavailable(monkeypatch, tmp_path):
@@ -259,3 +282,32 @@ def test_short_session_recorded_as_too_few_prompts(monkeypatch, tmp_path):
 
     assert imported == []
     assert extractor.skip_counts.get("too_few_user_prompts", 0) >= 1
+
+
+def test_source_data_is_reported_even_without_readable_input(monkeypatch, tmp_path):
+    """#158 — a bare brain tree has source data, just nothing decodable."""
+    brain = _brain_dir(tmp_path)
+    (brain / "opaque").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    extractor = AntigravityExtractor()
+    assert extractor.has_source_data() is True
+    assert extractor.is_available() is False
+
+
+def test_check_deep_reports_coverage_for_an_undecodable_tree(monkeypatch, tmp_path, capsys):
+    """#158 — the diagnostic says which artifacts it could not use."""
+    import argparse
+
+    import lore_cli
+
+    brain = _brain_dir(tmp_path)
+    session_dir = brain / "opaque"
+    (session_dir / "conversations").mkdir(parents=True)
+    (session_dir / "conversations" / "x.pb").write_bytes(b"\x00bin")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [AntigravityExtractor()])
+    lore_cli.cmd_check(argparse.Namespace(deep=True, output_dir=str(tmp_path / ".lore")))
+    out = capsys.readouterr().out
+    assert "data directory present, no readable input" in out
+    assert "Coverage: unsupported_artifacts=1" in out
+    assert "Sessions parsed: 0" in out
