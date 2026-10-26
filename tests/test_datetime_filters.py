@@ -71,7 +71,9 @@ def test_date_only_end_keeps_the_selected_final_day(berlin):
         {"id": "last-second", "created": "2026-09-12T23:59:59"},
         {"id": "next-day", "created": "2026-09-13T00:00:01"},
     ]
-    kept = [s["id"] for s in filter_sessions(sessions, end=parse_date_param("2026-09-12", end=True))]
+    kept = [
+        s["id"] for s in filter_sessions(sessions, end=parse_date_param("2026-09-12", end=True))
+    ]
     assert kept == ["early", "evening", "last-second"]
 
 
@@ -145,7 +147,12 @@ def test_aware_timestamp_is_converted_to_local_wall_clock(berlin):
     [
         (datetime(2026, 9, 12, 0, 0), datetime(2026, 9, 12, 0, 0), None, True),
         (datetime(2026, 9, 11, 23, 59), datetime(2026, 9, 12, 0, 0), None, False),
-        (datetime(2026, 9, 12, 23, 59, 59, 999999), None, datetime(2026, 9, 12, 23, 59, 59, 999999), True),
+        (
+            datetime(2026, 9, 12, 23, 59, 59, 999999),
+            None,
+            datetime(2026, 9, 12, 23, 59, 59, 999999),
+            True,
+        ),
         (datetime(2026, 9, 13, 0, 0), None, datetime(2026, 9, 12, 23, 59, 59, 999999), False),
         (datetime(2026, 9, 12, 12, 0), None, None, True),
     ],
