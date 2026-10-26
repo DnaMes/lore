@@ -1688,6 +1688,42 @@ def cmd_memory(args):
                 print(line)
         return
 
+    if action == "repair-index":
+        from lore.storage import memory_index_health, repair_memory_index
+
+        health = repair_memory_index(output_dir, apply=bool(getattr(args, "apply", False)))
+        if getattr(args, "json", False):
+            payload = {
+                "total_memories": health.total_memories,
+                "indexed": health.indexed,
+                "missing": health.missing,
+                "orphans": health.orphans,
+                "healthy": health.healthy,
+                "applied": bool(getattr(args, "apply", False)),
+            }
+            print(json.dumps(payload, indent=2))
+            return
+        before = memory_index_health(output_dir) if getattr(args, "apply", False) else health
+        if health.healthy:
+            print(
+                f"Memory search index is healthy ({health.total_memories} memories, "
+                f"{health.indexed} indexed)."
+            )
+            return
+        print(f"Memories: {before.total_memories}, indexed: {before.indexed}")
+        if before.missing:
+            print(f"Missing search rows for {len(before.missing)} memories: {before.missing[:20]}")
+        if before.orphans:
+            print(f"Search rows without a memory: {len(before.orphans)} ({before.orphans[:10]})")
+        if getattr(args, "apply", False):
+            print(
+                f"Repaired: {len(before.missing)} rows rebuilt, "
+                f"{len(before.orphans)} orphan rows removed."
+            )
+        else:
+            print("Dry run: nothing was written. Re-run with --apply to repair.")
+        return
+
     if action == "rate":
         try:
             record_feedback(output_dir, args.memory_id, args.rater, args.score)
@@ -2348,6 +2384,15 @@ Examples:
         help="output format (default: text)",
     )
     mem_context.add_argument("--limit", type=int, default=40, help="max memories to consider")
+
+    mem_repair = memory_sub.add_parser(
+        "repair-index",
+        help="Detect and rebuild missing memory search rows (dry run by default)",
+    )
+    mem_repair.add_argument(
+        "--apply", action="store_true", help="write the repair instead of only reporting it"
+    )
+    mem_repair.add_argument("--json", action="store_true", help="print the report as JSON")
 
     mem_rate = memory_sub.add_parser("rate", help="Rate a memory from 1 to 5")
     mem_rate.add_argument("memory_id", type=int, help="memory id")

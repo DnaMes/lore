@@ -11,6 +11,9 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Fixed
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
+### Added
+- `lore memory repair-index` (dry run by default, `--apply` writes, `--json` for machines) compares the memory table with the shared FTS index, reports memories whose search row is missing and index rows whose memory is gone, and repairs both in one transaction.
+
 ### Fixed
 - The transcript keeps roles and execution states apart: every turn carries its original role in `data-role` and gets a role-specific badge (assistant, Tool result, System, Info) instead of rendering every non-user message as the assistant, and tool state uses one vocabulary (`pending`, `running`, `ok`, `failed`, `cancelled`, `unmatched`, `unknown`) with a distinct chip per state that also survives folding a burst.
 

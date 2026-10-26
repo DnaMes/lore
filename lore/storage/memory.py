@@ -798,6 +798,104 @@ def _apply_feedback_ranking(entries: List[MemoryEntry], influence: float) -> Lis
     return [e for _score, e in scored]
 
 
+@dataclass
+class MemoryIndexHealth:
+    """State of the memory rows in the shared ``search_index`` table (#159)."""
+
+    total_memories: int
+    indexed: int
+    missing: List[int] = field(default_factory=list)
+    orphans: List[str] = field(default_factory=list)
+
+    @property
+    def healthy(self) -> bool:
+        return not self.missing and not self.orphans
+
+
+def memory_index_health(output_dir: Path) -> MemoryIndexHealth:
+    """Compare the memory table with its search rows (#159).
+
+    ``missing`` lists memories that recall cannot find, ``orphans`` lists search
+    rows whose memory is gone. Both are cheap to compute: one joined query each.
+    """
+    conn = _connect(output_dir)
+    try:
+        total = int(conn.execute("SELECT COUNT(*) FROM memory").fetchone()[0])
+        indexed = int(
+            conn.execute(
+                "SELECT COUNT(DISTINCT CAST(entity_id AS INTEGER)) FROM search_index "
+                "WHERE entity_type = 'memory'"
+            ).fetchone()[0]
+        )
+        missing = [
+            int(row[0])
+            for row in conn.execute(
+                "SELECT m.id FROM memory m "
+                "LEFT JOIN search_index s "
+                "  ON s.entity_type = 'memory' AND CAST(s.entity_id AS INTEGER) = m.id "
+                "WHERE s.rowid IS NULL ORDER BY m.id"
+            ).fetchall()
+        ]
+        orphans = [
+            str(row[0])
+            for row in conn.execute(
+                "SELECT s.entity_id FROM search_index s "
+                "LEFT JOIN memory m ON m.id = CAST(s.entity_id AS INTEGER) "
+                "WHERE s.entity_type = 'memory' AND m.id IS NULL ORDER BY s.entity_id"
+            ).fetchall()
+        ]
+    finally:
+        conn.close()
+    return MemoryIndexHealth(
+        total_memories=total, indexed=indexed, missing=missing, orphans=orphans
+    )
+
+
+def repair_memory_index(output_dir: Path, *, apply: bool = False) -> MemoryIndexHealth:
+    """Rebuild the missing memory search rows and drop orphans (#159).
+
+    Dry run by default: the returned health reports what would change and
+    nothing is written. With ``apply=True`` the whole repair runs in one
+    transaction, so a failure leaves the store exactly as it was.
+    """
+    health = memory_index_health(output_dir)
+    if not apply or health.healthy:
+        return health
+
+    conn = _connect(output_dir)
+    try:
+        conn.execute("BEGIN")
+        for entity_id in health.orphans:
+            conn.execute(
+                "DELETE FROM search_index WHERE entity_type = 'memory' AND entity_id = ?",
+                (entity_id,),
+            )
+        for memory_id in health.missing:
+            row = conn.execute(
+                "SELECT title, body, scope_tool, scope_project FROM memory WHERE id = ?",
+                (memory_id,),
+            ).fetchone()
+            if row is None:  # pragma: no cover - vanished between the two queries
+                continue
+            conn.execute(
+                "INSERT INTO search_index (entity_type, entity_id, tool, project, title, body) "
+                "VALUES ('memory', ?, ?, ?, ?, ?)",
+                (str(memory_id), row[2] or "", row[3] or "", row[0] or "", row[1] or ""),
+            )
+        conn.execute("COMMIT")
+    except sqlite3.Error:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.OperationalError:
+            pass
+        raise
+    finally:
+        conn.close()
+
+    repaired = memory_index_health(output_dir)
+    return repaired
+
+
 def recall_memory(
     output_dir: Path,
     query: str,
