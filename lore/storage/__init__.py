@@ -47,7 +47,12 @@ from .reader import (
     v2_is_available,
 )
 from .schema import apply_migrations, current_version, initialise, open_connection
-from .search import search_sessions, semantic_search_sessions
+from .search import (
+    count_session_hits,
+    message_evidence_for_sessions,
+    search_sessions,
+    semantic_search_sessions,
+)
 from .tags import (
     BOOKMARK_TAG,
     add_session_tag,
@@ -95,6 +100,9 @@ __all__ = [
     "remove_session_tag",
     "rrf_merge",
     "save_session_knowledge",
+    "count_session_hits",
+    "message_evidence_for_sessions",
+    "count_session_hits",
     "search_sessions",
     "semantic_search_sessions",
     "set_memory_status",

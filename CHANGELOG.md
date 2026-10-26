@@ -12,6 +12,7 @@ The version is the single source of truth in `lore/__init__.py`.
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
 ### Added
+- Search hits carry `evidence`: the matching message (`message_seq`, `role`), a marked excerpt with `excerpt_truncated` and its permalink; `/api/v1/search` reports a real `total` with `page`/`per_page`/`next_page` (`limit` still accepted) and `total_is_partial` for scoped searches, and `lore search` gained `--page` plus the total and an evidence line per hit.
 - Message permalinks: `/session/<id>/m/<seq>` and `/api/v1/sessions/<id>/messages/<seq>` resolve one message with a bounded neighbour window (21 messages) read straight from the v2 rows, with 410 for a message the store does not know.
 
 ### Changed

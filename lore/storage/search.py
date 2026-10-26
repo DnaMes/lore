@@ -168,6 +168,7 @@ def search_sessions(
     start: Optional[str] = None,
     end: Optional[str] = None,
     limit: int = 50,
+    offset: int = 0,
     scope: Optional[str] = None,
     include_automated: bool = False,
 ) -> List[Dict[str, Any]]:
@@ -182,6 +183,7 @@ def search_sessions(
         start/end: optional date or ISO timestamp bounds; both are inclusive and
             a date-only ``end`` covers the whole day.
         limit: max results.
+        offset: number of matching sessions to skip, for paging (#175).
         scope: optional message-role scope. One of ``SEARCH_SCOPES`` keys.
             ``None`` or ``"all"`` searches whole sessions (default). Any other
             value keeps only sessions that have at least one message of the
@@ -221,7 +223,9 @@ def search_sessions(
         tool=tool, project=project, tag=tag, start=start, end=end
     )
     start_dt, end_dt = _range_bounds(start, end)
-    # Role scope still needs the per-message table, so it keeps a margin.
+    # Role scope still needs the per-message table, so it keeps a margin; an
+    # offset has to skip matching rows, which the scope filter decides later.
+    window_offset = max(0, int(offset))
     candidate_limit = max(1, limit) * 4 if scope_roles else max(1, limit)
     conn = open_connection(db)
     try:
@@ -241,8 +245,8 @@ def search_sessions(
             JOIN sessions s ON s.id = search_index.entity_id
             WHERE search_index MATCH ?
               AND search_index.entity_type = 'session'{exclusion}{ignored_sql}{filter_sql}
-            ORDER BY score ASC
-            LIMIT ?
+            ORDER BY score ASC, search_index.entity_id ASC
+            LIMIT ? OFFSET ?
             """,
             (
                 SNIPPET_OPEN,
@@ -251,6 +255,7 @@ def search_sessions(
                 *ignored_params,
                 *filter_params,
                 candidate_limit,
+                window_offset if not scope_roles else 0,
             ),
         ).fetchall()
     except sqlite3.Error:
@@ -267,6 +272,7 @@ def search_sessions(
         scoped_session_ids = _sessions_matching_scope(db, candidate_ids, fts_query, scope_roles)
 
     results: List[Dict[str, Any]] = []
+    skipped = 0
     for row in rows:
         session = _row_to_session_dict(row)
         if tool and session.get("tool") != tool:
@@ -286,12 +292,197 @@ def search_sessions(
                 continue
         if scoped_session_ids is not None and session.get("id") not in scoped_session_ids:
             continue
+        if scoped_session_ids is not None and skipped < window_offset:
+            skipped += 1
+            continue
         results.append(
             {"session": session, "score": float(row["score"]), "snippet": row["snippet"] or None}
         )
         if len(results) >= limit:
             break
+    if results:
+        # (#175) Name the message a hit is based on, so a result is evidence
+        # rather than a claim. One connection, one throwaway index, one pass.
+        evidence = message_evidence_for_sessions(
+            output_dir,
+            [str(entry["session"].get("id")) for entry in results],
+            query,
+            roles=scope_roles,
+        )
+        for entry in results:
+            matches = evidence.get(str(entry["session"].get("id")), [])
+            entry["evidence"] = matches[0] if matches else None
     return results
+
+
+def count_session_hits(
+    output_dir: Path,
+    query: str,
+    *,
+    tool: Optional[str] = None,
+    project: Optional[str] = None,
+    tag: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    include_automated: bool = False,
+    exclude_ids: Optional[set] = None,
+) -> Optional[int]:
+    """Exact number of matching sessions, for an explicit search total (#175).
+
+    Uses the identical WHERE clause (and therefore the identical filters) as
+    :func:`search_sessions`, so the total can never disagree with the pages.
+    Returns ``None`` when the v2 store is absent or the query is unusable.
+
+    A message-role ``scope`` is deliberately not applied: scoping needs the
+    per-message table, so a scoped caller must mark its total as partial rather
+    than compare it with a filtered page.
+    """
+    db = v2_db_path(output_dir)
+    if not db.exists():
+        return None
+    fts_query = build_fts_query(query)
+    if fts_query is None:
+        return None
+    ignored = set(load_ignored_session_ids(output_dir))
+    # Soft-deleted sessions are not reachable by paging, so they must not be
+    # counted either (#175).
+    ignored.update(str(value) for value in (exclude_ids or ()) if value)
+    filter_sql, filter_params = session_filter_sql(
+        tool=tool, project=project, tag=tag, start=start, end=end
+    )
+    conn = open_connection(db)
+    try:
+        exclusion = "" if include_automated else automated_exclusion_sql(conn, "s")
+        ignored_sql, ignored_params = _bind_ignored_exclusion(conn, "s.id", ignored)
+        row = conn.execute(
+            f"""
+            SELECT COUNT(*) FROM search_index
+            JOIN sessions s ON s.id = search_index.entity_id
+            WHERE search_index MATCH ?
+              AND search_index.entity_type = 'session'{exclusion}{ignored_sql}{filter_sql}
+            """,
+            (fts_query, *ignored_params, *filter_params),
+        ).fetchone()
+    except sqlite3.Error:
+        return None
+    finally:
+        conn.close()
+    return int(row[0]) if row else None
+
+
+def _excerpt_elided(excerpt: str, body: str) -> bool:
+    """Whether the excerpt omits part of the message.
+
+    FTS5 emits a window of ``n`` tokens around the match, so anything outside it
+    is dropped — sometimes with, sometimes without an ellipsis glyph. The only
+    reliable test is coverage: an excerpt is complete exactly when its plain text
+    (markers and ellipses removed, whitespace normalised) equals the message.
+    """
+    plain = " ".join(
+        excerpt.replace(SNIPPET_OPEN, "").replace(SNIPPET_CLOSE, "").replace("…", " ").split()
+    )
+    if not plain:
+        return True
+    return plain != " ".join(body.split())
+
+
+def session_message_evidence(
+    output_dir: Path,
+    session_id: str,
+    query: str,
+    *,
+    roles: tuple = (),
+    limit: int = 1,
+) -> List[Dict[str, Any]]:
+    """Evidence for one session; see :func:`message_evidence_for_sessions`."""
+    return message_evidence_for_sessions(
+        output_dir, [session_id], query, roles=roles, per_session=limit
+    ).get(str(session_id), [])
+
+
+def message_evidence_for_sessions(
+    output_dir: Path,
+    session_ids: List[str],
+    query: str,
+    *,
+    roles: tuple = (),
+    per_session: int = 1,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Messages of ``session_id`` that match ``query``, with a bounded excerpt (#175).
+
+    Session hits alone cannot show *where* a match is, which is what a search
+    result needs to be evidence rather than a claim. The rule is the same one
+    the scoped search uses: messages are copied into a throwaway FTS5 table with
+    the session index's tokenizer and queried with the same expression, so an
+    excerpt cannot claim a match the session search would not accept.
+
+    Returns up to ``limit`` entries ordered by ``seq``::
+
+        [{"seq": int, "role": str, "excerpt": str, "truncated": bool}]
+
+    ``truncated`` is true when FTS5 shortened the passage — the caller must not
+    present such an excerpt as the whole message.
+    """
+    db = v2_db_path(output_dir)
+    ids = [str(session_id) for session_id in session_ids if session_id]
+    if not db.exists() or not ids:
+        return {}
+    fts_query = build_fts_query(query)
+    if fts_query is None:
+        return {}
+
+    role_sql = ""
+    role_params: tuple = ()
+    if roles:
+        role_sql = f" AND m.role IN ({','.join('?' for _ in roles)})"
+        role_params = tuple(roles)
+
+    conn = open_connection(db)
+    try:
+        conn.execute("ATTACH DATABASE ':memory:' AS evidence_check")
+        conn.execute(
+            "CREATE VIRTUAL TABLE evidence_check.messages USING fts5("
+            "session_id UNINDEXED, seq UNINDEXED, role UNINDEXED, body, "
+            f"tokenize='{SCOPE_FTS_TOKENIZER}')"
+        )
+        found: Dict[str, List[Dict[str, Any]]] = {}
+        for session_id in ids:
+            conn.execute("DELETE FROM evidence_check.messages")
+            conn.execute(
+                "INSERT INTO evidence_check.messages (session_id, seq, role, body) "
+                "SELECT m.session_id, m.seq, m.role, m.content FROM messages m "
+                f"WHERE m.session_id = ?{role_sql}",
+                (session_id, *role_params),
+            )
+            rows = conn.execute(
+                "SELECT seq, role, body, "
+                # The snippet() argument is a bare table name; a schema prefix
+                # is parsed as a column and fails.
+                "snippet(messages, 3, ?, ?, '…', 20) AS excerpt "
+                "FROM evidence_check.messages WHERE messages MATCH ? "
+                "ORDER BY CAST(seq AS INTEGER) LIMIT ?",
+                (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, max(1, int(per_session))),
+            ).fetchall()
+            if not rows:
+                continue
+            found[session_id] = [
+                {
+                    "seq": int(row["seq"]),
+                    "role": row["role"],
+                    "excerpt": row["excerpt"] or "",
+                    # An elided passage is evidence, not the whole message
+                    # (#175). Decided by content, not by the ellipsis glyph:
+                    # FTS5 also marks a window that starts mid-message even when
+                    # nothing was removed.
+                    "truncated": _excerpt_elided(row["excerpt"] or "", row["body"] or ""),
+                }
+                for row in rows
+            ]
+    except sqlite3.Error:
+        return {}
+    finally:
+        conn.close()
+    return found
 
 
 def _sessions_matching_scope(
@@ -437,6 +628,10 @@ def _filter_semantic_rows(
     start_dt: Optional[datetime] = None,
     end_dt: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
+    # sqlite-vec returns equally distant neighbours in an order that depends on
+    # k, so the same query could rank ties differently per page. Sort by
+    # (distance, session id) for a stable ranking that paging can tile (#175).
+    rows = sorted(rows, key=lambda row: (float(row["score"]), str(row["id"])))
     results: List[Dict[str, Any]] = []
     for row in rows:
         if max_distance is not None and float(row["score"]) > max_distance:

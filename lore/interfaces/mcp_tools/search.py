@@ -98,6 +98,22 @@ def register(server, deps: MCPToolDeps) -> None:
             results = [
                 result for result in results if _matches_tag(result["session"], tag_filter, saved)
             ]
+        from ...services.index import count_index_hits
+
+        try:
+            total = count_index_hits(
+                Path(str(deps.index_path)),
+                query,
+                set(deps.deleted_ids()) if hasattr(deps, "deleted_ids") else set(),
+                tool=tool_filter,
+                project=project_filter,
+                tag=tag_filter,
+                start=start_filter,
+                end=end_filter,
+                include_automated=include_automated,
+            )
+        except Exception:  # noqa: BLE001 - a total must never break the tool
+            total = None
         payload = {
             "query": query,
             "tool": tool_filter,
@@ -107,6 +123,9 @@ def register(server, deps: MCPToolDeps) -> None:
             "start": start_filter,
             "end": end_filter,
             "count": len(results),
+            "total": total,
+            # A role scope narrows per message after the session-level count.
+            "total_is_partial": scope not in ("all", ""),
             "results": [serialize_search_result(result) for result in results],
         }
         return deps.json_text(payload)

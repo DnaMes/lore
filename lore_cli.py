@@ -1400,8 +1400,26 @@ def cmd_search(args):
         print("No index found. Run 'lore export --all' first.")
         return
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
+    page = getattr(args, "page", 1) or 1
+    if page < 1:
+        print("Error: --page must be 1 or higher", file=sys.stderr)
+        return 1
+    per_page = 20
     try:
         results = search_index(
+            index_path,
+            args.query,
+            deleted,
+            tool=args.tool,
+            project=args.project,
+            include_automated=_include_automated(args),
+            tag=getattr(args, "tag", None) or None,
+            limit=per_page,
+            offset=(page - 1) * per_page,
+        )
+        from lore.services.index import count_index_hits
+
+        total = count_index_hits(
             index_path,
             args.query,
             deleted,
@@ -1418,16 +1436,25 @@ def cmd_search(args):
         print("No results found.")
         return
 
-    noun = "result" if len(results) == 1 else "results"
-    print(f"Found {len(results)} {noun} for '{args.query}':\n")
+    noun = "result" if (total or len(results)) == 1 else "results"
+    found = total if total is not None else len(results)
+    page_note = "" if page == 1 else f" (page {page}, 20 per page)"
+    print(f"Found {found} {noun} for '{args.query}'{page_note}:\n")
 
-    for r in results[:20]:  # Show top 20
+    for r in results:
         session = r["session"]
         score = r["score"]
         print(f"[{session['tool']}] {session.get('title', session['id'][:20])}")
         print(
             f"  Score: {float(score):.3f} | Date: {session['created'][:10]} | Messages: {session['messages']}"
         )
+        evidence = r.get("evidence") or None
+        if evidence:
+            marker = "…" if evidence.get("truncated") else ""
+            print(
+                f"  Evidence: #{evidence['seq']} ({evidence['role']}) "
+                f"/session/{session['id']}/m/{evidence['seq']} {evidence['excerpt']}{marker}"
+            )
         if session.get("export_path"):
             print(f"  File: {session['export_path']}")
         print()
@@ -2162,6 +2189,9 @@ Examples:
     search_parser.add_argument("--tool", help="Search only specific tool")
     search_parser.add_argument("--project", help="Search only specific project")
     search_parser.add_argument("--tag", help="Search only sessions with this saved tag/bookmark")
+    search_parser.add_argument(
+        "--page", type=int, default=1, help="Page of results (20 per page; default 1)"
+    )
     _add_automated_flag(search_parser)
 
     # stats command

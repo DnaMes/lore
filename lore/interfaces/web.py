@@ -34,6 +34,7 @@ from ..services.extraction import find_live_session
 from ..services.index import (
     InvalidFlagError,
     automated_hidden_line,
+    count_index_hits,
     filter_automated_payload,
     is_automated,
     load_deleted_session_ids,
@@ -45,10 +46,12 @@ from ..services.index import (
 from ..services.summarize_cli import web_summarize_enabled
 from ..storage import load_session_message_window
 from .api_payloads import (
+    message_permalink,
     search_result_snippet,
     serialize_index_session_summary,
     serialize_live_session,
     serialize_project,
+    serialize_search_evidence,
     serialize_search_result,
     serialize_thread_messages,
     serialize_thread_overview,
@@ -2330,6 +2333,7 @@ def api_search():
                 "tool": r["session"].get("tool"),
                 "date": r["session"].get("created")[:10],
                 "snippet": search_result_snippet(r),
+                "evidence": serialize_search_evidence(r),
                 "source": "session",
             }
             for r in res
@@ -2369,36 +2373,65 @@ def api_v1_search():
         )
 
     try:
-        limit = _api_limit_param(default=20, max_value=200)
+        # `per_page` is the documented name; `limit` stays accepted for older
+        # clients. `page` is 1-based, so every match is reachable (#175).
+        per_page = _api_limit_param(name="per_page", default=20, max_value=200)
+        if not request.args.get("per_page") and request.args.get("limit"):
+            per_page = _api_limit_param(default=20, max_value=200)
+        page = int(request.args.get("page", "1"))
         filters = _search_filter_params()
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
+    if page < 1:
+        return jsonify({"error": "Invalid page parameter"}), 400
 
+    # `offset` is only passed when it is non-zero, so callers that wrap
+    # `search_index` with the older signature keep working for the first page.
+    paging = {"offset": (page - 1) * per_page} if page > 1 else {}
     try:
         results = search_index(
             q,
             tool=tool or None,
             project=project or None,
-            limit=limit,
+            limit=per_page,
             scope=scope,
             **_automated_kwargs(),
+            **filters,
+            **paging,
+        )
+        total = count_index_hits(
+            INDEX_PATH,
+            q,
+            load_deleted_session_ids(OUTPUT_DIR / "deleted_sessions.json"),
+            tool=tool or None,
+            project=project or None,
+            include_automated=_automated_kwargs().get("include_automated", False),
             **filters,
         )
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
-    return jsonify(
-        {
-            "query": q,
-            "tool": tool or None,
-            "project": project or None,
-            "scope": scope,
-            "tag": filters.get("tag"),
-            "start": filters.get("start"),
-            "end": filters.get("end"),
-            "count": len(results),
-            "results": [serialize_search_result(result) for result in results],
-        }
-    )
+
+    # A role scope is applied per message after the session-level count, so the
+    # total can be wider than the scoped pages; say so instead of overclaiming.
+    total_is_partial = scope not in ("all", "")
+    payload = {
+        "query": q,
+        "tool": tool or None,
+        "project": project or None,
+        "scope": scope,
+        "tag": filters.get("tag"),
+        "start": filters.get("start"),
+        "end": filters.get("end"),
+        "count": len(results),
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "total_is_partial": total_is_partial,
+        "results": [serialize_search_result(result) for result in results],
+    }
+    if total is not None and page * per_page < total and not total_is_partial:
+        payload["next_page"] = page + 1
+    return jsonify(payload)
 
 
 def _search_filter_params() -> dict:
@@ -2621,16 +2654,6 @@ def _bounded_message_window(session_id: str, *, offset: int, limit: int, around_
         "messages": messages[offset : offset + limit],
         "found_seq": None,
     }
-
-
-def message_permalink(session_id: str, seq: int) -> str:
-    """Stable deep link for one canonical message (#171).
-
-    The identity is ``(session_id, seq)``: ``seq`` is the stored order of the
-    message inside its session and survives a reindex, a prune/undo and a
-    restore of the archive, which a SQLite row id does not.
-    """
-    return f"/session/{session_id}/m/{int(seq)}"
 
 
 @app.route("/api/v1/sessions/<session_id>/messages")

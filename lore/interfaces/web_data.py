@@ -170,6 +170,7 @@ def search_index(
     tag=None,
     start=None,
     end=None,
+    offset=0,
 ):
     """Search sessions (wrapper over ``services.search_index``)."""
     return _service_search_index(
@@ -184,6 +185,7 @@ def search_index(
         tag=tag,
         start=start,
         end=end,
+        offset=offset,
     )
 
 

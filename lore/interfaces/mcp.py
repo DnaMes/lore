@@ -95,6 +95,7 @@ def search_index(
     tag=None,
     start=None,
     end=None,
+    offset=0,
 ):
     """Search the index from the MCP server's output directory."""
     return _service_search_index(
@@ -109,6 +110,7 @@ def search_index(
         tag=tag,
         start=start,
         end=end,
+        offset=offset,
     )
 
 

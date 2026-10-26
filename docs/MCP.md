@@ -18,7 +18,7 @@ Read versus write:
 
 | name | purpose | writes |
 |------|---------|--------|
-| `search_history` | Search across all AI chat sessions. `scope` limits matches to a message-role subset: `user_only`, `assistant_only` or `tool_results`; `tag`, `start` and `end` keep only sessions with that saved tag/bookmark and inside the inclusive date range, applied before `limit`. | no |
+| `search_history` | Search across all AI chat sessions. `scope` limits matches to a message-role subset: `user_only`, `assistant_only` or `tool_results`; `tag`, `start` and `end` keep only sessions with that saved tag/bookmark and inside the inclusive date range, applied before `limit`. Each hit carries the matching message as `evidence` (`message_seq`, `role`, `excerpt`, `excerpt_truncated`, `permalink`); the payload reports `total` and `total_is_partial`. | no |
 | `list_sessions` | List AI chat sessions with optional filters (`tool`, `project`, `thread_id`, `tag`, `start`, `end`, `since`, `limit`, `include_automated`). An unparsable date is reported as an error, not silently ignored. | no |
 | `get_session` | Get a single session by id, optionally with messages and user tags. | no |
 | `get_session_messages` | Get live session messages by session id. | no |

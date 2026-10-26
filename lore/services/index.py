@@ -458,6 +458,53 @@ def _hybrid_enabled() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
+# Candidate window used whenever hybrid fusion is on: a fixed width keeps the
+# fused ranking stable across pages (#175).
+_HYBRID_WINDOW = 200
+
+
+def count_index_hits(
+    index_path: Path,
+    query: str,
+    deleted: set[str],
+    tool: Optional[str] = None,
+    project: Optional[str] = None,
+    tag: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    include_automated: bool = False,
+) -> Optional[int]:
+    """Exact number of matches for a search, or ``None`` when unknown (#175).
+
+    Returns ``None`` when the v2 store is unavailable — the legacy path cannot
+    count without ranking everything — so a caller reports "unknown" instead of
+    a wrong total. Soft-deleted ids are excluded, so the total is exactly what
+    paging can reach.
+    """
+    index_dir = index_path.parent
+    if not _v2_enabled():
+        return None
+    try:
+        from lore.storage import count_session_hits, v2_is_available
+
+        if not v2_is_available(index_dir, compare_to=index_path):
+            return None
+        return count_session_hits(
+            index_dir,
+            query,
+            tool=tool,
+            project=project,
+            tag=tag,
+            start=start,
+            end=end,
+            include_automated=include_automated,
+            exclude_ids=deleted,
+        )
+    except Exception as exc:  # noqa: BLE001 - a total must never break a search
+        logger.warning("count for search failed: %s", exc)
+        return None
+
+
 def _hybrid_search(
     index_dir: Path,
     query: str,
@@ -470,6 +517,7 @@ def _hybrid_search(
     tag: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
+    offset: int = 0,
 ) -> list[dict]:
     """Fuse the already-computed FTS hits with semantic (vector) hits via RRF.
 
@@ -492,7 +540,18 @@ def _hybrid_search(
     )
     if not vec_results:
         return fts_results
-    return rrf_merge(fts_results, vec_results, limit=limit)
+    fused = rrf_merge(fts_results, vec_results, limit=limit)
+    # (#175) Fusion rebuilds the entries; keep the message evidence the keyword
+    # pass found, so a fused hit still names the message behind it.
+    evidence_by_id = {
+        str(result["session"].get("id")): result.get("evidence")
+        for result in fts_results
+        if result.get("evidence")
+    }
+    for entry in fused:
+        if "evidence" not in entry:
+            entry["evidence"] = evidence_by_id.get(str(entry["session"].get("id")))
+    return fused
 
 
 def _load_index_from_v2(index_path: Path, deleted: set[str]) -> Optional[dict]:
@@ -640,6 +699,7 @@ def search_index(
     tag: Optional[str] = None,
     start: Optional[str] = None,
     end: Optional[str] = None,
+    offset: int = 0,
 ) -> list[dict]:
     """Search sessions, reading from whichever store ``load_index`` uses (#34).
 
@@ -677,6 +737,20 @@ def search_index(
             # JSON has 793 sessions and v2 has 0 and search silently returns
             # nothing.
             if v2_is_available(index_dir, compare_to=index_path):
+                # Paging is applied after the ranking step: fusion rewrites the
+                # order and has no offset of its own, so the pipeline fetches
+                # `offset + limit` hits, ranks them (keyword, or fused with the
+                # vector pass) and then slices. Otherwise page 1 would be fused
+                # and page 2 would not, and the pages would not tile (#175).
+                start_index = max(0, int(offset))
+                # Fusion depends on the ranks it sees, so a fused order computed
+                # from 10 candidates differs from one computed from 30. Fetch a
+                # constant window whenever fusion is on, otherwise the pages of
+                # one query do not tile (a hit can appear on two pages) (#175).
+                fused = _hybrid_enabled() and not (scope and scope != "all")
+                fetch_limit = (
+                    max(limit + start_index, _HYBRID_WINDOW) if fused else (limit + start_index)
+                )
                 results = search_sessions(
                     index_dir,
                     query,
@@ -685,7 +759,7 @@ def search_index(
                     tag=tag,
                     start=start,
                     end=end,
-                    limit=limit,
+                    limit=fetch_limit,
                     scope=scope,
                     include_automated=include_automated,
                 )
@@ -693,19 +767,22 @@ def search_index(
                 # query that only matches by meaning still surfaces. Only when
                 # enabled, the vector backend is present, and no role scope is
                 # set (scoping is keyword-only — vectors are per-session).
-                if _hybrid_enabled() and not (scope and scope != "all"):
+                if fused:
                     results = _hybrid_search(
                         index_dir,
                         query,
                         tool,
                         project,
-                        limit,
+                        fetch_limit,
                         fts_results=results,
                         include_automated=include_automated,
                         tag=tag,
                         start=start,
                         end=end,
                     )
+                # Always take this page's slice: a fused query fetched a wider
+                # window than it returns.
+                results = results[start_index : start_index + limit]
                 if results:
                     results = filter_automated_results(results, include_automated)
                     return apply_deleted_filter_to_results(results, deleted)
@@ -739,7 +816,8 @@ def search_index(
     results = apply_deleted_filter_to_results(results, deleted)
     if tag or start_dt or end_dt:
         results = _filter_ranked_results(results, index_dir, tag, start_dt, end_dt)
-    return results[:limit]
+    start_index = max(0, int(offset))
+    return results[start_index : start_index + limit]
 
 
 def _validated_range(index_dir: Path, start: Optional[str], end: Optional[str]) -> tuple:

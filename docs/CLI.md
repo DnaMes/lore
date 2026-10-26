@@ -157,7 +157,7 @@ Prints `Found N result` (singular for one hit) with each score to three decimals
 
 ```text
 usage: lore search [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
-                   [--include-automated]
+                   [--page PAGE] [--include-automated]
                    query
 
 positional arguments:

@@ -45,12 +45,44 @@ def search_result_snippet(result: Dict[str, Any]) -> Optional[str]:
     return snippet_to_text(snippet) if snippet else None
 
 
+def message_permalink(session_id: str, seq: int) -> str:
+    """Stable path of one canonical message (#171, #175).
+
+    The identity is ``(session_id, seq)``; ``seq`` is the stored order inside the
+    session and survives a reindex, a prune/undo and a restore.
+    """
+    return f"/session/{session_id}/m/{int(seq)}"
+
+
+def serialize_search_evidence(result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The message a hit is based on: seq, role, excerpt, permalink (#175).
+
+    ``excerpt_truncated`` is part of the contract: a shortened passage must not
+    be presented as the whole message. Returns ``None`` when the store could not
+    name a matching message (an older archive, or a match on session metadata).
+    """
+    evidence = result.get("evidence")
+    if not evidence:
+        return None
+    session_id = result["session"].get("id")
+    return {
+        "message_seq": evidence.get("seq"),
+        "role": evidence.get("role"),
+        "excerpt": snippet_to_text(evidence.get("excerpt") or ""),
+        "excerpt_truncated": bool(evidence.get("truncated")),
+        "permalink": message_permalink(session_id, evidence.get("seq"))
+        if session_id and evidence.get("seq") is not None
+        else None,
+    }
+
+
 def serialize_search_result(result: Dict[str, Any]) -> Dict[str, Any]:
-    """Serialize one ``search_index`` hit: session summary, score, snippet, source."""
+    """Serialize one ``search_index`` hit: session summary, score, snippet, evidence."""
     return {
         **serialize_index_session_summary(result["session"]),
         "score": result.get("score"),
         "snippet": search_result_snippet(result),
+        "evidence": serialize_search_evidence(result),
         "source": "session",
     }
 
