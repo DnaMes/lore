@@ -218,9 +218,20 @@ Round 2b — the rest of the Wave 2 chain:
 | #171 message permalinks | CLOSED | `9c860da` | `load_session_message_window` (COUNT + `ORDER BY seq LIMIT/OFFSET`), `/session/<id>/m/<seq>` and `/api/v1/sessions/<id>/messages/<seq>`, 404/410 paths; `pytest tests/test_message_permalink.py … -q` -> 45 passed, including a page that still answers with `load_session_by_id` patched to raise |
 | #175 evidence + paging | CLOSED | `7e8ab87` | `message_evidence_for_sessions` (seq, role, marked excerpt, coverage-based `excerpt_truncated`, permalink), `count_session_hits` with the identical WHERE, `page`/`per_page`/`total`/`next_page`/`total_is_partial`; `pytest tests/test_search_evidence.py … -q` -> 75 passed; deterministic tiebreaks (FTS `entity_id`, semantic id sort, fixed `_HYBRID_WINDOW`) so pages tile |
 
-Remaining after round 2: **36 open issues** — 2 owner-deferred (#29, #48), 31 Archive
+Round 3 — export and reading experience (the "#165-#170" block):
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #166 tool-call envelope | CLOSED | `5b7590b` | `lore/exporters/tool_calls.py`: name, call id, JSON arguments (or raw text + note), result/error, status, duration, truncation and dropped-event labels, merged with `tool_events`, unmatched results kept; `pytest tests/test_export_canonical.py -q` -> 15 passed |
+| #165 complete transcript export | CLOSED | `5b7590b` | every message in order incl. empty/system/`TOOL`, verbatim code whitespace, derived title/summary labelled, provider-free export; same file plus `pytest -k "export or markdown or html or index or writer or reader or web or session" -q` -> 1129 passed |
+| #169 full Markdown in the HTML export | CLOSED | `190b395` | `lore/utils/markdown_render.py` + `lore/utils/html_sanitize.py` shared with the UI; `pytest tests/test_html_export_markdown.py tests/test_html_export.py tests/test_export_canonical.py -q` -> 36 passed |
+| #167 view-only normalisation | CLOSED | `0665390` | `original_content` preserved, idempotent re-derivation, folded lines kept in a `details` block; `pytest tests/test_display_normalization.py -q` -> 14 passed; full suite `exit=0`, coverage 86.76 % |
+
+Remaining after round 3: **32 open issues** — 2 owner-deferred (#29, #48), 27 Archive
 epic gaps and 3 independent ones (#119, #194, #197). The Wave 2 chain (#172, #173,
-#174, #171, #175) is complete.
+#174, #171, #175) and the export/reading block (#166, #165, #169, #167) are complete.
+Next in the archived plan: #168 (faithful roles and tool states), then #170 (reading
+contract and its automated checks), then #158/#159 (small, no migration).
 
 Correction to the #174 row: the semantic path was NOT VERIFIED when #174 closed
 (no `sqlite-vec` in the venv). The extra is installed now, the vector test runs and
