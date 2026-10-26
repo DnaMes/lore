@@ -984,6 +984,15 @@
         .tool-chip.status-ok { border-color: #86efac; color: #166534; background: #f0fdf4; }
         .tool-chip.status-error { border-color: #fca5a5; color: #991b1b; background: #fef2f2; }
         .tool-chip.status-neutral { border-color: #cbd5e1; color: #334155; background: #f8fafc; }
+        /* (#168) every execution state stays distinguishable, not just ok/error */
+        .tool-chip.status-pending { border-color: #cbd5e1; color: #475569; background: #f8fafc; }
+        .tool-chip.status-running { border-color: #93c5fd; color: #1d4ed8; background: #eff6ff; }
+        .tool-chip.status-cancelled { border-color: #fdba74; color: #9a3412; background: #fff7ed; }
+        .tool-chip.status-unmatched { border-color: #c4b5fd; color: #5b21b6; background: #f5f3ff; }
+        .tool-chip.status-unknown { border-color: #e2e8f0; color: #64748b; background: #f8fafc; }
+        .response-icon-tool, .response-icon-system, .response-icon-info { border-color: #cbd5e1; color: #334155; }
+        .message-card[data-role="tool"] .prose, .message-card[data-role="system"] .prose, .message-card[data-role="info"] .prose { font-size: 13px; color: var(--text-muted); }
+        .message-card[data-role="system"] .prose { font-style: italic; }
         html.dark .toc-card { background: #0f172a; border-color: #334155; }
         html.dark .toc-card-head { border-bottom-color: #1e293b; color: #cbd5e1; }
         html.dark .toc-item-text { color: #cbd5e1; }

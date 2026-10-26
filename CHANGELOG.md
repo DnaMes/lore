@@ -12,6 +12,9 @@ The version is the single source of truth in `lore/__init__.py`.
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
 ### Fixed
+- The transcript keeps roles and execution states apart: every turn carries its original role in `data-role` and gets a role-specific badge (assistant, Tool result, System, Info) instead of rendering every non-user message as the assistant, and tool state uses one vocabulary (`pending`, `running`, `ok`, `failed`, `cancelled`, `unmatched`, `unknown`) with a distinct chip per state that also survives folding a burst.
+
+### Fixed
 - Display normalisation is view-only: the canonical message text is preserved on `original_content` and every render re-derives from it, so repeated normalisation is idempotent and a page load can no longer fold an already folded message. The file-operation and unset-environment-variable summaries keep the lines they fold in a collapsed `details` block, so no line is lost from the view or the export.
 
 ### Added

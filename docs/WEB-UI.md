@@ -66,6 +66,12 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
 ### Session Details and Dynamic Fragments
 
 - `/session/<session_id>`: Detailed session view with transcript rendering, tool invocation cards, and metadata.
+  Every turn states its original role in the markup (`data-role="user|assistant|tool|system|info"`)
+  and renders a role-specific badge, so a system or tool message never reads as the
+  model talking. Tool state is one closed vocabulary — `pending`, `running`, `ok`,
+  `failed`, `cancelled`, `unmatched`, `unknown` — and each state has its own chip
+  (`data-status`, icon and colour), which survives folding: a failed call inside a
+  collapsed burst stays marked.
 - `/session/<session_id>/m/<seq>`: Message permalink. Renders that message plus a bounded
   neighbour window (21 messages) straight from the v2 message rows — never the whole
   transcript — so a link into a 20 000-message session stays cheap. The identity is

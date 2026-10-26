@@ -152,21 +152,98 @@ def format_duration_ms(value: Any) -> str | None:
     return f"{value // 1000}s"
 
 
+# One vocabulary for execution state, used by the chips, the folding logic and
+# the exports (#168). Every state stays distinguishable: "unknown" is not the
+# same as "pending", and a cancelled run is not a failure.
+TOOL_STATES = ("pending", "running", "ok", "failed", "cancelled", "unmatched", "unknown")
+
+_TOOL_STATE_WORDS = {
+    "ok": "ok",
+    "success": "ok",
+    "succeeded": "ok",
+    "complete": "ok",
+    "completed": "ok",
+    "done": "ok",
+    "failed": "failed",
+    "fail": "failed",
+    "error": "failed",
+    "errored": "failed",
+    "failure": "failed",
+    "pending": "pending",
+    "queued": "pending",
+    "waiting": "pending",
+    "running": "running",
+    "in_progress": "running",
+    "started": "running",
+    "cancelled": "cancelled",
+    "canceled": "cancelled",
+    "aborted": "cancelled",
+    "unmatched": "unmatched",
+    "orphaned": "unmatched",
+}
+
+_TOOL_STATE_LABELS = {
+    "ok": "ok",
+    "failed": "failed",
+    "pending": "pending",
+    "running": "running",
+    "cancelled": "cancelled",
+    "unmatched": "no call",
+    "unknown": "unknown",
+}
+
+_TOOL_STATE_ICONS = {
+    "ok": "✓",
+    "failed": "✗",
+    "pending": "…",
+    "running": "⟳",
+    "cancelled": "⊘",
+    "unmatched": "?",
+    "unknown": "·",
+}
+
+# CSS classes that already exist for the two historical states; the others share
+# the neutral chip so nothing renders unstyled.
+_TOOL_STATE_CLASSES = {
+    "ok": "status-ok",
+    "failed": "status-error",
+    "pending": "status-pending",
+    "running": "status-running",
+    "cancelled": "status-cancelled",
+    "unmatched": "status-unmatched",
+    "unknown": "status-unknown",
+}
+
+
+def canonical_tool_state(status: Any = None, *, is_error: bool = False) -> str:
+    """Map any stored status word onto :data:`TOOL_STATES` (#168).
+
+    ``is_error`` wins over the status word: a call that reported an error is
+    failed even if its status said "completed".
+    """
+    if is_error:
+        return "failed"
+    if status is None or str(status).strip() == "":
+        return "unknown"
+    normalized = str(status).strip().lower().replace("-", "_").replace(" ", "_")
+    return _TOOL_STATE_WORDS.get(normalized, "unknown")
+
+
 def _canonical_tool_status(
     status: Any = None,
     *,
     is_error: bool = False,
 ) -> str | None:
-    if is_error:
-        return "failed"
-    if status is None:
-        return None
-    normalized = str(status).strip().lower()
-    if normalized in ("ok", "success", "completed"):
-        return "ok"
-    if normalized in ("failed", "error", "failure"):
-        return "failed"
+    """Legacy two-state view (``ok``/``failed``/``None``) of :func:`canonical_tool_state`."""
+    state = canonical_tool_state(status, is_error=is_error)
+    if state in ("ok", "failed"):
+        return state
     return None
+
+
+def tool_state_label(state: str) -> str:
+    """Human label for a state, e.g. ``unmatched`` → ``no call``."""
+    return _TOOL_STATE_LABELS.get(state, state or "unknown")
 
 
 def _tool_status_meta_html(
@@ -179,17 +256,17 @@ def _tool_status_meta_html(
     parts: list[str] = []
     if isinstance(exit_code, bool) or not isinstance(exit_code, int):
         exit_code = None  # only a plain integer may reach the markup
-    if status_word == "ok":
+    if status_word:
+        state = canonical_tool_state(status_word)
+        label = tool_state_label(state)
+        icon = _TOOL_STATE_ICONS.get(state, "·")
+        css = _TOOL_STATE_CLASSES.get(state, "status-unknown")
         parts.append(
-            '<span class="tool-chip status-ok">'
-            '<span class="tool-status-icon" aria-hidden="true">✓</span> ok</span>'
+            f'<span class="tool-chip {css}" data-status="{state}">'
+            f'<span class="tool-status-icon" aria-hidden="true">{icon}</span> '
+            f"{html.escape(label)}</span>"
         )
-    elif status_word == "failed":
-        parts.append(
-            '<span class="tool-chip status-error">'
-            '<span class="tool-status-icon" aria-hidden="true">✗</span> failed</span>'
-        )
-        if exit_code is not None:
+        if state == "failed" and exit_code is not None:
             parts.append(f'<span class="action-meta">exit {exit_code}</span>')
     duration_label = format_duration_ms(duration_ms)
     if duration_label:
@@ -321,11 +398,13 @@ def format_tool_result(
     lines = text.split("\n")
     line_count = len(lines)
 
-    status_word = _canonical_tool_status(status, is_error=is_error)
-    legacy_error = status_word is None and any(
+    status_word = canonical_tool_state(status, is_error=is_error)
+    # An unlabelled result is classified from its text — but "unknown" stays the
+    # state when nothing hints at a failure (#168).
+    legacy_error = status_word == "unknown" and any(
         token in lowered for token in ("error", "exception", "traceback", "failed")
     )
-    if status_word is None and legacy_error:
+    if status_word == "unknown" and legacy_error:
         status_word = "failed"
 
     first_line = next((line.strip() for line in lines if line.strip()), "Output")
@@ -461,7 +540,7 @@ def format_tool_display(
         "</details>"
     )
 
-    status_word = _canonical_tool_status(status, is_error=is_error)
+    status_word = canonical_tool_state(status, is_error=is_error)
     meta_html = _tool_status_meta_html(status_word, duration_ms)
 
     return f"""

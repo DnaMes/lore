@@ -3,7 +3,7 @@
 {% set pair_anchor = pair.user.index if pair.user else (pair.responses[0].index if pair.responses else 0) %}
 <div class="message-cluster">
     {% if pair.user %}
-    <div id="msg-{{ pair.user.index }}" class="turn-row user group">
+    <div id="msg-{{ pair.user.index }}" class="turn-row user group" data-role="user">
         <div class="turn-gutter">
             <span class="turn-index user">{{ loop.index + pair_offset }}</span>
         </div>
@@ -32,9 +32,21 @@
         </div>
         <div class="turn-content assistant-content">
             <div class="flex items-center justify-between mb-2">
-                <div class="role-badge">
+                {%- set resp_role = resp.role.value if resp.role else 'assistant' %}
+                <div class="role-badge" data-role="{{ resp_role }}">
+                    {%- if resp_role == 'tool' %}
+                    <span class="response-icon response-icon-tool" title="Tool result">T</span>
+                    <span>Tool result</span>
+                    {%- elif resp_role == 'system' %}
+                    <span class="response-icon response-icon-system" title="System message">S</span>
+                    <span>System</span>
+                    {%- elif resp_role == 'info' %}
+                    <span class="response-icon response-icon-info" title="Info message">i</span>
+                    <span>Info</span>
+                    {%- else %}
                     <span class="response-icon" title="{{ style.name }}">AI</span>
                     <span>{{ style.name }}</span>
+                    {%- endif %}
                     {% if resp.model %}<span class="model-chip" title="model">{{ resp.model }}</span>{% endif %}
                     {% if resp.tokens %}
                         {% if resp.tokens.get('input') %}<span class="token-chip" title="input tokens">↑{{ resp.tokens.get('input') }}</span>{% endif %}
@@ -43,7 +55,7 @@
                 </div>
                 <div class="message-time">{{ resp.timestamp.strftime('%H:%M') }}</div>
             </div>
-            <div class="message-card assistant-card p-4">
+            <div class="message-card assistant-card p-4" data-role="{{ resp_role }}">
                 <div class="prose max-w-none antialiased" data-find-index="{{ pair_anchor }}" data-find-message="{{ loop.index }}">
                     {% if resp.formatted_reasoning %} {{ resp.formatted_reasoning | safe }} {% endif %}
                     {{ resp.formatted_content | safe }}
