@@ -246,13 +246,13 @@ Backup (writes the archive to the current directory, atomically):
 ```bash
 docker compose stop app
 backup="lore-data-$(date +%F).tar.gz"
-tmp="$(mktemp "${backup}.XXXXXX.tar.gz")"
+tmp="$(mktemp "${backup}.XXXXXX")"
 if docker run --rm --volumes-from lore-app alpine \
     tar -C /home/ai/.lore -czf - . > "$tmp"; then
   mv "$tmp" "$backup"
 else
-  echo "backup failed; the archive was not touched"
-  rm -f "$backup"
+  echo "backup failed; an existing backup was not touched"
+  rm -f "$tmp"
 fi
 docker compose start app
 ```
@@ -262,13 +262,14 @@ Restore (replaces the current contents of the volume; keep a copy of the current
 ```bash
 docker compose stop app
 # 1. verify the archive without extracting, inside a throwaway container
-docker run --rm -i alpine tar -tzf - > /dev/null \
-  < lore-data-2026-10-26.tar.gz \
-  || { echo "archive is broken; nothing was changed"; exit 1; }
-# 2. only then wipe and re-extract
-docker run --rm -i --volumes-from lore-app alpine \
-  sh -c 'find /home/ai/.lore -mindepth 1 -delete && tar -C /home/ai/.lore -xzf -' \
-  < lore-data-2026-10-26.tar.gz
+if docker run --rm -i alpine tar -tzf - > /dev/null < lore-data-2026-10-26.tar.gz; then
+  # 2. only then wipe and re-extract
+  docker run --rm -i --volumes-from lore-app alpine \
+    sh -c 'find /home/ai/.lore -mindepth 1 -delete && tar -C /home/ai/.lore -xzf -' \
+    < lore-data-2026-10-26.tar.gz
+else
+  echo "archive is broken; nothing was changed"
+fi
 docker compose start app
 ```
 

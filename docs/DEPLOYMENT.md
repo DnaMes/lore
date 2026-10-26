@@ -52,13 +52,13 @@ container via `--volumes-from lore-app`:
 # the archive is only put in place after the tar succeeds
 docker compose stop app
 backup="lore-data-$(date +%F).tar.gz"
-tmp="$(mktemp "${backup}.XXXXXX.tar.gz")"
+tmp="$(mktemp "${backup}.XXXXXX")"
 if docker run --rm --volumes-from lore-app alpine \
     tar -C /home/ai/.lore -czf - . > "$tmp"; then
   mv "$tmp" "$backup"
 else
-  echo "backup failed; the archive was not touched"
-  rm -f "$backup"
+  echo "backup failed; an existing backup was not touched"
+  rm -f "$tmp"
 fi
 docker compose start app
 
@@ -66,12 +66,13 @@ docker compose start app
 # and aborts on an unreadable or truncated archive before touching the volume
 # replaces the volume contents (keep a copy of the current data first)
 docker compose stop app
-docker run --rm -i alpine tar -tzf - > /dev/null \
-  < lore-data-YYYY-MM-DD.tar.gz \
-  || { echo "archive is broken; nothing was changed"; exit 1; }
-docker run --rm -i --volumes-from lore-app alpine \
-  sh -c 'find /home/ai/.lore -mindepth 1 -delete && tar -C /home/ai/.lore -xzf -' \
-  < lore-data-YYYY-MM-DD.tar.gz
+if docker run --rm -i alpine tar -tzf - > /dev/null < lore-data-YYYY-MM-DD.tar.gz; then
+  docker run --rm -i --volumes-from lore-app alpine \
+    sh -c 'find /home/ai/.lore -mindepth 1 -delete && tar -C /home/ai/.lore -xzf -' \
+    < lore-data-YYYY-MM-DD.tar.gz
+else
+  echo "archive is broken; nothing was changed"
+fi
 docker compose start app
 ```
 
