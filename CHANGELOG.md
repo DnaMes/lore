@@ -5,6 +5,10 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
 
+### Added
+- `accessibility`: accessible names for the project filter controls (tool, tag, start and end date), the noise-rules preview textarea and the resume copy button; the labels are checked by `tests/test_a11y_form_labels.py` (cluster of PRs #200, #201, #205, #208, #210).
+
+
 ## [2.4.0] - 2026-10-26 (unreleased until tagged)
 
 ### Added

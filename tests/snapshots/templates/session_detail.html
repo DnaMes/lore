@@ -2169,7 +2169,7 @@ function resumeSession(sessionId) {
             '<p class="text-slate-500 text-xs mb-2">Run this command in your terminal:</p>' +
             '<div class="relative group">' +
               '<pre class="bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs font-mono text-slate-800 dark:text-slate-100 overflow-x-auto whitespace-pre-wrap break-all" id="resume-cmd-text">' + escHtml(data.command) + '</pre>' +
-              '<button id="resume-copy-btn" class="absolute top-2 right-2 text-[10px] text-slate-500 hover:text-slate-700 border border-slate-200 bg-white rounded-lg px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>' +
+              '<button id="resume-copy-btn" aria-label="Copy resume command" class="absolute top-2 right-2 text-[10px] text-slate-500 hover:text-slate-700 border border-slate-200 bg-white rounded-lg px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity">Copy</button>' +
             '</div>';
         // Inline onclick is CSP-blocked (#106) — wire the freshly inserted
         // copy button explicitly.
