@@ -61,6 +61,7 @@ from .api_payloads import (
 # Re-exported (PEP 484 redundant aliases) because web_jobs resolves them via
 # late `from .web import ...` lookups and the test suite patches them here —
 # the module-global bindings must keep existing.
+from .fast_bind import skip_reverse_dns_on_bind
 from .web_audit import (  # noqa: F401  (re-exports, see comment)
     _audit_index_sessions as _audit_index_sessions,
 )
@@ -2964,4 +2965,5 @@ def start_web_ui(port=5000, host="127.0.0.1", debug=False):
     clear_index_cache()
     clear_sessions_cache()
     logger.info("Cache cleared on startup")
+    skip_reverse_dns_on_bind()  # a reverse lookup made macOS start ~35 s late
     app.run(host=host, port=port, debug=debug)
