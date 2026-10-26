@@ -173,12 +173,29 @@ def _compute_stats(sessions: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def load_ignored_session_ids(output_dir: Path) -> set[str]:
+    """Session ids listed in ``ignored.json`` (pruned); rows stay in SQLite."""
+    ignore_path = output_dir / "ignored.json"
+    if not ignore_path.exists():
+        return set()
+    try:
+        data = json.loads(ignore_path.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            values = data.get("session_ids", [])
+        else:
+            values = data
+        return {str(v) for v in (values or []) if v is not None}
+    except (OSError, json.JSONDecodeError, TypeError):
+        return set()
+
+
 def load_index_v2(output_dir: Path) -> Dict[str, Any]:
     """Load the v2 store as a legacy-shaped index dict.
 
     Returns ``{"version": "2", "stats": {...}, "sessions": [...]}`` — the same
     structure ``load_index()`` returns from ``index.json``. Sessions are
-    sorted newest-first by ``updated``.
+    sorted newest-first by ``updated``. Pruned ids in ``ignored.json`` are
+    omitted from the result (SQLite rows are kept for undo/restore).
 
     Raises:
         FileNotFoundError: if no v2 DB exists at ``output_dir``.
@@ -209,7 +226,8 @@ def load_index_v2(output_dir: Path) -> Dict[str, Any]:
     finally:
         conn.close()
 
-    sessions = [_row_to_session_dict(r) for r in rows]
+    ignored = load_ignored_session_ids(output_dir)
+    sessions = [_row_to_session_dict(r) for r in rows if str(r["id"]) not in ignored]
     return {
         "version": "2",
         "generated_at": generated_at,

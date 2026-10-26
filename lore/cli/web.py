@@ -8,7 +8,45 @@ intended for local/dev use; in production the app is served by gunicorn
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
+import sys
+
+
+def _is_loopback_bind(host: str) -> bool:
+    """Whether a bind host only accepts connections from this machine."""
+    if host == "localhost":
+        return True
+    try:
+        return bool(ipaddress.ip_address(host).is_loopback)
+    except ValueError:
+        return False
+
+
+def warn_if_exposed_without_origin_config(host: str) -> None:
+    """Warn loudly when binding beyond loopback with no origin hardening (#193).
+
+    There is no authentication in ``lore-web``: a non-loopback bind serves the
+    UI and its state-changing endpoints to the network. Without
+    ``LORE_PUBLIC_ORIGINS`` (reverse-proxy origin policy) or
+    ``LORE_ALLOWED_HOSTS`` (Host allowlist) nothing constrains which Host/Origin
+    may reach it. The warning goes to stderr so it is visible next to the
+    server log even when logging is unconfigured.
+    """
+    if _is_loopback_bind(host):
+        return
+    if os.environ.get("LORE_PUBLIC_ORIGINS", "").strip():
+        return
+    if os.environ.get("LORE_ALLOWED_HOSTS", "").strip():
+        return
+    print(
+        f"WARNING: lore-web is bound to non-loopback host {host!r} with no origin "
+        "hardening configured and no authentication exists: the UI (including "
+        "state-changing endpoints) is reachable from other machines. Set "
+        "LORE_PUBLIC_ORIGINS (behind a reverse proxy with TRUSTED_PROXY=1) or "
+        "LORE_ALLOWED_HOSTS, or bind to 127.0.0.1 and use an SSH tunnel.",
+        file=sys.stderr,
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -38,6 +76,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    warn_if_exposed_without_origin_config(args.host)
     # Imported lazily so `--help` doesn't pay the heavy web.py import cost.
     from lore.interfaces.web import start_web_ui
 

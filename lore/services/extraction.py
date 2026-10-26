@@ -208,6 +208,48 @@ def _source_fingerprints(prior_entries: dict[str, dict]) -> tuple[dict[str, int]
     return mtimes, {path: versions[path] for path in mtimes}
 
 
+def _path_present(path_value: object) -> bool:
+    """True when ``path_value`` names an existing filesystem path."""
+    if not path_value:
+        return False
+    try:
+        return Path(str(path_value)).expanduser().exists()
+    except OSError:
+        return False
+
+
+def preserve_unobserved_index_entries(
+    existing_by_id: dict[str, dict],
+    observed_ids: set[str],
+    *,
+    ignored_ids: Optional[set[str]] = None,
+    deleted_ids: Optional[set[str]] = None,
+) -> list[dict]:
+    """Prior index entries not re-observed this run, minus pruned or orphaned.
+
+    Keeps every previous entry whose id was not seen again, unless it is listed
+    in ``ignored_ids`` / ``deleted_ids``, or a recorded export path is gone and
+    the source file is gone too. Entries with no recorded export path are kept
+    even when the source disappeared (web sync has no markdown yet).
+    """
+    ignored = ignored_ids or set()
+    deleted = deleted_ids or set()
+    kept: list[dict] = []
+    for session_id, prior in existing_by_id.items():
+        if session_id in observed_ids or session_id in deleted or session_id in ignored:
+            continue
+        export_path = prior.get("export_path")
+        # Orphan GC only when a once-exported file vanished with its source.
+        if (
+            export_path
+            and not _path_present(export_path)
+            and not _path_present(prior.get("source_path"))
+        ):
+            continue
+        kept.append(prior)
+    return kept
+
+
 def build_search_index(
     output_dir: Path,
     index_path: Path,
@@ -273,6 +315,8 @@ def build_search_index(
     title_generator = TitleGenerator(strategy=TitleStrategy.FAST)
     total = len(selected) or 1
     deleted = deleted_ids or set()
+    # Shared with cmd_export: ignored ids must not re-enter via preservation.
+    ignored_ids = IndexBuilder(output_dir)._load_ignored()
     refresh_count = 0
     finished: list[BaseExtractor] = []
 
@@ -395,10 +439,15 @@ def build_search_index(
 
         # An extractor can fail, be unavailable, or return only part of its
         # source. Preserve prior derived entries that were not observed in this
-        # run; explicit tombstones remain the only deletion signal.
-        for session_id, prior in existing_by_id.items():
-            if session_id not in seen_ids and session_id not in deleted:
-                reused_entries.append(prior)
+        # run (shared with cmd_export); ignored/tombstoned/fully-orphaned drop.
+        reused_entries.extend(
+            preserve_unobserved_index_entries(
+                existing_by_id,
+                seen_ids,
+                ignored_ids=ignored_ids,
+                deleted_ids=deleted,
+            )
+        )
 
     # reused_entries / reused_ids are populated as session_stream runs. They are
     # consumed only after the generator drains (build_index seeds reused-entry

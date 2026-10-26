@@ -102,7 +102,7 @@ def test_thread_continue_command_is_attribute_escaped():
     autoescape). The adversarial quote must therefore arrive as &quot;
     inside the double-quoted attribute — never as a raw quote.
     """
-    cmd = 'ai-session switch gemini --thread-id bad";alert(1)//'
+    cmd = 'lore-session switch gemini --thread-id bad";alert(1)//'
 
     page = web.render(
         "thread_detail",
@@ -123,8 +123,8 @@ def test_thread_continue_command_is_attribute_escaped():
         title="Thread",
     )
 
-    assert 'data-copy-text="ai-session switch gemini --thread-id bad&#34;;alert(1)//"' in page
-    assert 'data-copy-text="ai-session switch gemini --thread-id bad"' not in page
+    assert 'data-copy-text="lore-session switch gemini --thread-id bad&#34;;alert(1)//"' in page
+    assert 'data-copy-text="lore-session switch gemini --thread-id bad"' not in page
 
 
 def test_threads_list_urlencodes_thread_links():

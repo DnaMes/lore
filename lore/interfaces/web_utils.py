@@ -47,6 +47,22 @@ OUTPUT_DIR = lore_home()
 # all a direct deployment needs.
 LORE_PUBLIC_ORIGINS_ENV = "LORE_PUBLIC_ORIGINS"
 
+# Hosts a browser (and the Docker healthcheck) can only mean for "this machine":
+# always a permitted ``Host`` header. ``LOOPBACK_HOSTS`` in Host-header spelling
+# — an IPv6 literal needs brackets to parse as a host.
+DEFAULT_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "[::1]")
+
+# Extra permitted ``Host`` values, comma separated (#193 follow-up). The literal
+# ``*`` allows every Host, but only when set explicitly here.
+LORE_ALLOWED_HOSTS_ENV = "LORE_ALLOWED_HOSTS"
+
+# Bind hosts that listen on every interface; they never appear as a Host value.
+WILDCARD_BIND_HOSTS = ("0.0.0.0", "::")
+
+# ``LORE_ALLOWED_HOSTS='*'`` turns Host validation off entirely; complain about
+# that exactly once per process instead of once per request.
+_WILDCARD_HOSTS_WARNED = False
+
 # Hosts a browser can only mean for "this machine": always a permitted Origin.
 LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 
@@ -83,7 +99,8 @@ def parse_origin(origin: str) -> Optional[Tuple[str, str, Optional[int]]]:
 
 def normalize_origin(scheme: str, host: str, port: Optional[int]) -> str:
     """Canonical origin: lowercase scheme and host, default port omitted."""
-    base = f"{scheme}://{host}"
+    hostname = f"[{host}]" if ":" in host else host  # bracket IPv6 literals
+    base = f"{scheme}://{hostname}"
     if port and port != _DEFAULT_PORTS.get(scheme):
         return f"{base}:{port}"
     return base
@@ -111,28 +128,63 @@ def configured_public_origins() -> Tuple[str, ...]:
     return tuple(origins)
 
 
+def _split_host(value: str) -> Optional[Tuple[str, Optional[int]]]:
+    """Split a ``host[:port]`` value into ``(hostname, port)``; ``None`` when malformed.
+
+    Accepts dotted hostnames and bracketed IPv6 literals with the same rules
+    the ``X-Forwarded-Host`` validation from #193 uses, so the Host allowlist
+    and the proxy checks agree on what a well-formed host is.
+    """
+    raw = (value or "").strip()
+    if not raw or any(c in raw for c in " /\\@?#%"):
+        return None
+    if raw.startswith("["):
+        end = raw.find("]")
+        if end == -1:
+            return None
+        try:
+            ipaddress.IPv6Address(raw[1:end])
+        except ValueError:
+            return None
+        rest = raw[end + 1 :]
+        if not rest:
+            return raw[1:end].lower(), None
+        if rest.startswith(":") and rest[1:].isdigit():
+            return raw[1:end].lower(), int(rest[1:])
+        return None
+    try:
+        parsed = urlparse(f"http://{raw}")
+        port = parsed.port  # noqa: B018 - ValueError is the validation
+    except ValueError:
+        return None
+    if parsed.hostname is None or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
+        return None
+    return parsed.hostname, port
+
+
+def request_origin() -> str:
+    """Own origin of the current request: ``scheme://host[:port]``.
+
+    Built from the connection scheme and the ``Host`` header — both rewritten
+    by ``ProxyFix`` while ``TRUSTED_PROXY`` is set — so a browser's same-origin
+    ``Origin`` header compares exactly against it. Malformed ``X-Forwarded-*``
+    headers are rejected in ``before_request`` before this runs (#193).
+    """
+    host_header = request.headers.get("Host", "")
+    split = _split_host(host_header)
+    host, port = split if split is not None else (host_header.strip().lower(), None)
+    return normalize_origin(request.scheme, host, port)
+
+
 def _is_valid_host(value: str) -> bool:
     """A ``host[:port]`` header value: dotted labels or a bracketed IPv6 literal."""
-    if not value or any(c in value for c in " /\\@?#%"):
+    split = _split_host(value)
+    if split is None:
         return False
-    if value.startswith("["):
-        end = value.find("]")
-        if end == -1:
-            return False
-        try:
-            ipaddress.IPv6Address(value[1:end])
-        except ValueError:
-            return False
-        rest = value[end + 1 :]
-        return not rest or (rest.startswith(":") and rest[1:].isdigit())
-    try:
-        parsed = urlparse(f"http://{value}")
-        parsed.port  # noqa: B018 - ValueError is the validation
-    except ValueError:
-        return False
-    if parsed.hostname is None or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
-        return False
-    for label in parsed.hostname.split("."):
+    hostname = split[0]
+    if ":" in hostname:  # bracketed IPv6 literal — already validated by _split_host
+        return True
+    for label in hostname.split("."):
         if not label or len(label) > 63 or label.startswith("-") or label.endswith("-"):
             return False
         if not all(ch.isalnum() or ch == "-" for ch in label):
@@ -195,6 +247,66 @@ def forwarded_header_error() -> Optional[str]:
             return f"X-Forwarded-For is not a list of addresses: {forwarded_for[:60]!r}"
 
     return None
+
+
+def configured_allowed_hosts(bind_host: str = "") -> Tuple[Tuple[str, Optional[int]], ...]:
+    """``(hostname, port)`` pairs a request's ``Host`` header may carry.
+
+    Always includes the loopback defaults (``localhost``, ``127.0.0.1``,
+    ``[::1]``), the configured bind host (``start_web_ui`` passes it; gunicorn
+    deployments rely on ``LORE_WEB_HOST``), and the host of every
+    ``LORE_PUBLIC_ORIGINS`` entry — an operator who configured a public origin
+    means that host to reach the app (#193). ``LORE_ALLOWED_HOSTS`` (comma
+    separated) adds more entries; the literal ``*`` allows every Host, but only
+    when set explicitly there. An entry without a port matches any port; an
+    entry with a port requires the same port.
+    """
+    global _WILDCARD_HOSTS_WARNED
+    allowed: set[tuple[str, Optional[int]]] = set()
+
+    def add(entry: str) -> None:
+        split = _split_host(entry)
+        if split is None:
+            logger.warning("Ignoring malformed host entry: %r", entry[:120])
+            return
+        allowed.add(split)
+
+    for entry in DEFAULT_ALLOWED_HOSTS:
+        add(entry)
+    bind = (bind_host or os.environ.get("LORE_WEB_HOST", "")).strip()
+    if bind and bind not in WILDCARD_BIND_HOSTS:
+        add(bind)
+    for origin in configured_public_origins():
+        parsed = parse_origin(origin)
+        if parsed is not None:
+            allowed.add((parsed[1], parsed[2]))
+    for chunk in os.environ.get(LORE_ALLOWED_HOSTS_ENV, "").split(","):
+        entry = chunk.strip()
+        if not entry:
+            continue
+        if entry == "*":
+            if not _WILDCARD_HOSTS_WARNED:
+                _WILDCARD_HOSTS_WARNED = True
+                logger.warning(
+                    "%s='*' disables Host header validation entirely; any Host is accepted",
+                    LORE_ALLOWED_HOSTS_ENV,
+                )
+            allowed.add(("*", None))
+        else:
+            add(entry)
+    return tuple(allowed)
+
+
+def host_header_allowed(host_header: str, bind_host: str = "") -> bool:
+    """Whether a ``Host`` header passes :func:`configured_allowed_hosts`."""
+    allowed = configured_allowed_hosts(bind_host)
+    if ("*", None) in allowed:
+        return True
+    split = _split_host(host_header)
+    if split is None:
+        return False
+    host, port = split
+    return any(h == host and (p is None or p == port) for h, p in allowed)
 
 
 NOISE_RULES_PATH = OUTPUT_DIR / "noise_rules.json"

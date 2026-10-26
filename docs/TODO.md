@@ -62,6 +62,16 @@ diff itself (it is already capped by `MAX_DIFF_CHARS`) instead of the stat, and 
 treat an APPROVE for this repo as "no finding raised", not as "line-level reviewed". Do not hold
 Lore commits back over it.
 
+### 2026-10-26 doc pass
+
+Archive stale docs: move UMBAU, ROADMAP, PLAN-hybrid-search, REVIEW, SESSION-HANDOFF, NEXT-SESSION-*, EXECUTION-PROMPT into docs/archive/. Recommended decision: move (git mv), keep research, superpowers, plans and audits as records. AB#1762
+
+Verify API_REFERENCE, LLM_INTEGRATION, DEPLOYMENT, browser-tools against the code and move homelab-specific hosts out of DEPLOYMENT. Recommended decision: verify, then archive what no longer matches. AB#1763
+
+Commit the cloud opt-in gate (LORE_ALLOW_CLOUD, require_cloud_opt_in in lore/services/summarize_cli.py, lore_cli.py _cloud_optin_error) together with the new docs (docs/CLI.md, docs/CONFIGURATION.md, docs/PRIVACY.md, README.md, CHANGELOG.md). They are uncommitted in the working tree; docs describe the gate. Recommended decision: commit both in one lore commit after the tests pass, then bump the ai-stack submodule pointer. No AB item yet.
+
+Docker: docker-compose.yml still carries the maintainer's Traefik labels and DNS entries (see docs/DOCKER.md). Recommended decision: keep them only in docker-compose.traefik.example.yml and make the default file standalone. No AB item yet.
+
 ## Deferred roadmap (label `deferred` on GitHub)
 
 ### #29 — MCP-over-HTTP transport (streamable-http)

@@ -45,7 +45,13 @@ def _trusted(monkeypatch: pytest.MonkeyPatch, origins: str) -> None:
 
 def test_direct_loopback_origin_passes(client):
     assert _post(client, {"Origin": "http://localhost"}).status_code != 403
-    assert _post(client, {"Origin": "http://127.0.0.1:5000"}).status_code != 403
+    # An Origin is only accepted when it exactly matches the request's own
+    # scheme://host:port — send the matching Host header for :5000 (follow-up
+    # to #193: cross-port loopback origins are no longer a free pass).
+    assert (
+        _post(client, {"Origin": "http://127.0.0.1:5000", "Host": "127.0.0.1:5000"}).status_code
+        != 403
+    )
 
 
 def test_direct_foreign_origin_is_rejected(client):

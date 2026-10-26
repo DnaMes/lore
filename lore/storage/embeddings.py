@@ -3,7 +3,8 @@
 Semantic search needs an embedding model. To keep the base install light,
 this is an *optional* feature: it depends on ``fastembed`` (a small
 ONNX-runtime model, no torch), pulled in by the ``lore[semantic]``
-extra. When ``fastembed`` is not installed every function here degrades
+extra — or, for a pipx install, ``pipx inject lore fastembed sqlite-vec``.
+When ``fastembed`` is not installed every function here degrades
 gracefully — :func:`embeddings_available` returns False and callers fall
 back to FTS search.
 
@@ -63,7 +64,12 @@ def _get_model():
         _model = TextEmbedding(model_name=DEFAULT_MODEL)
         return _model
     except Exception as exc:  # noqa: BLE001 - any failure disables the feature
-        logger.warning("Embedding model unavailable, semantic search disabled: %s", exc)
+        hint = (
+            " (install with: pipx inject lore fastembed sqlite-vec)"
+            if isinstance(exc, ImportError)
+            else ""
+        )
+        logger.warning("Embedding model unavailable, semantic search disabled: %s%s", exc, hint)
         _model_failed = True
         return None
 

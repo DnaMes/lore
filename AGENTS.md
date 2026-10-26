@@ -191,7 +191,7 @@ Conventions before editing the vault: skill `obsidian-keeper`.
 (lore `cd9256b`, `892cbe5`; ai-stack `4ea810e`). Root cause: per-session `DELETE ... WHERE entity_id = ?`
 full-scanned the FTS5 table; the writer now deletes by rowid inside `BEGIN IMMEDIATE`. Sync is 75 s
 cold / 14 s steady (was 28+ min), the suite runs 3m40s with 0 failures (tests now isolate HOME).
-Never loop `WHERE entity_id = ?` on FTS5. Next: Wave 2 of `docs/NEXT-SESSION-issue-backlog.md`;
+Never loop `WHERE entity_id = ?` on FTS5. Next: Wave 2 of `docs/archive/NEXT-SESSION-issue-backlog.md`;
 optional `lore-app` image rebuild. Preserve other sessions' dirty files in `ai-stack`.
 Details and verified state: `HANDOFF.md`.
 

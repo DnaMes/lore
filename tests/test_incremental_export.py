@@ -233,3 +233,33 @@ def test_streaming_extractor_keeps_entries_skipped_after_its_first_yield(tmp_pat
 
     second = _export(tmp_path)
     assert _ids(second) == ["sess-a", "sess-b", "sess-c"]
+
+
+def test_missing_source_keeps_prior_index_entry_on_export(env):
+    """A source deleted after export (retention) must not drop the index row."""
+    tmp_path, project, parsed = env
+    first = _export(tmp_path)
+    assert "sess-b" in _ids(first)
+
+    (project / "sess-b.jsonl").unlink()
+    parsed.clear()
+    second = _export(tmp_path)
+
+    assert "sess-b" in _ids(second)
+    assert _ids(second) == ["sess-a", "sess-b", "sess-c"]
+    assert "sess-b" not in parsed
+
+
+def test_ignored_entry_is_not_resurrected_when_source_is_gone(env):
+    """ignored.json wins: a pruned id must not return via missing-source preserve."""
+    tmp_path, project, _parsed = env
+    first = _export(tmp_path)
+    assert "sess-b" in _ids(first)
+
+    out = tmp_path / "out"
+    (out / "ignored.json").write_text(json.dumps(["sess-b"]), encoding="utf-8")
+    (project / "sess-b.jsonl").unlink()
+
+    second = _export(tmp_path)
+    assert "sess-b" not in _ids(second)
+    assert _ids(second) == ["sess-a", "sess-c"]

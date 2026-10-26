@@ -140,7 +140,6 @@ from .web_summary import (
     cite_href as summary_cite_href,
 )
 from .web_utils import (
-    LOOPBACK_HOSTS,
     METRICS,
     METRICS_LOCK,
     NOISE_RULES_PATH,
@@ -159,9 +158,11 @@ from .web_utils import (
     _should_rate_limit,
     configured_public_origins,
     forwarded_header_error,
+    host_header_allowed,
     load_noise_rules,
     normalize_origin,
     parse_origin,
+    request_origin,
     save_noise_rules,
 )
 
@@ -227,6 +228,10 @@ if os.environ.get("TRUSTED_PROXY"):
 
 _SESSION_WATCHER = None
 
+# Bind host passed to ``start_web_ui``; part of the Host allowlist. Gunicorn
+# deployments never call it and rely on ``$LORE_WEB_HOST`` instead.
+_BIND_HOST = ""
+
 
 def _maybe_start_session_watcher() -> None:
     """Start the background file watcher when ``LORE_WATCH=1``.
@@ -264,35 +269,31 @@ def _check_local_origin() -> Optional[tuple]:
     never send Origin, so they are unaffected. Returns an error Response if
     the request should be rejected, None otherwise.
 
-    Accepted origins (#193):
+    Accepted origins:
 
-    - loopback hosts, unchanged from before (local UI, tests, ``localhost``),
+    - the request's own origin — ``scheme://host[:port]`` exactly as the
+      connection scheme and the ``Host`` header spell it. A loopback Origin on
+      a different port is no longer a free pass: another local app is
+      cross-origin like any other site (follow-up to #193),
     - an origin listed in ``LORE_PUBLIC_ORIGINS`` — but only while
       ``TRUSTED_PROXY`` is set, because without a proxy nothing rewrites
       scheme/host and the configured list would just be attack surface.
 
     Scheme *and* port are part of the comparison, so ``https://host:8443``
-    never authorises ``http://host`` or ``https://host``. While a proxy is
-    configured, malformed ``X-Forwarded-*`` headers are rejected first: a
+    never authorises ``http://host`` or ``https://host``. Malformed
+    ``X-Forwarded-*`` headers are rejected in ``before_request`` first: a
     request whose forwarded headers do not parse is not one a proxy sent.
     """
-    if (bad := forwarded_header_error()) is not None:
-        logger.warning("Rejecting state-changing request with bad forwarded headers: %s", bad)
-        return jsonify({"error": "Invalid forwarded headers"}), 400
-
     origin = request.headers.get("Origin")
     if origin is None:
         return None
     parsed = parse_origin(origin)
     if parsed is None:
         return jsonify({"error": "Cross-origin request rejected"}), 403
-    scheme, host, port = parsed
-    if host in LOOPBACK_HOSTS:
+    normalized = normalize_origin(*parsed)
+    if normalized == request_origin():
         return None
-    if (
-        os.environ.get("TRUSTED_PROXY")
-        and normalize_origin(scheme, host, port) in configured_public_origins()
-    ):
+    if os.environ.get("TRUSTED_PROXY") and normalized in configured_public_origins():
         return None
     return jsonify({"error": "Cross-origin request rejected"}), 403
 
@@ -611,6 +612,42 @@ def prepare_request_context_and_limit() -> Optional[Response]:
     g.csp_nonce = secrets.token_urlsafe(16)
     g.request_started_epoch = time.time()
     g.request_id = _request_id()
+
+    # #193: while a proxy is supposedly in front, malformed X-Forwarded-*
+    # headers mean no proxy sent this request. Reject before anything parses
+    # scheme/host — the Host allowlist below sees the ProxyFix-rewritten host.
+    if (bad := forwarded_header_error()) is not None:
+        logger.warning(
+            "Rejecting request with bad forwarded headers: %s request_id=%s", bad, g.request_id
+        )
+        return jsonify({"error": "Invalid forwarded headers"}), 400
+
+    # Host allowlist: a request naming a foreign domain (DNS rebinding,
+    # poisoned Host) never reaches a route. Loopback names, the bind host and
+    # operator-configured hosts (LORE_ALLOWED_HOSTS, LORE_PUBLIC_ORIGINS) pass.
+    if not host_header_allowed(request.headers.get("Host", ""), _BIND_HOST):
+        _metrics_inc("host_rejections")
+        logger.warning(
+            "Rejecting request with disallowed Host header: %r request_id=%s",
+            request.headers.get("Host", "")[:120],
+            g.request_id,
+        )
+        return Response(
+            "Bad Host header. Allowed hosts can be configured via LORE_ALLOWED_HOSTS.",
+            status=400,
+            mimetype="text/plain",
+        )
+
+    # Mutating requests: when an Origin header is present it must spell this
+    # request's own scheme://host[:port] or a configured public origin exactly
+    # — a loopback Origin on a different port is cross-origin like any other
+    # site (follow-up to #193). A missing Origin keeps the historical
+    # behaviour: curl and MCP clients never send one. The per-route
+    # _check_local_origin() guards remain as defence in depth.
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin_err = _check_local_origin()
+        if origin_err is not None:
+            return origin_err
 
     if not _rate_limit_enabled() or not _should_rate_limit(request.path):
         return None
@@ -2659,6 +2696,8 @@ def export_session(session_id):
 
 
 def start_web_ui(port=5000, host="127.0.0.1", debug=False):
+    global _BIND_HOST
+    _BIND_HOST = host
     clear_index_cache()
     clear_sessions_cache()
     logger.info("Cache cleared on startup")

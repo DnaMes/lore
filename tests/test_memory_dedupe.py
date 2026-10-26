@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -44,12 +45,16 @@ def _import_file(root: Path, slug: str = "-project", *, body: str = 'Use "care".
 def test_dry_run_reports_normalized_duplicates_without_writing(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    # Rewritten for scope-aware identity: the grouped pair must share kind and scope
+    # (all global "fact"); a project-scoped copy of the same content is a separate
+    # memory and must survive, since the old test merged across scopes/kinds.
     older = add_memory(tmp_path, "fact", "Risk  Posture", r"Use \"care\".")
-    keeper = add_memory(
-        tmp_path, "lesson", "risk\nposture", 'Use  "care".\n', scope_project="/work/project"
-    )
+    keeper = add_memory(tmp_path, "fact", "risk\nposture", 'Use  "care".\n')
     other_body = add_memory(tmp_path, "fact", "risk posture", 'Use "Care".')
     other_title = add_memory(tmp_path, "fact", "other title", 'Use "care".')
+    scoped_copy = add_memory(
+        tmp_path, "fact", "risk posture", r"Use \"care\".", scope_project="/work/project"
+    )
     before = v2_db_path(tmp_path).read_bytes()
 
     _run_cli(tmp_path)
@@ -60,27 +65,63 @@ def test_dry_run_reports_normalized_duplicates_without_writing(
     assert f"reject #{older}" in out
     assert "1 duplicate groups" in out and "Would reject: 1" in out
     assert v2_db_path(tmp_path).read_bytes() == before
-    assert {entry.id for entry in list_memory(tmp_path)} == {older, keeper, other_body, other_title}
+    assert {entry.id for entry in list_memory(tmp_path)} == {
+        older,
+        keeper,
+        other_body,
+        other_title,
+        scoped_copy,
+    }
 
 
-@pytest.mark.parametrize("winner", ["feedback", "scope", "updated"])
-def test_keeper_priority(tmp_path: Path, winner: str, capsys: pytest.CaptureFixture[str]) -> None:
-    feedback = add_memory(tmp_path, "fact", "Rule", "Body", scope_project="/work")
-    scoped = add_memory(tmp_path, "fact", "Rule", "Body", scope_project="/work/deep/project")
-    newest = add_memory(tmp_path, "fact", "Rule", "Body")
-    for memory_id in (feedback, scoped):
-        _set_updated(tmp_path, memory_id, "2026-10-17T00:30:00+02:00")
-    _set_updated(tmp_path, newest, "2026-10-16T23:00:00+00:00")
-    if winner == "feedback":
-        record_feedback(tmp_path, feedback, "tester", 5)
-    elif winner == "updated":
-        # Equal path length makes the chronological timestamp the deciding factor.
-        with sqlite3.connect(v2_db_path(tmp_path)) as conn:
-            conn.execute("UPDATE memory SET scope_project = NULL")
+def test_global_and_identical_project_copy_both_survive(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A global memory and an identical project-scoped copy are never merged."""
+    global_id = add_memory(tmp_path, "fact", "Risk Posture", 'Use "care".')
+    scoped_id = add_memory(
+        tmp_path, "fact", "Risk Posture", 'Use "care".', scope_project="/work/project"
+    )
 
     _run_cli(tmp_path, "--apply")
 
-    expected = {"feedback": feedback, "scope": scoped, "updated": newest}[winner]
+    out = capsys.readouterr().out
+    assert "0 duplicate groups" in out and "Rejected: 0" in out
+    assert {entry.id for entry in list_memory(tmp_path)} == {global_id, scoped_id}
+
+
+def test_identical_copies_in_same_scope_are_still_deduped(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    first = add_memory(tmp_path, "fact", "Risk Posture", 'Use "care".', scope_project="/work")
+    second = add_memory(tmp_path, "fact", "Risk Posture", 'Use "care".', scope_project="/work")
+    global_id = add_memory(tmp_path, "fact", "Risk Posture", 'Use "care".')
+
+    _run_cli(tmp_path, "--apply")
+
+    out = capsys.readouterr().out
+    assert "1 duplicate groups" in out and "Rejected: 1" in out
+    survivor = {entry.id for entry in list_memory(tmp_path)}
+    assert global_id in survivor and len(survivor) == 2
+    rejected_id = next(memory_id for memory_id in (first, second) if memory_id not in survivor)
+    assert get_memory(tmp_path, rejected_id).status == "rejected"
+
+
+@pytest.mark.parametrize("winner", ["feedback", "updated"])
+def test_keeper_priority(tmp_path: Path, winner: str, capsys: pytest.CaptureFixture[str]) -> None:
+    # Rewritten for scope-aware identity: the "scope" case merged cross-scope copies,
+    # which is now forbidden, and within one scope the path-length tie-break is inert
+    # (every grouped entry shares the same scope_project), so it was removed.
+    feedback = add_memory(tmp_path, "fact", "Rule", "Body", scope_project="/work")
+    newest = add_memory(tmp_path, "fact", "Rule", "Body", scope_project="/work")
+    _set_updated(tmp_path, feedback, "2026-10-17T00:30:00+02:00")
+    _set_updated(tmp_path, newest, "2026-10-16T23:00:00+00:00")
+    if winner == "feedback":
+        record_feedback(tmp_path, feedback, "tester", 5)
+
+    _run_cli(tmp_path, "--apply")
+
+    expected = feedback if winner == "feedback" else newest
     assert [entry.id for entry in list_memory(tmp_path)] == [expected]
     assert f"keep #{expected}" in capsys.readouterr().out
 
@@ -110,6 +151,53 @@ def test_apply_keeps_rows_and_is_idempotent_and_reversible(
     assert {entry.id for entry in list_memory(tmp_path, status=None)} == set(ids)
     _run_cli(tmp_path, "--restore", str(undo_path))
     assert "Restored: 0" in capsys.readouterr().out
+
+
+def test_restore_refuses_undo_log_from_another_store(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A log fingerprinted for one store must not change a different store."""
+    store_a = tmp_path / "store-a"
+    store_b = tmp_path / "store-b"
+    add_memory(store_a, "fact", "Rule", "Body")
+    add_memory(store_a, "fact", "Rule", "Body")
+    _, undo_path = dedupe_memories(store_a, apply=True)
+    assert undo_path is not None
+    victim_b = add_memory(store_b, "fact", "Rule", "Body")
+    add_memory(store_b, "fact", "Rule", "Body")
+    before_b = v2_db_path(store_b).read_bytes()
+
+    with pytest.raises(SystemExit) as excinfo:
+        _run_cli(store_b, "--restore", str(undo_path))
+
+    assert excinfo.value.code == 1
+    err = capsys.readouterr().err
+    assert "refusing to restore into a different store" in err
+    assert "belongs to store" in err
+    assert v2_db_path(store_b).read_bytes() == before_b  # nothing changed
+    assert get_memory(store_b, victim_b).status == "confirmed"
+
+
+def test_legacy_undo_log_without_store_identity_restores_with_warning(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Logs written before store fingerprints existed still restore, with a warning."""
+    add_memory(tmp_path, "fact", "Rule", "Body")
+    add_memory(tmp_path, "fact", "Rule", "Body")
+    groups, undo_path = dedupe_memories(tmp_path, apply=True)
+    assert undo_path is not None
+    rejected_id = groups[0].rejected_ids[0]
+    legacy = tmp_path / "legacy-undo.json"
+    legacy_payload = json.loads(undo_path.read_text(encoding="utf-8"))
+    del legacy_payload["store"]
+    legacy.write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+    _run_cli(tmp_path, "--restore", str(legacy))
+
+    captured = capsys.readouterr()
+    assert "has no store identity" in captured.err and "Warning" in captured.err
+    assert "Restored: 1" in captured.out
+    assert get_memory(tmp_path, rejected_id).status == "confirmed"
 
 
 def test_excludes_candidates_rejected_and_superseded(

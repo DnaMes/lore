@@ -129,7 +129,7 @@ export GEMINI_API_KEY="your-api-key-here"
 4. Go to APIs & Services → Credentials → Create Credentials → OAuth 2.0 Client ID
 5. Select "Desktop application"
 6. Use [OAuth Playground](https://developers.google.com/oauthplayground/) to get refresh token:
-   - Click the gear icon ⚙️ → Use your own OAuth credentials
+   - Click the gear icon → Use your own OAuth credentials
    - Enter your Client ID and Client Secret
    - Select scope: `https://www.googleapis.com/auth/generative-language`
    - Authorize and exchange code for tokens

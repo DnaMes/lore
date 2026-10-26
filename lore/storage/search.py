@@ -28,7 +28,12 @@ from .fts import (
     SNIPPET_OPEN,
     build_fts_query,
 )
-from .reader import _row_to_session_dict, automated_exclusion_sql, session_contract_select
+from .reader import (
+    _row_to_session_dict,
+    automated_exclusion_sql,
+    load_ignored_session_ids,
+    session_contract_select,
+)
 from .schema import open_connection
 from .writer import v2_db_path
 
@@ -98,6 +103,7 @@ def search_sessions(
     if fts_query is None:
         return []
 
+    ignored = load_ignored_session_ids(output_dir)
     conn = open_connection(db)
     try:
         exclusion = "" if include_automated else automated_exclusion_sql(conn, "s")
@@ -136,6 +142,8 @@ def search_sessions(
     results: List[Dict[str, Any]] = []
     for row in rows:
         session = _row_to_session_dict(row)
+        if str(session.get("id") or "") in ignored:
+            continue
         if tool and session.get("tool") != tool:
             continue
         if project and project not in str(session.get("project") or ""):
@@ -281,12 +289,16 @@ def _filter_semantic_rows(
     include_automated: bool,
     *,
     max_distance: Optional[float],
+    ignored: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
+    ignored_ids = ignored or set()
     results: List[Dict[str, Any]] = []
     for row in rows:
         if max_distance is not None and float(row["score"]) > max_distance:
             continue  # too far away to mean anything (#92) — dropped before fusion
         session = _row_to_session_dict(row)
+        if str(session.get("id") or "") in ignored_ids:
+            continue
         if not include_automated and session.get("origin") in AUTOMATED_ORIGINS:
             continue
         if tool and session.get("tool") != tool:
@@ -339,6 +351,7 @@ def semantic_search_sessions(
     if vector is None:
         return []
 
+    ignored = load_ignored_session_ids(output_dir)
     conn = open_connection(db)
     try:
         packed = pack_vector(vector)
@@ -346,7 +359,13 @@ def semantic_search_sessions(
         k = max(1, limit) * KNN_K_FACTOR
         rows = _knn_rows(conn, packed, k)
         results = _filter_semantic_rows(
-            rows, tool, project, limit, include_automated, max_distance=cutoff
+            rows,
+            tool,
+            project,
+            limit,
+            include_automated,
+            max_distance=cutoff,
+            ignored=ignored,
         )
         # The filters run after the KNN cut-off, so a neighbourhood made of automated
         # (or other filtered-out) sessions can leave fewer than ``limit`` hits. Ask once
@@ -355,7 +374,13 @@ def semantic_search_sessions(
             wider = min(k * KNN_K_RETRY_FACTOR, KNN_K_MAX)
             rows = _knn_rows(conn, packed, wider)
             results = _filter_semantic_rows(
-                rows, tool, project, limit, include_automated, max_distance=cutoff
+                rows,
+                tool,
+                project,
+                limit,
+                include_automated,
+                max_distance=cutoff,
+                ignored=ignored,
             )
     except sqlite3.Error:
         # No vec table (e.g. extension absent) or a malformed query — FTS covers it.

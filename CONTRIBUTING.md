@@ -10,33 +10,34 @@
 git clone https://github.com/DnaMes/lore.git
 cd lore
 python -m venv .venv && source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
 pre-commit install
 ```
+
+The `dev` extra includes pytest, ruff, mypy, fastembed and sqlite-vec.
 
 ## Running Tests
 
 ```bash
-# All tests
-python -m pytest tests/
+# All tests (pyproject addopts includes coverage; fail_under 80)
+pytest tests/
 
 # Single file
-python -m pytest tests/test_extractors_contract.py
+pytest tests/test_extractors_contract.py
 
 # Pattern match
-python -m pytest tests/ -k "opencode"
+pytest tests/ -k "opencode"
 
 # With output
-python -m pytest tests/ -v --tb=short
+pytest tests/ -v --tb=short
 ```
 
 ## Lint & Format
 
 ```bash
-black . --line-length=100
-isort . --profile black --line-length=100
-flake8 . --max-line-length=100 --ignore=E501,W503,E203
+ruff format . && ruff check --fix .
 mypy lore/ --ignore-missing-imports
+bandit -r lore/
 ```
 
 Or run all pre-commit hooks at once:
@@ -53,7 +54,7 @@ pre-commit run --all-files
    - `tool` property → return the correct `Tool` enum value
    - `extract_sessions()` → `Iterator[UnifiedSession]`
    - `is_available()` → check if the tool's data directory exists
-4. Register in `lore/extractors/factory.py`
+4. Register in `lore/extractors/factory.py` (`get_all_extractors()` list)
 5. Add the tool to `Tool` enum in `lore/core/models.py` if it's new
 6. Add a contract test in `tests/test_extractors_contract.py`
 
@@ -62,11 +63,15 @@ See existing extractors (e.g. `claude.py`, `gemini.py`) for patterns. Use `safe_
 ## Pull Request Guidelines
 
 - One logical change per PR
-- Tests must pass: `python -m pytest tests/`
+- Tests must pass: `pytest tests/`
 - Pre-commit hooks must pass
 - Follow [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`
 - Do not add cloud dependencies — this project is local-first by design
 - Do not hardcode absolute paths; use `Path.home()` / `Path.expanduser()`
+
+## Documentation
+
+User docs live in [README.md](README.md) and `docs/`. Start with [docs/CONFIGURATION.md](docs/CONFIGURATION.md) and [docs/CLI.md](docs/CLI.md). Keep documentation in sync with behavior in the same change.
 
 ## Releasing
 
@@ -75,8 +80,7 @@ The version is defined in exactly one place: `__version__` in
 release:
 
 1. Bump `__version__` in `lore/__init__.py` (semantic versioning).
-2. Move the `[Unreleased]` entries in `CHANGELOG.md` into a new dated
-   `[X.Y.Z]` section.
+2. Move the [Unreleased] entries in CHANGELOG.md into a new [X.Y.Z] - YYYY-MM-DD section and leave an empty [Unreleased] above it.
 3. Commit: `docs: changelog for X.Y.Z` together with the version bump.
 4. Tag the commit: `git tag -a vX.Y.Z -m "Lore X.Y.Z — <summary>"`.
 5. Push the branch and the tag: `git push <remote> main vX.Y.Z`.
@@ -87,4 +91,4 @@ The web UI (sidebar footer), `lore --version`, and
 
 ## Architecture
 
-See [CLAUDE.md](CLAUDE.md) for a detailed architecture overview.
+See [AGENTS.md](AGENTS.md) for a detailed architecture overview.

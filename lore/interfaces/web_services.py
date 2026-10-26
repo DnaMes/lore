@@ -614,7 +614,7 @@ def build_thread_detail_payload(
                     }
                 )
 
-    continue_cmd = f"ai-session switch gemini --thread-id {thread_id}"
+    continue_cmd = f"lore-session switch gemini --thread-id {thread_id}"
     thread_meta = {
         "session_count": session_count,
         "message_count": len(messages),

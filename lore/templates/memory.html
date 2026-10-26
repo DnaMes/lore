@@ -35,7 +35,7 @@
     {% if semantic and not semantic_available %}
     <div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-6">
         Semantic search needs the optional embedding model
-        (<span class="font-mono">pip install -e ".[semantic]"</span>) — showing keyword results instead.
+        (<span class="font-mono">pipx inject lore fastembed sqlite-vec</span>) — showing keyword results instead.
     </div>
     {% endif %}
 

@@ -25,7 +25,7 @@
                 <summary class="header-menu-trigger" aria-label="More session actions">⋯</summary>
                 <div class="header-menu-panel">
                     {% if session.thread_id %}
-                    <button type="button" data-action="copy-command" data-copy-text="{{ ("ai-session switch gemini --thread-id " ~ session.thread_id) }}" class="header-menu-item">Copy Continue</button>
+                    <button type="button" data-action="copy-command" data-copy-text="{{ ("lore-session switch gemini --thread-id " ~ session.thread_id) }}" class="header-menu-item">Copy Continue</button>
                     {% endif %}
                     <button type="button" data-action="copy-link" class="header-menu-item">Copy Link</button>
                     <a href="/" class="header-menu-item">Dashboard</a>

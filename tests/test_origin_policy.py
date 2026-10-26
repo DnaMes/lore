@@ -771,19 +771,25 @@ def _knowledge_ids(store: Path) -> set[str]:
 def test_knowledge_candidates_exclude_automated_unless_switched(store, monkeypatch):
     provider = _RecordingProvider()
     monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
-    args = _cli_args(store, provider="gemini", model=None, output=None, limit=50)
+    args = _cli_args(store, provider="gemini", model=None, output=None, limit=50, allow_cloud=True)
 
     assert lore_cli.cmd_knowledge(args) == 0
     assert _knowledge_ids(store) == VISIBLE
 
     args = _cli_args(
-        store, provider="gemini", model=None, output=None, limit=50, include_automated=True
+        store,
+        provider="gemini",
+        model=None,
+        output=None,
+        limit=50,
+        include_automated=True,
+        allow_cloud=True,
     )
     assert lore_cli.cmd_knowledge(args) == 0
     assert _knowledge_ids(store) == VISIBLE | AUTOMATED
 
     # A stored extraction of an automated session never reaches the default knowledge base.
-    args = _cli_args(store, provider="gemini", model=None, output=None, limit=50)
+    args = _cli_args(store, provider="gemini", model=None, output=None, limit=50, allow_cloud=True)
     assert lore_cli.cmd_knowledge(args) == 0
     kb = json.loads((store / "knowledge" / "knowledge_base.json").read_text(encoding="utf-8"))
     assert kb["total_entries"] == len(VISIBLE)
@@ -817,6 +823,7 @@ def test_cli_format_with_an_explicit_id_reaches_a_hidden_session(store, monkeypa
         limit=5,
         session_id="exec-sess1",
         output_dir=str(store),
+        allow_cloud=True,
     )
     lore_cli.cmd_format(args)
     assert "Formatting 1 sessions" in capsys.readouterr().out

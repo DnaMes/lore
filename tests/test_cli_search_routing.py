@@ -56,6 +56,7 @@ def test_cmd_search_uses_service_router(tmp_path, monkeypatch, capsys):
         ]
 
     monkeypatch.setattr("lore.services.index.search_index", fake_search_index)
+    (tmp_path / "index.json").write_text("{}", encoding="utf-8")  # an index must exist
     rc = lore_cli.cmd_search(_argns(query="anything", output_dir=str(tmp_path)))
     out = capsys.readouterr().out
 

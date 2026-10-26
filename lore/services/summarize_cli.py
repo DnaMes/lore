@@ -86,6 +86,31 @@ def provider_locality(provider: str) -> str:
     return "local"
 
 
+def cloud_opt_in_granted(allow_cloud: bool = False) -> bool:
+    """True when ``--allow-cloud`` or ``LORE_ALLOW_CLOUD=1`` (or true/yes) is set."""
+    if allow_cloud:
+        return True
+    return os.environ.get("LORE_ALLOW_CLOUD", "").strip().lower() in ("1", "true", "yes")
+
+
+def require_cloud_opt_in(provider: str, allow_cloud: bool = False) -> int | None:
+    """Exit code 2 when a cloud provider is chosen without opt-in, else None.
+
+    Shared by summarize, analyze, knowledge, and format. Refusal names both
+    ``--allow-cloud`` and ``LORE_ALLOW_CLOUD``.
+    """
+    if provider_locality(provider) != "cloud":
+        return None
+    if cloud_opt_in_granted(allow_cloud):
+        return None
+    print(
+        f"Error: provider '{provider}' sends session text to the cloud. "
+        "Pass --allow-cloud or set LORE_ALLOW_CLOUD=1 to confirm.",
+        file=sys.stderr,
+    )
+    return 2
+
+
 def llm_base_url_is_local(base_url: str | None) -> bool:
     """True when the LLM endpoint hostname is loopback (or unset)."""
     if base_url is None or not str(base_url).strip():
@@ -322,13 +347,10 @@ def run_summarize_command(args: Namespace) -> int:
         return err
 
     provider_name = args.provider
-    if provider_locality(provider_name) == "cloud" and not args.allow_cloud:
-        print(
-            f"Error: provider '{provider_name}' sends transcript text to the cloud. "
-            "Pass --allow-cloud to confirm.",
-            file=sys.stderr,
-        )
-        return 2
+    if (
+        rc := require_cloud_opt_in(provider_name, bool(getattr(args, "allow_cloud", False)))
+    ) is not None:
+        return rc
 
     model = args.model or default_model(provider_name)
     model_label = f"{provider_name}/{model}"

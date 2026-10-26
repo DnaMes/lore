@@ -33,10 +33,10 @@ Snapshot at HEAD `136b0e0` (2026-10-14). Index and caveats: `docs/research/2026-
 - FIX COMMAND: `grep -n "index.json\|index.sqlite" lore/exporters/index.py` (still written; `~/.lore` still holds all three files).
 
 ### #92 Hybrid search: add a distance cutoff to semantic results (Phase 2)
-- STATUS: CLOSED 2026-10-14 (commit `a781f75`). `_filter_semantic_rows` drops neighbours with `distance > semantic_max_distance()` before RRF fusion; the default 0.88 is the midpoint of related-p95 (0.777) / unrelated-p05 (0.986) measured on 28 labelled pairs with the real model (L2 over unit-normalised bge-small, norm 1.0000): keeps 14/14 related, drops 14/14 unrelated. `LORE_SEMANTIC_MAX_DISTANCE` overrides, `0` disables, unparsable falls back. Tool `tools/calibrate_semantic_cutoff.py`, note in `docs/PLAN-hybrid-search.md`. Was OPEN
+- STATUS: CLOSED 2026-10-14 (commit `a781f75`). `_filter_semantic_rows` drops neighbours with `distance > semantic_max_distance()` before RRF fusion; the default 0.88 is the midpoint of related-p95 (0.777) / unrelated-p05 (0.986) measured on 28 labelled pairs with the real model (L2 over unit-normalised bge-small, norm 1.0000): keeps 14/14 related, drops 14/14 unrelated. `LORE_SEMANTIC_MAX_DISTANCE` overrides, `0` disables, unparsable falls back. Tool `tools/calibrate_semantic_cutoff.py`, note in `docs/archive/PLAN-hybrid-search.md`. Was OPEN
 - SCOPE: Drop vec hits whose `distance` exceeds a calibrated threshold in `semantic_search_sessions`, optionally via `LORE_SEMANTIC_MAX_DISTANCE`.
 - ACCEPTANCE: [ ] max-distance cutoff before RRF fusion; [ ] calibrated on the real bge-small distance distribution (percentile, not a constant); [ ] optional env override.
-- FILES: `lore/storage/search.py` (`semantic_search_sessions` 247-316, `_knn_rows` 205-225), `lore/storage/fusion.py`, `docs/PLAN-hybrid-search.md`
+- FILES: `lore/storage/search.py` (`semantic_search_sessions` 247-316, `_knn_rows` 205-225), `lore/storage/fusion.py`, `docs/archive/PLAN-hybrid-search.md`
 - DEPENDS-ON: #87 (done)
 - SIZE: M; RISK: none
 - FIX COMMAND: `HOME=/tmp/opencode/lore-test-home .venv/bin/python -m pytest tests -p no:cacheprovider -q -o addopts= -k "semantic or hybrid"` after adding a cutoff test (no `max_distance`/env exists today).

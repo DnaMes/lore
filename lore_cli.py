@@ -49,6 +49,7 @@ from lore.extractors.base import stamp_parser_version
 from lore.extractors.factory import get_all_extractors
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.services.discovery import read_last_discovery, record_discovery
+from lore.services.extraction import preserve_unobserved_index_entries
 from lore.services.index import automated_hidden_line, filter_automated
 from lore.services.summarize_cli import PROVIDER_CHOICES, default_model
 from lore.utils.datetime import make_naive, parse_duration
@@ -355,6 +356,35 @@ def _redacted_export_dir_error(output_dir: Path) -> str | None:
     return None
 
 
+def _print_skip_summary(extractors) -> None:
+    """Explain on stderr why sessions were left out of an export or sync.
+
+    Sums each extractor's per-run ``skip_counts`` so a first run that exports
+    nothing says why (e.g. every session is below the prompt floor).
+    """
+    totals: dict[str, int] = {}
+    min_prompts = None
+    for extractor in extractors:
+        counts = getattr(extractor, "skip_counts", None) or {}
+        for reason, n in counts.items():
+            totals[reason] = totals.get(reason, 0) + n
+        if min_prompts is None and counts.get("too_few_user_prompts"):
+            min_prompts = extractor._effective_thresholds()[2]
+    for reason, n in sorted(totals.items()):
+        if not n:
+            continue
+        if reason == "too_few_user_prompts":
+            line = (
+                f"Skipped {n} sessions with fewer than {min_prompts} user prompts "
+                "(set LORE_MIN_USER_PROMPTS=1 to include them)"
+            )
+        elif reason == "too_little_content":
+            line = f"Skipped {n} sessions with too little content"
+        else:
+            line = f"Skipped {n} ({reason.replace('_', ' ')})"
+        print(line, file=sys.stderr)
+
+
 def cmd_export(args):
     """Export sessions to Markdown."""
     output_dir = Path(args.output_dir).expanduser()
@@ -403,9 +433,10 @@ def cmd_export(args):
     known_mtimes, prior_by_path, known_versions = (
         _incremental_baseline(index_path, prior_sessions) if incremental else ({}, {}, {})
     )
-    ignored_ids = index_builder._load_ignored() if incremental else set()
+    ignored_ids = index_builder._load_ignored()
     reused_entries: list[dict] = []
     finished_extractors: list = []
+    prior_by_id = {str(e["id"]): e for e in prior_sessions if e.get("id")}
 
     def export_stream():
         """Export each matching session, then yield it — one at a time.
@@ -416,6 +447,7 @@ def cmd_export(args):
         consumes this stream and drops each session after indexing it.
         """
         nonlocal exported, total_redactions
+        observed_ids: set[str] = set()
         for extractor in get_all_extractors():
             if tool_filter and extractor.tool.value != tool_filter:
                 continue
@@ -462,6 +494,7 @@ def cmd_export(args):
                         continue
                 replaced_ids.add(session.session_id)
                 skipped_by_id.pop(session.session_id, None)
+                observed_ids.add(session.session_id)
 
                 _tag_git_info(session, git_info_cache)
                 exported += 1
@@ -488,8 +521,18 @@ def cmd_export(args):
 
                 yield export_target
 
-            reused_entries.extend(reusable_view().values())
+            for entry in reusable_view().values():
+                sid = entry.get("id")
+                if sid:
+                    observed_ids.add(sid)
+                reused_entries.append(entry)
             finished_extractors.append(extractor)
+
+        # Sources deleted after the last export (retention cleanup) are never
+        # skipped or re-yielded; keep their prior rows unless pruned/orphaned.
+        reused_entries.extend(
+            preserve_unobserved_index_entries(prior_by_id, observed_ids, ignored_ids=ignored_ids)
+        )
 
     def all_sessions_stream():
         """Yield every session from every extractor for the unfiltered index."""
@@ -520,6 +563,7 @@ def cmd_export(args):
     unchanged = f" (+{len(reused_entries)} unchanged, not re-parsed)" if reused_entries else ""
     redacted_note = f"; Redacted {total_redactions} secret-like strings" if redact_exports else ""
     print(f"\nExported {exported} sessions{unchanged} to {output_dir}{redacted_note}")
+    _print_skip_summary(finished_extractors)
 
 
 def _find_session_by_id(session_id: str):
@@ -612,6 +656,22 @@ def cmd_export_html(args):
     return 0
 
 
+def _confined_export_path(export_path: str | Path, export_root: Path) -> Path | None:
+    """Resolve ``export_path`` and return it only when it stays under ``export_root``.
+
+    Follows symlinks via ``Path.resolve``; a link that escapes the archive root
+    yields ``None`` so prune never deletes outside files.
+    """
+    root = export_root.expanduser().resolve()
+    try:
+        resolved = Path(export_path).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return None
+    if not resolved.is_relative_to(root):
+        return None
+    return resolved
+
+
 def cmd_prune(args):
     """Prune sessions from the export/index based on prompt count."""
     output_dir = Path(args.output_dir).expanduser()
@@ -655,18 +715,27 @@ def cmd_prune(args):
             pass
 
     removed = []
+    skipped_paths = 0
     for s in candidates:
         session_id = s.get("id")
         ignored.add(session_id)
         removed.append(session_id)
         export_path = s.get("export_path")
-        if export_path:
-            try:
-                path = Path(export_path)
-                if path.exists():
-                    path.unlink()
-            except (OSError, PermissionError):
-                pass
+        if not export_path:
+            continue
+        confined = _confined_export_path(export_path, output_dir)
+        if confined is None:
+            print(
+                f"Warning: refusing to delete export outside archive root: {export_path}",
+                file=sys.stderr,
+            )
+            skipped_paths += 1
+            continue
+        try:
+            if confined.exists():
+                confined.unlink()
+        except OSError:
+            pass
 
     ignore_path.write_text(json.dumps(sorted(ignored), indent=2), encoding="utf-8")
 
@@ -684,6 +753,11 @@ def cmd_prune(args):
 
     IndexBuilder(output_dir).build_index(sessions, export_paths)
     print(f"Pruned {len(removed)} sessions and rebuilt index.")
+    if skipped_paths:
+        print(
+            f"Skipped {skipped_paths} export path(s) outside the archive root.",
+            file=sys.stderr,
+        )
 
 
 def cmd_reindex(args):
@@ -749,19 +823,17 @@ def cmd_reindex(args):
 
 
 def _cloud_optin_error(args) -> int | None:
-    """Exit code 2 when a cloud opt-in provider is chosen without --allow-cloud, else None.
+    """Exit code 2 when a cloud provider is chosen without opt-in, else None.
 
-    Gemini stays the compat default for analyze/knowledge/format (it prints its provider
-    name instead); newer hosted providers need the explicit opt-in summarize uses.
+    Every non-local provider (gemini, openrouter, jev, off-host ollama) needs
+    ``--allow-cloud`` or ``LORE_ALLOW_CLOUD=1``.
     """
-    if args.provider in ("openrouter", "jev") and not getattr(args, "allow_cloud", False):
-        print(
-            f"Error: provider '{args.provider}' sends session text to the cloud. "
-            "Pass --allow-cloud to confirm.",
-            file=sys.stderr,
-        )
-        return 2
-    return None
+    from lore.services.summarize_cli import require_cloud_opt_in
+
+    provider = getattr(args, "provider", None)
+    if not provider:
+        return None
+    return require_cloud_opt_in(provider, bool(getattr(args, "allow_cloud", False)))
 
 
 def cmd_analyze(args):
@@ -839,12 +911,19 @@ def cmd_improve(args):
     import json as json_mod
 
     from lore.services.improve import run_improve
+    from lore.services.summarize_cli import require_cloud_opt_in
 
     output_dir = Path(args.output_dir).expanduser()
     stages = args.stage if getattr(args, "stage", None) else None
     provider = getattr(args, "provider", None)
     chosen = provider or os.environ.get("LORE_LLM_PROVIDER", "").strip()
     if chosen and not getattr(args, "dry_run", False):
+        # extract_knowledge sends conversation text to the provider: cloud
+        # providers need --allow-cloud or LORE_ALLOW_CLOUD=1 like the other
+        # cloud commands.
+        allow_cloud = bool(getattr(args, "allow_cloud", False))
+        if (rc := require_cloud_opt_in(chosen, allow_cloud)) is not None:
+            return rc
         print(
             f"Conversation text may be sent to provider '{chosen}' for extract_knowledge.",
             file=sys.stderr,
@@ -873,6 +952,13 @@ def cmd_improve(args):
 
 def cmd_knowledge(args):
     """Extract knowledge from sessions using LLM."""
+    if not getattr(args, "provider", None):
+        print(
+            "Error: lore knowledge requires --provider (e.g. ollama). "
+            "Cloud providers also need --allow-cloud or LORE_ALLOW_CLOUD=1.",
+            file=sys.stderr,
+        )
+        return 2
     if (rc := _cloud_optin_error(args)) is not None:
         return rc
     from lore.llm import LLMConfig, get_provider
@@ -1112,9 +1198,11 @@ def cmd_sync(args):
 
     print("\nBuilding index...")
     all_sessions = []
+    built_extractors = []
     for extractor in get_all_extractors():
         if not extractor.is_available():
             continue
+        built_extractors.append(extractor)
         all_sessions.extend(extractor.extract_sessions())
 
     existing_paths, existing_index_sessions = _load_existing_index_state(output_dir / "index.json")
@@ -1147,6 +1235,7 @@ def cmd_sync(args):
     index_builder.build_index(merged_sessions, merged_paths)
     print(f"Index saved to: {index_builder.index_path}")
     print(f"\nSynced {len(sessions)} sessions to {output_dir}")
+    _print_skip_summary(built_extractors)
 
 
 def cmd_run(args):
@@ -1239,8 +1328,12 @@ def cmd_search(args):
     # legacy SearchEngine as the fallback. Previously this called SearchEngine
     # directly, bypassing v2 and hybrid search entirely (#87).
     from lore.services.index import load_deleted_session_ids, search_index
+    from lore.storage import v2_db_path
 
     index_path = output_dir / "index.json"
+    if not index_path.exists() and not v2_db_path(output_dir).exists():
+        print("No index found. Run 'lore export --all' first.")
+        return
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
     results = search_index(
         index_path,
@@ -1255,14 +1348,15 @@ def cmd_search(args):
         print("No results found.")
         return
 
-    print(f"Found {len(results)} results for '{args.query}':\n")
+    noun = "result" if len(results) == 1 else "results"
+    print(f"Found {len(results)} {noun} for '{args.query}':\n")
 
     for r in results[:20]:  # Show top 20
         session = r["session"]
         score = r["score"]
         print(f"[{session['tool']}] {session.get('title', session['id'][:20])}")
         print(
-            f"  Score: {score} | Date: {session['created'][:10]} | Messages: {session['messages']}"
+            f"  Score: {float(score):.3f} | Date: {session['created'][:10]} | Messages: {session['messages']}"
         )
         if session.get("export_path"):
             print(f"  File: {session['export_path']}")
@@ -1634,6 +1728,15 @@ def cmd_generate_titles(args):
 
     strategy = strategy_map.get(args.strategy, TitleStrategy.AUTO)
     provider = getattr(args, "provider", None)
+    # Privacy by default (#185): the local provider needs no opt-in; any
+    # non-local provider (gemini-cli, or an off-host ollama behind "local")
+    # sends a transcript excerpt and is gated like analyze/knowledge/format.
+    gate_provider = "ollama" if (provider or "local") == "local" else provider
+    from lore.services.summarize_cli import require_cloud_opt_in
+
+    allow_cloud = bool(getattr(args, "allow_cloud", False))
+    if (rc := require_cloud_opt_in(gate_provider, allow_cloud)) is not None:
+        return rc
     generator = TitleGenerator(
         strategy=strategy,
         provider=provider,
@@ -2191,6 +2294,11 @@ Examples:
     titles_parser.add_argument(
         "--model", default=None, help="Model for the selected provider (provider default otherwise)"
     )
+    titles_parser.add_argument(
+        "--allow-cloud",
+        action="store_true",
+        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
+    )
     _add_automated_flag(titles_parser)
 
     subparsers.add_parser(
@@ -2212,7 +2320,7 @@ Examples:
     analyze_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow the openrouter provider to receive session text",
+        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
     )
     analyze_parser.add_argument(
         "--no-llm",
@@ -2232,14 +2340,17 @@ Examples:
     knowledge_parser.add_argument(
         "--provider",
         choices=PROVIDER_CHOICES,
-        default="gemini",
-        help="LLM provider to use (default: gemini)",
+        default=None,
+        help=(
+            "LLM provider (required; no default — bare lore knowledge sends nothing). "
+            "Use ollama for local, or a cloud provider with --allow-cloud"
+        ),
     )
     knowledge_parser.add_argument("--model", help="Model name (default depends on --provider)")
     knowledge_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow the openrouter provider to receive session text",
+        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
     )
     knowledge_parser.add_argument(
         "--limit",
@@ -2260,6 +2371,11 @@ Examples:
     )
     improve_parser.add_argument("--provider", help="LLM provider for extract_knowledge")
     improve_parser.add_argument("--model", help="Model name for extract_knowledge")
+    improve_parser.add_argument(
+        "--allow-cloud",
+        action="store_true",
+        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
+    )
     improve_parser.add_argument(
         "--limit",
         type=int,
@@ -2300,7 +2416,7 @@ Examples:
     summarize_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow cloud providers to receive transcript text",
+        help="Allow cloud providers to receive transcript text (or set LORE_ALLOW_CLOUD=1)",
     )
     summarize_parser.add_argument(
         "--dry-run",
@@ -2354,7 +2470,7 @@ Examples:
     format_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow the openrouter provider to receive session text",
+        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
     )
     format_parser.add_argument("--session-id", help="Format specific session by ID")
     _add_automated_flag(format_parser)

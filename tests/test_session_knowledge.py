@@ -130,6 +130,8 @@ def _args(output_dir: Path) -> Namespace:
         provider="gemini",
         model=None,
         output=None,
+        allow_cloud=True,
+        include_automated=False,
     )
 
 

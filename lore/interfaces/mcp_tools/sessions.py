@@ -4,6 +4,7 @@ list_projects, get_thread and switch_to_tool."""
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 
 from ...services.index import (
@@ -29,6 +30,8 @@ from ..web_services import (
     thread_overview_by_id,
 )
 from .deps import MCPToolDeps
+
+SESSION_COMMAND = "lore-session"
 
 
 def register(server, deps: MCPToolDeps) -> None:
@@ -282,9 +285,15 @@ def register(server, deps: MCPToolDeps) -> None:
 
         switch_tool = to_session_switch_tool(normalized_tool)
         if not switch_tool:
-            return f"Tool '{normalized_tool}' is not supported by ai-session switch."
+            return f"Tool '{normalized_tool}' is not supported by lore-session switch."
 
-        cmd = ["ai-session", "switch", switch_tool, "--messages", str(max_messages)]
+        if shutil.which(SESSION_COMMAND) is None:
+            return (
+                f"{SESSION_COMMAND} command not found. "
+                "Install it with: pipx install git+https://github.com/DnaMes/lore"
+            )
+
+        cmd = [SESSION_COMMAND, "switch", switch_tool, "--messages", str(max_messages)]
         if thread_id:
             cmd.extend(["--thread-id", thread_id])
 
@@ -297,7 +306,10 @@ def register(server, deps: MCPToolDeps) -> None:
         except subprocess.TimeoutExpired:
             return "Timeout: Command took longer than 30 seconds."
         except FileNotFoundError:
-            return "ai-session command not found."
+            return (
+                f"{SESSION_COMMAND} command not found. "
+                "Install it with: pipx install git+https://github.com/DnaMes/lore"
+            )
 
     server.register_tool(
         "switch_to_tool",
