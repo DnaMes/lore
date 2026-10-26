@@ -111,6 +111,16 @@ Export sessions to Markdown files and rebuild the index.
 
 Writes: Markdown exports and the index under the output directory (default `~/.lore`).
 
+What an export contains: every canonical message in order — empty, system, failed and tool
+messages included — with each tool call rendered from the canonical envelope
+(`lore/exporters/tool_calls.py`): call name and id, pretty-printed JSON arguments (or the raw
+text with a "not valid JSON" note), the result or error, status, duration and a truncation or
+"n events dropped" label. An unmatched tool result stays visible as its own block. Message text
+is written verbatim, so fenced code keeps its exact whitespace and line endings. Titles and
+summaries are derived values: the export labels their source (`title_source`) and marks them
+"not transcript content" instead of letting them stand in for the transcript. No export step
+calls a model, so it works with every provider unavailable.
+
 After the run, stderr reports how many sessions were skipped and why (for example, sessions below the prompt floor). Archive preservation drops nothing automatically: an index entry is kept even when both its source file and its exported Markdown file are gone. Only `lore prune` removes entries, and it writes the pruned ids to `ignored.json`. This is deliberate: an unreadable, unmounted or temporarily missing source must never cost an index row, so the index can contain rows whose source no longer exists — that is the archive.
 
 ```text

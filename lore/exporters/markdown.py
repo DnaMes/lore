@@ -1,8 +1,8 @@
-import json
 from pathlib import Path
 
 from ..core.models import Role, UnifiedSession
 from ..utils.paths import project_to_dirname, sanitize_filename
+from .tool_calls import canonical_tool_calls, tool_call_markdown
 
 
 class MarkdownExporter:
@@ -73,6 +73,10 @@ class MarkdownExporter:
             lines.append(f"project: {session.project_path}")
         if session.thread_id:
             lines.append(f"thread_id: {session.thread_id}")
+        if session.title_source is not None:
+            lines.append(
+                f"title_source: {getattr(session.title_source, 'value', session.title_source)}"
+            )
         lines.append(f"created: {session.created_at.isoformat()}")
         lines.append(f"updated: {session.last_updated.isoformat()}")
         lines.append(f"messages: {session.message_count}")
@@ -91,6 +95,17 @@ class MarkdownExporter:
         title = session.title or session.summary or f"Session {session.session_id[:8]}"
         lines.append(f"# {title}")
         lines.append("")
+        # (#165) Titles and summaries are derived: say so instead of letting a
+        # generated string pass as captured transcript content.
+        title_source = getattr(session.title_source, "value", session.title_source)
+        if title_source and title_source != "native":
+            lines.append(f"*Title source: {title_source} (derived, not transcript content).*")
+            lines.append("")
+        if session.summary:
+            lines.append("**Summary (derived, not transcript content):**")
+            lines.append("")
+            lines.append(session.summary)
+            lines.append("")
 
         # Metadata
         lines.append(f"**Tool:** {session.tool.value}")
@@ -119,6 +134,9 @@ class MarkdownExporter:
         lines.append("")
 
         # Messages
+        if not session.messages:
+            lines.append("_No messages were captured for this session._")
+            lines.append("")
         for msg in session.messages:
             role_display = msg.role.value.title()
             time_str = msg.timestamp.strftime("%H:%M:%S")
@@ -133,18 +151,14 @@ class MarkdownExporter:
             else:
                 lines.append(msg.content)
 
-            # Tool calls
-            if msg.tool_calls:
+            # Tool calls and events, canonical envelope (#166): name, identity,
+            # arguments, result/error, status and truncation, in one shape.
+            calls = canonical_tool_calls(msg)
+            if calls:
                 lines.append("")
-                for tc in msg.tool_calls:
-                    tool_name = tc.get("name", "Unknown Tool")
-                    lines.append("<details>")
-                    lines.append(f"<summary>Tool: {tool_name}</summary>")
+                for call in calls:
+                    lines.extend(tool_call_markdown(call))
                     lines.append("")
-                    lines.append("```json")
-                    lines.append(json.dumps(tc.get("input", {}), indent=2))
-                    lines.append("```")
-                    lines.append("</details>")
 
             # Reasoning/thoughts
             if msg.reasoning:

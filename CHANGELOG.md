@@ -12,6 +12,10 @@ The version is the single source of truth in `lore/__init__.py`.
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
 ### Added
+- Markdown and HTML exports render every tool call from one canonical envelope: name, call id, pretty-printed JSON arguments (raw text plus a note when the payload is not JSON), result or error, status, duration, and truncation or dropped-event labels. Compact `tool_events` are merged in, so a failed call without recorded arguments and an unmatched tool result stay visible; exports no longer print "Unknown Tool" blocks and no longer drop results.
+- Exports label derived metadata: `title_source` in the front matter and a "not transcript content" note for the title and summary, and an explicit line when a session has no messages.
+
+### Added
 - Search hits carry `evidence`: the matching message (`message_seq`, `role`), a marked excerpt with `excerpt_truncated` and its permalink; `/api/v1/search` reports a real `total` with `page`/`per_page`/`next_page` (`limit` still accepted) and `total_is_partial` for scoped searches, and `lore search` gained `--page` plus the total and an evidence line per hit.
 - Message permalinks: `/session/<id>/m/<seq>` and `/api/v1/sessions/<id>/messages/<seq>` resolve one message with a bounded neighbour window (21 messages) read straight from the v2 rows, with 410 for a message the store does not know.
 

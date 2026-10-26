@@ -10,10 +10,10 @@ untrusted.
 from __future__ import annotations
 
 import html
-import json
 import re
 
 from ..core.models import Role, UnifiedSession
+from .tool_calls import canonical_tool_calls, tool_call_html
 
 _INLINE_CSS = """\
 * { box-sizing: border-box; }
@@ -153,7 +153,10 @@ def render_session_html(session: UnifiedSession) -> str:
     meta_bits.append(
         f"<span>Created: {html.escape(session.created_at.strftime('%Y-%m-%d %H:%M'))}</span>"
     )
-    meta_bits.append(f"<span>Messages: {session.message_count}</span>")
+    meta_bits.append(f"<span>Messages: {html.escape(str(session.message_count))}</span>")
+    title_source = getattr(session.title_source, "value", session.title_source)
+    if title_source and title_source != "native":
+        meta_bits.append(f"<span>Title source: {html.escape(title_source)} (derived)</span>")
     if session.git_branch:
         meta_bits.append(f"<span>Branch: {html.escape(session.git_branch)}</span>")
 
@@ -170,18 +173,9 @@ def render_session_html(session: UnifiedSession) -> str:
         if rendered:
             body_parts.append(rendered)
 
-        for tc in msg.tool_calls or []:
-            tool_name = str(tc.get("name", "Unknown Tool"))
-            try:
-                tc_input = json.dumps(tc.get("input", {}), indent=2, default=str)
-            except (TypeError, ValueError):
-                tc_input = str(tc.get("input", ""))
-            body_parts.append(
-                "<details><summary>Tool: "
-                f"{html.escape(tool_name)}</summary>"
-                f'<div class="detail-body"><pre><code>{html.escape(tc_input)}'
-                "</code></pre></div></details>"
-            )
+        # Canonical tool-call envelope (#166), same shape as the Markdown export.
+        for call in canonical_tool_calls(msg):
+            body_parts.append(tool_call_html(call))
 
         if msg.reasoning:
             body_parts.append(
@@ -193,6 +187,13 @@ def render_session_html(session: UnifiedSession) -> str:
         body = "\n".join(body_parts) or "<p></p>"
         rows.append(_render_message(role.value, role.value.title(), time_str, body))
 
+    # Derived metadata is labelled, never presented as captured content (#165).
+    summary_block = (
+        '<p class="summary"><strong>Summary (derived, not transcript content):</strong> '
+        f"{html.escape(session.summary)}</p>"
+        if session.summary
+        else ""
+    )
     doc = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -207,9 +208,10 @@ def render_session_html(session: UnifiedSession) -> str:
 <header class="session">
 <h1>{html.escape(title)}</h1>
 <div class="meta">{"".join(meta_bits)}</div>
+{summary_block}
 </header>
 <main>
-{chr(10).join(rows)}
+{chr(10).join(rows) or '<p class="empty">No messages were captured for this session.</p>'}
 </main>
 <footer class="session">Exported by lore &middot; session {html.escape(session.session_id)}</footer>
 </div>
