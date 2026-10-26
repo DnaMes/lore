@@ -22,7 +22,7 @@ the confirmed gap. `NOT VERIFIED` marks anything that was not actually executed.
 - `STILL-VALID` — gap confirmed at file:line; fix or record a deferral decision.
 - `OBSOLETE` — the premise no longer exists.
 - `DUPLICATE` — superseded by another issue/PR.
-- `DEFERRED` — deliberate owner decision, documented in `docs/TODO.md`.
+- `DEFERRED` — deliberate owner decision, documented in the "Deferral decisions" section below.
 - `BLOCKED` — two fix attempts failed or an external dependency blocks it.
 
 ## How the sweep was organised
@@ -138,7 +138,7 @@ visible `<label>`, and close all five.
 
 | Issue | Verdict | Evidence |
 |-------|---------|----------|
-| 29 | DEFERRED | MCP streamable-http; owner decision: implement after the search API (#174/#175) stabilises. Label `deferred`, documented in `docs/TODO.md` |
+| 29 | DEFERRED | MCP streamable-http; owner decision: implement after the search API (#174/#175) stabilises. Label `deferred`, documented in the "Deferral decisions" section below |
 | 48 | DEFERRED | JSON-index retirement; owner decision: only after a v2/JSON equivalence test exists. Label `deferred` |
 | 119 | STILL-VALID | `lore/interfaces/web.py` is 2700 lines; no blueprints. L — the "last, after everything touches web.py" item of the archived plan |
 | 191 | OBSOLETE | decision: no PyPI publication; `README.md` documents install-from-clone only, so the ambiguous `pip install lore` path is gone. Distribution stays `lore` |
@@ -270,7 +270,7 @@ one reviewed implementation). Open pull requests after the sweep: **0**.
 
 Issues: 6 closed with evidence (#172, #173, #174, #176, #191, #192), 2 owner-deferred
 (#29, #48), 36 confirmed gaps with a decided order (round 2 in this file, the rest in
-`docs/TODO.md`).
+the "Deferral decisions" section below).
 
 | Item | Final status | Evidence / link |
 |------|--------------|-----------------|
@@ -279,8 +279,8 @@ Issues: 6 closed with evidence (#172, #173, #174, #176, #191, #192), 2 owner-def
 | #176 | CLOSED (already done) | `pytest tests/test_session_detail_markup.py tests/test_render_smoke.py -o addopts="" -q` -> 25 passed; browser proof stays with #194 |
 | #192 | CLOSED (already done) | `docker compose -f docker-compose.yml config --quiet` -> exit 0; overlay -> exit 0; shipped in `9dbff6d` |
 | #191 | CLOSED (decision) | no PyPI publication; `grep -rn "pip install lore" README.md docs/` -> no output |
-| #29, #48 | OPEN, labelled `deferred` | owner decision, recorded in `docs/TODO.md` (`#29` after #174/#175, `#48` after the CI equivalence test) |
-| #151, #153-#175, #177-#190, #194, #197 | OPEN, decision recorded | confirmed gaps, each with the recommended order in `docs/TODO.md` "Backlog sweep 2026-10-26 — deferral decisions"; sizes and file:line evidence in the group tables above |
+| #29, #48 | OPEN, labelled `deferred` | owner decision, recorded in the "Deferral decisions" section below (`#29` after #174/#175, `#48` after the CI equivalence test) |
+| #151, #153-#175, #177-#190, #194, #197 | OPEN, decision recorded | confirmed gaps, each with the recommended order in the "Deferral decisions" section below; sizes and file:line evidence in the group tables above |
 
 ### Why the remaining issues stay open
 
@@ -321,3 +321,97 @@ The other non-blocking notes from that gate were worked off in `f5861f2`
 cache key, port parsing bounded to 1-65535, ambiguous-existence handling for the
 index preservation) and `0f268a8` (stale statements about the cloud opt-in,
 Traefik and the data directory).
+
+---
+
+## Deferral decisions
+
+Moved here on 2026-10-26 when `docs/TODO.md` was retired (the maintainer removed
+the file; the content of this section is the part that the sweep owns). Each open
+issue below is a confirmed gap, not a guess — the evidence is in the group tables
+above.
+
+The sweep (`docs/triage/LEDGER.md`) verified 44 open issues against the code. Two were
+closed as already done (#176, #192), one as obsolete (#191: no PyPI publication, so
+install-from-clone is the only documented path and the distribution stays `lore`).
+The following are confirmed gaps, not guesses, and are deliberately **not** in this
+session's scope. Each stays open with its `deferred` label.
+
+- **Capture and identity spine (#151, #153, #154, #155, #156, #157, #158, #160)** — one
+  design, several migrations: an append-only source-revision store, a canonical message
+  envelope, namespaced session identity and stable message evidence references. The
+  archived plan already says these need a written spec each before any migration.
+  **Recommended decision:** write `docs/superpowers/specs/2026-XX-source-revision-store-design.md`
+  and the identity/envelope spec, run both through the review gate, then implement in the
+  order #151 → #154 → #155 → #160; #153, #156, #157 and #158 follow on top of them.
+- **Backup, bundle import and health (#161, #162, #163)** — `lore backup`/`restore` on the
+  SQLite online-backup API, a per-source health table and portable bundle import. #161 is
+  the one with real data-loss risk today (there is no way to take a consistent backup).
+  **Recommended decision:** implement #161 first and alone, with a restore-verification
+  test that compares counts, identities, FTS rows and annotations.
+- **Export and reading experience (#165, #166, #167, #168, #169, #170)** — the exporters
+  were never migrated to the canonical tool-call envelope the web path already uses, so
+  Markdown/HTML exports show "Unknown Tool" and drop results. These are additive and
+  independent of the migrations.
+  **Recommended decision:** #166 first (export the stored `tool_events`), then #165 and
+  #169 (full Markdown, AI-independent), then #168/#167/#170 as the reading contract.
+- **Query and analysis (#171, #172, #173, #174, #175, #177, #178, #179, #180)** — the
+  archived plan fixes the order #172 → #173 → #174 → #171 → #175; #177/#178/#179/#180
+  follow the analysis pipeline.
+  **Recommended decision:** keep the planned order; #174 (filter before limit) is the one
+  that makes the search API worth freezing for #29.
+- **Native-CLI adapters and analysis groundwork (#181, #182, #183, #184, #186, #187, #188,
+  #189, #190)** — no adapter layer exists yet; every one of these needs #180's provider
+  boundary first, and #188/#189 need a written metric vocabulary.
+  **Recommended decision:** #180, then #181/#182/#184 (native CLIs, native auth only), then
+  #186/#187 on top of the job table from #179. #183 ships only the contract note and a
+  stub until the Antigravity CLI contract can be confirmed offline.
+- **#119 (split `web.py`)** — still 2700 lines, and the archived plan puts it last because
+  every other web item touches the file.
+  **Recommended decision:** do it after the #165-#170 export/reading work, one blueprint per
+  commit, keeping the late-import patch targets that ~15 test files rely on.
+- **#194 (browser interaction checks)** — `tools/playwright_e2e_regression.py` is not a
+  pytest fixture yet.
+  **Recommended decision:** wrap it as a `@pytest.mark.browser` test that skips when
+  Playwright is unavailable, then add the release-checklist section to `docs/DOCKER.md`.
+
+
+## Deferred roadmap (label `deferred` on GitHub)
+
+### #29 — MCP-over-HTTP transport (streamable-http)
+
+Lore's MCP server runs over stdio only. An HTTP transport is real work and the
+`/api/search` shape it would have to expose is about to change under #174 and
+#175.
+
+**Recommended decision:** implement after #174 and #175 are closed, so the
+transport freezes a search surface that is already final. Until then the issue
+stays open with the `deferred` label.
+
+### #48 — JSON-retirement exit criteria
+
+`index.json`/`index.sqlite` are still written next to the v2 store; the coexistence
+is annoying but reversible, and five exit criteria remain (tombstones into v2,
+search routed through v2, staleness assert, CI equivalence test, stop writing).
+
+**Recommended decision:** start only when the CI equivalence test between v2 and
+JSON exists (sub-task 4 of the issue). Everything before it is safe; the final
+step is the one that cannot be rolled back cheaply without that test.
+
+### #29 — MCP-over-HTTP transport (streamable-http)
+
+The MCP server runs over stdio only, and the `/api/search` shape an HTTP transport
+would expose was frozen by #174/#175 in this session.
+
+**Decision:** implement after the search surface has been stable for one release;
+until then the issue stays open with the `deferred` label.
+
+### #48 — JSON-retirement exit criteria
+
+`index.json`/`index.sqlite` are still written next to the v2 store; the coexistence
+is annoying but reversible, and five exit criteria remain (tombstones into v2,
+search routed through v2, staleness assert, CI equivalence test, stop writing).
+
+**Decision:** start only when the CI equivalence test between v2 and JSON exists
+(sub-task 4 of the issue). Everything before it is safe; the final step is the one
+that cannot be rolled back cheaply without that test.
