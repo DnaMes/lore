@@ -1714,6 +1714,7 @@
              data-pages="1">
         
 
+
 <div class="message-cluster">
     
     <div id="msg-0" class="turn-row user group">
@@ -1729,7 +1730,7 @@
                 <div class="text-[10px] text-slate-500 font-mono opacity-60">10:00</div>
             </div>
             <div class="message-card user-card p-4">
-                <div class="prose max-w-none antialiased">
+                <div class="prose max-w-none antialiased" data-find-index="0" data-find-message="0">
                     
                     <p>Find the sqlite issue</p>
                 </div>
@@ -1754,7 +1755,7 @@
                 <div class="message-time">10:01</div>
             </div>
             <div class="message-card assistant-card p-4">
-                <div class="prose max-w-none antialiased">
+                <div class="prose max-w-none antialiased" data-find-index="0" data-find-message="1">
                     
                     <p>I found the locking bug</p>
                 </div>
@@ -1878,8 +1879,12 @@
         if (!query) return;
         const q = query;
         const qLower = q.toLowerCase();
-        const roots = stream.querySelectorAll('.message-card .prose');
+        const roots = stream.querySelectorAll('.message-card .prose[data-find-index]');
         roots.forEach(function (root) {
+            const findIndex = root.dataset.findIndex;
+            const findMessage = root.dataset.findMessage;
+            if (findIndex === undefined || findMessage === undefined) return;
+            let occurrence = 0;
             const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
             const textNodes = [];
             let n;
@@ -1899,6 +1904,10 @@
                     }
                     const mark = document.createElement('mark');
                     mark.className = 'find-hit';
+                    mark.dataset.findIndex = findIndex;
+                    mark.dataset.findMessage = findMessage;
+                    mark.dataset.findOccurrence = String(occurrence);
+                    occurrence += 1;
                     mark.appendChild(document.createTextNode(text.slice(idx, idx + q.length)));
                     frag.appendChild(mark);
                     markNodes.push(mark);
@@ -1924,8 +1933,13 @@
         document.querySelectorAll('.find-hit-current').forEach(function (el) {
             el.classList.remove('find-hit-current');
         });
-        if (currentIdx < 0 || !markNodes.length) return;
-        const target = markNodes[currentIdx];
+        if (currentIdx < 0 || !matches.length) return;
+        const match = matches[currentIdx];
+        if (!match) return;
+        const sel = 'mark.find-hit[data-find-index="' + match.index + '"]' +
+            '[data-find-message="' + match.message + '"]' +
+            '[data-find-occurrence="' + match.occurrence + '"]';
+        const target = stream.querySelector(sel);
         if (target) {
             target.classList.add('find-hit-current');
             target.scrollIntoView({ block: 'center' });

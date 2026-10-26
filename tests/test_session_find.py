@@ -10,7 +10,7 @@ import pytest
 
 from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
 from lore.interfaces import web
-from lore.interfaces.session_find import find_session_matches
+from lore.interfaces.session_find import find_session_matches, visible_text_nodes_from_html
 
 SESSION_ID = "abc12345-def6-7890-abcd-ef1234567890"
 NEEDLE = "zzfindneedlezz"
@@ -185,7 +185,8 @@ def test_find_truncated_at_200_matches():
     assert len(data["matches"]) == 200
 
 
-def test_find_skips_huge_tool_output():
+def test_find_counts_tool_card_text_like_the_dom():
+    # Tool cards render inside `.prose`, so the client marks their text; the server must count it.
     ts = datetime(2026, 1, 1, 12, 0, 0)
     huge = "x" * 25_000 + NEEDLE
     session = _enrich(
@@ -208,7 +209,8 @@ def test_find_skips_huge_tool_output():
         )
     )
     data = find_session_matches(session, NEEDLE, per_page=40)
-    assert data["total"] == 0
+    assert data["total"] == 1
+    assert data["matches"][0]["message"] == 1
 
 
 def test_find_reasoning_excluded_by_default():
@@ -292,6 +294,8 @@ def test_scan_budget_marks_the_result_truncated(monkeypatch):
             self.content = content
             self.reasoning = None
             self.index = 1
+            self.formatted_content = content
+            self.formatted_reasoning = ""
 
     pairs = [{"user": Msg("needle " + "x" * 50), "responses": []} for _ in range(20)]
 
@@ -315,3 +319,189 @@ def test_client_script_discards_stale_responses_and_discloses_truncation():
     assert "mySeq !== requestSeq" in page
     assert "requestSeq += 1" in page
     assert "payload.truncated" in page
+
+
+def _session_with_messages(messages: list[UnifiedMessage]) -> UnifiedSession:
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    return _enrich(
+        UnifiedSession(
+            session_id=SESSION_ID,
+            tool=Tool.CLAUDE_CODE,
+            title="x",
+            created_at=ts,
+            last_updated=ts,
+            project_path="/p",
+            messages=messages,
+        )
+    )
+
+
+def test_find_visible_markdown_link_and_plain_needle():
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, "hi", ts),
+            UnifiedMessage(
+                Role.ASSISTANT,
+                "[needle](https://needle.example) needle",
+                ts,
+            ),
+        ]
+    )
+    data = find_session_matches(session, "needle", per_page=40)
+    assert data["total"] == 2
+    occ = [m["occurrence"] for m in data["matches"]]
+    assert occ == [0, 1]
+    assert all(m["message"] == 1 for m in data["matches"])
+
+
+def test_find_needle_in_url_only_not_visible():
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, "hi", ts),
+            UnifiedMessage(Role.ASSISTANT, "[click](https://needle.example/path)", ts),
+        ]
+    )
+    assert find_session_matches(session, "needle", per_page=40)["total"] == 0
+
+
+def test_find_fenced_code_counts_each_occurrence():
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    body = "needle intro\n```\nneedle\n```\nout `needle` tail"
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, "hi", ts),
+            UnifiedMessage(Role.ASSISTANT, body, ts),
+        ]
+    )
+    data = find_session_matches(session, "needle", per_page=40)
+    assert data["total"] == 3
+
+
+def test_find_html_entity_decoded_visible_text():
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, "hi", ts),
+            UnifiedMessage(Role.ASSISTANT, "prefix &amp;needle suffix", ts),
+        ]
+    )
+    data = find_session_matches(session, "needle", per_page=40)
+    assert data["total"] == 1
+
+
+def test_find_distinct_snippets_per_occurrence():
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, "hi", ts),
+            UnifiedMessage(
+                Role.ASSISTANT,
+                f"alpha {'x' * 80} {NEEDLE} beta {'y' * 80} {NEEDLE} gamma",
+                ts,
+            ),
+        ]
+    )
+    data = find_session_matches(session, NEEDLE, per_page=40)
+    assert data["total"] == 2
+    snippets = [m["snippet"] for m in data["matches"]]
+    assert snippets[0] != snippets[1]
+    assert data["matches"][0]["occurrence"] == 0
+    assert data["matches"][1]["occurrence"] == 1
+
+
+def test_find_occurrence_restarts_per_message():
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, f"{NEEDLE} user", ts),
+            UnifiedMessage(Role.ASSISTANT, f"{NEEDLE} assistant", ts),
+        ]
+    )
+    data = find_session_matches(session, NEEDLE, per_page=40)
+    assert [(m["message"], m["occurrence"]) for m in data["matches"]] == [(0, 0), (1, 0)]
+
+
+def test_find_assistant_response_message_positions():
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, "hi", ts),
+            UnifiedMessage(Role.ASSISTANT, f"{NEEDLE} first", ts),
+            UnifiedMessage(Role.ASSISTANT, f"{NEEDLE} second", ts),
+        ]
+    )
+    data = find_session_matches(session, NEEDLE, per_page=40)
+    assert [m["message"] for m in data["matches"]] == [1, 2]
+
+
+def test_find_matches_ordered_by_pair_message_occurrence():
+    ts = datetime(2026, 1, 1, 12, 0, 0)
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, f"{NEEDLE}a", ts),
+            UnifiedMessage(Role.ASSISTANT, "x", ts),
+            UnifiedMessage(Role.USER, f"{NEEDLE}b", ts),
+            UnifiedMessage(Role.ASSISTANT, f"{NEEDLE}c {NEEDLE}d", ts),
+        ]
+    )
+    data = find_session_matches(session, NEEDLE, per_page=40)
+    keys = [(m["index"], m["message"], m["occurrence"]) for m in data["matches"]]
+    assert keys == sorted(keys)
+
+
+def test_find_dom_visible_text_matches_server(find_client):
+    session = _session_with_messages(
+        [
+            UnifiedMessage(Role.USER, "hi", datetime(2026, 1, 1, 12, 0, 0)),
+            UnifiedMessage(
+                Role.ASSISTANT,
+                "[needle](https://x.example) needle",
+                datetime(2026, 1, 1, 12, 0, 0),
+            ),
+        ]
+    )
+    client = find_client(session)
+    api = client.get("/api/session/{}/find?q=needle".format(SESSION_ID)).get_json()
+    page = client.get(f"/session/{SESSION_ID}").get_data(as_text=True)
+
+    prose_re = re.compile(
+        r'<div class="prose[^"]*" data-find-index="(\d+)" data-find-message="(\d+)">'
+        r"(.*?)</div>\s*</div>\s*</div>",
+        re.DOTALL,
+    )
+
+    def count_needle_nodes(html_chunk: str) -> int:
+        total_hits = 0
+        for node in visible_text_nodes_from_html(html_chunk):
+            lower = node.lower()
+            start = 0
+            while True:
+                idx = lower.find("needle", start)
+                if idx < 0:
+                    break
+                total_hits += 1
+                start = idx + len("needle")
+        return total_hits
+
+    server_by_key: dict[tuple[str, int], int] = {}
+    for m in api["matches"]:
+        key = (str(m["index"]), int(m["message"]))
+        server_by_key[key] = server_by_key.get(key, 0) + 1
+
+    for match in prose_re.finditer(page):
+        idx, msg, inner = match.group(1), match.group(2), match.group(3)
+        dom_count = count_needle_nodes(inner)
+        key = (idx, int(msg))
+        assert dom_count == server_by_key.get(key, 0)
+
+
+def test_client_script_tags_marks_by_index_message_occurrence():
+    from pathlib import Path
+
+    page = Path("lore/templates/session.html").read_text(encoding="utf-8")
+    assert "data-find-occurrence" in page
+    assert "data-find-message" in page
+    assert "match.occurrence" in page
+    assert "match.message" in page

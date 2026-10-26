@@ -1,5 +1,6 @@
 
 {% for pair in pairs %}
+{% set pair_anchor = pair.user.index if pair.user else pair.responses[0].index %}
 <div class="message-cluster">
     {% if pair.user %}
     <div id="msg-{{ pair.user.index }}" class="turn-row user group">
@@ -15,7 +16,7 @@
                 <div class="text-[10px] text-slate-500 font-mono opacity-60">{{ pair.user.timestamp.strftime('%H:%M') }}</div>
             </div>
             <div class="message-card user-card p-4">
-                <div class="prose max-w-none antialiased">
+                <div class="prose max-w-none antialiased" data-find-index="{{ pair_anchor }}" data-find-message="0">
                     {% if pair.user.formatted_reasoning %} {{ pair.user.formatted_reasoning | safe }} {% endif %}
                     {{ pair.user.formatted_content | safe }}
                 </div>
@@ -43,7 +44,7 @@
                 <div class="message-time">{{ resp.timestamp.strftime('%H:%M') }}</div>
             </div>
             <div class="message-card assistant-card p-4">
-                <div class="prose max-w-none antialiased">
+                <div class="prose max-w-none antialiased" data-find-index="{{ pair_anchor }}" data-find-message="{{ loop.index }}">
                     {% if resp.formatted_reasoning %} {{ resp.formatted_reasoning | safe }} {% endif %}
                     {{ resp.formatted_content | safe }}
                 </div>
