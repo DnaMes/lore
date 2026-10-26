@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from ..utils.paths import lore_home
 from .base import LLMConfig, LLMProvider, LLMResponse
+from .gate import ensure_cloud_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -15,8 +16,11 @@ class GeminiProvider(LLMProvider):
     # Gemini CLI OAuth credentials location
     GEMINI_CLI_CREDS_PATH = Path.home() / ".gemini" / "oauth_creds.json"
 
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig, allow_cloud: bool = False):
         super().__init__(config)
+        # Transport-boundary opt-in: a directly constructed provider must refuse
+        # to send without it just like one built by the factory (#PRIVACY.md).
+        self.allow_cloud = allow_cloud
         self._client = None
         self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
         self._cache_dir: Optional[Path] = None
@@ -148,6 +152,7 @@ class GeminiProvider(LLMProvider):
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> LLMResponse:
+        ensure_cloud_allowed("gemini", self.allow_cloud)
         cache_key = None
         if self.config.cache_enabled:
             cache_key = self._get_cache_key(prompt, system_prompt)

@@ -8,12 +8,13 @@ if TYPE_CHECKING:
     from ...core.models import UnifiedSession
 
 from ...utils.paths import lore_home
-from ..base import LLMProvider
+from ..base import LLMProvider, prepare_prompt
 
 
 class StatsGenerator:
     def __init__(self, provider: Optional[LLMProvider] = None, output_dir: Optional[Path] = None):
         self.provider = provider
+        self.redactions = 0  # secret-like strings removed from prompts sent so far
         self.output_dir = output_dir or lore_home() / "stats"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -113,6 +114,11 @@ Format as JSON with keys: patterns, productivity, recommendations, trends"""
             }
 
         try:
+            # Secrets never leave the machine in the prompt (docs/PRIVACY.md):
+            # redact the FINISHED prompt — stats JSON (project paths) and the
+            # session summaries (titles) are session-derived too.
+            prompt, redactions = prepare_prompt(prompt)
+            self.redactions += redactions
             response = self.provider.generate(prompt, temperature=0.3)
             content = response.content.strip()
 

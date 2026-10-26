@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from ..utils.paths import lore_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
+from .gate import ensure_cloud_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -58,8 +59,11 @@ def _lane_failure_reason(returncode: int, stdout: str) -> str:
 
 
 class JevProvider(LLMProvider):
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig, allow_cloud: bool = False):
         super().__init__(config)
+        # Transport-boundary opt-in: a directly constructed provider must refuse
+        # to run the delegate broker without it, just like the factory path (#PRIVACY.md).
+        self.allow_cloud = allow_cloud
         self._lanes = resolve_jev_lanes()
         validate_jev_lanes(self._lanes)
         self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
@@ -83,6 +87,7 @@ class JevProvider(LLMProvider):
         temperature: Optional[float] = None,
     ) -> LLMResponse:
         del max_tokens, temperature  # delegate broker picks limits per lane
+        ensure_cloud_allowed("jev", self.allow_cloud)
         cache_key = None
         if self.config.cache_enabled:
             cache_key = self._get_cache_key(prompt, system_prompt)

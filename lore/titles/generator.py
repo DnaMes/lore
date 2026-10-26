@@ -246,32 +246,39 @@ class TitleGenerator:
             return self._generate_llm_ollama(session)
         return None
 
-    def _generate_llm_gemini(self, session: "UnifiedSession") -> Optional[str]:
-        import subprocess
+    def _llm_prompt(self, session: "UnifiedSession", tail: str) -> str:
+        """Build the complete title prompt, then redact the FINISHED text (#PRIVACY.md).
 
-        from ..llm.factory import CloudOptInRequired
-        from ..services.summarize_cli import cloud_opt_in_granted
+        Redaction runs over the whole outgoing prompt — instructions, tool, project
+        path, any git metadata and the conversation excerpt alike — so no
+        session-derived field can reach a provider unredacted.
+        """
         from ..utils.redact import redact
 
-        # gemini-cli ships the excerpt to a cloud service: refuse without opt-in
-        # even when the caller bypassed the CLI gate (#PRIVACY.md).
-        if not cloud_opt_in_granted(self.allow_cloud):
-            raise CloudOptInRequired(
-                "provider 'gemini-cli' sends the title excerpt to the cloud; "
-                "pass allow_cloud=True, --allow-cloud or set LORE_ALLOW_CLOUD=1 to confirm"
-            )
-
-        # Secrets never leave the machine in the prompt (docs/PRIVACY.md).
-        context = redact(self._build_context(session, max_messages=6)).text
         prompt = f"""Generate a concise title (max 8 words) for this AI coding session.
 
 Tool: {session.tool.value}
 Project: {session.project_path or "Unknown"}
 
 Conversation:
-{context}
+{self._build_context(session, max_messages=6)}
 
-Respond with ONLY the title, no quotes, no explanation."""
+{tail}"""
+        return redact(prompt).text
+
+    def _generate_llm_gemini(self, session: "UnifiedSession") -> Optional[str]:
+        import subprocess
+
+        from ..llm.gate import ensure_cloud_allowed
+
+        # gemini-cli ships the prompt to a cloud service: refuse without opt-in
+        # even when the caller bypassed the CLI gate (#PRIVACY.md).
+        ensure_cloud_allowed("gemini-cli", self.allow_cloud)
+
+        # Secrets never leave the machine in the prompt (docs/PRIVACY.md).
+        prompt = self._llm_prompt(
+            session, "Respond with ONLY the title, no quotes, no explanation."
+        )
 
         try:
             result = subprocess.run(["gemini", prompt], capture_output=True, text=True, timeout=10)
@@ -292,16 +299,17 @@ Respond with ONLY the title, no quotes, no explanation."""
         if not OLLAMA_AVAILABLE or ollama is None:
             return None
 
-        context = self._build_context(session, max_messages=6)
-        prompt = f"""Generate a concise title (max 8 words) for this AI coding session.
+        # A remote OLLAMA_HOST makes this a cloud send: apply the CLI's locality
+        # check and opt-in BEFORE any client exists (#PRIVACY.md). The check is
+        # outside the try so CloudOptInRequired never degrades into a fallback.
+        from ..llm.gate import ensure_cloud_allowed
 
-Tool: {session.tool.value}
-Project: {session.project_path or "Unknown"}
+        ensure_cloud_allowed("ollama", self.allow_cloud)
 
-Conversation:
-{context}
-
-Title:"""
+        # Same finished-prompt redaction as the gemini-cli path: a remote
+        # OLLAMA_HOST makes this a cloud send, and the project path must not
+        # bypass redaction there either (docs/PRIVACY.md).
+        prompt = self._llm_prompt(session, "Title:")
 
         try:
             client = ollama.Client()

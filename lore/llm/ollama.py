@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from ..utils.paths import lore_home
 from .base import LLMConfig, LLMProvider, LLMResponse
+from .gate import ensure_cloud_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,12 @@ def resolve_ollama_num_ctx(config: LLMConfig) -> int:
 
 
 class OllamaProvider(LLMProvider):
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig, allow_cloud: bool = False):
         super().__init__(config)
+        # Loopback Ollama stays local (provider_locality says so), but a directly
+        # constructed client pointed at a remote OLLAMA_HOST must be gated like
+        # any other cloud send (#PRIVACY.md).
+        self.allow_cloud = allow_cloud
         self._client = None
         self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
         self._cache_dir: Optional[Path] = None
@@ -77,6 +82,7 @@ class OllamaProvider(LLMProvider):
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> LLMResponse:
+        ensure_cloud_allowed("ollama", self.allow_cloud)
         cache_key = None
         if self.config.cache_enabled:
             cache_key = self._get_cache_key(prompt, system_prompt)

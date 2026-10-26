@@ -59,7 +59,7 @@ def test_subprocess_stdin_argv_and_cwd(monkeypatch: pytest.MonkeyPatch) -> None:
         return subprocess.CompletedProcess(cmd, 0, stdout="answer\n", stderr="")
 
     monkeypatch.setattr("lore.llm.jev.subprocess.run", fake_run)
-    provider = JevProvider(_config())
+    provider = JevProvider(_config(), allow_cloud=True)
     result = provider.generate("user bit", system_prompt="system bit")
 
     assert result.content == "answer"
@@ -81,7 +81,7 @@ def test_exit_3_falls_through_to_second_lane(monkeypatch: pytest.MonkeyPatch) ->
         return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
 
     monkeypatch.setattr("lore.llm.jev.subprocess.run", fake_run)
-    result = JevProvider(_config()).generate("hi")
+    result = JevProvider(_config(), allow_cloud=True).generate("hi")
 
     assert calls == ["local", "fastcheap"]
     assert result.content == "ok"
@@ -96,7 +96,7 @@ def test_all_lanes_fail_raises_jev_error_without_prompt(monkeypatch: pytest.Monk
 
     monkeypatch.setattr("lore.llm.jev.subprocess.run", fake_run)
     with pytest.raises(JevError) as exc:
-        JevProvider(_config()).generate(secret)
+        JevProvider(_config(), allow_cloud=True).generate(secret)
 
     msg = str(exc.value)
     assert secret not in msg
@@ -111,7 +111,7 @@ def test_empty_stdout_is_failure(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr("lore.llm.jev.subprocess.run", fake_run)
     with pytest.raises(JevError, match="empty response"):
-        JevProvider(_config()).generate("x")
+        JevProvider(_config(), allow_cloud=True).generate("x")
 
 
 def test_summarize_jev_without_allow_cloud_exits_2(tmp_path: Path, capsys) -> None:
@@ -165,7 +165,7 @@ def test_missing_delegate_binary_raises_jev_error(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr("lore.llm.jev.subprocess.run", boom)
     with pytest.raises(JevError) as exc:
-        JevProvider(_config()).generate(prompt)
+        JevProvider(_config(), allow_cloud=True).generate(prompt)
 
     msg = str(exc.value)
     assert "local" in msg  # the failing lane is named

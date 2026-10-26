@@ -3,6 +3,7 @@ import sys
 from typing import Optional
 
 from .base import LLMConfig, LLMProvider
+from .gate import CloudOptInRequired, ensure_cloud_allowed
 from .gemini import GeminiProvider
 from .jev import DEFAULT_MODEL_LABEL, JevProvider
 from .ollama import OllamaProvider
@@ -41,9 +42,8 @@ def _resolve_timeout(provider: str, kwargs: dict) -> dict:
     return {**kwargs, "timeout": seconds}
 
 
-class CloudOptInRequired(RuntimeError):
-    """A non-local provider was requested without ``--allow-cloud``/``LORE_ALLOW_CLOUD=1``."""
-
+# CloudOptInRequired is imported from .gate above (providers import it from there
+# too, so the check lives outside this module and avoids an import cycle).
 
 # Providers the factory itself knows; anything else keeps the ValueError below so an
 # unknown name is never mistaken for an opt-in problem.
@@ -54,18 +54,12 @@ def _cloud_opt_in_error(provider: str, allow_cloud: bool) -> str | None:
     """Return the refusal message when ``provider`` is non-local without opt-in."""
     if provider not in _KNOWN_PROVIDERS:
         return None
-    # Imported lazily: summarize_cli sits above the LLM layer in the dependency
-    # graph and its own imports stay provider-only.
-    from ..services.summarize_cli import cloud_opt_in_granted, provider_locality
-
-    if provider_locality(provider) != "cloud":
-        return None
-    if cloud_opt_in_granted(allow_cloud):
-        return None
-    return (
-        f"provider '{provider}' sends session text to the cloud; "
-        "pass allow_cloud=True, --allow-cloud or set LORE_ALLOW_CLOUD=1 to confirm"
-    )
+    # One shared check with the provider transport boundary (lore/llm/gate.py).
+    try:
+        ensure_cloud_allowed(provider, allow_cloud)
+    except CloudOptInRequired as exc:
+        return str(exc)
+    return None
 
 
 def get_provider(
@@ -88,7 +82,7 @@ def get_provider(
             api_key=api_key,
             **kwargs,
         )
-        return GeminiProvider(config)
+        return GeminiProvider(config, allow_cloud=allow_cloud)
 
     elif provider == "ollama":
         config = LLMConfig(
@@ -96,7 +90,7 @@ def get_provider(
             model=model or "llama3.2",
             **kwargs,
         )
-        return OllamaProvider(config)
+        return OllamaProvider(config, allow_cloud=allow_cloud)
 
     elif provider == "openrouter":
         default_model = os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
@@ -106,7 +100,7 @@ def get_provider(
             api_key=api_key,
             **_resolve_timeout(provider, kwargs),
         )
-        return OpenRouterProvider(config)
+        return OpenRouterProvider(config, allow_cloud=allow_cloud)
 
     elif provider == "jev":
         config = LLMConfig(
@@ -114,7 +108,7 @@ def get_provider(
             model=model or DEFAULT_MODEL_LABEL,
             **_resolve_timeout(provider, kwargs),
         )
-        return JevProvider(config)
+        return JevProvider(config, allow_cloud=allow_cloud)
 
     else:
         raise ValueError(

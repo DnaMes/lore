@@ -18,6 +18,16 @@ from lore.llm.openrouter import DEFAULT_MODEL, OpenRouterError, OpenRouterProvid
 from lore.services.summarize_cli import default_model, provider_locality
 
 
+@pytest.fixture(autouse=True)
+def _allow_cloud_direct_construction(monkeypatch: pytest.MonkeyPatch) -> None:
+    """These tests build OpenRouterProvider directly; opt in at the transport gate.
+
+    The factory/CLI gates are tested elsewhere (test_llm_cloud_optin.py,
+    test_cli_openrouter_optin.py); here only the provider itself is under test.
+    """
+    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+
+
 def _completion_body(content: str = "hello", tokens: int = 42) -> bytes:
     payload = {
         "choices": [{"message": {"content": content}}],

@@ -103,7 +103,7 @@ def test_gemini_transcript_task_no_cache_dir(lore_tmp_home, monkeypatch):
         model="gemini-2.0-flash",
         cache_dir=str(cache_root),
     )
-    provider = GeminiProvider(config)
+    provider = GeminiProvider(config, allow_cloud=True)
     monkeypatch.setattr(provider, "_get_client", lambda: _gemini_client_mock(captured))
 
     provider.generate("USER: hello from a transcript")
@@ -143,7 +143,7 @@ def test_non_transcript_task_still_caches(lore_tmp_home, monkeypatch):
         cache_enabled=True,
         cache_dir=str(cache_root),
     )
-    provider = GeminiProvider(config)
+    provider = GeminiProvider(config, allow_cloud=True)
     monkeypatch.setattr(provider, "_get_client", lambda: _gemini_client_mock(captured))
 
     stats = StatsGenerator(provider)

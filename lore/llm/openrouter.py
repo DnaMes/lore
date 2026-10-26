@@ -19,6 +19,7 @@ from urllib.request import Request, urlopen
 
 from ..utils.paths import lore_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
+from .gate import ensure_cloud_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -91,8 +92,11 @@ def resolve_openrouter_base_url(config: LLMConfig) -> str:
 
 
 class OpenRouterProvider(LLMProvider):
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig, allow_cloud: bool = False):
         super().__init__(config)
+        # Transport-boundary opt-in: a directly constructed provider must refuse
+        # to send without it just like one built by the factory (#PRIVACY.md).
+        self.allow_cloud = allow_cloud
         self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
         self._cache_dir: Optional[Path] = None
 
@@ -116,6 +120,7 @@ class OpenRouterProvider(LLMProvider):
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
     ) -> LLMResponse:
+        ensure_cloud_allowed("openrouter", self.allow_cloud)
         eff_max_tokens = max_tokens or self.config.max_tokens
         eff_temperature = temperature if temperature is not None else self.config.temperature
         base_url = resolve_openrouter_base_url(self.config)
