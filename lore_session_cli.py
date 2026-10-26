@@ -22,6 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lore.exporters.context import format_context
 from lore.extractors.factory import get_all_extractors
+from lore.utils.console import make_console_safe
 from lore.utils.datetime import make_naive
 from lore.utils.paths import get_current_project
 from lore.utils.security import get_safe_executable
@@ -231,6 +232,7 @@ def list_sessions_cmd():
 
 
 def main():
+    make_console_safe()
     parser = argparse.ArgumentParser(
         description="AI Session Manager - Seamless tool switching",
         formatter_class=argparse.RawDescriptionHelpFormatter,

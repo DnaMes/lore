@@ -75,6 +75,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    from lore.utils.console import make_console_safe
+
+    make_console_safe()
     args = build_parser().parse_args(argv)
     warn_if_exposed_without_origin_config(args.host)
     # Imported lazily so `--help` doesn't pay the heavy web.py import cost.

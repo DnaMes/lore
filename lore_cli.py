@@ -53,6 +53,7 @@ from lore.services.extraction import preserve_unobserved_index_entries
 from lore.services.index import automated_hidden_line, filter_automated
 from lore.services.summarize_cli import PROVIDER_CHOICES, default_model
 from lore.storage.reader import load_ignored_session_ids_strict
+from lore.utils.console import make_console_safe
 from lore.utils.datetime import make_naive, parse_duration
 from lore.utils.git import get_git_info
 from lore.utils.paths import get_current_project, lore_home, make_thread_id
@@ -2624,6 +2625,7 @@ Examples:
 
 
 def main():
+    make_console_safe()
     parser = build_parser()
     args = parser.parse_args()
 

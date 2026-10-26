@@ -21,6 +21,7 @@ import json
 import os
 import re
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -34,7 +35,7 @@ from typing import Any
 TIMEOUT = 120  # seconds for every subprocess
 # A cold pip install (onnxruntime for [semantic], sdist builds on musl) can take minutes.
 INSTALL_TIMEOUT = 900
-WEB_WAIT = 30  # seconds for lore-web to answer /api/health
+WEB_WAIT = 90  # seconds for lore-web to answer /api/health (a cold macOS runner is slow)
 PROXY_URL = "http://127.0.0.1:9"  # nothing listens here: a send would fail loudly
 PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
 LORE_SCRIPTS = ("lore", "lore-web", "lore-mcp", "lore-session")
@@ -491,13 +492,17 @@ def step_web(ctx: Ctx) -> list[Result]:
         proc = subprocess.Popen(
             [ctx.exe("lore-web"), "--host", "127.0.0.1", "--port", str(port)],
             cwd=ctx.cwd,
-            env=isolated_env(ctx.home),
+            env=isolated_env(ctx.home) | {"PYTHONFAULTHANDLER": "1"},
             stdin=subprocess.DEVNULL,
             stdout=log,
             stderr=subprocess.STDOUT,
         )
         try:
             results = _web_checks(port, proc)
+            stuck = any(r.status == "FAIL" and r.step == "web: /api/health" for r in results)
+            if stuck and proc.poll() is None and hasattr(signal, "SIGABRT") and os.name == "posix":
+                proc.send_signal(signal.SIGABRT)  # faulthandler prints where the server hangs
+                time.sleep(2)
         finally:
             if proc.poll() is None:  # the server child never outlives this step
                 proc.terminate()
@@ -510,7 +515,7 @@ def step_web(ctx: Ctx) -> list[Result]:
     for result in results:
         if result.status == "FAIL" and result.step == "web: /api/health":
             tail = (ctx.work / "lore-web.log").read_text(encoding="utf-8", errors="replace")
-            result.detail += " | server log tail: " + " / ".join(tail.strip().splitlines()[-25:])
+            result.detail += " | server log tail: " + " / ".join(tail.strip().splitlines()[-60:])
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=2):
             closed = verdict("web: port closed after stop", False, f"127.0.0.1:{port} still open")
@@ -641,6 +646,9 @@ def _installed_ctx(args: argparse.Namespace, work: Path, home: Path, cwd: Path) 
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    for stream in (sys.stdout, sys.stderr):  # a cp1252 console must not crash the report
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(errors="replace")
     args = parse_args(argv)
     work = Path(tempfile.mkdtemp(prefix="lore-smoke-"))
     home, cwd = work / "home", work / "cwd"  # cwd is outside the source tree
