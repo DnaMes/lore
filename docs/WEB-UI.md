@@ -82,6 +82,12 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
 - `/memory`: Viewer for persisted agent memory entries.
 - `/noise-rules`: Management interface for previewing and editing noise reduction filters.
 
+  Noise rules change the *view* only. The canonical message text is preserved on
+  the message (`original_content`) and every render re-derives from it, so loading
+  a page twice gives the same result. The two summarising rules (file operations,
+  unset environment variables) keep the lines they fold inside a collapsed
+  `details` block, so nothing disappears and the export still contains every line.
+
 ### Mutating Actions and Exports
 
 - `/session/<session_id>/summary` (`POST`): Triggers asynchronous summary generation for a session.

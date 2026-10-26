@@ -190,6 +190,8 @@ def _is_toc_noise(text: str) -> bool:
 
 
 def _summarize_file_operations(text: str) -> str:
+    if "File operations summary (collapsed):" in text:
+        return text  # already folded: repeated normalisation stays idempotent
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     operations = []
     passthrough = []
@@ -220,13 +222,23 @@ def _summarize_file_operations(text: str) -> str:
     if remainder > 0:
         preview.append(f"- ... and {remainder} more file operations")
 
-    summary = "File operations summary:\n" + "\n".join(preview)
+    summary = "File operations summary (collapsed):\n" + "\n".join(preview)
     if passthrough and len(passthrough) <= 3:
         summary += "\n\n" + "\n".join(passthrough)
+    # (#167) Display normalisation must not become a second lossy parser: the
+    # lines it folds away stay one click away, verbatim.
+    summary += (
+        f"\n\n<details><summary>Show all {len(operations)} file operations</summary>\n\n"
+        "```text\n"
+        f"{text}\n"
+        "```\n\n</details>"
+    )
     return _normalize_message_text(summary)
 
 
 def _summarize_unset_env_vars(text: str) -> str:
+    if "Unset environment variables (" in text and "<details>" in text:
+        return text  # already folded
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     keys = []
     passthrough = []
@@ -250,6 +262,12 @@ def _summarize_unset_env_vars(text: str) -> str:
     summary = f"Unset environment variables ({len(keys)}): {shown}"
     if passthrough and len(passthrough) <= 2:
         summary += "\n" + "\n".join(passthrough)
+    summary += (
+        f"\n\n<details><summary>Show all {len(keys)} unset variables</summary>\n\n"
+        "```text\n"
+        f"{text}\n"
+        "```\n\n</details>"
+    )
     return _normalize_message_text(summary)
 
 
@@ -348,10 +366,20 @@ def normalize_session_messages_for_display(
     provider_rules.update(provider_specific)
     for message in getattr(session, "messages", []):
         role = getattr(getattr(message, "role", None), "value", "")
+        # (#167) Display normalisation changes the view only. The canonical text
+        # is preserved on the message and every run re-derives from it, which
+        # also makes repeated normalisation idempotent.
+        original = getattr(message, "original_content", None)
+        if original is None:
+            original = message.content or ""
+            try:
+                message.original_content = original
+            except AttributeError:  # pragma: no cover - frozen message objects
+                pass
         message.content = _format_message_for_tool(
             tool,
             role,
-            message.content or "",
+            original,
             provider_rules,
         )
 

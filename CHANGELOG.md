@@ -11,6 +11,9 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Fixed
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
+### Fixed
+- Display normalisation is view-only: the canonical message text is preserved on `original_content` and every render re-derives from it, so repeated normalisation is idempotent and a page load can no longer fold an already folded message. The file-operation and unset-environment-variable summaries keep the lines they fold in a collapsed `details` block, so no line is lost from the view or the export.
+
 ### Added
 - The standalone HTML export renders full Markdown (headings, lists, tables, blockquotes, inline markup, links) with the web UI's pipeline and sanitises it with one shared allowlist, instead of understanding only paragraphs and code fences; the page stays self-contained and offline. The Markdown renderer and the HTML allowlist now live in `lore/utils/markdown_render.py` and `lore/utils/html_sanitize.py` so the UI and the export cannot drift apart.
 
