@@ -5,6 +5,7 @@ import logging
 import math
 import os
 import secrets
+import threading
 import time
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -164,6 +165,15 @@ from .web_utils import (
     parse_origin,
     save_noise_rules,
 )
+
+_md_local = threading.local()
+
+
+def _get_md_parser():
+    if not hasattr(_md_local, "parser"):
+        _md_local.parser = markdown.Markdown(extensions=["fenced_code", "tables", "nl2br"])
+    return _md_local.parser
+
 
 _TEST_EXPORTS = (
     DELETED_SESSIONS_PATH,
@@ -1645,7 +1655,7 @@ def session_detail(session_id):
     def _render_markdown(path_value):
         md_text = Path(path_value).read_text(encoding="utf-8")
         if markdown:
-            html_content = markdown.markdown(md_text, extensions=["fenced_code", "tables", "nl2br"])
+            html_content = _get_md_parser().reset().convert(md_text)
             html_content = nh3.clean(
                 html_content,
                 tags=SANITIZE_TAGS,
@@ -2090,7 +2100,7 @@ def rules():
         with open(rules_path, "r", encoding="utf-8") as f:
             rules_text = f.read()
     if rules_text and markdown:
-        rules_text = markdown.markdown(rules_text, extensions=["fenced_code", "tables", "nl2br"])
+        rules_text = _get_md_parser().reset().convert(rules_text)
         rules_text = nh3.clean(
             rules_text,
             tags=SANITIZE_TAGS,
