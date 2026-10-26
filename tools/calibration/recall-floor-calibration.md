@@ -8,20 +8,20 @@ of short texts).
 
 - Model: `BAAI/bge-small-en-v1.5` (384-dim), fastembed 0.9.0, running locally —
   no text leaves the machine.
-- Data: `docs/research/2026-10-14-recall-floor-labelled-pairs.json` — 61 pairs
+- Data: `tools/calibration/recall-floor-labelled-pairs.json` — 61 pairs
   of (stored memory, user query) in memory style, English and German, labelled
   `related` (acceptable to show for that query) or `unrelated` (must be
   filtered). Same-domain negatives included; one label corrected during the
   run (sourdough hydration vs. water in bread dough is the same subject).
-- Tool: `tools/calibrate_recall_floor.py` — embeds both sides, reports the
+- Tool: `tools/calibration/calibrate_recall_floor.py` — embeds both sides, reports the
   cosine distribution per label and sweeps every observed score as a candidate
   floor, maximising balanced accuracy (equal weight on keeping related hits and
   dropping unrelated padding; ties prefer the higher floor).
 - Run (never from a unit test — tests must not download models):
 
   ```bash
-  python tools/calibrate_recall_floor.py
-  python tools/calibrate_recall_floor.py --json
+  python tools/calibration/calibrate_recall_floor.py
+  python tools/calibration/calibrate_recall_floor.py --json
   ```
 
 ## Observed distribution (61 pairs)

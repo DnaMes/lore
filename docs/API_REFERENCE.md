@@ -320,7 +320,7 @@ Input:
   fused in (reciprocal rank fusion). Memories without a vector are still found by
   keyword. Only semantic candidates with cosine similarity at or above
   `LORE_MEMORY_RECALL_MIN_SIMILARITY` (default `0.6`, calibrated on 61 labelled
-  pairs on 2026-10-14 — see `docs/research/2026-10-14-recall-floor-calibration.md`;
+  pairs on 2026-10-14 — see `tools/calibration/recall-floor-calibration.md`;
   invalid values fall back to the default, range 0 to 1)
   take part.
 - `false`: keyword search only; the embedding model is never loaded.

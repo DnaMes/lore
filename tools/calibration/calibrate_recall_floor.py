@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Calibrate the auto-mode recall floor against a labelled pair set (#199).
 
-Runs the real embedding model over ``docs/research/2026-10-14-recall-floor-
+Runs the real embedding model over ``tools/calibration/recall-floor-
 labelled-pairs.json`` (stored memory vs. user query, labelled related/unrelated)
 and reports the cosine distributions plus a recommended
 ``LORE_MEMORY_RECALL_MIN_SIMILARITY``.
@@ -10,8 +10,8 @@ The model comes from the optional ``lore[semantic]`` extra, so run this from an
 environment that has ``fastembed`` installed — never from a unit test run (tests
 must not download models):
 
-    .venv/bin/python tools/calibrate_recall_floor.py
-    .venv/bin/python tools/calibrate_recall_floor.py --json   # machine-readable
+    .venv/bin/python tools/calibration/calibrate_recall_floor.py
+    .venv/bin/python tools/calibration/calibrate_recall_floor.py --json   # machine-readable
 
 Only text pairs are read from disk; nothing leaves the machine (local model).
 """
@@ -25,8 +25,8 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Sequence, Tuple
 
-REPO = Path(__file__).resolve().parent.parent
-DEFAULT_PAIRS = REPO / "docs" / "research" / "2026-10-14-recall-floor-labelled-pairs.json"
+REPO = Path(__file__).resolve().parents[2]
+DEFAULT_PAIRS = REPO / "tools" / "calibration" / "recall-floor-labelled-pairs.json"
 
 
 def cosine(a: Sequence[float], b: Sequence[float]) -> float:

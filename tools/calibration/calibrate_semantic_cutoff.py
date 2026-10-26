@@ -2,7 +2,7 @@
 """Calibrate the hybrid-search distance cutoff against labelled session pairs (#92).
 
 Runs the real embedding model over
-``docs/research/2026-10-14-semantic-cutoff-labelled-pairs.json`` (session body vs.
+``tools/calibration/semantic-cutoff-labelled-pairs.json`` (session body vs.
 search query, labelled related/unrelated) and reports the **L2** distance
 distribution — the metric sqlite-vec uses on ``session_embeddings`` (vec0's
 default; the vectors are unit-normalised, so ``distance = sqrt(2 - 2*cosine)``).
@@ -13,8 +13,8 @@ sessions and dropping unrelated padding), ties going to the stricter (lower)
 cutoff. Reported alongside: which percentile of the *related* distribution the
 cutoff sits at, so the value is never a bare constant.
 
-    python tools/calibrate_semantic_cutoff.py
-    python tools/calibrate_semantic_cutoff.py --json
+    python tools/calibration/calibrate_semantic_cutoff.py
+    python tools/calibration/calibrate_semantic_cutoff.py --json
 
 Needs the optional ``lore[semantic]`` extra (fastembed + model); never run it
 from a unit test — tests must not download models.
@@ -30,8 +30,8 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple
 
-REPO = Path(__file__).resolve().parent.parent
-DEFAULT_PAIRS = REPO / "docs" / "research" / "2026-10-14-semantic-cutoff-labelled-pairs.json"
+REPO = Path(__file__).resolve().parents[2]
+DEFAULT_PAIRS = REPO / "tools" / "calibration" / "semantic-cutoff-labelled-pairs.json"
 
 
 def l2_distance(a: Sequence[float], b: Sequence[float]) -> float:

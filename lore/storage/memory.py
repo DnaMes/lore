@@ -72,7 +72,7 @@ WRITABLE_STATUSES = ("candidate", "confirmed")
 # tied for the sweep optimum), where the previous 0.7 kept only 77 % for no extra
 # protection. Distribution, reproduction command and the two known misses
 # (German query vs. English memory, keyword-poor paraphrase):
-# docs/research/2026-10-14-recall-floor-calibration.md. The session-level cutoff
+# tools/calibration/recall-floor-calibration.md. The session-level cutoff
 # of #92 is calibrated separately. Override with LORE_MEMORY_RECALL_MIN_SIMILARITY.
 RECALL_MIN_SIMILARITY_ENV = "LORE_MEMORY_RECALL_MIN_SIMILARITY"
 DEFAULT_RECALL_MIN_SIMILARITY = 0.6

@@ -155,7 +155,7 @@ def test_floor_env_parsing(monkeypatch, raw, expected):
         monkeypatch.setenv("LORE_MEMORY_RECALL_MIN_SIMILARITY", raw)
     assert recall_min_similarity() == expected
     # Calibrated 2026-10-14 on 61 labelled pairs — see
-    # docs/research/2026-10-14-recall-floor-calibration.md
+    # tools/calibration/recall-floor-calibration.md
     assert DEFAULT_RECALL_MIN_SIMILARITY == 0.6
 
 

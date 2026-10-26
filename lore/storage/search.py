@@ -559,11 +559,11 @@ KNN_K_MAX = 1024
 # (``distance = sqrt(2 - 2*cosine)``), so smaller is closer and 0 is identical.
 #
 # 0.88 is measured, not invented: on the labelled set in
-# docs/research/2026-10-14-semantic-cutoff-labelled-pairs.json the related distances run
+# tools/calibration/semantic-cutoff-labelled-pairs.json the related distances run
 # 0.610-0.794 (p95 0.777) and the unrelated ones 0.980-1.104 (p05 0.986), so the cutoff
 # sits at the midpoint of related-p95 / unrelated-p05 (0.881 -> 0.88) and on that set
 # keeps 14/14 related while dropping 14/14 unrelated. Reproduce with
-# ``python tools/calibrate_semantic_cutoff.py``.
+# ``python tools/calibration/calibrate_semantic_cutoff.py``.
 SEMANTIC_MAX_DISTANCE_ENV = "LORE_SEMANTIC_MAX_DISTANCE"
 DEFAULT_SEMANTIC_MAX_DISTANCE = 0.88
 
