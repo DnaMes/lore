@@ -445,3 +445,38 @@ search routed through v2, staleness assert, CI equivalence test, stop writing).
 **Decision:** start only when the CI equivalence test between v2 and JSON exists
 (sub-task 4 of the issue). Everything before it is safe; the final step is the one
 that cannot be rolled back cheaply without that test.
+
+---
+
+## Browser interaction checks (#194) — CLOSED
+
+The `tools/playwright_e2e_regression.py` referenced by the earlier verdict was
+deleted in `7ff7c19` ("drop homelab leftovers, one-off scripts"), so there was
+no flow left to make importable. The checks were reimplemented as pytest tests
+on top of the current app instead of restoring the deleted one-off script.
+
+`tests/test_browser_interactions.py` seeds 51 synthetic Claude Code transcripts
+in a temporary `HOME`, builds the JSON + v2 archive, tags two sessions, serves
+the real Flask app on `127.0.0.1`, and drives headless Chromium through search,
+the code-card copy button (clipboard permission granted), the tag filter,
+message-permalink navigation, and session-list "Load more" pagination. The
+tests carry the `browser` marker and skip when Playwright or Chromium is absent;
+the `browser` extra is separate from `dev`.
+
+Run:
+
+```
+pip install -e ".[browser]" && playwright install chromium
+.venv/bin/python -m pytest tests/test_browser_interactions.py -o addopts="" -q -m browser
+```
+
+Observed:
+
+- Repository `.venv` (no Playwright installed): `5 skipped in 0.72s` — the
+  default suite is unaffected.
+- Isolated venv with Playwright 1.64.1 + its Chromium build:
+  `5 passed in 9.92s`.
+- Known residual: on a ≥1024 px viewport the desktop filters sheet
+  (`.bottom-sheet-panel`, absolute at the document bottom) intercepts pointer
+  events over the "Load more" button. The pagination test activates the button
+  from the keyboard; the layout overlap is a separate UI bug, not fixed here.

@@ -39,6 +39,12 @@ dependencies = [
 # sqlite-vec for native KNN over the session archive. Both optional; without
 # them search degrades to FTS-only.
 semantic = ["fastembed>=0.3", "sqlite-vec>=0.1.9"]
+# Real headless-browser interaction checks (#194). Not part of `dev`: the tests
+# skip when playwright or its Chromium build is absent, so the default suite
+# stays free of a ~150 MB browser download. Run `playwright install chromium`
+# after installing this extra.
+browser = ["playwright>=1.40"]
+
 # Everything needed to run the test suite, lint, and type-check locally.
 # Mirrors what CI installs; fastembed + sqlite-vec are included so the semantic
 # tests run for real instead of being skipped. `pip install -e ".[dev]"`.
@@ -116,6 +122,9 @@ skips = ["B101", "B310", "B608"]
 [tool.pytest.ini_options]
 addopts = "--cov=lore --cov-config=pyproject.toml --cov-report=term-missing -q"
 testpaths = ["tests"]
+markers = [
+    "browser: real headless-browser flows; needs the `browser` extra and Chromium",
+]
 
 [tool.coverage.run]
 source = ["lore"]

@@ -230,3 +230,21 @@ CLI options from `lore/interfaces/live_probe.py`:
 - `--json`: Outputs results as structured JSON instead of line-by-line terminal text.
 
 The probe executes standard test cases against the deployment, verifying that malformed queries, invalid parameters, and unauthorized requests return appropriate HTTP 400 or gateway rejection responses.
+
+## Release checklist — browser interaction checks
+
+Static template and CSP tests cannot see a dead control. The optional
+`browser` tests drive a real headless Chromium against a real Flask server
+seeded from synthetic Claude Code transcripts in a temporary `HOME`, so the
+operator's archive is never touched. They cover the topbar search, the code
+copy button, the tag filter, message permalinks, and session-list pagination.
+
+```bash
+pip install -e ".[browser]" && playwright install chromium
+.venv/bin/python -m pytest tests/test_browser_interactions.py -o addopts="" -q -m browser
+```
+
+The tests are marked `browser` and skip (never fail) when Playwright or its
+Chromium build is missing, so the default suite stays green without the
+optional extra. Record the Chromium version, the command, and the observed
+result in the release checklist for every release.
