@@ -197,17 +197,19 @@ def build_mcp_summarize_provider():
 
 
 def default_model(provider: str) -> str:
-    if provider == "gemini":
-        return "gemini-2.0-flash"
-    if provider == "openrouter":
-        from lore.llm.openrouter import DEFAULT_MODEL
+    """Default model label for ``provider``, from the one provider table.
 
-        return os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
-    if provider == "jev":
-        from lore.llm.jev import DEFAULT_MODEL_LABEL
+    ``lore/llm/adapters/selection.py`` owns the defaults, so the CLI and the factory
+    cannot disagree. A native-CLI adapter answers ``""``: the installed CLI uses
+    its own configured model and Lore passes no ``--model``. An unknown name keeps
+    the historical ``llama3.2`` answer.
+    """
+    from lore.llm.adapters import UnknownProviderError, default_model_for
 
-        return DEFAULT_MODEL_LABEL
-    return "llama3.2"
+    try:
+        return default_model_for(provider)
+    except UnknownProviderError:
+        return "llama3.2"
 
 
 def _estimate_totals(estimates: list[SessionEstimate]) -> dict[str, int]:

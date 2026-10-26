@@ -114,6 +114,15 @@ class LLMProvider(ABC):
     def get_model_info(self) -> Dict[str, Any]:
         pass
 
+    def provider_identity(self) -> Dict[str, Any]:
+        """Who answers this provider's requests, and how it authenticates (#180).
+
+        ``cache_identity`` stays the finer-grained key of one request; this is the
+        stable description of the destination. Native-CLI adapters add the
+        executable, its version and the auth mode.
+        """
+        return {"provider": type(self).__name__, "model": self.config.model or ""}
+
     # Bumped whenever the key composition changes, so old entries simply stop
     # matching instead of being mistaken for a hit of a different request (#186).
     CACHE_KEY_VERSION = 2

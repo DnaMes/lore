@@ -13,9 +13,6 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiProvider(LLMProvider):
-    # Gemini CLI OAuth credentials location
-    GEMINI_CLI_CREDS_PATH = Path.home() / ".gemini" / "oauth_creds.json"
-
     def __init__(self, config: LLMConfig, allow_cloud: bool = False):
         super().__init__(config)
         # Transport-boundary opt-in: a directly constructed provider must refuse
@@ -37,36 +34,6 @@ class GeminiProvider(LLMProvider):
     # Set GEMINI_CLIENT_ID / GEMINI_CLIENT_SECRET env vars to override.
     DEFAULT_GEMINI_CLIENT_ID = os.environ.get("GEMINI_CLIENT_ID", "")
     DEFAULT_GEMINI_CLIENT_SECRET = os.environ.get("GEMINI_CLIENT_SECRET", "")
-
-    def _load_gemini_cli_creds(self) -> Optional[Dict[str, str]]:
-        """Load OAuth credentials from Gemini CLI installation.
-
-        Note: Gemini CLI OAuth tokens have Cloud Platform scopes, not Generative Language API scopes.
-        This means they won't work directly with the Gemini API. You'll need either:
-        1. An API key from https://aistudio.google.com/app/apikey (recommended)
-        2. Or use Vertex AI with a Google Cloud project
-        """
-        try:
-            if self.GEMINI_CLI_CREDS_PATH.exists():
-                with open(self.GEMINI_CLI_CREDS_PATH, "r") as f:
-                    creds = json.load(f)
-                    # Use environment variables if set, otherwise use defaults
-                    client_id = os.environ.get(
-                        "GEMINI_CLI_CLIENT_ID", self.DEFAULT_GEMINI_CLIENT_ID
-                    )
-                    client_secret = os.environ.get(
-                        "GEMINI_CLI_CLIENT_SECRET", self.DEFAULT_GEMINI_CLIENT_SECRET
-                    )
-                    return {
-                        "refresh_token": creds.get("refresh_token"),
-                        "client_id": client_id,
-                        "client_secret": client_secret,
-                    }
-        except (OSError, json.JSONDecodeError) as exc:
-            # Malformed JSON or a permission-denied creds file must not look
-            # identical to "no credentials file" (#114).
-            logger.debug("Could not load Gemini CLI credentials: %s", exc)
-        return None
 
     def _get_client(self):
         if self._client is not None:
@@ -93,14 +60,6 @@ class GeminiProvider(LLMProvider):
             refresh_token = self.config.oauth_refresh_token or os.environ.get(
                 "GOOGLE_REFRESH_TOKEN"
             )
-
-            # Method 2b: Try Gemini CLI credentials
-            if not (client_id and client_secret and refresh_token):
-                gemini_creds = self._load_gemini_cli_creds()
-                if gemini_creds:
-                    client_id = client_id or gemini_creds["client_id"]
-                    client_secret = client_secret or gemini_creds["client_secret"]
-                    refresh_token = refresh_token or gemini_creds["refresh_token"]
 
             if client_id and client_secret and refresh_token:
                 from google.auth.transport.requests import Request
@@ -135,9 +94,10 @@ class GeminiProvider(LLMProvider):
                 "Gemini authentication not found. Use one of:\n"
                 "  1. Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable\n"
                 "  2. Set GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REFRESH_TOKEN for OAuth\n"
-                "  3. Login with Gemini CLI (creates ~/.gemini/oauth_creds.json)\n"
-                "  4. Run 'gcloud auth application-default login' and set use_adc=True\n"
-                "  5. Pass credentials in config"
+                "  3. Run 'gcloud auth application-default login' and set use_adc=True\n"
+                "  4. Pass credentials in config\n"
+                "The Gemini CLI's own login is not reused here: select the "
+                "'gemini-cli' adapter to run the CLI with its native login instead."
             )
 
         except ImportError as e:

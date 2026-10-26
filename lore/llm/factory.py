@@ -1,18 +1,41 @@
+"""Provider construction: every choice goes through the explicit request contract.
+
+Selection itself lives in :mod:`lore.llm.adapters.selection` (#180). This module
+resolves the environment overrides it is responsible for, hands the request to
+the cloud opt-in gate, and then builds one provider for that request — an
+installed-CLI adapter, an in-process API client, or the local Ollama path. An
+unknown name, an unsupported contract or a missing CLI never turns into a
+different provider.
+"""
+
 import os
 import sys
 from typing import Optional
 
+from .adapters import (
+    CLI_ADAPTERS,
+    HOSTED_DEFAULT_TIMEOUTS,
+    PROVIDERS,
+    AuthMode,
+    CancellationToken,
+    ProviderRequest,
+    select_provider,
+)
 from .base import LLMConfig, LLMProvider
 from .gate import CloudOptInRequired, ensure_cloud_allowed
 from .gemini import GeminiProvider
-from .jev import DEFAULT_MODEL_LABEL, JevProvider
+from .jev import JevProvider
 from .ollama import OllamaProvider
-from .openrouter import DEFAULT_MODEL, OpenRouterProvider
+from .openrouter import OpenRouterProvider
 
-# Hosted providers wait longer than the 60 s LLMConfig default: a delegate hop
-# chain and a free-tier OpenRouter model both routinely exceed it.
-HOSTED_DEFAULT_TIMEOUTS = {"openrouter": 90, "jev": 180}
 TIMEOUT_ENV_VAR = "LORE_LLM_TIMEOUT"
+
+# CloudOptInRequired is imported from .gate above (providers import it from there
+# too, so the check lives outside this module and avoids an import cycle).
+
+# Providers the factory itself knows; anything else is refused by selection, so an
+# unknown name is never mistaken for an opt-in problem.
+_KNOWN_PROVIDERS = frozenset(PROVIDERS)
 
 
 def _resolve_timeout(provider: str, kwargs: dict) -> dict:
@@ -42,14 +65,6 @@ def _resolve_timeout(provider: str, kwargs: dict) -> dict:
     return {**kwargs, "timeout": seconds}
 
 
-# CloudOptInRequired is imported from .gate above (providers import it from there
-# too, so the check lives outside this module and avoids an import cycle).
-
-# Providers the factory itself knows; anything else keeps the ValueError below so an
-# unknown name is never mistaken for an opt-in problem.
-_KNOWN_PROVIDERS = frozenset({"gemini", "ollama", "openrouter", "jev"})
-
-
 def _cloud_opt_in_error(provider: str, allow_cloud: bool) -> str | None:
     """Return the refusal message when ``provider`` is non-local without opt-in."""
     if provider not in _KNOWN_PROVIDERS:
@@ -67,50 +82,89 @@ def get_provider(
     model: Optional[str] = None,
     api_key: Optional[str] = None,
     allow_cloud: bool = False,
+    cancellation: Optional[CancellationToken] = None,
+    auth_mode: Optional[AuthMode] = None,
     **kwargs,
 ) -> LLMProvider:
-    provider = provider.lower()
+    """Build the provider named by an explicit :class:`ProviderRequest`.
 
-    refusal = _cloud_opt_in_error(provider, allow_cloud)
+    Raises :class:`~lore.llm.adapters.UnknownProviderError` (a ``ValueError``) for an
+    unknown name, :class:`~lore.llm.adapters.UnsupportedProviderCombination` for a
+    contract the provider does not implement (an API key offered to a native CLI,
+    a mismatched auth mode, a ``base_url`` for a subprocess provider), and
+    :class:`CloudOptInRequired` before any of that when the provider is non-local
+    and the opt-in is missing. A missing CLI is *not* raised here: the adapter is
+    built, ``is_available()`` is false, and its ``generate()`` raises
+    ``AdapterUnavailable`` naming the reason.
+    """
+    name = (provider or "").strip().lower()
+    if "timeout" not in kwargs:
+        kwargs = _resolve_timeout(name, kwargs)
+    request: ProviderRequest = select_provider(
+        name,
+        model=model,
+        api_key=api_key,
+        auth_mode=auth_mode,
+        timeout=kwargs.get("timeout"),
+        cancellation=cancellation,
+        base_url=kwargs.get("base_url"),
+    )
+
+    refusal = _cloud_opt_in_error(request.provider, allow_cloud)
     if refusal:
         raise CloudOptInRequired(refusal)
 
-    if provider == "gemini":
+    # ``timeout`` is part of the request now; never pass it twice to LLMConfig.
+    config_kwargs = {key: value for key, value in kwargs.items() if key != "timeout"}
+
+    adapter_cls = CLI_ADAPTERS.get(request.provider)
+    if adapter_cls is not None:
+        config = LLMConfig(
+            provider=request.provider,
+            model=request.model,
+            timeout=request.timeout,
+            **config_kwargs,
+        )
+        return adapter_cls(config, allow_cloud=allow_cloud, request=request)
+
+    if request.provider == "gemini":
         config = LLMConfig(
             provider="gemini",
-            model=model or "gemini-2.0-flash",
+            model=request.model,
             api_key=api_key,
-            **kwargs,
+            timeout=request.timeout,
+            **config_kwargs,
         )
         return GeminiProvider(config, allow_cloud=allow_cloud)
 
-    elif provider == "ollama":
+    elif request.provider == "ollama":
         config = LLMConfig(
             provider="ollama",
-            model=model or "llama3.2",
-            **kwargs,
+            model=request.model,
+            timeout=request.timeout,
+            **config_kwargs,
         )
         return OllamaProvider(config, allow_cloud=allow_cloud)
 
-    elif provider == "openrouter":
-        default_model = os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
+    elif request.provider == "openrouter":
         config = LLMConfig(
             provider="openrouter",
-            model=model or default_model,
+            model=request.model,
             api_key=api_key,
-            **_resolve_timeout(provider, kwargs),
+            timeout=request.timeout,
+            **config_kwargs,
         )
         return OpenRouterProvider(config, allow_cloud=allow_cloud)
 
-    elif provider == "jev":
+    elif request.provider == "jev":
         config = LLMConfig(
             provider="jev",
-            model=model or DEFAULT_MODEL_LABEL,
-            **_resolve_timeout(provider, kwargs),
+            model=request.model,
+            timeout=request.timeout,
+            **config_kwargs,
         )
         return JevProvider(config, allow_cloud=allow_cloud)
 
-    else:
-        raise ValueError(
-            f"Unknown provider: {provider}. Supported: gemini, jev, ollama, openrouter"
-        )
+    # Selection and construction read the same table; reaching this line means
+    # they disagree, which is a bug rather than an unknown name.
+    raise AssertionError(f"provider '{request.provider}' has no constructor")

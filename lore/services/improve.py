@@ -15,6 +15,7 @@ from ..llm.tasks.knowledge import KnowledgeExtractor
 from ..services.index import load_deleted_session_ids
 from ..services.knowledge import run_extraction, sessions_for_extraction
 from ..services.summarize import is_summary_stale
+from ..services.summarize_cli import default_model
 from ..storage.embeddings import (
     cosine_similarity,
     embed_text,
@@ -413,8 +414,7 @@ def _stage_extract(
     if not chosen:
         return StageResult("extract_knowledge", "skipped", reason="no_llm")
     try:
-        default_model = "llama3.2" if chosen == "ollama" else "gemini-2.0-flash"
-        config = LLMConfig.for_transcripts(provider=chosen, model=model or default_model)
+        config = LLMConfig.for_transcripts(provider=chosen, model=model or default_model(chosen))
         provider = get_provider(
             provider=config.provider,
             model=config.model,
