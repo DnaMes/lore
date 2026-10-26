@@ -6,6 +6,13 @@ The version is the single source of truth in `lore/__init__.py`.
 ## [Unreleased]
 
 ### Added
+- Native-CLI analysis adapters behind one explicit provider boundary (#180-#184): `lore/llm/adapters/` defines a persisted request descriptor (provider identity, model, auth mode, timeout, cancellation token, execution policy), detects the installed `claude`/`codex`/`gemini` executables (`--version` plus a `--help` capability probe), invokes the unmodified CLI with the prompt on standard input, parses its documented structured output and enforces the timeout, the prompt bound and cancellation. A missing CLI reports a reason and raises `AdapterUnavailable`; it never falls back to an API provider. `antigravity-cli` ships as an availability-gated stub with its open contract questions documented.
+
+### Changed
+- Provider selection goes through that boundary: `get_provider()` builds every provider from a `ProviderRequest` and one selection table (`lore/llm/adapters/selection.py`), refusing an unknown name, a mismatched auth mode, an API key (or `base_url`) for a native-CLI provider with typed errors instead of conventions.
+- The `gemini` API provider no longer reads `~/.gemini/oauth_creds.json`: the CLI's login belongs to the `gemini-cli` adapter, so API credentials and CLI credentials stay separate.
+
+### Added
 - `accessibility`: accessible names for the project filter controls (tool, tag, start and end date), the noise-rules preview textarea and the resume copy button; the labels are checked by `tests/test_a11y_form_labels.py` (cluster of PRs #200, #201, #205, #208, #210).
 
 ### Fixed

@@ -428,3 +428,117 @@ for each other.
 
 Transcript-bearing prompts still disable the cache entirely (`LLMConfig.for_transcripts`);
 this key work applies to any provider call that does use it.
+
+## Native CLI adapters
+
+Four provider names are answered by an installed CLI rather than by an API client:
+`claude-cli` (#182), `codex-cli` (#181), `gemini-cli` (#184) and
+`antigravity-cli` (#183). They live in `lore/llm/adapters/`, and the boundary is
+explicit: one persisted request descriptor (`lore/llm/adapters/contract.py` —
+provider identity, model, auth mode, timeout, cancellation token, execution
+policy), one selection table (`selection.py`), one invocation path
+(`native_cli.py`). `lore.llm.factory.get_provider()` builds every provider from
+that descriptor, so a name cannot mean one thing in the factory and another in the
+adapter.
+
+| Provider | Executable | Invocation | Parsed output |
+| --- | --- | --- | --- |
+| `claude-cli` | `claude` | `claude --print [--model M]`, prompt on stdin | `--output-format json`: `{type, subtype, is_error, result, session_id, usage}` |
+| `codex-cli` | `codex` | `codex exec --json --sandbox read-only --skip-git-repo-check [--model M] -`, prompt on stdin | JSONL events; the answer is the last `agent_message` (`item.completed/item.item_type`, older `msg.type`) |
+| `gemini-cli` | `gemini` | `gemini --output-format json -p "<constant instruction>" [--model M]`, prompt on stdin | `{"response": ..., "stats": {...}}` |
+| `antigravity-cli` | `antigravity` | none — see below | none |
+
+Select one with the factory (it is a cloud provider, so the opt-in applies):
+
+```bash
+export LORE_ALLOW_CLOUD=1   # or pass allow_cloud=True in the library
+LORE_LLM_PROVIDER=claude-cli lore improve --stage extract_knowledge --allow-cloud
+```
+
+### Availability
+
+An adapter is available only when all three checks pass: `shutil.which` finds the
+executable, `<executable> --version` succeeds (the version is parsed and reported,
+never guessed), and `<executable> --help` documents the flags the adapter uses
+(`--print --output-format` for Claude, `--json` for Codex, `-p --output-format` for
+Gemini). `is_available()` is false otherwise, `availability()` returns a `CliProbe`
+with `available`, `version`, `capabilities` and a human-readable `reason`, and
+`generate()` raises `AdapterUnavailable` naming that reason. **A missing CLI is
+never answered by an API provider** — there is no implicit fallback anywhere in the
+boundary.
+
+`antigravity-cli` (#183) is availability-gated on purpose: no supported
+non-interactive CLI contract could be confirmed offline, so the adapter reports
+unavailable with a reason (distinguishing "not installed" from "installed but no
+confirmed contract") and invokes nothing. The open questions that block it —
+executable name and channel, prompt transport, structured-output format and flag,
+credit/limit behaviour, pinnable version range — are listed in the module
+docstring `lore/llm/adapters/antigravity.py`. Antigravity conversations stay
+archived source artifacts until then.
+
+### Authentication
+
+Native only. The adapter runs the unmodified CLI and lets it use the login it
+already has; Lore never reads, copies or forwards a credential:
+
+- No credential file is opened (`~/.claude/.credentials.json`,
+  `~/.codex/auth.json`, `~/.gemini/oauth_creds.json` and friends are never touched
+  by the adapter).
+- `CREDENTIAL_ENV_VARS` (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`,
+  `GOOGLE_API_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLIENT_ID/SECRET`,
+  `GOOGLE_REFRESH_TOKEN`, `OPENROUTER_API_KEY`) are removed from the child
+  environment, so only the CLI's own login can answer. If the CLI has no login, the
+  call fails with `AdapterAuthError` rather than borrowing a key Lore holds for a
+  different provider.
+- The rest of the environment is inherited untouched; nothing is added.
+- An API key offered to a native CLI is refused
+  (`UnsupportedProviderCombination`), and so is a `base_url` for a subprocess
+  provider — before anything runs.
+- `lore/llm/gemini.py` no longer reads `~/.gemini/oauth_creds.json` for the
+  `gemini` API provider (#184): API credentials and the CLI's login stay separate.
+
+### Limits
+
+`ProviderRequest.timeout` bounds each call (default 60 s; `timeout=` or, for the
+hosted API providers only, `LORE_LLM_TIMEOUT`). The prompt is bounded by the
+execution policy's `max_prompt_chars` (400 000) and refused with
+`AdapterPromptTooLarge` beyond it. The child runs in a temporary working directory,
+in its own process group, with no shell. The prompt travels on standard input, so
+transcript text never appears in the argument vector or the process list.
+Sampling limits (`max_tokens`, `temperature`) are not passed: they belong to the
+CLI's own configuration and inventing flags for them would be guessing.
+
+### Cancellation
+
+Every request carries a `CancellationToken`
+(`lore/llm/adapters/contract.py`). The adapter polls the token while the CLI runs;
+cancelling kills the process group and raises `AdapterCancelled`. The same path
+enforces the timeout (`AdapterTimeout`). Both leave no orphaned process behind.
+
+Outcomes are distinct and typed, so a caller can persist them separately:
+unavailable, auth error, timeout, cancelled, execution error (non-zero exit or a
+reported failed result), malformed/partial output (`AdapterOutputError`; a
+truncated trailing JSONL line after usable events is reported as partial output,
+not as failure).
+
+### Deliberately unsupported
+
+- **Antigravity invocation** until the CLI contract is confirmed (see above).
+- **Reusing one provider's credentials for another**: no token, cookie or CLI login
+  crosses the boundary in either direction.
+- **`--continue`/`--resume`, MCP/tool/permission changes, extensions configuration,
+  interactive TUIs, image input** — the adapter is one bounded text call.
+- **`<cli> login` on the user's behalf** — authentication is the user's step.
+- **Translating or validating model names**: `--model` is passed through as the CLI
+  documents it (`sonnet`, a full id, …); an unknown name fails with the CLI's own
+  error. With no model named, Lore passes no `--model` and the CLI uses its own
+  configured default.
+- **Disk caching**: CLI results are not written to `~/.lore/llm_cache` (the requests
+  carry transcripts). `cache_identity()` still covers the whole request —
+  provider, model, auth mode, timeout, execution policy and the resolved CLI version
+  — so two adapters can never answer for each other.
+- **CLI `--provider` choice lists**: `lore analyze|knowledge|summarize|format
+  --provider` still enumerates `gemini`, `jev`, `ollama`, `openrouter`. The adapters
+  are reachable through `get_provider()` and `LORE_LLM_PROVIDER` (e.g. `lore
+  improve`); adding them to every command's choice list is a separate CLI change.
+
