@@ -506,6 +506,11 @@ def step_web(ctx: Ctx) -> list[Result]:
                 except subprocess.TimeoutExpired:
                     proc.kill()
                     proc.wait()
+    # A server that never answered is undebuggable from CI without its own output.
+    for result in results:
+        if result.status == "FAIL" and result.step == "web: /api/health":
+            tail = (ctx.work / "lore-web.log").read_text(encoding="utf-8", errors="replace")
+            result.detail += " | server log tail: " + " / ".join(tail.strip().splitlines()[-25:])
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=2):
             closed = verdict("web: port closed after stop", False, f"127.0.0.1:{port} still open")

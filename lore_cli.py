@@ -30,7 +30,6 @@ Usage:
 import argparse
 import json
 import os
-import pty
 import re
 import sqlite3
 import subprocess
@@ -1350,6 +1349,9 @@ def cmd_run(args):
     thread_id = make_thread_id(project_path=project_path)
 
     def run_with_pty() -> int:
+        # Unix only: importing pty at module level made the whole CLI unusable on Windows.
+        import pty
+
         log_file = open(log_path, "ab")
 
         def read(fd):
@@ -1369,7 +1371,13 @@ def cmd_run(args):
         if args.no_pty:
             subprocess.run(cmd, check=False, shell=False, timeout=3600)
         else:
-            exit_status = run_with_pty()
+            try:
+                exit_status = run_with_pty()
+            except ImportError:
+                print(
+                    "Pseudo-terminals are unavailable here; running without one.", file=sys.stderr
+                )
+                subprocess.run(cmd, check=False, shell=False, timeout=3600)
     except FileNotFoundError:
         print(f"Executable not found: {executable}")
         return
