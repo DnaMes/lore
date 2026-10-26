@@ -17,6 +17,16 @@ Public surface:
 
 from __future__ import annotations
 
+from .backup import (
+    BackupError,
+    BackupManifest,
+    BackupResult,
+    BundleReport,
+    RestoreReport,
+    create_backup,
+    restore_backup,
+    verify_bundle,
+)
 from .embeddings import embed_text, embeddings_available
 from .feedback import feedback_influence, feedback_weight, ranking_factor, record_feedback
 from .fusion import rrf_merge
@@ -73,11 +83,17 @@ from .writer import v2_db_path, write_sessions, write_sessions_safe
 __all__ = [
     "BOOKMARK_TAG",
     "MEMORY_KINDS",
+    "BackupError",
+    "BackupManifest",
+    "BackupResult",
+    "BundleReport",
     "MemoryEntry",
+    "RestoreReport",
     "add_memory",
     "add_session_tag",
     "all_tags_by_session",
     "apply_migrations",
+    "create_backup",
     "current_version",
     "delete_memory",
     "embed_text",
@@ -110,6 +126,7 @@ __all__ = [
     "repair_memory_index",
     "record_feedback",
     "remove_session_tag",
+    "restore_backup",
     "rrf_merge",
     "save_session_knowledge",
     "count_session_hits",
@@ -120,6 +137,7 @@ __all__ = [
     "set_memory_status",
     "supersede_memory",
     "v2_db_path",
+    "verify_bundle",
     "v2_is_available",
     "write_sessions",
     "write_sessions_safe",

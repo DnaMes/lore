@@ -924,6 +924,80 @@ def _cloud_optin_error(args) -> int | None:
     return require_cloud_opt_in(provider, bool(getattr(args, "allow_cloud", False)))
 
 
+def _print_manifest(manifest) -> None:
+    """Print the fields of a backup manifest that a person needs to see."""
+    from lore.storage.backup import BUNDLE_FORMAT
+
+    print(
+        f"  format:     {BUNDLE_FORMAT} v{manifest.format_version}, created {manifest.created_at}"
+    )
+    print(
+        f"  lore:       {manifest.lore_version} "
+        f"(store schema {manifest.schema_version}, this Lore {manifest.expected_schema_version})"
+    )
+    rows = " ".join(f"{table}={count}" for table, count in sorted(manifest.counts.items()))
+    print(f"  rows:       {rows}")
+    for member in manifest.members:
+        print(f"  member:     {member.name} sha256={member.sha256[:16]}… {member.size} bytes")
+
+
+def cmd_backup(args):
+    """``lore backup <path>`` writes a bundle; ``lore backup verify <path>`` checks one.
+
+    Both forms share one subcommand (#161 asks for both) and are told apart by
+    a literal leading ``verify``, the way ``git stash list`` works.
+    """
+    from lore.storage.backup import BackupError, create_backup, verify_bundle
+
+    words = list(args.arguments)
+    verify = words[:1] == ["verify"]
+    if verify:
+        words = words[1:]
+    if len(words) != 1:
+        print("usage: lore backup [verify] <path>", file=sys.stderr)
+        return 1
+    path = Path(words[0]).expanduser()
+
+    if verify:
+        report = verify_bundle(path)
+        for problem in report.problems:
+            print(f"Problem: {problem}", file=sys.stderr)
+        if not report.ok:
+            print(f"Bundle FAILED verification: {path}", file=sys.stderr)
+            return 1
+        print(f"Bundle OK: {path}")
+        if report.manifest is not None:
+            _print_manifest(report.manifest)
+        return 0
+
+    output_dir = Path(args.output_dir).expanduser()
+    try:
+        result = create_backup(output_dir, path)
+    except BackupError as exc:
+        print(f"Backup failed: {exc}", file=sys.stderr)
+        return 1
+    print(f"Backup written: {result.bundle}")
+    _print_manifest(result.manifest)
+    return 0
+
+
+def cmd_restore(args):
+    """Replace the v2 store with the one in a verified bundle."""
+    from lore.storage.backup import BackupError, restore_backup
+
+    bundle = Path(args.bundle).expanduser()
+    output_dir = Path(args.output_dir).expanduser()
+    try:
+        report = restore_backup(bundle, output_dir, force=bool(args.force))
+    except BackupError as exc:
+        print(f"Restore refused: {exc}", file=sys.stderr)
+        return 1
+    action = "replaced" if report.replaced else "created"
+    print(f"Restored {report.store} ({action}) from {report.bundle}")
+    _print_manifest(report.manifest)
+    return 0
+
+
 def cmd_analyze(args):
     """Generate AI-powered statistics and insights."""
     from lore.llm import LLMConfig, get_provider
@@ -2283,6 +2357,8 @@ COMMANDS = {
     "threads": cmd_threads,
     "rules": cmd_rules,
     "prune": cmd_prune,
+    "backup": cmd_backup,
+    "restore": cmd_restore,
     "sync": cmd_sync,
     "run": cmd_run,
     "generate-titles": cmd_generate_titles,
@@ -2585,6 +2661,30 @@ Examples:
     )
     prune_parser.add_argument("--dry-run", action="store_true", help="Show what would be pruned")
     _add_automated_flag(prune_parser)
+
+    # backup command — a bundle, or `lore backup verify` for an existing one
+    backup_parser = subparsers.add_parser(
+        "backup",
+        help="Write a versioned, consistent backup bundle",
+        description=(
+            "Write a bundle of the v2 store taken from a consistent SQLite "
+            "snapshot, or check an existing bundle without restoring it "
+            "(`lore backup verify <path>`)"
+        ),
+    )
+    backup_parser.add_argument(
+        "arguments",
+        nargs="+",
+        metavar="[verify] PATH",
+        help="destination for a new bundle, or `verify PATH` to check one",
+    )
+
+    # restore command
+    restore_parser = subparsers.add_parser(
+        "restore", help="Restore the v2 store from a backup bundle"
+    )
+    restore_parser.add_argument("bundle", help="bundle written by `lore backup`")
+    restore_parser.add_argument("--force", action="store_true", help="Replace an existing store")
 
     # sync command
     sync_parser = subparsers.add_parser("sync", help="Sync sessions for a tool")

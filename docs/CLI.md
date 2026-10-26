@@ -19,13 +19,13 @@ Output of `.venv/bin/python lore_cli.py --help`:
 
 ```text
 usage: lore [-h] [-v] [--version] [--output-dir OUTPUT_DIR]
-            {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
+            {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,backup,restore,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
             ...
 
 Lore — local-first archive and shared agent memory for your AI coding sessions
 
 positional arguments:
-  {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
+  {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,backup,restore,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
                         Commands
     list                List all sessions
     export              Export sessions to Markdown
@@ -39,6 +39,8 @@ positional arguments:
     threads             List threads
     rules               Generate derived rules
     prune               Prune sessions by prompt count
+    backup              Write a versioned, consistent backup bundle
+    restore             Restore the v2 store from a backup bundle
     sync                Sync sessions for a tool
     run                 Run a tool and sync after it exits
     generate-titles     Generate readable titles for sessions
@@ -495,6 +497,71 @@ options:
   --dry-run             Show what would be pruned
   --include-automated   Also include automated (exec/cron/subagent) sessions,
                         hidden by default
+```
+
+## backup
+
+Write a bundle of the v2 store, or check an existing one.
+
+Writes: one zip file at the given path (or `lore-backup-<UTC>.zip` inside it when the path is a directory).
+
+A bundle is a zip with a format-version marker: `manifest.json` records
+`format: "lore-backup"`, `format_version`, the creation time, the Lore version,
+the store's schema version and every applied migration, one sha256 and size per
+payload member, and the row count of every archived table (sessions, messages,
+the shared FTS index, memory with its tags/sources/ratings, session tags,
+knowledge, summaries, embedding bookkeeping and deletion tombstones).
+`db/index_v2.sqlite` is a snapshot taken with SQLite's online-backup API, so a
+writer running at the same time cannot leave a torn or stale copy — a plain
+file copy of a live WAL database can miss the newest commits.
+
+Only the store is archived. The rest of the data directory — including the
+provider cache — stays out, and no credential, token or API key is read or
+written: provider credentials come from the environment
+([CONFIGURATION.md](./CONFIGURATION.md#provider-credentials-not-lore_-variables)).
+
+`lore backup verify <path>` runs the whole verification without restoring
+anything: zip structure, format marker, member checksums and sizes, the
+snapshot's `PRAGMA integrity_check`, the row counts against the manifest, and
+whether this Lore can restore the bundle's schema at all. It prints every
+problem it finds and exits `1` if there is one.
+
+```text
+usage: lore backup [-h] [verify] PATH [[verify] PATH ...]
+
+Write a bundle of the v2 store taken from a consistent SQLite snapshot, or
+check an existing bundle without restoring it (`lore backup verify <path>`)
+
+positional arguments:
+  [verify] PATH  destination for a new bundle, or `verify PATH` to check one
+
+options:
+  -h, --help     show this help message and exit
+```
+
+## restore
+
+Replace the v2 store with the one in a bundle.
+
+Writes: `<output-dir>/index_v2.sqlite` (and removes that store's `-wal`/`-shm` sidecars).
+
+The bundle is verified first, and nothing is written when verification fails.
+An existing store is only replaced with `--force`; without it the command
+refuses and exits `1`. The snapshot is extracted to a sibling temp file, its
+sha256 is re-checked there, and only then moved over the store with an atomic
+replace, so a failed restore leaves the existing store as it was. A bundle
+recorded by an older Lore is restored as it was written and migrated on the
+next open; a bundle from a newer schema is refused.
+
+```text
+usage: lore restore [-h] [--force] bundle
+
+positional arguments:
+  bundle      bundle written by `lore backup`
+
+options:
+  -h, --help  show this help message and exit
+  --force     Replace an existing store
 ```
 
 ## sync

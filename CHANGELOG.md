@@ -68,6 +68,9 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Changed
 - Markdown rendering reuses one parser per thread (`thread_local_markdown_parser`) instead of building a parser for every conversion: measured 1.37x faster on 1 KB and 1.27x on 10 KB messages, with identical output (cluster of PRs #202-#215).
 
+### Added
+- `lore backup <path>`, `lore backup verify <path>` and `lore restore <path> [--force]` (#161): a bundle is a zip with a format-version marker, a SQLite-consistent snapshot taken with the online-backup API (never a copy of a live WAL database) and a `manifest.json` carrying the schema and applied migration versions, the Lore version, the creation time, one sha256 per member and the row count of every archived table — sessions, messages, the shared FTS index, memory, tags and the other annotations. Verification checks the structure, every checksum, `PRAGMA integrity_check`, the row counts and schema compatibility without restoring; a restore verifies first, refuses an existing store without `--force`, and swaps the snapshot in from a sibling temp file so a failed restore leaves the live store untouched. Bundles carry no credentials: nothing outside the store is read, and provider credentials live in the environment.
+
 ## [2.4.0] - 2026-10-26
 
 ### Added

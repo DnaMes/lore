@@ -81,6 +81,26 @@ Defaults below are taken from the code. Where a default depends on the call site
 | LORE_ACTION_JOB_TTL_SECONDS | 3600 | Time to keep finished action jobs, in seconds. Clamped to at least 60. | lore/interfaces/web_jobs.py |
 | LORE_PARSER_REEXTRACT_BUDGET | 150 | Number of version-stale sources one extractor may re-parse per run. `0` re-parses none. A negative value removes the cap. Invalid values use the default. | lore/extractors/base.py |
 
+## Data directory and backups
+
+Lore keeps everything it owns in one directory: `~/.lore`, or the path given by
+`--output-dir`. `index_v2.sqlite` in that directory is the store — sessions,
+messages, the shared FTS index, memory, tags and annotations; the legacy
+`index.json`/`index.sqlite`, the Markdown exports and the title cache sit beside
+it.
+
+`lore backup <path>` writes a versioned bundle of that store, and
+`lore restore <path>` puts it back (see [CLI.md](./CLI.md#backup)). The bundle
+holds a SQLite-consistent snapshot plus a `manifest.json` with the schema and
+migration versions, one sha256 per member and the row count of every archived
+table, and it is a zip with its own format version. `lore backup verify <path>`
+checks it without restoring.
+
+A bundle contains no credentials, tokens or API keys. Credentials are read from
+the environment only (next section) and never written into the store, and a
+backup reads the store and nothing else — the provider cache under
+`~/.lore/llm_cache` is not part of a bundle.
+
 ## Provider credentials (not LORE_ variables)
 
 These names are read from the environment. They are never stored in repo files. Do not write their values into documentation, prompts or commits.
