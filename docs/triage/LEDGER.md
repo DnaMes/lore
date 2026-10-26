@@ -227,11 +227,22 @@ Round 3 — export and reading experience (the "#165-#170" block):
 | #169 full Markdown in the HTML export | CLOSED | `190b395` | `lore/utils/markdown_render.py` + `lore/utils/html_sanitize.py` shared with the UI; `pytest tests/test_html_export_markdown.py tests/test_html_export.py tests/test_export_canonical.py -q` -> 36 passed |
 | #167 view-only normalisation | CLOSED | `0665390` | `original_content` preserved, idempotent re-derivation, folded lines kept in a `details` block; `pytest tests/test_display_normalization.py -q` -> 14 passed; full suite `exit=0`, coverage 86.76 % |
 
-Remaining after round 3: **32 open issues** — 2 owner-deferred (#29, #48), 27 Archive
-epic gaps and 3 independent ones (#119, #194, #197). The Wave 2 chain (#172, #173,
-#174, #171, #175) and the export/reading block (#166, #165, #169, #167) are complete.
-Next in the archived plan: #168 (faithful roles and tool states), then #170 (reading
-contract and its automated checks), then #158/#159 (small, no migration).
+Round 4 — roles, states and the memory repair:
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #168 roles and tool states | CLOSED | `fbb57e3` | one state vocabulary (`pending`/`running`/`ok`/`failed`/`cancelled`/`unmatched`/`unknown`) with `data-status` chips, `data-role` per turn and role-specific badges; `pytest tests/test_role_and_state_rendering.py -q` -> 31 passed |
+| #159 memory search repair | CLOSED | `5e8dc4d` | `memory_index_health` + `repair_memory_index` (one transaction, dry run default) and `lore memory repair-index [--apply] [--json]`; `pytest tests/test_memory_index_repair.py -q` -> 11 passed; CLI smoke run in a throwaway HOME |
+
+Full suite after round 4: **exit=0**, coverage 86.77 %.
+
+Remaining after round 4: **30 open issues** — 2 owner-deferred (#29, #48), 25 Archive
+epic gaps and 3 independent ones (#119, #194, #197). Done so far: the Wave 2 chain
+(#172, #173, #174, #171, #175), the export/reading block (#166, #165, #169, #167),
+roles and states (#168) and the memory repair (#159). Next in the archived plan:
+#170 (reading contract and its automated checks), then the small no-migration items
+#158, #162 and #197, then the spec-first migration waves (#151, #154, #155, #160,
+#161, #163, #179, #190).
 
 Correction to the #174 row: the semantic path was NOT VERIFIED when #174 closed
 (no `sqlite-vec` in the venv). The extra is installed now, the vector test runs and
