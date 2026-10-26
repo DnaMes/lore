@@ -58,7 +58,9 @@ The version is the single source of truth in `lore/__init__.py`.
 - `lore memory context` renders a token-budgeted memory block for a project path.
 - `lore memory show` prints one memory in full: status, kind, scope, supersession links, and body.
 - `lore memory import-claude` seeds shared memory from Claude Code auto-memory files; dry run by default, `--apply` writes, idempotent by file path and content hash.
-- `lore memory rate` records feedback ratings for confirmed memories, with a bounded derived weight.
+- Cross-platform install smoke test (`scripts/smoke_install.py`): installs a wheel into a clean venv with an isolated `HOME` and checks the CLI commands, `lore-web`, `lore-mcp` and archive behaviour.
+- Docker install matrix (`scripts/install-matrix.sh`): the smoke test across Python 3.11-3.14 slim images, 3.12 with `semantic`, Alpine (musl), Debian 12, Ubuntu 24.04, Fedora via distro `pipx` and emulated linux/arm64 (10 of 10 targets passed).
+- A GitHub workflow (`.github/workflows/install-matrix.yml`) that builds the wheel and runs the smoke test on Linux, macOS and Windows on every push to `main` and pull request.
 - Memory candidate status and atomic supersession, with similar-memory hints; recall is hybrid by default with a 0.6 relevance floor and source tags.
 - Web UI: peek preview pane, keyboard shortcuts with a help dialog, and in-session find across all pages with highlight and next/prev.
 
@@ -82,6 +84,9 @@ The version is the single source of truth in `lore/__init__.py`.
 - Packaging: the license is declared as SPDX `MIT` (needs setuptools>=77, PEP 639); the sdist excludes maintainer files (handover notes, session management logs, maintenance-night documents, triage and research docs, and scratch directories); the `[dev]` extra includes pre-commit and bandit.
 
 ### Fixed
+- `lore` starts on Windows: the `pty` module is only loaded for `lore run`.
+- `lore` no longer crashes on consoles that cannot encode the status symbols: stdout and stderr replace unencodable characters (for example on a cp1252 console).
+- `lore-web` starts in under a second on macOS instead of about 35 s (no reverse DNS lookup while binding; the first answer now takes 0.4-0.8 s).
 - `lore export` keeps index entries whose source file was deleted, and now also keeps entries whose export is gone: nothing is dropped automatically, only `lore prune` removes entries.
 - `lore prune` honours `ignored.json` in the v2 store views, so pruned sessions stay hidden.
 - MCP `switch_to_tool` and the web "continue" command call `lore-session` instead of the removed `ai-session` command.

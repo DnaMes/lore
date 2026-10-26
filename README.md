@@ -52,6 +52,30 @@ the Git repository. Other options (uv tool, virtual environment, editable clone)
 are in [docs/INSTALL.md](docs/INSTALL.md); if `lore check` lists no tools, see
 Troubleshooting below.
 
+## Supported platforms
+
+CI (the workflow
+[.github/workflows/install-matrix.yml](.github/workflows/install-matrix.yml), run on
+every push to `main` and every pull request) builds the wheel and runs
+`scripts/smoke_install.py` on ubuntu-latest, macos-latest and windows-latest with
+Python 3.11, 3.13 and 3.14, plus one job with the `semantic` extra on ubuntu/Python
+3.12 and a `pipx install` from Git on ubuntu; `ci.yml` runs the test suite on ubuntu
+with Python 3.11, 3.12 and 3.13.
+
+| Platform | What CI verifies | Notes |
+| --- | --- | --- |
+| Linux (glibc, musl, x86-64; arm64 emulated) | Wheel smoke test on Python 3.11, 3.13, 3.14; `semantic` extra on Python 3.12; `pipx install` from Git | The local Docker matrix `scripts/install-matrix.sh` also covers Python 3.11-3.14 slim images, 3.12 with `semantic`, Alpine/musl, Debian 12, Ubuntu 24.04 and Fedora via distro `pipx`; 10 of 10 targets passed on 2026-10-26 |
+| macOS | Wheel smoke test on Python 3.11, 3.13, 3.14 | The smoke test works with synthetic sessions under a temporary HOME |
+| Windows | Wheel smoke test on Python 3.11, 3.13, 3.14 | The smoke test works with synthetic sessions under a temporary HOME |
+
+Not verified: real tool histories on macOS or Windows (the smoke test uses synthetic
+Claude Code and Codex sessions, so the extractors' default locations for each tool on
+macOS and Windows are not exercised), and the `semantic` extra, Python 3.12 and `pipx`
+on macOS and Windows, `lore run` with a pseudo-terminal on Windows (it falls back to
+running without one), and the Docker image on anything but Linux hosts.
+
+Details: [docs/INSTALL.md](docs/INSTALL.md) (Platforms and verification).
+
 ## Supported tools
 
 | Tool | Reads from | Notes |

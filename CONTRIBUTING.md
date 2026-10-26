@@ -79,6 +79,24 @@ See existing extractors (e.g. `claude.py`, `gemini.py`) for patterns. Use `safe_
 
 User docs live in [README.md](README.md) and `docs/`. Start with [docs/CONFIGURATION.md](docs/CONFIGURATION.md) and [docs/CLI.md](docs/CLI.md). Keep documentation in sync with behavior in the same change.
 
+## Checking an install
+
+Before a release, build a wheel and run the install smoke test, which installs the wheel into a clean venv with an isolated `HOME` and checks the CLI commands, `lore-web`, `lore-mcp` and archive behaviour:
+
+```bash
+python -m build
+python scripts/smoke_install.py --wheel dist/lore-<version>-py3-none-any.whl
+```
+
+Then run the Docker install matrix (needs Docker; it builds the wheel once in a throwaway container, pulls the target images and cleans up its `lore-matrix-*` images; skip cleanup only with `--keep`):
+
+```bash
+bash scripts/install-matrix.sh                         # all 10 targets, incl. emulated linux/arm64
+ONLY=py312,debian12 bash scripts/install-matrix.sh     # subset of targets
+```
+
+CI runs the same smoke test on three operating systems (Linux, macOS and Windows) on every push to `main` and pull request, see [`.github/workflows/install-matrix.yml`](.github/workflows/install-matrix.yml). What is and is not covered is listed in [docs/INSTALL.md](docs/INSTALL.md) ("Platforms and verification").
+
 ## Releasing
 
 The version is defined in exactly one place: `__version__` in

@@ -7,8 +7,44 @@ Installation guide and package options for Lore.
 - Python: Python 3.11 or newer (specified by `requires-python = ">=3.11"` in `pyproject.toml`).
 - Operating System:
   - Linux: Verified by the maintainer.
-  - macOS: NOT VERIFIED.
-  - Windows: NOT VERIFIED.
+  - macOS: the install is verified by CI; real tool histories are NOT VERIFIED (see [Platforms and verification](#platforms-and-verification)).
+  - Windows: the install is verified by CI; real tool histories are NOT VERIFIED (see [Platforms and verification](#platforms-and-verification)).
+
+## Platforms and verification
+
+Two automations check the installation (all green on the recorded date, 2026-10-26):
+
+### GitHub workflow
+
+[`.github/workflows/install-matrix.yml`](../.github/workflows/install-matrix.yml) runs on every push to `main` and every pull request. It builds the wheel and runs `scripts/smoke_install.py` on ubuntu-latest, macos-latest and windows-latest with Python 3.11, 3.13 and 3.14, plus one job with the `[semantic]` extra on ubuntu/Python 3.12, plus `pipx install` from Git on ubuntu. `.github/workflows/ci.yml` runs the test suite on ubuntu with Python 3.11, 3.12 and 3.13.
+
+### The smoke script
+
+After building a wheel, run the smoke test locally the same way CI does:
+
+```bash
+python scripts/smoke_install.py --wheel <wheel>
+# e.g. python scripts/smoke_install.py --wheel dist/lore-2.4.0-py3-none-any.whl
+```
+
+It installs into a clean venv with an isolated `HOME` (and temp XDG/APPDATA roots), then checks `lore check/list/stats/search/export/reindex/sync`, `lore memory ...`, the cloud opt-in refusals (`knowledge`, `analyze`), the skip counts for short sessions, archive preservation after the source is deleted, `lore prune` confinement with a decoy file, `lore-web` (pages, `/api/health`, a bad `Host` gets 400 and a foreign `Origin` gets 403), `lore-mcp` (initialize, tools/list) and the license metadata.
+
+### Local Docker matrix
+
+`scripts/install-matrix.sh` needs Docker on the host, pulls the target images, builds the wheel once in a throwaway container, and cleans up its `lore-matrix-*` images afterwards (`--keep` skips the cleanup; exit code is the number of failed targets). Exact usage from `bash scripts/install-matrix.sh -h` and the script header:
+
+```bash
+bash scripts/install-matrix.sh [--worktree] [--no-arm] [--keep]
+ONLY=py312,debian12 bash scripts/install-matrix.sh   # subset; full set: py311 py312 py313 py314 py312-semantic alpine313 debian12 ubuntu24 fedora arm64-py313
+```
+
+The targets are Python 3.11, 3.12, 3.13 and 3.14 slim images, 3.12 with `[semantic]`, Alpine (musl), linux/arm64 (emulated), Debian 12, Ubuntu 24.04, and Fedora via distro `pipx`; `JOBS` (default 4) sets the parallelism. All 10 targets passed on 2026-10-26.
+
+### Not verified
+
+The automation does not verify real tool histories on macOS or Windows: the smoke script uses synthetic Claude Code and Codex sessions under a temporary `HOME`, so the extractors' default locations for each tool on macOS and Windows are not exercised. Also not verified: the `[semantic]` extra on macOS and Windows, Python 3.12 on macOS and Windows, `pipx` on macOS and Windows, `lore run` with a pseudo-terminal on Windows (it falls back to running without one), and the Docker image on anything but Linux hosts.
+
+Fixes that came out of this matrix in 2.4.0: `lore` no longer crashes at start on Windows (`pty` was imported at module level), it no longer crashes printing status symbols on a cp1252 console, and `lore-web` answers in 0.4-0.8 s on macOS instead of about 35 s (no reverse DNS lookup while binding).
 
 ## Package Distribution
 
