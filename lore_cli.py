@@ -222,7 +222,7 @@ def cmd_list(args):
 
             sessions.append(session)
 
-    if args.tag:
+    if getattr(args, "tag", None):
         from lore.storage import all_tags_by_session
 
         user_tags = all_tags_by_session(Path(args.output_dir).expanduser())
