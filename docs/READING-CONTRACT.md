@@ -47,6 +47,23 @@ walkthrough in a real browser) still needs a browser and is tracked in #194.
 | `target="_blank"` links carry `rel` | checked per page |
 | Deep links are durable | `/session/<id>/m/<seq>`; unknown session 404, unknown message 410 |
 
+## Structured message envelope
+
+Every message keeps two views of the same turn. `content` stays the flattened
+text that search, exports and the UI have always read. The canonical envelope
+keeps what flattened text cannot: the provider's ordered `content_blocks`
+(`text`, `thinking`, `tool_use` with id/name/input, `tool_result` with
+tool_use_id/content/is_error), the native message id, model, token usage,
+per-call arguments/results/errors/status/truncation in `tool_calls`, and unknown
+provider fields under `extensions["<provider>"]`.
+
+Blocks are never reordered. A row written before the envelope
+(`envelope_version = 0`) stays readable but reports itself as legacy instead of
+claiming to be complete. Attachments (image/document blocks) are stored as
+descriptors only — media type, byte length and sha256 — never the inline bytes;
+a path or URL source is never opened, so an attachment cannot pull in a
+credential file.
+
 ## What is not covered yet
 
 - The browser pass: a real 380 px viewport at 200 % zoom, keyboard traversal

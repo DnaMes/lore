@@ -603,3 +603,50 @@ commit, but no concurrent-writer run was executed); interrupt-during-restore
 behaviour (the atomic-replace ordering is exercised only by the refusal tests);
 and the restored store's semantic/vector search, which needs the `semantic`
 extra on the restoring host.
+
+## Round 11 — extractor message envelopes (#157, #156)
+
+The Group 1 rows above (`157 | STILL-VALID`, `156 | STILL-VALID`) are superseded by
+this round. `sweep/extractors` is rebased onto the reviewed envelope spine (#151 +
+#154), so both extractors write the canonical message envelope the store now keeps.
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #157 Claude envelope | CLOSED | `2daed40` | `lore/extractors/claude.py` (`_normalise_blocks`, `_media_descriptor`, `_extensions_for`, `_native_message_id`), `tests/test_extractor_claude_enrichment.py`; `pytest tests/test_extractor_claude_enrichment.py -o addopts="" -q` -> 23 passed |
+| #156 Codex envelope | CLOSED | `2415cbb` | `lore/extractors/codex.py` (`_result_outcome`, paired `tool_calls`, `extensions["codex"]["unknown_events"]`), `tests/test_extractor_codex_enrichment.py`; `pytest tests/test_extractor_codex_enrichment.py -o addopts="" -q` -> 31 passed, 1 skipped |
+
+What survives now:
+
+- Claude keeps the native `uuid`/`message.id`, model, usage (input/output/total plus
+  cache counters), thinking as `reasoning` and as an ordered block, text and every
+  non-text block in source order, `tool_use` (id/name/input), `tool_result`
+  (tool_use_id/content/is_error), image/document descriptors (media type, byte
+  length, sha256; the bytes are never stored), and unknown record/block fields under
+  `extensions["claude"]`. Malformed lines are skipped without losing later records.
+- Codex pairs calls and outputs by native `call_id`, keeps interleaved, failed,
+  cancelled and unmatched events in source order and role, records
+  arguments/output/error/duration/exit code/truncation in `tool_calls`, keeps the
+  compact `tool_events` behaviour unchanged, and attaches unknown record/payload
+  event types (original `type` preserved) to `extensions["codex"]["unknown_events"]`.
+
+Verified together:
+
+```
+$ pytest tests/test_extractor_claude_enrichment.py tests/test_extractor_codex_enrichment.py \
+    tests/test_claude_extractor.py tests/test_codex_extractor.py \
+    tests/test_message_envelope.py tests/test_export_canonical.py -o addopts="" -q
+137 passed, 1 skipped
+
+$ ruff check lore/extractors/claude.py lore/extractors/codex.py \
+    tests/test_extractor_claude_enrichment.py tests/test_extractor_codex_enrichment.py
+All checks passed!
+
+$ ruff format --check lore/extractors/claude.py lore/extractors/codex.py \
+    tests/test_extractor_claude_enrichment.py tests/test_extractor_codex_enrichment.py
+4 files already formatted
+```
+
+NOT VERIFIED: no real Claude Code or Codex CLI archive was re-ingested in this round;
+the fixtures are hand-written from the documented rollout/transcript shapes. The
+Markdown/HTML exporters still render from `content` + `tool_calls` and do not yet
+render `content_blocks`; that is a reader change outside #156/#157.
