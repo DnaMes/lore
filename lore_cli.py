@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import pty
+import re
 import sqlite3
 import subprocess
 import sys
@@ -52,6 +53,7 @@ from lore.services.discovery import read_last_discovery, record_discovery
 from lore.services.extraction import preserve_unobserved_index_entries
 from lore.services.index import automated_hidden_line, filter_automated
 from lore.services.summarize_cli import PROVIDER_CHOICES, default_model
+from lore.storage.reader import load_ignored_session_ids_strict
 from lore.utils.datetime import make_naive, parse_duration
 from lore.utils.git import get_git_info
 from lore.utils.paths import get_current_project, lore_home, make_thread_id
@@ -698,14 +700,26 @@ _PROTECTED_NAME_PREFIXES = (
     "rules",
 )
 
+# Deletable-export heuristic, mirroring MarkdownExporter._candidate_path
+# (lore/exporters/markdown.py): the exporter writes
+# <root>/projects/<project dir>/<tool dir>/<YYYY-MM-DD>_<title>_<id>.md.
+# Both the basename pattern and the directory layout are checked, so a stray
+# .md anywhere else in the archive (e.g. backups/notes.md) is never deleted.
+_EXPORT_FILENAME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_.+_.+\.md$")
+_EXPORT_LAYOUT_DIR = "projects"
+_EXPORT_LAYOUT_DEPTH = 4  # projects/<project dir>/<tool dir>/<filename>
+
 
 def _confined_export_path(export_path: str | Path, export_root: Path) -> Path | None:
     """Return the resolved export file prune may delete, or ``None`` to refuse.
 
-    Deletable means a regular ``.md`` file under ``export_root``, not directly in
-    its top level (where index and control files live), and not a store or
-    control file. A symlink at the entry is refused outright; parent directories
-    are resolved, so a link chain that leaves the root is refused as well.
+    Deletable means a regular ``.md`` file under ``export_root`` whose basename
+    matches the exporter's naming scheme and whose path follows the exporter's
+    ``projects/<project>/<tool>/`` layout (``export_path`` always comes from an
+    index entry, which is the source of the path). Anything else — including
+    store and control file names — is refused. A symlink at the entry is
+    refused outright; parent directories are resolved, so a link chain that
+    leaves the root is refused as well.
     """
     root = export_root.expanduser().resolve()
     raw = Path(export_path).expanduser()
@@ -719,7 +733,12 @@ def _confined_export_path(export_path: str | Path, export_root: Path) -> Path | 
         return None
     if resolved.suffix != ".md" or resolved.name.endswith(("-wal", "-shm")):
         return None
+    if not _EXPORT_FILENAME_RE.match(resolved.name):
+        return None
     if resolved.name.startswith(_PROTECTED_NAME_PREFIXES):
+        return None
+    relative = resolved.relative_to(root)
+    if len(relative.parts) != _EXPORT_LAYOUT_DEPTH or relative.parts[0] != _EXPORT_LAYOUT_DIR:
         return None
     if not resolved.is_file() or resolved.is_symlink():
         return None
@@ -733,6 +752,17 @@ def cmd_prune(args):
     if not index_path.exists():
         print(f"No index found at {index_path}. Run `lore export --all` first.")
         return
+
+    # Read the existing ignore set before anything is deleted or rewritten:
+    # an unreadable/invalid ignored.json must abort (rewriting it would drop
+    # every previously pruned id we could not parse). A missing file is fine.
+    ignore_path = output_dir / "ignored.json"
+    try:
+        ignored = load_ignored_session_ids_strict(output_dir)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        print("Fix or move ignored.json before pruning; nothing was deleted.", file=sys.stderr)
+        return 1
 
     with open(index_path, "r", encoding="utf-8") as f:
         index = json.load(f)
@@ -756,18 +786,6 @@ def cmd_prune(args):
             print(f"  ...and {len(candidates) - 20} more")
         return
 
-    ignore_path = output_dir / "ignored.json"
-    ignored = set()
-    if ignore_path.exists():
-        try:
-            data = json.loads(ignore_path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                ignored.update(data.get("session_ids", []))
-            else:
-                ignored.update(data)
-        except (FileNotFoundError, json.JSONDecodeError, UnicodeDecodeError):
-            pass
-
     removed = []
     skipped_paths = 0
     for s in candidates:
@@ -790,6 +808,9 @@ def cmd_prune(args):
         except OSError:
             pass
 
+    # Union of previously ignored ids and the freshly pruned ones, written as a
+    # plain sorted list — the canonical form cmd_prune has always written and
+    # every reader (load_ignored_session_ids) accepts.
     ignore_path.write_text(json.dumps(sorted(ignored), indent=2), encoding="utf-8")
 
     extractors = get_all_extractors()

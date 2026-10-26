@@ -190,6 +190,35 @@ def _warn_ignored_json_once(reason: str) -> None:
     )
 
 
+def _parse_ignored_session_ids(data: Any) -> tuple[set[str], Optional[str], Optional[str]]:
+    """Parse a decoded ``ignored.json`` payload.
+
+    Single source of shape validation for every ignored.json reader (the lenient
+    loader below, and the strict loader prune uses before rewriting the file).
+
+    Returns ``(ids, shape_error, warning)``:
+
+    - ``ids``: the valid string session ids found in the payload.
+    - ``shape_error``: the payload is not a valid shape (``ids`` is empty in
+      that case). A dict must carry a ``session_ids`` key holding a list; the
+      top level must be a list.
+    - ``warning``: a recoverable issue (``ids`` is still usable), e.g. a list
+      mixing strings with non-string entries.
+    """
+    if isinstance(data, dict):
+        if "session_ids" not in data:
+            return set(), "expected a list of session ids or a 'session_ids' key", None
+        values = data["session_ids"]
+    else:
+        values = data
+    if not isinstance(values, list):
+        return set(), f"expected a list of session ids, got {type(values).__name__}", None
+    skipped = sum(1 for v in values if not isinstance(v, str))
+    ids = {v for v in values if isinstance(v, str)}
+    warning = f"skipped {skipped} non-string entries" if skipped else None
+    return ids, None, warning
+
+
 def load_ignored_session_ids(output_dir: Path) -> set[str]:
     """Session ids listed in ``ignored.json`` (pruned); rows stay in SQLite.
 
@@ -205,14 +234,37 @@ def load_ignored_session_ids(output_dir: Path) -> set[str]:
     except (UnicodeDecodeError, ValueError, OSError) as exc:
         _warn_ignored_json_once(str(exc))
         return set()
-    values = data.get("session_ids", []) if isinstance(data, dict) else data
-    if not isinstance(values, list):
-        _warn_ignored_json_once(f"expected a list of session ids, got {type(values).__name__}")
+    ids, error, warning = _parse_ignored_session_ids(data)
+    if error is not None:
+        _warn_ignored_json_once(error)
         return set()
-    skipped = sum(1 for v in values if not isinstance(v, str))
-    if skipped:
-        _warn_ignored_json_once(f"skipped {skipped} non-string entries")
-    return {v for v in values if isinstance(v, str)}
+    if warning is not None:
+        _warn_ignored_json_once(warning)
+    return ids
+
+
+def load_ignored_session_ids_strict(output_dir: Path) -> set[str]:
+    """Like :func:`load_ignored_session_ids`, but raises ``ValueError``.
+
+    Prune uses this before rewriting ``ignored.json``: silently degrading an
+    unreadable or invalid file to an empty set would drop every previously
+    stored ignore id on the next write. A missing file is valid and yields an
+    empty set; decode failures and shape errors raise instead. Non-string list
+    entries are skipped with the usual warning (ids stay usable, not fatal).
+    """
+    ignore_path = output_dir / "ignored.json"
+    if not ignore_path.exists():
+        return set()
+    try:
+        data = json.loads(ignore_path.read_text(encoding="utf-8"))
+    except (UnicodeDecodeError, ValueError, OSError) as exc:
+        raise ValueError(f"could not read ignored.json: {exc}") from exc
+    ids, error, warning = _parse_ignored_session_ids(data)
+    if error is not None:
+        raise ValueError(f"invalid ignored.json: {error}")
+    if warning is not None:
+        _warn_ignored_json_once(warning)
+    return ids
 
 
 def ignored_json_stat(output_dir: Path) -> tuple[int, int]:

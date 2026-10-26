@@ -697,6 +697,7 @@ def _cli_args(store: Path, **extra: Any) -> argparse.Namespace:
         "offset": None,
         "format": "json",
         "query": SHARED_WORD,
+        "tag": None,
     }
     base.update(extra)
     return argparse.Namespace(**base)

@@ -43,6 +43,7 @@ def _args(**extra) -> Namespace:
         "offset": None,
         "format": "json",
         "include_automated": False,
+        "tag": None,
     }
     base.update(extra)
     return Namespace(**base)
