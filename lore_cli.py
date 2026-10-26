@@ -56,7 +56,13 @@ from lore.storage.reader import load_ignored_session_ids_strict
 from lore.utils.console import make_console_safe
 from lore.utils.datetime import make_naive, parse_duration
 from lore.utils.git import get_git_info
-from lore.utils.paths import get_current_project, lore_home, make_thread_id
+from lore.utils.paths import (
+    get_current_project,
+    lore_home,
+    make_thread_id,
+    restrict_file,
+    secure_dir,
+)
 from lore.utils.rules import extract_rules
 from lore.utils.tooling import normalize_tool_name
 
@@ -1340,8 +1346,8 @@ def cmd_run(args):
     print(f"Running: {' '.join(cmd)}")
 
     output_dir = Path(args.output_dir).expanduser()
-    runs_dir = output_dir / "runs"
-    runs_dir.mkdir(parents=True, exist_ok=True)
+    # Raw transcripts: private directory, and 0600 logs from the first byte.
+    runs_dir = secure_dir(output_dir / "runs")
     start_ts = datetime.now()
     log_name = f"{start_ts.strftime('%Y%m%d_%H%M%S')}_{tool}.log"
     log_path = runs_dir / log_name
@@ -1353,7 +1359,8 @@ def cmd_run(args):
         # Unix only: importing pty at module level made the whole CLI unusable on Windows.
         import pty
 
-        log_file = open(log_path, "ab")
+        log_file = os.fdopen(os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "ab")
+        restrict_file(log_path)
 
         def read(fd):
             data = os.read(fd, 1024)
@@ -1405,6 +1412,7 @@ def cmd_run(args):
     }
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
+    restrict_file(meta_path)
 
     sync_args = argparse.Namespace(
         tool=tool,
@@ -1686,6 +1694,83 @@ def cmd_memory(args):
                 if note:
                     line += f" — {note}"
                 print(line)
+        return
+
+    if action == "review":
+        from lore.storage import list_memory, set_memory_status
+
+        target = getattr(args, "target", None)
+        review_ids = getattr(args, "ids", None) or []
+        if target is None:
+            candidates = list_memory(
+                output_dir, kind=getattr(args, "kind", None), limit=200, status="candidate"
+            )
+            if getattr(args, "json", False):
+                payload = {
+                    "count": len(candidates),
+                    "candidates": [
+                        {
+                            "id": entry.id,
+                            "kind": entry.kind,
+                            "title": entry.title,
+                            "body": entry.body,
+                            "scope_project": entry.scope_project,
+                            "scope_tool": entry.scope_tool,
+                            "created": entry.created,
+                        }
+                        for entry in candidates
+                    ],
+                }
+                print(json.dumps(payload, indent=2))
+                return
+            if not candidates:
+                print("No memory candidates waiting for review.")
+                return
+            print(f"{len(candidates)} candidate(s) waiting for review:")
+            for entry in candidates:
+                scope = entry.scope_project or "global"
+                print(f"  #{entry.id} [{entry.kind}] {entry.title} ({scope})")
+            print("\nAccept or reject with: lore memory review accept|reject <id> [...]")
+            return
+
+        if not review_ids:
+            print("Error: give at least one memory id to review", file=sys.stderr)
+            sys.exit(1)
+        new_status = "confirmed" if target == "accept" else "rejected"
+        changed, skipped = [], []
+        for raw_id in review_ids:
+            try:
+                memory_id = int(raw_id)
+            except (TypeError, ValueError):
+                print(f"Error: invalid memory id {raw_id!r}", file=sys.stderr)
+                sys.exit(1)
+            try:
+                if set_memory_status(output_dir, memory_id, new_status, from_status="candidate"):
+                    changed.append(memory_id)
+                else:
+                    skipped.append(memory_id)
+            except ValueError:
+                # Not in the expected source state (already confirmed, rejected or
+                # unknown): report it instead of aborting the whole batch.
+                skipped.append(memory_id)
+        if getattr(args, "json", False):
+            print(
+                json.dumps(
+                    {
+                        "action": target,
+                        "status": new_status,
+                        "changed": changed,
+                        "unchanged": skipped,
+                    },
+                    indent=2,
+                )
+            )
+            return
+        noun = "candidate" if len(changed) == 1 else "candidates"
+        if changed:
+            print(f"{target.title()}ed {len(changed)} {noun} ({new_status}): {changed}")
+        if skipped:
+            print(f"No change for ids: {skipped} (not a candidate)")
         return
 
     if action == "repair-index":
@@ -2396,6 +2481,19 @@ Examples:
         help="output format (default: text)",
     )
     mem_context.add_argument("--limit", type=int, default=40, help="max memories to consider")
+
+    mem_review = memory_sub.add_parser(
+        "review", help="Review candidates: list them, or accept/reject by id"
+    )
+    mem_review.add_argument(
+        "target",
+        nargs="?",
+        choices=["accept", "reject"],
+        help="omit to list the candidates waiting for review",
+    )
+    mem_review.add_argument("ids", nargs="*", help="candidate ids to accept or reject")
+    mem_review.add_argument("--kind", help="filter the listing by kind")
+    mem_review.add_argument("--json", action="store_true", help="print the result as JSON")
 
     mem_repair = memory_sub.add_parser(
         "repair-index",

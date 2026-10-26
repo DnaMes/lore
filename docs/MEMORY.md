@@ -138,6 +138,24 @@ lore memory dedupe --restore dedupe-undo-2026-10-14T10-00-00Z.json
   case-sensitive. Dedupe never merges across `kind`, `scope_project` or `scope_tool`.
 - Keeper order: highest feedback weight, then newest update, then highest id.
 
+## Review queue
+
+A memory written by an agent can arrive as `candidate`: stored, but outside recall
+until a human accepts it.
+
+```bash
+lore memory review                      # list what is waiting
+lore memory review accept 12 15         # confirm them
+lore memory review reject 14            # keep the row, exclude it from recall
+lore memory review --json               # machine-readable listing
+```
+
+The web UI has the same queue at `/memory?status=candidate`, with Accept and Reject
+on each card; both post to `/memory/<id>/review`. Rejection is a status change, not
+a delete: `set_memory_status(..., "confirmed", from_status="rejected")` restores a
+memory, and `lore memory review` never touches a memory that is not a candidate
+(it reports the id as unchanged).
+
 ## Rate
 
 ```bash

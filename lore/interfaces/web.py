@@ -2188,6 +2188,11 @@ def memory_page():
     query = request.args.get("q", "").strip()
     kind = request.args.get("kind", "").strip() or None
     semantic = request.args.get("semantic", "") in ("1", "true", "on")
+    # (#197) Candidates are a review queue: hidden from the default list, shown
+    # on their own tab with accept/reject actions.
+    status = request.args.get("status", "").strip().lower()
+    if status not in ("candidate", "confirmed"):
+        status = "confirmed"
 
     if query and not validate_search_query(query):
         return "Invalid search query", 400
@@ -2197,10 +2202,15 @@ def memory_page():
     output_dir = INDEX_PATH.parent
     if query:
         entries = recall_memory(
-            output_dir, query, kind=kind, limit=100, semantic=True if semantic else None
+            output_dir,
+            query,
+            kind=kind,
+            limit=100,
+            semantic=True if semantic else None,
+            status=status,
         )
     else:
-        entries = list_memory(output_dir, kind=kind, limit=100)
+        entries = list_memory(output_dir, kind=kind, limit=100, status=status)
 
     memories = [entry.to_dict() for entry in entries]
 
@@ -2214,8 +2224,33 @@ def memory_page():
         kinds=list(MEMORY_KINDS),
         semantic=semantic,
         semantic_available=embeddings_available(),
+        status=status,
+        candidate_count=len(list_memory(output_dir, kind=kind, limit=500, status="candidate")),
+        confirmed_count=len(list_memory(output_dir, kind=kind, limit=500, status="confirmed")),
         title="Memory",
     )
+
+
+@app.route("/memory/<int:memory_id>/review", methods=["POST"])
+def memory_review(memory_id):
+    """Accept or reject a memory candidate (#197).
+
+    Rejecting keeps the row (status ``rejected``), so the decision is reversible
+    with `lore memory review` or a direct status change; nothing is deleted.
+    """
+    if (err := _check_local_origin()) is not None:
+        return err
+    from lore.storage import set_memory_status
+
+    action = (request.form.get("action") or request.args.get("action") or "").strip().lower()
+    if action not in ("accept", "reject"):
+        return "Invalid review action", 400
+    target = "confirmed" if action == "accept" else "rejected"
+    try:
+        set_memory_status(INDEX_PATH.parent, memory_id, target, from_status="candidate")
+    except ValueError:
+        return "Invalid review action", 400
+    return redirect("/memory?status=candidate")
 
 
 @app.route("/memory/<int:memory_id>/delete", methods=["POST"])

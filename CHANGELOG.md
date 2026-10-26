@@ -15,6 +15,9 @@ The version is the single source of truth in `lore/__init__.py`.
 - Antigravity availability means readable data now: a `brain/` directory alone is not "available", and `lore check --deep` still inspects such a tree and reports its coverage — sources matched, sessions parsed, skip reasons and a `Coverage:` line with Antigravity's `unsupported_artifacts`, `task_artifacts_parsed`/`transcript(s)_parsed` split instead of a bare "not found".
 
 ### Added
+- Memory candidate review: `lore memory review` lists the queue and `lore memory review accept|reject <id> [...]` decides it (rejection keeps the row and is reversible), and the web UI gained a Candidates tab at `/memory?status=candidate` with per-card Accept/Reject posting to `/memory/<id>/review`. Candidates stay out of recall and out of the default list until they are accepted.
+
+### Added
 - `docs/READING-CONTRACT.md`: the rules a reader can rely on (roles and execution states, theme-driven typography, keyboard and focus, live status, document structure), each tied to its implementation, plus `tests/test_a11y_reading_contract.py`, which checks the machine-decidable half over every page — language, one `h1` and no heading jumps, skip link with target, unique ids, an accessible name on every link, button and form control, live regions for async feedback, theme variables instead of hardcoded text colours, no fixed heights on transcript content, and a focus ring for every interactive component.
 
 ### Added
@@ -118,6 +121,11 @@ The version is the single source of truth in `lore/__init__.py`.
 - Changes to `ignored.json` invalidate the v2 index cache, so prune and un-prune take effect at once.
 - Install hints name `pipx install git+https://github.com/DnaMes/lore` and `pipx inject`, not the unrelated PyPI package `lore`.
 - `docker-compose.yml` reads `LORE_PORT` for the published host port (default 5000), so it can move when 5000 is taken.
+
+### Security
+
+- `lore run` creates `runs/` as 0700 and its raw transcript logs and metadata as 0600 from the first byte.
+- The Gemini session handoff and `gemini-cli` titles no longer put session text into the process arguments: the handoff passes a path to the private context file, titles use standard input.
 
 ### Removed
 - Internal planning notes, research dumps, homelab leftovers and one-off maintainer scripts left the tree (`docs/archive`, `docs/research`, `docs/superpowers`, `SESSION-MANAGEMENT.md`, `tools/sync.py` and others); they stay reachable in Git history under the tag `archive/pre-cleanup-2026-10-26`. The recall and cutoff calibration scripts and their data moved to `tools/calibration/`.

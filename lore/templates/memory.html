@@ -13,7 +13,19 @@
         </div>
     </div>
 
+    <div class="flex flex-wrap items-center gap-2 mb-6" role="tablist" aria-label="Memory views">
+        <a href="/memory" role="tab" aria-selected="{{ 'true' if status != 'candidate' else 'false' }}"
+           class="tag-chip {{ 'bg-slate-900 text-white' if status != 'candidate' else '' }}">
+            Confirmed ({{ confirmed_count }})
+        </a>
+        <a href="/memory?status=candidate" role="tab" aria-selected="{{ 'true' if status == 'candidate' else 'false' }}"
+           class="tag-chip {{ 'bg-slate-900 text-white' if status == 'candidate' else '' }}">
+            Candidates ({{ candidate_count }})
+        </a>
+    </div>
+
     <form method="get" class="flex flex-wrap items-center gap-3 mb-8">
+        <input type="hidden" name="status" value="{{ status }}">
         <input type="text" name="q" value="{{ query or '' }}"
                placeholder="Search memory…" aria-label="Search memory"
                class="flex-1 min-w-[12rem] bg-white border border-slate-200 text-sm text-slate-700 rounded-xl px-3 py-2 outline-none focus:border-slate-300">
@@ -61,6 +73,19 @@
                         {% for tag in m.tags %}<span class="tag-chip text-[10px]">#{{ tag }}</span>{% endfor %}
                     </div>
                 </div>
+                <div class="flex items-start gap-1.5">
+                {% if status == 'candidate' %}
+                <form action="/memory/{{ m.id }}/review" method="POST">
+                    <input type="hidden" name="action" value="accept">
+                    <button type="submit" aria-label="Accept memory {{ m.title }}"
+                            class="text-[10px] text-slate-600 hover:text-slate-900 border border-slate-200 px-2 py-1 rounded-lg bg-white transition-all">Accept</button>
+                </form>
+                <form action="/memory/{{ m.id }}/review" method="POST">
+                    <input type="hidden" name="action" value="reject">
+                    <button type="submit" aria-label="Reject memory {{ m.title }}"
+                            class="text-[10px] text-amber-700 hover:text-slate-900 border border-amber-200 px-2 py-1 rounded-lg bg-white transition-all">Reject</button>
+                </form>
+                {% endif %}
                 <form action="/memory/{{ m.id }}/delete" method="POST"
                       data-confirm="Delete this memory?">
                     <button type="submit" aria-label="Delete memory {{ m.title }}"
@@ -69,6 +94,7 @@
                              stroke-width="2.5" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
                     </button>
                 </form>
+                </div>
             </div>
             <div class="text-[10px] text-slate-500 mt-3 uppercase tracking-tight">
                 {{ m.author or 'unknown' }} · {{ m.created[:10] }}
@@ -85,7 +111,7 @@
         </article>
         {% else %}
         <div class="surface-card p-8 text-center">
-            <p class="text-sm text-slate-600">No memory entries{{ ' match your search' if query else ' yet' }}.</p>
+            <p class="text-sm text-slate-600">No memory entries{{ ' match your search' if query else ' yet' }}{{ ' waiting for review' if status == 'candidate' else '' }}.</p>
             <p class="text-xs text-slate-500 mt-2">
                 Record one with <span class="font-mono">lore memory add</span>, or let an
                 AI agent write to it via the <span class="font-mono">memory_write</span> MCP tool.

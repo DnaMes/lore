@@ -1520,7 +1520,19 @@
         </div>
     </div>
 
+    <div class="flex flex-wrap items-center gap-2 mb-6" role="tablist" aria-label="Memory views">
+        <a href="/memory" role="tab" aria-selected="true"
+           class="tag-chip bg-slate-900 text-white">
+            Confirmed (0)
+        </a>
+        <a href="/memory?status=candidate" role="tab" aria-selected="false"
+           class="tag-chip ">
+            Candidates (0)
+        </a>
+    </div>
+
     <form method="get" class="flex flex-wrap items-center gap-3 mb-8">
+        <input type="hidden" name="status" value="confirmed">
         <input type="text" name="q" value=""
                placeholder="Search memory…" aria-label="Search memory"
                class="flex-1 min-w-[12rem] bg-white border border-slate-200 text-sm text-slate-700 rounded-xl px-3 py-2 outline-none focus:border-slate-300">
