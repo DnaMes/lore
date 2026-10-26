@@ -200,6 +200,20 @@ passed).
 
 All five closed as superseded by that commit.
 
+## Round 2 — the Wave 2 chain (#172, #173, #174)
+
+Worked in the order the archived plan prescribes, each as its own commit with a
+focused test file and the matching docs.
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #172 date filters | CLOSED | `b674502` | `parse_date_bound` / `datetime_in_range` / `to_local_naive` shared by web, CLI, API and MCP; `pytest tests/test_datetime_filters.py tests/test_web_helpers_and_jobs.py tests/test_datetime_utils.py -o addopts="" -q` -> 62 passed (inclusive end day, UTC offsets, naive legacy rows, both New York DST transitions, explicit timezone) |
+| #173 saved tags as filters | CLOSED | `37a86a3` | one match predicate (saved tags + index keywords) used by the web filter and dropdown, `lore list --tag`, `lore search --tag`, MCP `search_history`/`list_sessions`; `pytest tests/test_tag_filtering.py tests/test_session_tags.py -o addopts="" -q` -> 20 passed, including sync rewrite, reindex and consistent SQLite copy |
+| #174 filters before the limit | CLOSED | `bb9819d`, `e94b788` | `session_filter_sql()` inside the FTS and KNN queries, exact date re-check, explicit errors; `pytest tests/test_search_filter_before_limit.py ... -q` -> 97 passed with the "top hits belong elsewhere" fixture at `limit=1`; semantic runtime NOT VERIFIED here (no sqlite-vec in this venv) |
+
+Remaining after round 2: **38 open issues** — 2 owner-deferred (#29, #48), 33 Archive
+epic gaps and 3 independent ones (#119, #194, #197).
+
 ## Phase 3 — fixes
 
 Fixes that came out of the review gate on the release-readiness commit are being
@@ -212,6 +226,10 @@ session log); they are listed in the final report.
 
 Pull requests: **16 of 16 closed**, none merged as-is (each cluster was replaced by
 one reviewed implementation). Open pull requests after the sweep: **0**.
+
+Issues: 6 closed with evidence (#172, #173, #174, #176, #191, #192), 2 owner-deferred
+(#29, #48), 36 confirmed gaps with a decided order (round 2 in this file, the rest in
+`docs/TODO.md`).
 
 | Item | Final status | Evidence / link |
 |------|--------------|-----------------|
