@@ -11,7 +11,7 @@ The server speaks JSON-RPC 2.0 over stdin/stdout. Requests are read line by line
 Read versus write:
 
 - `memory_write` and `memory_feedback` are the only tools that write to the shared memory store (the `memory` and `memory_feedback` tables in `<output-dir>/index_v2.sqlite`, default `~/.lore/index_v2.sqlite`).
-- Every other tool reads. `switch_to_tool` is read-only for Lore but shells out to `lore-session switch`, which prepares a handoff for another tool.
+- Every other tool reads. `switch_to_tool` is read-only for Lore but shells out to `lore-session switch`, which prepares a handoff for another tool. When the target is `gemini` or `codex` (they receive the context as an argument or file), the server needs the cloud opt-in `LORE_ALLOW_CLOUD=1` in its environment; the context is redacted before it is written or passed and kept in a private mode-0600 file under `~/.lore/handoff/`. `claude` and the manual tools (`cursor`, `vscode`) send nothing.
 - `summarize_session` is the one exception outside the memory store: when enabled it can persist an AI summary row for a session.
 
 ## Tools
@@ -25,7 +25,7 @@ Read versus write:
 | `list_recent_sessions` | List recently updated sessions. | no |
 | `list_projects` | List projects present in the history index. | no |
 | `get_thread` | Get a thread overview and optional messages. | no |
-| `switch_to_tool` | Switch to another AI tool with context (runs `lore-session switch`). | no |
+| `switch_to_tool` | Switch to another AI tool with context (runs `lore-session switch`). Requires the cloud opt-in `LORE_ALLOW_CLOUD=1` in the server environment when the target is `gemini` or `codex`; `claude` and the manual tools send nothing. | no |
 | `memory_write` | Record a durable memory (fact, decision, todo, snippet, link, lesson, note) into the shared cross-tool store. The response lists near-duplicates in `similar`; pass `supersedes` with one of their ids to replace it. | yes (memory store) |
 | `memory_recall` | Search the shared memory store for facts, decisions and lessons recorded earlier by any tool. Matches keywords and, when the embedding backend is installed, meaning; a query in double quotes is an exact phrase. `semantic=false` forces keywords only. | no |
 | `memory_feedback` | Rate a confirmed memory from 1 (wrong or unhelpful) to 5 (right and useful). Candidates and rejected memories cannot be rated; one rating per rater and memory, a new rating replaces the old one. The weight is shown with the memory in `memory_recall`. | yes (memory store) |

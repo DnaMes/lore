@@ -126,6 +126,7 @@ The version is the single source of truth in `lore/__init__.py`.
 - `lore prune` deletes only regular `.md` export files under the archive root; symlinks and control or store files (index, ignored, deleted-session and title-cache names, memories, rules, opencode state, `-wal`/`-shm`) are refused with a stderr warning. A damaged `ignored.json` (bad UTF-8, invalid JSON or the wrong shape) warns once per process, and pruned sessions may be visible again until the file is fixed.
 - Dedupe undo logs record the store they came from, and `--restore` refuses a log written for a different store.
 - `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles` require `--allow-cloud` or `LORE_ALLOW_CLOUD=1` for every non-local provider; a refused run exits with code 2 and sends nothing.
+- `lore-session switch` / `continue` and the MCP `switch_to_tool` require the cloud opt-in for `gemini` and `codex`, redact the context before it is written or passed, and keep it in a private mode-0600 file under `~/.lore/handoff/` instead of the shared `/tmp/ai-session-context.md`.
 - `lore-web` prints a warning at startup when it binds beyond loopback without `LORE_PUBLIC_ORIGINS` or `LORE_ALLOWED_HOSTS`.
 - The web UI binds to `127.0.0.1` by default.
 - Per-window rate limits for the web UI (`LORE_RATE_LIMIT_*`), and honoured public origins behind a proxy (`LORE_PUBLIC_ORIGINS`).

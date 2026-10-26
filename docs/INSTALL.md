@@ -7,8 +7,8 @@ Installation guide and package options for Lore.
 - Python: Python 3.11 or newer (specified by `requires-python = ">=3.11"` in `pyproject.toml`).
 - Operating System:
   - Linux: Verified by the maintainer.
-  - macOS: the install is verified by CI; real tool histories are NOT VERIFIED (see [Platforms and verification](#platforms-and-verification)).
-  - Windows: the install is verified by CI; real tool histories are NOT VERIFIED (see [Platforms and verification](#platforms-and-verification)).
+  - macOS: the CI install matrix verifies install, CLI, web UI and MCP with synthetic sessions (see [Platforms and verification](#platforms-and-verification)); real tool histories are NOT VERIFIED there.
+  - Windows: the CI install matrix verifies install, CLI, web UI and MCP with synthetic sessions (see [Platforms and verification](#platforms-and-verification)); real tool histories are NOT VERIFIED there.
 
 ## Platforms and verification
 
@@ -42,7 +42,7 @@ The targets are Python 3.11, 3.12, 3.13 and 3.14 slim images, 3.12 with `[semant
 
 ### Not verified
 
-The automation does not verify real tool histories on macOS or Windows: the smoke script uses synthetic Claude Code and Codex sessions under a temporary `HOME`, so the extractors' default locations for each tool on macOS and Windows are not exercised. Also not verified: the `[semantic]` extra on macOS and Windows, Python 3.12 on macOS and Windows, `pipx` on macOS and Windows, `lore run` with a pseudo-terminal on Windows (it falls back to running without one), and the Docker image on anything but Linux hosts.
+The automation does not verify real tool histories on macOS or Windows: the smoke script uses synthetic Claude Code and Codex sessions under a temporary `HOME`, so the extractors' default locations for each tool on macOS and Windows are not exercised. Cursor and VS Code Copilot are the clearest case: their extractors look in Linux-style `~/.config/` paths, which a stock macOS or Windows install does not use. Also not verified: the `[semantic]` extra on macOS and Windows, Python 3.12 on macOS and Windows, `pipx` on macOS and Windows, `lore run` with a pseudo-terminal on Windows (it falls back to running without one), and the Docker image on anything but Linux hosts.
 
 Fixes that came out of this matrix in 2.4.0: `lore` no longer crashes at start on Windows (`pty` was imported at module level), it no longer crashes printing status symbols on a cp1252 console, and `lore-web` answers in 0.4-0.8 s on macOS instead of about 35 s (no reverse DNS lookup while binding).
 
@@ -68,13 +68,23 @@ uv tool install git+https://github.com/DnaMes/lore
 
 ### Alternative: Virtual Environment
 
-To install into a dedicated Python virtual environment:
+To install into a dedicated Python virtual environment. Linux and macOS (POSIX):
 
 ```bash
-python3 -m venv ~/.venvs/lore && ~/.venvs/lore/bin/pip install git+https://github.com/DnaMes/lore
+python3 -m venv ~/.venvs/lore
+~/.venvs/lore/bin/python -m pip install git+https://github.com/DnaMes/lore
 ```
 
 You can then add `~/.venvs/lore/bin` to your `PATH` or invoke the binaries directly.
+
+Windows PowerShell:
+
+```powershell
+python -m venv $HOME\.venvs\lore
+$HOME\.venvs\lore\Scripts\python.exe -m pip install git+https://github.com/DnaMes/lore
+```
+
+You can then add `$HOME\.venvs\lore\Scripts` to your `PATH` or invoke the binaries directly.
 
 ### Alternative: Editable Clone
 
@@ -91,7 +101,7 @@ Lore has two optional extras, both defined in `pyproject.toml`. The former `watc
 | Extra | Adds | Without it |
 | --- | --- | --- |
 | `semantic` | `fastembed>=0.3`, `sqlite-vec>=0.1.9` | Keyword-only search. When installed, enables semantic vector search and KNN similarity queries over session embeddings (`bge-small-en-v1.5`), fusing vector scores with FTS5 BM25 keyword matches via Reciprocal Rank Fusion (RRF). Without this extra, `sqlite_vec_available()` returns false and search falls back strictly to FTS5 keyword search. |
-| `dev` | `pytest>=8,<10`, `pytest-cov>=5`, `coverage>=7`, `ruff>=0.6`, `mypy>=1.8`, `fastembed>=0.3`, `sqlite-vec>=0.1.9` | Development and testing dependencies. Only required for contributors running test suites, coverage reports, linters, and type checkers. |
+| `dev` | `pytest>=8,<10`, `pytest-cov>=5`, `coverage>=7`, `ruff>=0.6`, `mypy>=1.8`, `pre-commit>=3,<5`, `bandit[toml]>=1.7`, `fastembed>=0.3`, `sqlite-vec>=0.1.9` | Development and testing dependencies: test suites, coverage reports, linting, type checking, pre-commit hooks and bandit security scanning; `fastembed` and `sqlite-vec` are included so the semantic tests run for real instead of being skipped. Only required for contributors. |
 
 ### Installing Extras
 
@@ -137,13 +147,23 @@ The `lore check` command is read-only. It inspects configured directories for su
 
 ## Upgrading
 
-To upgrade a `pipx`-installed version to the latest repository commit:
+A plain repeated install is not a reliable upgrade, and neither is `pipx upgrade lore`: it runs `pip install --upgrade` by package name (verified from `pipx upgrade --help`, pipx 1.15.0), which would resolve `lore` against PyPI -- and PyPI's `lore` is an unrelated project.
+
+For a `pipx` install, re-run the install with `--force` (flag verified from `pipx install --help`), or reinstall with the options of the original install (verified from `pipx reinstall --help`):
 
 ```bash
-pipx upgrade lore
+pipx install --force git+https://github.com/DnaMes/lore
+# or
+pipx reinstall lore
 ```
 
-Alternatively, re-run the `pipx install` or `pip install` command with the repository URL. Existing databases, exported sessions, and cache files stored under `~/.lore` are preserved during upgrades.
+For a `pip` install from Git:
+
+```bash
+pip install --upgrade --force-reinstall git+https://github.com/DnaMes/lore
+```
+
+Existing databases, exported sessions, and cache files stored under `~/.lore` are preserved during upgrades.
 
 ## Uninstalling
 

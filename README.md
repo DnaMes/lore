@@ -35,7 +35,10 @@ Verified on one host only:
   Traefik overlays are checked for configuration only. The image has no built-in login.
   The verification log is in [docs/DOCKER.md](docs/DOCKER.md).
 
-## Quickstart (about 3 minutes)
+## Quickstart (a few minutes, depending on downloads)
+
+Prerequisites: Git, `pipx`, and a `PATH` that includes pipx's binary directory
+(run `pipx ensurepath` once and restart the shell if needed).
 
 ```bash
 pipx install git+https://github.com/DnaMes/lore
@@ -170,10 +173,15 @@ export.
 A provider receives text only when you run an AI command with one. Every command that
 can send session text to a non-local provider requires the opt-in, `--allow-cloud` or
 `LORE_ALLOW_CLOUD=1`: `analyze`, `knowledge`, `format`, `summarize`, `improve`, and
-`generate-titles` with `--provider gemini-cli`. Without it they exit with code 2 and send
-nothing. The opt-in is enforced in the library as well as the CLI (`get_provider()` in
-`lore/llm/factory.py` and friends raise `CloudOptInRequired`), and `ollama` counts as
-local only on a loopback host. `lore knowledge` has no default provider: it exits with
+`generate-titles` with `--provider gemini-cli`, plus the session handoff
+(`lore-session switch` / `lore-session continue` and the MCP `switch_to_tool`) when
+the target tool is `gemini` or `codex`. Without it they exit with code 2 and send
+nothing. The handoff redacts the context before it is written or passed and keeps it
+in a mode-0600 file under `~/.lore/handoff/`, removed again once the launched tool
+exits; `claude --continue` and the manual tools (`cursor`, `vscode`: a file for you
+to paste) send nothing. The opt-in is enforced in the library as well as the
+CLI (`get_provider()` in `lore/llm/factory.py` and friends raise
+`CloudOptInRequired`), and `ollama` counts as local only on a loopback host. `lore knowledge` has no default provider: it exits with
 code 2 until you pass `--provider`. `analyze` and `format` default to `gemini`, a cloud
 provider; to stay local, pass `--no-llm` (`analyze` only) or `--provider ollama`.
 `improve` sends text only when `--provider` or `LORE_LLM_PROVIDER` is set, and

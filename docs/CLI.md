@@ -751,7 +751,18 @@ Note: `format` has no `--no-llm` flag. Use `--provider ollama` (local) to keep t
 Switch the active AI tool for the current project and continue where the last
 session stopped.
 
-Writes: the shared context file `/tmp/ai-session-context.md`.
+Writes: the redacted handoff context to a unique mode-0600 file
+`~/.lore/handoff/context-<id>.md` (no longer the shared
+`/tmp/ai-session-context.md`). The file is removed after the launched tool
+exits (kept for the manual tools, whose block you paste from it), and stale
+files older than 24 hours are removed.
+
+Sends nothing by itself. Switching to `gemini` or `codex` -- they receive the
+context as an argument or referenced file -- requires the cloud opt-in
+`--allow-cloud` or `LORE_ALLOW_CLOUD=1`; without it the command prints an
+error and exits with code 2. The context is redacted before it is written or
+passed. `claude` is continued with `--continue`, and the manual tools
+(`cursor`, `vscode`) only print how to paste the block; both send nothing.
 
 ```text
 usage: lore_session_cli.py [-h] {list,switch,continue} ...
@@ -839,7 +850,8 @@ The CLI returns three codes:
   `lore_cli.py` (via `require_cloud_opt_in` in `lore/services/summarize_cli.py`; `improve` and `generate-titles` call `require_cloud_opt_in` directly)
   returns `2` for `gemini`, `gemini-cli`, `openrouter`, `jev`, or an off-host `ollama`
   without `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; nothing is sent and nothing
-  is written.
+  is written. `lore-session switch` and `lore-session continue` also exit with
+  `2` when the target tool is `gemini` or `codex` without the opt-in.
 
 Automation can therefore treat any non-zero code as failure and distinguish the
 refused cloud opt-in from other errors by the value `2`.
