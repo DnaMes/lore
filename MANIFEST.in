@@ -6,35 +6,14 @@ include LICENSE
 include CHANGELOG.md
 include CONTRIBUTING.md
 include SECURITY.md
+include CODE_OF_CONDUCT.md
 include pyproject.toml
 include lore_cli.py
 include lore_session_cli.py
 
 graft lore
 graft tests
+graft docs
 
-# Tracked maintainer noise: include then strip (avoids "not previously-included" warnings).
-include HANDOFF.md
-include SESSION-MANAGEMENT.md
-graft docs/triage
-graft docs/archive
-graft docs/research
-graft docs/superpowers
-graft .parachute
-graft scripts
-
-exclude HANDOFF.md
-exclude SESSION-MANAGEMENT.md
-global-include MAINT-*
-global-exclude MAINT-*
+# Maintainer working notes live in the tree while a backlog sweep runs; never ship them.
 prune docs/triage
-prune docs/archive
-prune docs/research
-prune docs/superpowers
-prune .parachute
-prune scripts
-# Gitignored locally; prune is a no-op when absent and strips them when present.
-prune .serena
-prune .specstory
-prune build
-prune lore.egg-info

@@ -50,3 +50,8 @@ toc-verify.js
 .DS_Store
 Thumbs.db
 uv.lock
+
+# Local maintainer working state (session handoffs, personal git hooks)
+HANDOFF.md
+.parachute/
+.githooks/
