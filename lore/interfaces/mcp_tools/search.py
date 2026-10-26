@@ -11,7 +11,12 @@ from ...services.index import (
     is_automated,
     parse_bool_flag,
 )
-from ...utils.datetime import parse_duration, to_local_naive
+from ...utils.datetime import (
+    datetime_in_range,
+    parse_date_bound,
+    parse_duration,
+    to_local_naive,
+)
 from ...utils.security import (
     validate_search_param,
     validate_search_query,
@@ -51,6 +56,8 @@ def register(server, deps: MCPToolDeps) -> None:
         limit = deps.normalize_limit(args.get("limit"), default=10)
         scope = str(args.get("scope") or "all").strip().lower()
         tag_filter = (args.get("tag") or "").strip() or None
+        start_filter = (args.get("start") or "").strip() or None
+        end_filter = (args.get("end") or "").strip() or None
         try:
             include_automated = parse_bool_flag(
                 args.get("include_automated"), name="include_automated"
@@ -77,11 +84,16 @@ def register(server, deps: MCPToolDeps) -> None:
                 project=project_filter,
                 limit=limit,
                 scope=scope,
+                tag=tag_filter,
+                start=start_filter,
+                end=end_filter,
                 **extra,
             )
         except ValueError as exc:
             return str(exc)
         if tag_filter:
+            # Saved tags are filtered inside SQL; index keywords are not in the
+            # v2 store, so they are matched here for parity with the web filter.
             saved = _saved_tags(deps)
             results = [
                 result for result in results if _matches_tag(result["session"], tag_filter, saved)
@@ -92,6 +104,8 @@ def register(server, deps: MCPToolDeps) -> None:
             "project": project_filter,
             "scope": scope,
             "tag": tag_filter,
+            "start": start_filter,
+            "end": end_filter,
             "count": len(results),
             "results": [serialize_search_result(result) for result in results],
         }
@@ -111,6 +125,14 @@ def register(server, deps: MCPToolDeps) -> None:
                 "tag": {
                     "type": "string",
                     "description": "Only sessions carrying this saved tag/bookmark (or index keyword).",
+                },
+                "start": {
+                    "type": "string",
+                    "description": "Inclusive lower date bound (YYYY-MM-DD or an ISO timestamp).",
+                },
+                "end": {
+                    "type": "string",
+                    "description": "Inclusive upper date bound; a date-only value covers the whole day.",
                 },
                 "scope": {
                     "type": "string",
@@ -133,6 +155,8 @@ def register(server, deps: MCPToolDeps) -> None:
         project_filter = args.get("project") or None
         thread_filter = args.get("thread_id") or None
         tag_filter = (args.get("tag") or "").strip() or None
+        start_filter = (args.get("start") or "").strip() or None
+        end_filter = (args.get("end") or "").strip() or None
         since = args.get("since")
         limit = deps.normalize_limit(args.get("limit"), default=20)
         try:
@@ -151,6 +175,15 @@ def register(server, deps: MCPToolDeps) -> None:
 
         sessions = []
         cutoff = None
+        try:
+            start_dt = parse_date_bound(start_filter)
+            end_dt = parse_date_bound(end_filter, end=True) if end_filter else None
+        except ValueError as exc:  # pragma: no cover - parse_date_bound returns None
+            return str(exc)
+        if start_filter and start_dt is None:
+            return "Invalid start parameter."
+        if end_filter and end_dt is None:
+            return "Invalid end parameter."
         if since:
             try:
                 cutoff = datetime.now() - parse_duration(since)
@@ -168,6 +201,15 @@ def register(server, deps: MCPToolDeps) -> None:
                 continue
             if thread_filter and session.get("thread_id") != thread_filter:
                 continue
+            if start_dt or end_dt:
+                try:
+                    created_bound = to_local_naive(
+                        datetime.fromisoformat(str(session.get("created")).replace("Z", "+00:00"))
+                    )
+                except (TypeError, ValueError):
+                    continue
+                if not datetime_in_range(created_bound, start_dt, end_dt):
+                    continue
             if cutoff:
                 created = session.get("created")
                 try:
@@ -204,6 +246,14 @@ def register(server, deps: MCPToolDeps) -> None:
                 "tag": {
                     "type": "string",
                     "description": "Only sessions carrying this saved tag/bookmark (or index keyword).",
+                },
+                "start": {
+                    "type": "string",
+                    "description": "Inclusive lower date bound (YYYY-MM-DD or an ISO timestamp).",
+                },
+                "end": {
+                    "type": "string",
+                    "description": "Inclusive upper date bound; a date-only value covers the whole day.",
                 },
                 "since": {"type": "string"},
                 "limit": {"type": "integer"},

@@ -160,7 +160,17 @@ def load_sessions_for_tool(tool: Optional[str] = None):
 # --- Index Loading & Search ---
 
 
-def search_index(query, tool=None, project=None, limit=50, scope=None, include_automated=False):
+def search_index(
+    query,
+    tool=None,
+    project=None,
+    limit=50,
+    scope=None,
+    include_automated=False,
+    tag=None,
+    start=None,
+    end=None,
+):
     """Search sessions (wrapper over ``services.search_index``)."""
     return _service_search_index(
         INDEX_PATH,
@@ -171,6 +181,9 @@ def search_index(query, tool=None, project=None, limit=50, scope=None, include_a
         limit=limit,
         scope=scope,
         include_automated=include_automated,
+        tag=tag,
+        start=start,
+        end=end,
     )
 
 

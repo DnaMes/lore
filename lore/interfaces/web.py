@@ -2305,9 +2305,22 @@ def api_search():
     if project and not validate_search_param(project):
         return jsonify({"error": "Invalid project parameter"}), 400
 
-    res = search_index(
-        q, tool=tool or None, project=project or None, limit=10, **_automated_kwargs()
-    )
+    try:
+        filters = _search_filter_params()
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    try:
+        res = search_index(
+            q,
+            tool=tool or None,
+            project=project or None,
+            limit=10,
+            **_automated_kwargs(),
+            **filters,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(
         [
             {
@@ -2356,27 +2369,54 @@ def api_v1_search():
 
     try:
         limit = _api_limit_param(default=20, max_value=200)
+        filters = _search_filter_params()
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
 
-    results = search_index(
-        q,
-        tool=tool or None,
-        project=project or None,
-        limit=limit,
-        scope=scope,
-        **_automated_kwargs(),
-    )
+    try:
+        results = search_index(
+            q,
+            tool=tool or None,
+            project=project or None,
+            limit=limit,
+            scope=scope,
+            **_automated_kwargs(),
+            **filters,
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     return jsonify(
         {
             "query": q,
             "tool": tool or None,
             "project": project or None,
             "scope": scope,
+            "tag": filters.get("tag"),
+            "start": filters.get("start"),
+            "end": filters.get("end"),
             "count": len(results),
             "results": [serialize_search_result(result) for result in results],
         }
     )
+
+
+def _search_filter_params() -> dict:
+    """Validated ``tag``/``start``/``end`` search filters (#174).
+
+    Empty values are omitted so the search keeps its defaults. Invalid dates are
+    reported as a 400 by the caller instead of silently widening the result set.
+    """
+    filters: dict = {}
+    tag = (request.args.get("tag") or "").strip()
+    if tag:
+        if not validate_search_param(tag):
+            raise ValueError("Invalid tag parameter")
+        filters["tag"] = tag
+    for name in ("start", "end"):
+        value = (request.args.get(name) or "").strip()
+        if value:
+            filters[name] = value
+    return filters
 
 
 def _api_page_params(

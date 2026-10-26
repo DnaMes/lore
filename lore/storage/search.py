@@ -17,11 +17,13 @@ from __future__ import annotations
 import math
 import os
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from lore.core.models import AUTOMATED_ORIGINS
 
+from ..utils.datetime import datetime_in_range, parse_date_bound, to_local_naive
 from .fts import (
     SEARCH_INDEX_BODY_COLUMN,
     SNIPPET_CLOSE,
@@ -89,12 +91,82 @@ def _bind_ignored_exclusion(
     return f" AND {column_sql} NOT IN (SELECT id FROM _lore_ignored_ids)", ()
 
 
+def _like_escape(value: str) -> str:
+    """Escape ``%`` and ``_`` so a project filter is a literal substring match."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def session_filter_sql(
+    *,
+    tool: Optional[str] = None,
+    project: Optional[str] = None,
+    tag: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    prefix: str = "s",
+) -> tuple:
+    """SQL that constrains candidate rows *before* the LIMIT (#174).
+
+    Every public search path over-fetched an unfiltered candidate list and
+    dropped non-matching rows in Python afterwards, so a query whose best
+    unfiltered hits lived in another project or tool returned too few — or no —
+    results even though matching sessions existed.
+
+    Returns ``(sql, params)`` where ``sql`` is a sequence of ``AND …`` clauses
+    for the query's ``WHERE`` and ``params`` its bound values. Date bounds are
+    compared on the ``YYYY-MM-DD`` prefix, which is the granularity every
+    surface exposes and which sorts correctly for ISO timestamps; the exact
+    ``[start, end]`` check still runs afterwards through
+    :func:`lore.utils.datetime.datetime_in_range` so an offset-carrying stored
+    value cannot slip into the wrong day.
+
+    Raises:
+        ValueError: when a date filter is not a date or timestamp.
+    """
+    clauses: List[str] = []
+    params: List[Any] = []
+    if tool:
+        clauses.append(f"AND {prefix}.tool = ?")
+        params.append(str(tool))
+    if project:
+        clauses.append(f"AND {prefix}.project LIKE ? ESCAPE '\\'")
+        params.append(f"%{_like_escape(str(project))}%")
+    if tag:
+        clauses.append(
+            "AND EXISTS (SELECT 1 FROM session_tags st "
+            f"WHERE st.session_id = {prefix}.id AND st.tag = ?)"
+        )
+        params.append(str(tag).strip().lower())
+    for value, operator, label in ((start, ">=", "start"), (end, "<=", "end")):
+        if value is None or str(value).strip() == "":
+            continue
+        bound = parse_date_bound(value, end=label == "end")
+        if bound is None:
+            raise ValueError(
+                f"Invalid {label} date '{value}'. Expected YYYY-MM-DD or an ISO timestamp."
+            )
+        clauses.append(f"AND substr({prefix}.created, 1, 10) {operator} ?")
+        params.append(bound.date().isoformat())
+    return "".join(f"\n              {clause}" for clause in clauses), tuple(params)
+
+
+def _range_bounds(start: Optional[str], end: Optional[str]) -> tuple:
+    """The exact ``(start, end)`` boundaries for the post-filter, or ``(None, None)``."""
+    return (
+        parse_date_bound(start) if start else None,
+        parse_date_bound(end, end=True) if end else None,
+    )
+
+
 def search_sessions(
     output_dir: Path,
     query: str,
     *,
     tool: Optional[str] = None,
     project: Optional[str] = None,
+    tag: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
     limit: int = 50,
     scope: Optional[str] = None,
     include_automated: bool = False,
@@ -106,6 +178,9 @@ def search_sessions(
         query: free-text query; terms are prefix-matched.
         tool: optional exact tool filter.
         project: optional substring project filter.
+        tag: optional saved tag (``session_tags``) the session must carry.
+        start/end: optional date or ISO timestamp bounds; both are inclusive and
+            a date-only ``end`` covers the whole day.
         limit: max results.
         scope: optional message-role scope. One of ``SEARCH_SCOPES`` keys.
             ``None`` or ``"all"`` searches whole sessions (default). Any other
@@ -122,7 +197,8 @@ def search_sessions(
         is too short, or the FTS expression is malformed.
 
     Raises:
-        ValueError: when ``scope`` is not a recognised value.
+        ValueError: when ``scope`` is not a recognised value, or when a date
+            filter cannot be parsed.
     """
     scope_value = (scope or "all").strip().lower()
     if scope_value not in SEARCH_SCOPES:
@@ -139,6 +215,14 @@ def search_sessions(
         return []
 
     ignored = load_ignored_session_ids(output_dir)
+    # #174: every filter is part of the candidate selection, so a limit of N
+    # returns N matching sessions instead of N - k after post-filtering.
+    filter_sql, filter_params = session_filter_sql(
+        tool=tool, project=project, tag=tag, start=start, end=end
+    )
+    start_dt, end_dt = _range_bounds(start, end)
+    # Role scope still needs the per-message table, so it keeps a margin.
+    candidate_limit = max(1, limit) * 4 if scope_roles else max(1, limit)
     conn = open_connection(db)
     try:
         exclusion = "" if include_automated else automated_exclusion_sql(conn, "s")
@@ -156,11 +240,18 @@ def search_sessions(
             FROM search_index
             JOIN sessions s ON s.id = search_index.entity_id
             WHERE search_index MATCH ?
-              AND search_index.entity_type = 'session'{exclusion}{ignored_sql}
+              AND search_index.entity_type = 'session'{exclusion}{ignored_sql}{filter_sql}
             ORDER BY score ASC
             LIMIT ?
             """,
-            (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, *ignored_params, max(1, limit) * 4),
+            (
+                SNIPPET_OPEN,
+                SNIPPET_CLOSE,
+                fts_query,
+                *ignored_params,
+                *filter_params,
+                candidate_limit,
+            ),
         ).fetchall()
     except sqlite3.Error:
         return []
@@ -182,6 +273,17 @@ def search_sessions(
             continue
         if project and project not in str(session.get("project") or ""):
             continue
+        if start_dt or end_dt:
+            # The SQL narrowed on the date prefix; this keeps the exact window,
+            # including offset-carrying stored values.
+            try:
+                created_value = to_local_naive(
+                    datetime.fromisoformat(str(session.get("created")).replace("Z", "+00:00"))
+                )
+            except (TypeError, ValueError):
+                continue
+            if not datetime_in_range(created_value, start_dt, end_dt):
+                continue
         if scoped_session_ids is not None and session.get("id") not in scoped_session_ids:
             continue
         results.append(
@@ -302,6 +404,8 @@ def _knn_rows(
     *,
     ignored_sql: str = "",
     ignored_params: tuple = (),
+    filter_sql: str = "",
+    filter_params: tuple = (),
 ) -> List[sqlite3.Row]:
     return conn.execute(
         f"""
@@ -315,10 +419,10 @@ def _knn_rows(
         FROM session_embeddings se
         JOIN sessions s ON s.id = se.session_id
         WHERE se.embedding MATCH ?
-          AND k = ?{ignored_sql}
+          AND k = ?{ignored_sql}{filter_sql}
         ORDER BY se.distance ASC
         """,
-        (packed, k, *ignored_params),
+        (packed, k, *ignored_params, *filter_params),
     ).fetchall()
 
 
@@ -330,6 +434,8 @@ def _filter_semantic_rows(
     include_automated: bool,
     *,
     max_distance: Optional[float],
+    start_dt: Optional[datetime] = None,
+    end_dt: Optional[datetime] = None,
 ) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     for row in rows:
@@ -342,6 +448,15 @@ def _filter_semantic_rows(
             continue
         if project and project not in str(session.get("project") or ""):
             continue
+        if start_dt or end_dt:
+            try:
+                created_value = to_local_naive(
+                    datetime.fromisoformat(str(session.get("created")).replace("Z", "+00:00"))
+                )
+            except (TypeError, ValueError):
+                continue
+            if not datetime_in_range(created_value, start_dt, end_dt):
+                continue
         results.append({"session": session, "score": float(row["score"])})
         if len(results) >= limit:
             break
@@ -354,6 +469,9 @@ def semantic_search_sessions(
     *,
     tool: Optional[str] = None,
     project: Optional[str] = None,
+    tag: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
     limit: int = 50,
     include_automated: bool = False,
 ) -> List[Dict[str, Any]]:
@@ -388,6 +506,13 @@ def semantic_search_sessions(
     if vector is None:
         return []
 
+    # #174: constrain the neighbour search itself. sqlite-vec applies the extra
+    # WHERE before it finalises the k nearest, so filtered-out neighbours no
+    # longer consume the budget.
+    filter_sql, filter_params = session_filter_sql(
+        tool=tool, project=project, tag=tag, start=start, end=end, prefix="s"
+    )
+    start_dt, end_dt = _range_bounds(start, end)
     ignored = load_ignored_session_ids(output_dir)
     conn = open_connection(db)
     try:
@@ -397,7 +522,15 @@ def semantic_search_sessions(
         # sqlite-vec applies extra WHERE after the k nearest are chosen, so
         # inflate k by the ignore-set size or pruned neighbours crowd out keeps.
         k = min(KNN_K_MAX, max(1, limit) * KNN_K_FACTOR + len(ignored))
-        rows = _knn_rows(conn, packed, k, ignored_sql=ignored_sql, ignored_params=ignored_params)
+        rows = _knn_rows(
+            conn,
+            packed,
+            k,
+            ignored_sql=ignored_sql,
+            ignored_params=ignored_params,
+            filter_sql=filter_sql,
+            filter_params=filter_params,
+        )
         results = _filter_semantic_rows(
             rows,
             tool,
@@ -405,6 +538,8 @@ def semantic_search_sessions(
             limit,
             include_automated,
             max_distance=cutoff,
+            start_dt=start_dt,
+            end_dt=end_dt,
         )
         # The filters run after the KNN cut-off, so a neighbourhood made of automated
         # (or other filtered-out) sessions can leave fewer than ``limit`` hits. Ask once
@@ -417,6 +552,8 @@ def semantic_search_sessions(
                 wider,
                 ignored_sql=ignored_sql,
                 ignored_params=ignored_params,
+                filter_sql=filter_sql,
+                filter_params=filter_params,
             )
             results = _filter_semantic_rows(
                 rows,
@@ -425,6 +562,8 @@ def semantic_search_sessions(
                 limit,
                 include_automated,
                 max_distance=cutoff,
+                start_dt=start_dt,
+                end_dt=end_dt,
             )
     except sqlite3.Error:
         # No vec table (e.g. extension absent) or a malformed query — FTS covers it.

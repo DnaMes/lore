@@ -108,8 +108,8 @@ The application exposes JSON endpoints under `/api/`. Mutating requests (`POST`,
 | | `DELETE` | `/api/sessions/<session_id>/tags` | Removes a tag from a session. |
 | **Find & Summary** | `GET` | `/api/session/<session_id>/find` | Searches within an individual session transcript for text matches. |
 | | `GET` | `/api/session/<session_id>/summary` | Returns cached AI-generated summary, model information, and chunk metadata. |
-| **Search v1** | `GET` | `/api/search` | Legacy query endpoint returning brief session snippets. |
-| | `GET` | `/api/v1/search` | Full-text index search with tool, project, and message role scope filters. |
+| **Search v1** | `GET` | `/api/search` | Legacy query endpoint returning brief session snippets. Accepts `tool`, `project`, `tag`, `start` and `end`; an invalid date returns 400. |
+| | `GET` | `/api/v1/search` | Full-text index search with tool, project, message-role scope, saved-tag (`tag`) and inclusive date (`start`, `end`) filters. Every filter constrains the candidate set before `limit`, so a filtered search still fills its limit from matching sessions. |
 | | `GET` | `/api/v1/index/summary` | Compact metadata summary used for rapid dashboard initialization. |
 | | `GET` | `/api/v1/sessions` | Paginated session summaries with filtering and query capabilities. |
 | | `GET` | `/api/v1/sessions/<session_id>` | Detailed session metadata, supporting live disk fallback (`?live=1`). |

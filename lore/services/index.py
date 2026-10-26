@@ -12,6 +12,7 @@ import logging
 import os
 import threading
 from collections import OrderedDict
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -466,6 +467,9 @@ def _hybrid_search(
     *,
     fts_results: list[dict],
     include_automated: bool = False,
+    tag: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
 ) -> list[dict]:
     """Fuse the already-computed FTS hits with semantic (vector) hits via RRF.
 
@@ -480,6 +484,9 @@ def _hybrid_search(
         query,
         tool=tool,
         project=project,
+        tag=tag,
+        start=start,
+        end=end,
         limit=limit,
         include_automated=include_automated,
     )
@@ -630,6 +637,9 @@ def search_index(
     limit: int = 50,
     scope: Optional[str] = None,
     include_automated: bool = False,
+    tag: Optional[str] = None,
+    start: Optional[str] = None,
+    end: Optional[str] = None,
 ) -> list[dict]:
     """Search sessions, reading from whichever store ``load_index`` uses (#34).
 
@@ -647,8 +657,14 @@ def search_index(
 
     Returns ``[{"session": <dict>, "score": <float>}]``.
 
+    ``tag``, ``start`` and ``end`` constrain the candidate set before the limit
+    is applied (#174), so a filtered search still fills its limit from matching
+    sessions. On the legacy fallback path they are applied after ranking,
+    because the legacy store has neither saved tags nor an indexed date column.
+
     Raises:
-        ValueError: when ``scope`` is not a recognised value.
+        ValueError: when ``scope`` is not a recognised value, or when a date
+            filter cannot be parsed.
     """
     index_dir = index_path.parent
     if _v2_enabled():
@@ -666,6 +682,9 @@ def search_index(
                     query,
                     tool=tool,
                     project=project,
+                    tag=tag,
+                    start=start,
+                    end=end,
                     limit=limit,
                     scope=scope,
                     include_automated=include_automated,
@@ -683,6 +702,9 @@ def search_index(
                         limit,
                         fts_results=results,
                         include_automated=include_automated,
+                        tag=tag,
+                        start=start,
+                        end=end,
                     )
                 if results:
                     results = filter_automated_results(results, include_automated)
@@ -706,8 +728,58 @@ def search_index(
 
     from lore.search.engine import SearchEngine
 
+    # Validate the filters even on this path, so an invalid date is an error
+    # rather than a silently unfiltered result set (#174).
+    start_dt, end_dt = _validated_range(index_dir, start, end)
+
     engine = SearchEngine(index_path)
     # The engine drops automated sessions before its row cap, so a flood of them cannot
     # push the interactive hits out of the result.
     results = engine.search(query, tool=tool, project=project, include_automated=include_automated)
-    return apply_deleted_filter_to_results(results[:limit], deleted)
+    results = apply_deleted_filter_to_results(results, deleted)
+    if tag or start_dt or end_dt:
+        results = _filter_ranked_results(results, index_dir, tag, start_dt, end_dt)
+    return results[:limit]
+
+
+def _validated_range(index_dir: Path, start: Optional[str], end: Optional[str]) -> tuple:
+    """Parse the date filters; raises ValueError on an unparsable value (#174)."""
+    from lore.storage.search import session_filter_sql
+
+    # Reuses the v2 helper purely for its validation, so both paths reject the
+    # same inputs with the same message.
+    session_filter_sql(start=start, end=end, prefix="sessions")
+    from lore.utils.datetime import parse_date_bound
+
+    return (
+        parse_date_bound(start) if start else None,
+        parse_date_bound(end, end=True) if end else None,
+    )
+
+
+def _filter_ranked_results(
+    results: list[dict], index_dir: Path, tag, start_dt, end_dt
+) -> list[dict]:
+    """Post-filter for the legacy store, which has no tags and no indexed date."""
+    from lore.storage import all_tags_by_session
+    from lore.utils.datetime import datetime_in_range, to_local_naive
+
+    saved = all_tags_by_session(index_dir) if tag else {}
+    wanted = str(tag).strip().lower() if tag else None
+    kept: list[dict] = []
+    for result in results:
+        session = result.get("session", {})
+        if wanted is not None:
+            tags = saved.get(str(session.get("id")), [])
+            if wanted not in [str(value).lower() for value in tags]:
+                continue
+        if start_dt or end_dt:
+            raw = session.get("created")
+            try:
+                created = to_local_naive(datetime.fromisoformat(str(raw).replace("Z", "+00:00")))
+            except (TypeError, ValueError):
+                continue
+            if not datetime_in_range(created, start_dt, end_dt):
+                continue
+        kept.append(result)
+    return kept
