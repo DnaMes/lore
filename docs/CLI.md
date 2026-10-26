@@ -76,7 +76,14 @@ The cloud opt-in can also be set with `LORE_ALLOW_CLOUD=1` (see [CONFIGURATION.m
 
 ## list
 
-List archived sessions with optional filters.
+List the sessions found in the live tool directories, with optional filters.
+
+`lore list` reads the tool source directories, not the archive index: when a
+session's source file is deleted (for example by the tool's retention setting),
+the session disappears from `lore list`, but it stays in `lore search`,
+`lore stats` and the web UI, because those read the archive. With
+`--format json`, stdout carries only the JSON array; totals and paging hints
+go to stderr.
 
 Mode: read-only
 
@@ -103,7 +110,7 @@ Export sessions to Markdown files and rebuild the index.
 
 Writes: Markdown exports and the index under the output directory (default `~/.lore`).
 
-After the run, stderr reports how many sessions were skipped and why (for example, sessions below the prompt floor). An index entry whose source file was deleted is kept, unless its exported file is also gone.
+After the run, stderr reports how many sessions were skipped and why (for example, sessions below the prompt floor). Archive preservation drops nothing automatically: an index entry is kept even when both its source file and its exported Markdown file are gone. Only `lore prune` removes entries, and it writes the pruned ids to `ignored.json`. This is deliberate: an unreadable, unmounted or temporarily missing source must never cost an index row, so the index can contain rows whose source no longer exists — that is the archive.
 
 ```text
 usage: lore export [-h] [--all] [--tool TOOL] [--project PROJECT] [--full]
@@ -456,7 +463,13 @@ options:
 
 Delete sessions whose prompt count is at or below a threshold.
 
-Writes: marks sessions as ignored in `ignored.json` and deletes their exports (`--dry-run` only prints the selection). Deletion is confined to the output directory: an export path that resolves outside it (for example through a symlink) is skipped with a warning. Ignored ids are also hidden from the v2 store views; the rows are kept.
+Writes: marks sessions as ignored in `ignored.json` and deletes their exports (`--dry-run` only prints the selection).
+
+Deletion is confined to the output directory. `lore prune` deletes only regular `.md` export files under the archive root, and refuses: symlinks (including link chains whose target leaves the root), files directly in the top level of the archive, and control or store files (whose names start with `index`, `ignored`, `deleted_sessions`, `title_cache`, `memory`, `memories`, `opencode_state` or `rules`, or end with `-wal` or `-shm`). Each refusal is reported to stderr. The index is then rebuilt from the sources, preserving every entry that was not re-observed, so entries whose source still exists elsewhere are not lost.
+
+Pruned ids go to `ignored.json` and are hidden from the v2 store views (`lore search`, stats and the web UI) without deleting the SQLite rows; the file's mtime and size are part of the v2 index cache key, so a rewrite of `ignored.json` takes effect at once. If `ignored.json` is damaged (bad UTF-8, invalid JSON, or the wrong shape), a process warns once on stderr, and pruned sessions may become visible again in those views until the file is removed or fixed.
+
+Archive preservation (see [export](#export)) no longer drops entries on its own: only `lore prune` removes index entries, so the index can contain rows whose source file no longer exists. That is the archive — use `lore prune` to retire such sessions.
 
 ```text
 usage: lore prune [-h] [--max-prompts MAX_PROMPTS] [--dry-run]

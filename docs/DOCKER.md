@@ -145,8 +145,10 @@ Compose passes these to the app (defaults shown):
   python3 -c "import secrets; print(secrets.token_hex(32))"
   ```
 
-- `TRUSTED_PROXY` (empty): passed from `.env`. Any non-empty value makes Lore trust
-  `X-Forwarded-*` headers; the Traefik overlay sets it to `1`.
+- `TRUSTED_PROXY` (empty): passed from `.env`. Only `1`, `true`, `yes` or `on`
+  (case-insensitive) makes Lore trust `X-Forwarded-*` headers; `0`, `false`,
+  `no`, `off` and any other value disable trust. The Traefik overlay sets it
+  to `1`.
 - `LORE_PUBLIC_ORIGINS` (empty): public origins, e.g. `https://your.host`. Their hosts
   are allowed in the `Host` header; origins are honoured as same-origin when
   `TRUSTED_PROXY` is set.
@@ -239,19 +241,31 @@ inconsistent snapshot. Stop the app first. The commands below use the container 
 `lore-app` from `docker-compose.yml`; `--volumes-from` reads the named volume through a
 throwaway `alpine` container.
 
-Backup (writes the archive to the current directory):
+Backup (writes the archive to the current directory, atomically):
 
 ```bash
 docker compose stop app
-docker run --rm --volumes-from lore-app alpine \
-  tar -C /home/ai/.lore -czf - . > "lore-data-$(date +%F).tar.gz"
+backup="lore-data-$(date +%F).tar.gz"
+tmp="$(mktemp "${backup}.XXXXXX.tar.gz")"
+if docker run --rm --volumes-from lore-app alpine \
+    tar -C /home/ai/.lore -czf - . > "$tmp"; then
+  mv "$tmp" "$backup"
+else
+  echo "backup failed; the archive was not touched"
+  rm -f "$backup"
+fi
 docker compose start app
 ```
 
-Restore (replaces the current contents of the volume; keep a copy of the current data first):
+Restore (replaces the current contents of the volume; keep a copy of the current data first). It verifies the archive in a throwaway container before touching the volume, and it aborts on an unreadable or truncated archive:
 
 ```bash
 docker compose stop app
+# 1. verify the archive without extracting, inside a throwaway container
+docker run --rm -i alpine tar -tzf - > /dev/null \
+  < lore-data-2026-10-26.tar.gz \
+  || { echo "archive is broken; nothing was changed"; exit 1; }
+# 2. only then wipe and re-extract
 docker run --rm -i --volumes-from lore-app alpine \
   sh -c 'find /home/ai/.lore -mindepth 1 -delete && tar -C /home/ai/.lore -xzf -' \
   < lore-data-2026-10-26.tar.gz
@@ -286,6 +300,7 @@ in a copy of the checkout; the default `lore-app` container was left running):
 | `LORE_PORT` | `docker compose config` publishes `5077` with `LORE_PORT=5077`, `5001` with `LORE_PORT=5001`, `5000` when unset |
 | `LORE_BIND` default | `host_ip: 127.0.0.1` when unset |
 | Backup and restore | Stop, `tar` through `--volumes-from`, restore with `find -delete` and `tar -x`, start: memory still present, file owner `10001` |
+| Recipe re-check on a scratch volume (2026-10-26, `lore-doc-test`) | `mktemp` + `tar -czf -` redirect + `mv` in place only after `tar` succeeds; `tar -tzf -` inside a throwaway `alpine` container accepts a good archive and aborts with `tar: invalid magic` on a corrupt one before the wipe; `find -delete` + `tar -x` restores the seeded file set; scratch volume removed afterwards |
 | `LORE_DATA_DIR` on a host directory | Directory mode 755 owned by the test user: writes fail with `Permission denied` while the container still reports `healthy`; mode 777: writes succeed and the file is owned by 10001. `sudo chown` was not tested (no sudo in the test session) |
 | Upgrade path | `docker compose pull app` reports "No image to be pulled" (exit 0) |
 | `down -v` | Removed the container, the network and `lore-verify_lore-data` |

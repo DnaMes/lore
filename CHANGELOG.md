@@ -37,6 +37,7 @@ The version is the single source of truth in `lore/__init__.py`.
 - Web UI: peek preview pane, keyboard shortcuts with a help dialog, and in-session find across all pages with highlight and next/prev.
 
 ### Changed
+- **BREAKING:** `TRUSTED_PROXY` is boolean-valued: only `1`, `true`, `yes` or `on` (case-insensitive) enable proxy trust. The value `0` used to enable trust (any non-empty value did); it now disables it, as does `false`, `no`, `off` or any other value.
 - **BREAKING:** `lore analyze` and `lore format` need `--allow-cloud` or `LORE_ALLOW_CLOUD=1` by default, because their default provider, gemini, is a cloud provider. Without it they exit with code 2 and send nothing.
 - **BREAKING:** `lore knowledge` has no default provider; `--provider` is required, and a bare `lore knowledge` exits with code 2.
 - **BREAKING:** the `watch` extra is removed; `lore watch` polls for new sessions and needs no extra package.
@@ -51,9 +52,11 @@ The version is the single source of truth in `lore/__init__.py`.
 - Web UI uses light and dark themes only, and a precompiled stylesheet replaces the Tailwind JIT runtime.
 - Bounded reload memory: `IndexBuilder` streams sessions, and OpenCode extraction is two-pass.
 - Session list and conversation UI: day-grouped list, folded tool-call groups, AI summary card, bulk select with delete and tag, bottom sheets for outline and filters.
+- `lore list` reads the live tool directories, not the archive index. After a source file is deleted the session disappears from `lore list` while it stays in `lore search`, `lore stats` and the web UI. `--format json` prints only the JSON array to stdout; totals and paging hints go to stderr.
+- Packaging: the license is declared as SPDX `MIT` (needs setuptools>=77, PEP 639); the sdist excludes maintainer files (handover notes, session management logs, maintenance-night documents, triage and research docs, and scratch directories); the `[dev]` extra includes pre-commit and bandit.
 
 ### Fixed
-- `lore export` keeps index entries whose source file was deleted, unless their exported file is also gone.
+- `lore export` keeps index entries whose source file was deleted, and now also keeps entries whose export is gone: nothing is dropped automatically, only `lore prune` removes entries.
 - `lore prune` honours `ignored.json` in the v2 store views, so pruned sessions stay hidden.
 - MCP `switch_to_tool` and the web "continue" command call `lore-session` instead of the removed `ai-session` command.
 - `lore search` and `lore prune` tell you to run `lore export --all` when no index exists.
@@ -80,9 +83,10 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ### Security
 - Requests whose `Host` header is not loopback, the bind host, a public origin, or listed in `LORE_ALLOWED_HOSTS` get a 400.
-- `Host` and `Origin` parsing rejects ports outside 1 to 65535 (for example `0` or `65536`) as not allowed (400 or 403) instead of returning a 500.
+- `Host` and `Origin` parsing accepts only ASCII digit ports in 1 to 65535; non-ASCII digits and out-of-range values (for example `0`, `65536` or a fullwidth `１２`) are rejected as not allowed (400 for Host, 403 for Origin) instead of returning a 500.
+- The cloud opt-in is enforced in the library, not only the CLI: `get_provider()` (`lore/llm/factory.py`), `run_improve` (`lore/services/improve.py`) and `TitleGenerator` (`lore/titles/generator.py`) raise `CloudOptInRequired` without `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; `ollama` counts as local only on a loopback host. The title prompt's transcript excerpt is redacted with the same redactor as the other send paths.
 - Mutating requests (POST, PUT, PATCH, DELETE) with an `Origin` header must match their own scheme and host or a configured public origin; anything else gets a 403.
-- `lore prune` deletes export files only inside the output directory; a path that resolves outside it is skipped with a warning.
+- `lore prune` deletes only regular `.md` export files under the archive root; symlinks and control or store files (index, ignored, deleted-session and title-cache names, memories, rules, opencode state, `-wal`/`-shm`) are refused with a stderr warning. A damaged `ignored.json` (bad UTF-8, invalid JSON or the wrong shape) warns once per process, and pruned sessions may be visible again until the file is fixed.
 - Dedupe undo logs record the store they came from, and `--restore` refuses a log written for a different store.
 - `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles` require `--allow-cloud` or `LORE_ALLOW_CLOUD=1` for every non-local provider; a refused run exits with code 2 and sends nothing.
 - `lore-web` prints a warning at startup when it binds beyond loopback without `LORE_PUBLIC_ORIGINS` or `LORE_ALLOWED_HOSTS`.

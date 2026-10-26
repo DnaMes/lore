@@ -85,7 +85,7 @@ Lore enforces strict owner-only permissions on POSIX systems via utility functio
 
 By default, Lore does not make outbound network connections. External network requests occur only when a user explicitly invokes an LLM command and selects a provider.
 
-Every non-local provider (gemini, gemini-cli, openrouter, jev, and ollama when `OLLAMA_HOST` resolves off-host) requires an explicit cloud opt-in: `--allow-cloud` or `LORE_ALLOW_CLOUD=1` (also `true` or `yes`). The gate is `require_cloud_opt_in` in `lore/services/summarize_cli.py`. It runs in `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles`, so every command that can send session text to a non-local provider requires the opt-in. Without it the command prints an error naming both options and exits with code 2 before anything is sent. `--dry-run` sends nothing and is not gated.
+Every non-local provider (gemini, gemini-cli, openrouter, jev, and ollama when `OLLAMA_HOST` resolves off-host) requires an explicit cloud opt-in: `--allow-cloud` or `LORE_ALLOW_CLOUD=1` (also `true` or `yes`). The gate is `require_cloud_opt_in` in `lore/services/summarize_cli.py`; the same refusal is enforced again in the library layer, so programmatic users cannot bypass it: `get_provider()` in `lore/llm/factory.py`, `run_improve` in `lore/services/improve.py` and `TitleGenerator` in `lore/titles/generator.py` raise `CloudOptInRequired` for a non-local provider without the opt-in. `ollama` counts as local only on a loopback host. The CLI gate runs in `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles`, so every command that can send session text to a non-local provider requires the opt-in. Without it the command prints an error naming both options and exits with code 2 before anything is sent. `--dry-run` sends nothing and is not gated.
 
 ### Cloud behaviour by command
 
@@ -93,7 +93,7 @@ Every non-local provider (gemini, gemini-cli, openrouter, jev, and ollama when `
 - `lore analyze` and `lore format` default to `gemini`, a cloud provider. Without the opt-in they exit with code 2 and send nothing. `analyze --no-llm` sends nothing at all. `format` has no `--no-llm` flag; use `--provider ollama` to stay local.
 - `lore summarize` defaults to `ollama` (local). A cloud provider, or an off-host Ollama endpoint, needs the opt-in. `--dry-run` exits before any provider is contacted.
 - `lore improve` sends conversation text only to the provider named by `--provider` or `LORE_LLM_PROVIDER`, and only in the `extract_knowledge` stage. A non-local provider needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; without it the command exits with code 2 and sends nothing. With the opt-in, a notice naming the provider is printed to stderr before the run. Leave both unset to keep it local (the stage is skipped). `--dry-run` sends nothing and is not gated.
-- `lore generate-titles` uses the local provider by default and needs no opt-in. `--provider gemini-cli` is the cloud choice and needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1` as well; without it the command exits with code 2 and sends nothing. Titles send a transcript excerpt per title.
+- `lore generate-titles` uses the local provider by default and needs no opt-in. `--provider gemini-cli` is the cloud choice and needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1` as well; without it the command exits with code 2 and sends nothing. Titles send a transcript excerpt per title; the excerpt is redacted with the same secret redactor as the other paths before it leaves the process.
 
 | Provider | Used by | Data sent | Opt-in |
 | :--- | :--- | :--- | :--- |
@@ -159,6 +159,13 @@ Implemented in `lore/utils/redact.py`:
 
 Prompt preparation in `lore/llm/base.py`:
 - `prepare_prompt(text: str) -> tuple[str, int]`: Automatically runs `redact(text)` on user prompt inputs before passing text to any external LLM provider, stripping secret-shaped tokens prior to transmission.
+
+Other send paths:
+- Title generation (`lore/titles/generator.py`): the transcript excerpt built for a title is run through `redact(text)` before it is sent to the configured provider, including the `gemini-cli` cloud choice.
+- `lore memory context` (`lore/services/memory_context.py`): the rendered memory block passes through `redact(text)`. This is output-side cleaning only; the block stays on the machine.
+- `lore memory import-claude` (`lore/services/claude_memory_import.py`): titles and bodies are redacted before they are written to the memory store.
+- `lore improve` (`lore/services/improve.py`): knowledge extracted for the memory candidates is redacted, and the redaction count is reported with the result.
+- `lore summarize` (`lore/services/summarize.py`): the artifacts payload stored with a summary is redacted before use, and summary output is refused when it contains a secret-shaped string.
 
 ### Input sanitization and validation
 

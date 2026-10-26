@@ -149,6 +149,7 @@ The security model is based directly on the application implementation:
 - **Loopback binding by default**: The application binds strictly to `127.0.0.1` out of the box. Exposing the web UI outside the local machine requires placing it behind a reverse proxy (e.g. Caddy, Nginx, or Traefik) that enforces authentication (such as Basic Auth, OAuth2/OIDC, or mTLS) and handles TLS.
 - **Origin checks**: Every mutating request (`POST`, `PUT`, `PATCH`, `DELETE`) that carries an `Origin` header is validated before it reaches a route.
   - The origin must match the request's own `scheme://host[:port]`. Scheme, host, and port are compared.
+  - Ports in Host and Origin values must be ASCII digits in 1..65535; a value with no port or outside that range (`0`, `65536`, a non-ASCII digit string) is malformed.
   - Origins listed in `LORE_PUBLIC_ORIGINS` (comma-separated `scheme://host[:port]` entries) are also accepted when `TRUSTED_PROXY` is enabled.
   - A malformed or disallowed origin receives HTTP 403. A request without an `Origin` header is not rejected by this check.
   - Without `TRUSTED_PROXY`, forwarded headers are not processed. This prevents forwarded-header spoofing.

@@ -85,7 +85,7 @@ Lore reads what the tools already store on disk; it never writes into them.
 
 | Command | What it does |
 | --- | --- |
-| `lore list` | List archived sessions, filtered by tool, project or date |
+| `lore list` | List the sessions found in the tool directories, filtered by tool, project or date |
 | `lore export` | Export sessions to Markdown and rebuild the index |
 | `lore search` | Full-text search across archived sessions |
 | `lore stats` | Print counts and breakdowns from the existing index |
@@ -147,12 +147,16 @@ A provider receives text only when you run an AI command with one. Every command
 can send session text to a non-local provider requires the opt-in, `--allow-cloud` or
 `LORE_ALLOW_CLOUD=1`: `analyze`, `knowledge`, `format`, `summarize`, `improve`, and
 `generate-titles` with `--provider gemini-cli`. Without it they exit with code 2 and send
-nothing. `lore knowledge` has no default provider: it exits with code 2 until you pass
-`--provider`. `analyze` and `format` default to `gemini`, a cloud provider; to stay local,
-pass `--no-llm` (`analyze` only) or `--provider ollama`. `improve` sends text only when
-`--provider` or `LORE_LLM_PROVIDER` is set, and `--dry-run` sends nothing. `generate-titles`
-uses the local provider by default and needs no opt-in. The full per-command provider
-table is in [docs/PRIVACY.md](docs/PRIVACY.md).
+nothing. The opt-in is enforced in the library as well as the CLI (`get_provider()` in
+`lore/llm/factory.py` and friends raise `CloudOptInRequired`), and `ollama` counts as
+local only on a loopback host. `lore knowledge` has no default provider: it exits with
+code 2 until you pass `--provider`. `analyze` and `format` default to `gemini`, a cloud
+provider; to stay local, pass `--no-llm` (`analyze` only) or `--provider ollama`.
+`improve` sends text only when `--provider` or `LORE_LLM_PROVIDER` is set, and
+`--dry-run` sends nothing. `generate-titles` uses the local provider by default and needs
+no opt-in; the transcript excerpt a title is built from is redacted before it is sent to
+any provider. The full per-command provider table is in
+[docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Configuration
 
@@ -202,6 +206,10 @@ data in your tool directories is not touched.
   the tool has not created local sessions yet.
 - Claude sessions are missing: older transcripts may have been pruned by the
   tool's retention setting before Lore synced them.
+- A session is missing from `lore list` but still found by `lore search`:
+  `lore list` reads the live tool directories, not the archive index, so a
+  session whose source file was deleted disappears from `lore list` while it
+  stays in `lore search`, `lore stats` and the web UI.
 - Search returns nothing: build the index first with `lore export --all` or
   `lore sync <tool>`.
 - Port 5000 is busy: start the UI with `lore-web --port 5001` or set
