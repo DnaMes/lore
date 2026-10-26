@@ -130,10 +130,12 @@ def test_meta_omits_unknown_tokens_and_short_duration(monkeypatch):
     entry.pop("tokens", None)
     monkeypatch.setattr(web, "load_index", lambda: _index_with(entry))
     html = web.app.test_client().get("/sessions").get_data(as_text=True)
-    assert "12.4k" not in html
-    assert "prompts" in html
-    assert "1h" not in html
-    assert "30m" not in html
+    # Only the rows: the full page carries random tokens that can contain "1h" by chance.
+    rows_html = html.split('id="sessionRows"', 1)[1].split("</section>", 1)[0]
+    assert "12.4k" not in rows_html
+    assert "prompts" in rows_html
+    assert "1h" not in rows_html
+    assert "30m" not in rows_html
 
 
 def test_time_element_has_valid_datetime(client):

@@ -80,7 +80,7 @@ def _render(url: str) -> str:
         ],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=180,  # a cold Chromium on a shared CI runner can need more than a minute
     )
     return proc.stdout + "\n" + proc.stderr
 
