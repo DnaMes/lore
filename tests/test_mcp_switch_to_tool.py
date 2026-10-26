@@ -29,6 +29,8 @@ def _completed(stdout: str = "ctx") -> subprocess.CompletedProcess:
 
 def test_switch_to_tool_invokes_lore_session_when_installed(monkeypatch: pytest.MonkeyPatch):
     calls: list[dict[str, Any]] = []
+    # gemini is cloud-bound; the MCP gate needs the opt-in env before spawning.
+    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
 
     def fake_which(name: str) -> str | None:
         calls.append({"which": name})
@@ -47,6 +49,7 @@ def test_switch_to_tool_invokes_lore_session_when_installed(monkeypatch: pytest.
     run_cmd = calls[1]["run"]
     assert run_cmd[0] == "lore-session"
     assert run_cmd[1] == "switch"
+    assert "--allow-cloud" in run_cmd
     assert "--messages" in run_cmd and "5" in run_cmd
     assert "context body" in result
 

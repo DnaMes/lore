@@ -15,6 +15,7 @@ from ...services.index import (
     thread_hidden_count,
     thread_sessions,
 )
+from ...services.summarize_cli import cloud_opt_in_granted
 from ...utils.security import validate_session_id, validate_tool_name
 from ...utils.tooling import normalize_tool_name, to_session_switch_tool
 from ..api_payloads import (
@@ -32,6 +33,10 @@ from ..web_services import (
 from .deps import MCPToolDeps
 
 SESSION_COMMAND = "lore-session"
+
+# Tools whose lore-session switch launches a process that receives OUR session
+# context (gemini as argv, codex via @file). They need an explicit cloud opt-in.
+CLOUD_CONTEXT_TOOLS = frozenset({"gemini", "codex"})
 
 
 def register(server, deps: MCPToolDeps) -> None:
@@ -293,7 +298,17 @@ def register(server, deps: MCPToolDeps) -> None:
                 "Install it with: pipx install git+https://github.com/DnaMes/lore"
             )
 
+        # Cloud gate: refuse before spawning anything when the requested tool
+        # would receive the session context in a cloud-bound process.
+        if switch_tool in CLOUD_CONTEXT_TOOLS and not cloud_opt_in_granted():
+            return (
+                f"Refusing to switch to {normalized_tool}: lore-session would send the "
+                "session context to the cloud. Set LORE_ALLOW_CLOUD=1 to confirm."
+            )
+
         cmd = [SESSION_COMMAND, "switch", switch_tool, "--messages", str(max_messages)]
+        if switch_tool in CLOUD_CONTEXT_TOOLS:
+            cmd.append("--allow-cloud")
         if thread_id:
             cmd.extend(["--thread-id", thread_id])
 

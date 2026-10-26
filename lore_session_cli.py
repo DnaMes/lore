@@ -7,12 +7,18 @@ Usage:
     lore-session switch gemini                 # Switch to Gemini with current context
     lore-session switch codex                  # Switch to Codex with current context
     lore-session continue                      # Auto-select best tool based on rate limits
+
+Cloud-bound tools (gemini, codex) receive the session context and therefore need an
+explicit opt-in via --allow-cloud or LORE_ALLOW_CLOUD=1 (or true/yes).
 """
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
+import time
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -22,13 +28,53 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from lore.exporters.context import format_context
 from lore.extractors.factory import get_all_extractors
+from lore.services.summarize_cli import cloud_opt_in_granted
 from lore.utils.console import make_console_safe
 from lore.utils.datetime import make_naive
-from lore.utils.paths import get_current_project
+from lore.utils.paths import get_current_project, lore_home, secure_dir
+from lore.utils.redact import redact
 from lore.utils.security import get_safe_executable
 from lore.utils.tooling import normalize_tool_name, to_session_switch_tool
 
-CONTEXT_FILE = Path("/tmp/ai-session-context.md")
+# Tools whose launched process receives OUR session context (gemini as argv, codex
+# via @file). They require an explicit cloud opt-in. claude --continue never
+# receives our context and the manual tools (cursor, vscode) only produce a local
+# file for the user to paste, so both stay ungated.
+CLOUD_CONTEXT_TOOLS = frozenset({"gemini", "codex"})
+_CONTEXT_FILE_STALE_SECONDS = 24 * 60 * 60
+
+
+def _handoff_dir() -> Path:
+    """Private (0700) directory holding handoff context files."""
+    return secure_dir(lore_home() / "handoff")
+
+
+def _cleanup_stale_context_files() -> None:
+    """Delete handoff context files older than 24h (best effort, ignore OSError)."""
+    cutoff = time.time() - _CONTEXT_FILE_STALE_SECONDS
+    try:
+        for path in _handoff_dir().glob("context-*.md"):
+            try:
+                if path.stat().st_mtime < cutoff:
+                    path.unlink()
+            except OSError:
+                continue
+    except OSError:
+        return
+
+
+def _write_context_file(context: str) -> Path:
+    """Write ``context`` to a unique 0600 file in the private handoff directory.
+
+    O_EXCL on a fresh random name means an attacker cannot win the race with a
+    symlink or pre-planted file (unlike the old fixed /tmp path).
+    """
+    _cleanup_stale_context_files()
+    path = _handoff_dir() / f"context-{uuid.uuid4().hex}.md"
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(context)
+    return path
 
 
 def get_project_sessions(project_path: str):
@@ -65,26 +111,22 @@ def get_project_sessions(project_path: str):
     return sessions
 
 
-def switch_to_tool(tool: str, context: str):
-    """Switch to specified AI tool with context."""
+def switch_to_tool(tool: str, context: str, allow_cloud: bool = False):
+    """Switch to specified AI tool with a redacted context.
+
+    Returns True on success, False on refusal or failure. Cloud-bound tools
+    (gemini, codex) refuse unless ``allow_cloud`` or ``LORE_ALLOW_CLOUD`` opts in.
+    """
 
     normalized_tool = normalize_tool_name(tool) or tool
     switch_tool = to_session_switch_tool(normalized_tool) or tool
 
-    # Save context
-    try:
-        with open(CONTEXT_FILE, "w", encoding="utf-8") as f:
-            f.write(context)
-    except Exception as e:
-        print(f"❌ Error saving context: {e}")
-        return False
-
     commands = {
-        "gemini": ["gemini", f"$(cat {CONTEXT_FILE})"],
-        "codex": ["codex", f"@{CONTEXT_FILE}"],
+        "gemini": "argv",  # context is passed as an argv element
+        "codex": "file",  # context is referenced via @<file>
         "cursor": None,  # Manual
         "vscode": None,  # Manual
-        "claude": ["claude", "--continue"],
+        "claude": "continue",  # claude --continue; never receives our context
     }
 
     if switch_tool not in commands:
@@ -92,24 +134,50 @@ def switch_to_tool(tool: str, context: str):
         print(f"Available: {', '.join(commands.keys())}")
         return False
 
-    cmd = commands[switch_tool]
+    if switch_tool in CLOUD_CONTEXT_TOOLS and not cloud_opt_in_granted(allow_cloud):
+        print(
+            f"Error: switching to {tool} sends the session context to the cloud. "
+            "Pass --allow-cloud or set LORE_ALLOW_CLOUD=1 to confirm.",
+            file=sys.stderr,
+        )
+        return False
 
-    if cmd is None:
-        # Manual tools
-        print(f"✓ Context saved to: {CONTEXT_FILE}")
+    # Redact secret-shaped strings before the context is written anywhere or
+    # passed as argv — including the manual tools (the file stays on disk).
+    context = redact(context).text
+
+    context_path: Path | None = None
+    if switch_tool != "claude":
+        try:
+            context_path = _write_context_file(context)
+        except OSError as e:
+            print(f"❌ Error saving context: {e}")
+            return False
+
+    if commands[switch_tool] is None:
+        # Manual tools: the user pastes from the file, so keep it and point at it.
+        print(f"✓ Context saved to: {context_path}")
         print(f"\nTo continue in {tool.title()}:")
         if tool == "cursor":
             print("  1. Open Cursor")
             print("  2. Press Cmd/Ctrl+I")
-            print(f"  3. Paste content from {CONTEXT_FILE}")
+            print(f"  3. Paste content from {context_path}")
         elif tool == "vscode":
             print("  1. Open VSCode")
             print("  2. Press Ctrl+Shift+I (Copilot Chat)")
-            print(f"  3. Type: @{CONTEXT_FILE}")
+            print(f"  3. Type: @{context_path}")
         return True
 
+    if switch_tool == "gemini":
+        cmd = ["gemini", "<session context as argument>"]
+    elif switch_tool == "codex":
+        cmd = ["codex", f"@{context_path}"]
+    else:
+        cmd = ["claude", "--continue"]
+
     print(f"\n🚀 Switching to {tool}...\n")
-    print(f"Context: {CONTEXT_FILE}")
+    if context_path is not None:
+        print(f"Context: {context_path}")
     print(f"Command: {' '.join(cmd)}\n")
 
     try:
@@ -121,7 +189,7 @@ def switch_to_tool(tool: str, context: str):
         if switch_tool == "gemini":
             subprocess.run([executable, context], shell=False, timeout=3600)
         elif switch_tool == "codex":
-            subprocess.run([executable, f"@{CONTEXT_FILE}"], shell=False, timeout=3600)
+            subprocess.run([executable, f"@{context_path}"], shell=False, timeout=3600)
         elif switch_tool == "claude":
             subprocess.run([executable, "--continue"], shell=False, timeout=3600)
     except FileNotFoundError:
@@ -133,11 +201,18 @@ def switch_to_tool(tool: str, context: str):
     except KeyboardInterrupt:
         print("\n\n✓ Session ended")
         return True
+    finally:
+        # The launched process has consumed the context; remove the protected file.
+        if context_path is not None:
+            try:
+                context_path.unlink()
+            except OSError:
+                pass
 
     return True
 
 
-def auto_switch():
+def auto_switch(allow_cloud: bool = False):
     """Auto-select best tool based on rate limits and availability."""
 
     # Check Claude Code availability/rate limit
@@ -164,6 +239,10 @@ def auto_switch():
             or shutil.which(f"{tool}-cli")
             or (tool == "gemini" and shutil.which("gemini-cli"))
         ):
+            # Deliberately NOT falling through to the next tool: if the selection
+            # is cloud-bound (gemini/codex) and the user did not opt in, the
+            # caller must refuse instead of silently sending the context to a
+            # different provider (or picking a tool the user did not confirm).
             print(f"✓ Selected: {tool}")
             return tool
 
@@ -256,9 +335,19 @@ def main():
         help="Number of recent messages (default: 15)",
     )
     switch_parser.add_argument("--thread-id", help="Continue a specific thread id")
+    switch_parser.add_argument(
+        "--allow-cloud",
+        action="store_true",
+        help="Confirm sending the session context to cloud-bound tools (gemini, codex)",
+    )
 
     # continue command
-    subparsers.add_parser("continue", help="Auto-select best available tool")
+    continue_parser = subparsers.add_parser("continue", help="Auto-select best available tool")
+    continue_parser.add_argument(
+        "--allow-cloud",
+        action="store_true",
+        help="Confirm sending the session context to cloud-bound tools (gemini, codex)",
+    )
 
     args = parser.parse_args()
 
@@ -284,15 +373,19 @@ def main():
             print(f"\n🔍 Loading context from {len(sessions)} previous sessions...")
             context = format_context(sessions, args.messages)
 
-        switch_to_tool(args.tool, context)
+        if not switch_to_tool(args.tool, context, allow_cloud=args.allow_cloud):
+            sys.exit(2)
 
     elif args.command == "continue":
-        tool = auto_switch()
+        tool = auto_switch(allow_cloud=args.allow_cloud)
         if tool:
             project = get_current_project()
             sessions = get_project_sessions(project)
             context = format_context(sessions, 15)
-            switch_to_tool(tool, context)
+            # If auto picked a gated tool without opt-in this refuses (exit 2);
+            # it must not silently fall back to a different tool.
+            if not switch_to_tool(tool, context, allow_cloud=args.allow_cloud):
+                sys.exit(2)
 
 
 if __name__ == "__main__":

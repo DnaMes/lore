@@ -35,6 +35,24 @@ from typing import Any
 TIMEOUT = 120  # seconds for every subprocess
 # A cold pip install (onnxruntime for [semantic], sdist builds on musl) can take minutes.
 INSTALL_TIMEOUT = 900
+# Source-location overrides and provider credentials a stranger's machine would not have: they
+# would point extractors at the developer's real histories or let a cloud call succeed.
+FOREIGN_ENV = frozenset(
+    {
+        "CLAUDE_CONFIG_DIR",
+        "GEMINI_PROJECT_ROOTS",
+        "OPENCODE_SQLITE_PATHS",
+        "OPENCODE_STORAGE_PATHS",
+        "GEMINI_API_KEY",
+        "GOOGLE_API_KEY",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_CLIENT_ID",
+        "GEMINI_CLIENT_ID",
+        "GEMINI_CLIENT_SECRET",
+        "OPENROUTER_API_KEY",
+        "OLLAMA_HOST",
+    }
+)
 WEB_WAIT = 90  # seconds for lore-web to answer /api/health (a cold macOS runner is slow)
 PROXY_URL = "http://127.0.0.1:9"  # nothing listens here: a send would fail loudly
 PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
@@ -103,7 +121,11 @@ def isolated_env(home: Path, base: Mapping[str, str] | None = None) -> dict[str,
     ~/.lore or import the source tree.
     """
     source = os.environ if base is None else base
-    env = {k: v for k, v in source.items() if not k.startswith("LORE_") and k != "PYTHONPATH"}
+    env = {
+        k: v
+        for k, v in source.items()
+        if not k.startswith("LORE_") and k != "PYTHONPATH" and k not in FOREIGN_ENV
+    }
     roots = {
         "HOME": home,
         "USERPROFILE": home,

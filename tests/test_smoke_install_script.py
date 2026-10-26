@@ -151,3 +151,19 @@ def test_parse_args_requires_exactly_one_mode():
         smoke.parse_args([])
     with pytest.raises(SystemExit):
         smoke.parse_args(["--installed", "--wheel", "x.whl"])
+
+
+def test_isolated_env_drops_source_overrides_and_credentials(tmp_path):
+    base = {
+        "OPENCODE_STORAGE_PATHS": "/real/opencode",
+        "OPENCODE_SQLITE_PATHS": "/real/opencode.db",
+        "GEMINI_PROJECT_ROOTS": "/real/gemini",
+        "CLAUDE_CONFIG_DIR": "/real/claude",
+        "GEMINI_API_KEY": "secret",
+        "OPENROUTER_API_KEY": "secret",
+        "OLLAMA_HOST": "http://192.0.2.1:11434",
+        "KEEP_ME": "yes",
+    }
+    env = smoke.isolated_env(tmp_path, base)
+    assert not (set(base) - {"KEEP_ME"}) & set(env)
+    assert env["KEEP_ME"] == "yes"
