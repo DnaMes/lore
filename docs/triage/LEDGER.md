@@ -541,3 +541,65 @@ identity per adapter, factory routing, and the Antigravity gate.
   legacy event names; releases that differ in both would report
   `AdapterOutputError` instead of an answer.
 
+## Round 10 — backup and restore (#161)
+
+The Group 2 row above (`161 | STILL-VALID`) is superseded by this round.
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #161 backup/restore | CLOSED | `68a1495` | `lore/storage/backup.py` (`create_backup`, `verify_bundle`, `restore_backup`), `lore backup <path>` / `lore backup verify <path>` / `lore restore <path> [--force]` in `lore_cli.py`, `tests/test_backup_restore.py`, `docs/CLI.md`, `docs/CONFIGURATION.md`; `pytest tests/test_backup_restore.py -o addopts="" -q` -> 23 passed |
+
+What made it not a file copy: the snapshot comes from SQLite's online-backup
+API (`Connection.backup`), so commits still sitting in a live `-wal` are
+included. The bundle is a zip whose `manifest.json` carries the format-version
+marker, the store schema and every applied migration, the Lore version, the
+creation time, one sha256 + size per member and the row count of every archived
+table. Verification runs the checksums, `PRAGMA integrity_check`, the row
+counts and the schema-compatibility check before anything is restored; the
+restore itself verifies first, refuses an existing store without `--force`, and
+swaps the snapshot in from a sibling temp file with `os.replace`.
+
+Observed in a throwaway `HOME` (store with 1 session, 2 FTS rows, 1 memory,
+1 tag):
+
+```
+$ HOME=$H lore backup $H/smoke.zip
+Backup written: /tmp/tmp.32v3cIZ4Tr/smoke.zip
+  format:     lore-backup v1, created 2026-10-26T22:46:12+00:00
+  lore:       2.4.0 (store schema 18, this Lore 18)
+  rows:       deleted_sessions=0 memory=1 ... session_tags=1 sessions=1
+  member:     db/index_v2.sqlite sha256=ad246ca4ffc15a3e… 1851392 bytes
+rc=0
+
+$ HOME=$H lore backup verify $H/smoke.zip
+Bundle OK: /tmp/tmp.32v3cIZ4Tr/smoke.zip
+rc=0
+
+$ HOME=$H lore --output-dir $H/restored restore $H/smoke.zip
+Restored /tmp/tmp.32v3cIZ4Tr/restored/index_v2.sqlite (created) from …
+rc=0
+
+$ HOME=$H lore --output-dir $H/restored restore $H/smoke.zip
+Restore refused: …/restored/index_v2.sqlite already exists; pass --force to replace it
+rc=1
+
+$ HOME=$H lore backup verify $H/tampered.zip      # one flipped payload byte
+Problem: db/index_v2.sqlite has sha256 c3f9509b…, the manifest says ad246ca4…
+Bundle FAILED verification: /tmp/tmp.32v3cIZ4Tr/tampered.zip
+rc=1
+
+$ HOME=$H lore --output-dir $H/fresh restore $H/tampered.zip
+Restore refused: … failed verification, nothing was restored: …
+rc=1                                               # $H/fresh not created
+
+$ HOME=$H lore --output-dir $H/restored restore $H/smoke.zip --force
+Restored /tmp/tmp.32v3cIZ4Tr/restored/index_v2.sqlite (replaced) from …
+rc=0
+```
+
+NOT VERIFIED in this round: a backup taken while another process is writing
+(the backup API is the guarantee, and the WAL test covers an uncheckpointed
+commit, but no concurrent-writer run was executed); interrupt-during-restore
+behaviour (the atomic-replace ordering is exercised only by the refusal tests);
+and the restored store's semantic/vector search, which needs the `semantic`
+extra on the restoring host.
