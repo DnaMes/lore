@@ -211,8 +211,20 @@ focused test file and the matching docs.
 | #173 saved tags as filters | CLOSED | `37a86a3` | one match predicate (saved tags + index keywords) used by the web filter and dropdown, `lore list --tag`, `lore search --tag`, MCP `search_history`/`list_sessions`; `pytest tests/test_tag_filtering.py tests/test_session_tags.py -o addopts="" -q` -> 20 passed, including sync rewrite, reindex and consistent SQLite copy |
 | #174 filters before the limit | CLOSED | `bb9819d`, `e94b788` | `session_filter_sql()` inside the FTS and KNN queries, exact date re-check, explicit errors; `pytest tests/test_search_filter_before_limit.py ... -q` -> 97 passed with the "top hits belong elsewhere" fixture at `limit=1`; semantic runtime NOT VERIFIED here (no sqlite-vec in this venv) |
 
-Remaining after round 2: **38 open issues** — 2 owner-deferred (#29, #48), 33 Archive
-epic gaps and 3 independent ones (#119, #194, #197).
+Round 2b — the rest of the Wave 2 chain:
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #171 message permalinks | CLOSED | `9c860da` | `load_session_message_window` (COUNT + `ORDER BY seq LIMIT/OFFSET`), `/session/<id>/m/<seq>` and `/api/v1/sessions/<id>/messages/<seq>`, 404/410 paths; `pytest tests/test_message_permalink.py … -q` -> 45 passed, including a page that still answers with `load_session_by_id` patched to raise |
+| #175 evidence + paging | CLOSED | `7e8ab87` | `message_evidence_for_sessions` (seq, role, marked excerpt, coverage-based `excerpt_truncated`, permalink), `count_session_hits` with the identical WHERE, `page`/`per_page`/`total`/`next_page`/`total_is_partial`; `pytest tests/test_search_evidence.py … -q` -> 75 passed; deterministic tiebreaks (FTS `entity_id`, semantic id sort, fixed `_HYBRID_WINDOW`) so pages tile |
+
+Remaining after round 2: **36 open issues** — 2 owner-deferred (#29, #48), 31 Archive
+epic gaps and 3 independent ones (#119, #194, #197). The Wave 2 chain (#172, #173,
+#174, #171, #175) is complete.
+
+Correction to the #174 row: the semantic path was NOT VERIFIED when #174 closed
+(no `sqlite-vec` in the venv). The extra is installed now, the vector test runs and
+passes, and the issue carries a follow-up comment saying so.
 
 ## Phase 3 — fixes
 
