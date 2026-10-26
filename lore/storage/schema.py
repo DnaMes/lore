@@ -411,6 +411,43 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
             ON messages(session_id, native_id);
         """,
     ),
+    (
+        21,
+        "namespaced session identity and divergent copies (#155)",
+        # The unqualified provider id stays the primary key so every existing
+        # reference keeps resolving; these columns add the qualifiers that make
+        # collisions detectable instead of silently overwriting.
+        """
+        ALTER TABLE sessions ADD COLUMN source_namespace TEXT;
+        ALTER TABLE sessions ADD COLUMN source_record_id TEXT;
+        ALTER TABLE sessions ADD COLUMN content_sha256 TEXT;
+        ALTER TABLE sessions ADD COLUMN copy_of_session_id TEXT;
+        CREATE INDEX IF NOT EXISTS idx_sessions_namespace
+            ON sessions(source_namespace, source_record_id);
+        CREATE INDEX IF NOT EXISTS idx_sessions_content_sha
+            ON sessions(content_sha256);
+        CREATE INDEX IF NOT EXISTS idx_sessions_copy_of
+            ON sessions(copy_of_session_id);
+        """,
+    ),
+    (
+        22,
+        "stable evidence references for memory links (#160)",
+        # message_id is a volatile SQLite rowid: a reindex that re-inserts rows
+        # changes it. These columns carry an identity that survives that, while
+        # message_id stays for compatibility with existing links.
+        """
+        ALTER TABLE memory_sources ADD COLUMN message_seq INTEGER;
+        ALTER TABLE memory_sources ADD COLUMN message_native_id TEXT;
+        ALTER TABLE memory_sources ADD COLUMN message_sha256 TEXT;
+        ALTER TABLE memory_sources ADD COLUMN source_revision_id INTEGER;
+        ALTER TABLE memory_sources ADD COLUMN session_namespace TEXT;
+        CREATE INDEX IF NOT EXISTS idx_memory_sources_session_seq
+            ON memory_sources(session_id, message_seq);
+        CREATE INDEX IF NOT EXISTS idx_memory_sources_message_sha
+            ON memory_sources(message_sha256);
+        """,
+    ),
 ]
 
 

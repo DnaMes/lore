@@ -16,12 +16,14 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..core.models import MESSAGE_KINDS, ORIGINS, RELATIONS, UnifiedMessage, UnifiedSession
 from .envelope import ENVELOPE_VERSION, envelope_for
+from .identity import canonical_content_hash, resolve_store_id, store_identity_columns
 from .schema import initialise
 from .session_vectors import _MAX_EMBED_CHARS, embed_sessions
 from .source_revisions import capture_session_source
@@ -411,7 +413,23 @@ def _write_full_session(
     for the post-commit vector pass. Shared by :func:`write_sessions` (list
     path) and :class:`StreamingV2Writer` (streaming path) so both produce
     identical rows.
+
+    Divergent copies (#155): when the id already exists with *different* content,
+    this row is written under a qualified id and linked to the earlier one. The
+    existing row is never replaced — a second provider history under the same
+    unqualified id used to be destroyed by last-write-wins.
     """
+    record_id = session.session_id
+    content_hash = canonical_content_hash(session)
+    store_id, copy_of = resolve_store_id(conn, session, content_hash=content_hash)
+    if store_id != session.session_id:
+        logger.info(
+            "Divergent copy of %s stored as %s (copy_of=%s)",
+            session.session_id,
+            store_id,
+            copy_of,
+        )
+        session = replace(session, session_id=store_id)
     source_mtime_ns = _source_mtime_ns(session.source_path, session.source_mtime_ns)
     conn.execute("DELETE FROM messages WHERE session_id = ?", (session.session_id,))
     conn.execute(
@@ -493,6 +511,14 @@ def _write_full_session(
         fts_rows,
     )
     _link_source_revision(conn, session, source_mtime_ns)
+    store_identity_columns(
+        conn,
+        session.session_id,
+        session,
+        content_hash=content_hash,
+        copy_of=copy_of,
+        record_id=record_id,
+    )
     return (session.session_id, fts_body, source_mtime_ns)
 
 
@@ -590,6 +616,16 @@ def _write_reused_full_session(
         fts_rows,
     )
     _link_source_revision(conn, session, source_mtime_ns)
+    current_copy = conn.execute(
+        "SELECT copy_of_session_id FROM sessions WHERE id = ?", (session.session_id,)
+    ).fetchone()
+    store_identity_columns(
+        conn,
+        session.session_id,
+        session,
+        content_hash=canonical_content_hash(session),
+        copy_of=current_copy[0] if current_copy else None,
+    )
     return True, (session.session_id, None, source_mtime_ns)
 
 

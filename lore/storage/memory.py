@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .evidence import record_evidence_link, resolve_evidence
 from .feedback import (
     _check_id,
     _id_in_range,
@@ -1340,43 +1341,70 @@ def link_memory_to_session(
     session_id: str,
     *,
     message_id: Optional[int] = None,
+    message_seq: Optional[int] = None,
     note: Optional[str] = None,
 ) -> None:
-    """Record that a memory originated from a particular session/message."""
+    """Record that a memory originated from a particular session/message.
+
+    Stores the legacy rowid *and* a reindex-stable identity (sequence, native id,
+    content hash, session namespace, source revision) so a rebuild cannot make
+    the evidence point at a different message (#160). Passing ``message_seq`` is
+    preferred; ``message_id`` stays for older callers.
+    """
     conn = _connect(output_dir)
     try:
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO memory_sources (memory_id, session_id, message_id, note)
-            VALUES (?, ?, ?, ?)
-            """,
-            (memory_id, session_id, message_id, note),
+        record_evidence_link(
+            conn,
+            memory_id=memory_id,
+            session_id=session_id,
+            message_id=message_id,
+            message_seq=message_seq,
+            note=note,
         )
     finally:
         conn.close()
 
 
 def list_memory_sources(output_dir: Path, memory_id: int) -> List[Dict[str, Any]]:
-    """Return the source-session links recorded for a memory (#33).
+    """Return the source-session links recorded for a memory (#33, #160).
 
-    Each entry is ``{"session_id", "message_id", "note"}`` — the sessions
-    a memory was derived from. Empty list when nothing is linked.
+    Each entry is ``{"session_id", "message_id", "note"}`` plus the stable
+    evidence identity (``message_seq``, ``message_native_id``,
+    ``message_sha256``, ``source_revision_id``, ``session_namespace``) and a
+    ``resolved`` block naming the message the link points at *now* and whether
+    the rowid or the stable identity resolved it. ``resolved`` is ``None`` when
+    the transcript no longer contains that message.
     """
     conn = _connect(output_dir)
     try:
         rows = conn.execute(
-            "SELECT session_id, message_id, note FROM memory_sources "
-            "WHERE memory_id = ? ORDER BY session_id",
+            "SELECT session_id, message_id, note, message_seq, message_native_id, "
+            "message_sha256, source_revision_id, session_namespace FROM memory_sources "
+            "WHERE memory_id = ? ORDER BY session_id, message_seq",
             (memory_id,),
         ).fetchall()
-        return [
-            {
-                "session_id": r["session_id"],
-                "message_id": r["message_id"],
-                "note": r["note"],
-            }
-            for r in rows
-        ]
+        entries = []
+        for r in rows:
+            resolved = resolve_evidence(conn, r)
+            entries.append(
+                {
+                    "session_id": r["session_id"],
+                    "message_id": r["message_id"],
+                    "note": r["note"],
+                    "message_seq": r["message_seq"],
+                    "message_native_id": r["message_native_id"],
+                    "message_sha256": r["message_sha256"],
+                    "source_revision_id": r["source_revision_id"],
+                    "session_namespace": r["session_namespace"],
+                    "resolved": (
+                        {key: resolved[key] for key in resolved if key != "resolved_by"}
+                        if resolved
+                        else None
+                    ),
+                    "resolved_by": resolved["resolved_by"] if resolved else None,
+                }
+            )
+        return entries
     finally:
         conn.close()
 
