@@ -10,7 +10,8 @@ services:
     restart: unless-stopped
     ports:
       # Loopback by default. Set LORE_BIND=0.0.0.0 only if you intentionally expose the host.
-      - "${LORE_BIND:-127.0.0.1}:5000:5000"
+      # LORE_PORT changes the host port when 5000 is taken (for example by macOS AirPlay).
+      - "${LORE_BIND:-127.0.0.1}:${LORE_PORT:-5000}:5000"
     volumes:
       # Named volume by default (seeded from image ownership uid 10001). Override with
       # LORE_DATA_DIR=/host/path — that host path must be writable by container uid 10001.

@@ -51,6 +51,8 @@ RUN apt-get update \
         sqlite3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 10001 ai \
+    && mkdir -p /home/ai/.lore \
+    && chown -R ai:ai /home/ai/.lore \
     && chmod 0711 /home/ai
 
 COPY --from=builder /usr/local /usr/local

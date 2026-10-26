@@ -10,6 +10,8 @@
 # Lore has no login: add an auth middleware (e.g. basic auth) to the router below.
 services:
   app:
+    # Present so `docker compose -f docker-compose.traefik.example.yml config` validates alone.
+    build: .
     environment:
       - TRUSTED_PROXY=1
       - LORE_PUBLIC_ORIGINS=https://lore.example.com
