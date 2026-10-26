@@ -296,10 +296,11 @@ archived plan forbids and the one with real data-loss risk. They are therefore
 recorded with a decided order, not silently reshuffled or half-implemented.
 
 Three of the four non-epic gaps (#119, #194, #197) are independent of the
-migrations and are the shortest path back into the backlog; #194 and #197 also
-depend on nothing that is still unbuilt (the Playwright script and the memory
-review CLI are the only missing pieces). Their recommended order is in
-`docs/TODO.md`.
+migrations and are the shortest path back into the backlog. #194 needs the
+Playwright fixture (the script exists in `tools/`, the dependency does not), #197
+needs `lore memory review accept|reject` and the Candidates tab; both are bounded
+and need no schema change. Their order is fixed in the "Deferral decisions"
+section below.
 
 ### Review gate
 
