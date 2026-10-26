@@ -89,6 +89,63 @@ def test_bind_host_counts_as_allowed(client, monkeypatch):
     assert client.get("/api/health", headers={"Host": "10.1.2.4"}).status_code == 400
 
 
+@pytest.mark.parametrize(
+    "host",
+    [
+        "localhost:0",
+        "localhost:65536",
+        "localhost:" + ("9" * 4500),
+        "[::1]:65536",
+        "[::1]:0",
+    ],
+)
+def test_invalid_host_ports_are_rejected_with_400(client, host):
+    """Port 0 / out-of-range / absurd digit strings must be 400, never 500."""
+    resp = client.get("/api/health", headers={"Host": host})
+    assert resp.status_code == 400
+
+
+def test_bracketed_ipv6_with_valid_port_is_allowed(client):
+    assert client.get("/api/health", headers={"Host": "[::1]:5000"}).status_code == 200
+
+
+def test_default_http_ports_match_portless(client):
+    """``:80`` / ``:443`` normalise equal to a portless Host/Origin pair."""
+    assert (
+        web_utils.normalize_origin("http", "lore.example", 80)
+        == web_utils.normalize_origin("http", "lore.example", None)
+        == "http://lore.example"
+    )
+    assert (
+        web_utils.normalize_origin("https", "lore.example", 443)
+        == web_utils.normalize_origin("https", "lore.example", None)
+        == "https://lore.example"
+    )
+    # Host allowlist: an entry without a port matches the default-port spelling.
+    assert web_utils.host_header_allowed("localhost:80")
+    assert web_utils.parse_origin("http://localhost:80") == ("http", "localhost", 80)
+    assert web_utils.normalize_origin(*web_utils.parse_origin("http://localhost:80")) == (
+        web_utils.normalize_origin("http", "localhost", None)
+    )
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://localhost:0",
+        "http://localhost:65536",
+        "http://localhost:" + ("9" * 4500),
+        "http://[::1]:65536",
+    ],
+)
+def test_invalid_origin_ports_are_rejected_with_403(client, origin):
+    resp = client.post(
+        "/api/cache/clear",
+        headers={"Host": "localhost:5000", "Origin": origin},
+    )
+    assert resp.status_code == 403
+
+
 # ---------------------------------------------------------------------------
 # Mutation-Origin policy
 # ---------------------------------------------------------------------------

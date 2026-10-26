@@ -11,6 +11,7 @@ import pytest
 import lore.storage.embeddings as embeddings
 import lore_cli
 from lore.services.claude_memory_import import import_claude_memory
+from lore.services.memory_context import select_context_memories
 from lore.services.memory_dedupe import dedupe_memories
 from lore.storage import add_memory, get_memory, list_memory, record_feedback, set_memory_status
 from lore.storage.memory import reject_memories_bulk, restore_rejected_memories_bulk
@@ -440,3 +441,72 @@ def test_list_superseded_by_queries_predecessors_directly(tmp_path: Path) -> Non
     new = add_memory(tmp_path, "fact", "topic", "new body", supersedes=old)
     assert list_superseded_by(tmp_path, new) == [old]
     assert list_superseded_by(tmp_path, old) == []
+
+
+def test_scope_project_trailing_slash_is_grouped(tmp_path: Path) -> None:
+    """The recall normalizer resolves ``/work/repo/`` and ``/work/repo`` together."""
+    first = add_memory(tmp_path, "fact", "Shared rule", "Body", scope_project="/work/repo/")
+    second = add_memory(tmp_path, "fact", "Shared rule", "Body", scope_project="/work/repo")
+
+    groups, _ = dedupe_memories(tmp_path)
+
+    assert len(groups) == 1
+    assert sorted(groups[0].rejected_ids + [groups[0].kept_id]) == sorted([first, second])
+
+
+def test_scope_project_whitespace_in_path_is_not_collapsed(tmp_path: Path) -> None:
+    """``/work/repo/a  b`` and ``/work/repo/a b`` are distinct scopes."""
+    add_memory(tmp_path, "fact", "Rule", "Body", scope_project="/work/repo/a  b")
+    add_memory(tmp_path, "fact", "Rule", "Body", scope_project="/work/repo/a b")
+
+    groups, _ = dedupe_memories(tmp_path)
+
+    assert groups == []
+
+
+def test_dedupe_groups_are_consistent_with_context_recall(tmp_path: Path) -> None:
+    """A rejected duplicate may be recalled for its project only if the keeper is too."""
+    scenarios = [
+        (None, None),
+        ("/work/repo/", None),
+        ("/other", "tool-a"),
+        ("/work/repo/sub/../sub", None),
+    ]
+    expected_groups = 0
+    for scope_project, scope_tool in scenarios:
+        add_memory(
+            tmp_path,
+            "fact",
+            f"Rule {scope_project} {scope_tool}",
+            "Same body",
+            scope_project=scope_project,
+            scope_tool=scope_tool,
+        )
+        second = add_memory(
+            tmp_path,
+            "fact",
+            f"Rule {scope_project} {scope_tool}",
+            "Same body",
+            scope_project=scope_project,
+            scope_tool=scope_tool,
+        )
+        record_feedback(tmp_path, second, "tester", 5)
+        expected_groups += 1
+
+    groups, _ = dedupe_memories(tmp_path)
+    assert len(groups) == expected_groups
+
+    for group in groups:
+        keeper = get_memory(tmp_path, group.kept_id)
+        selected = {
+            entry.id
+            for entry in select_context_memories(
+                tmp_path,
+                scope_project=keeper.scope_project,
+                scope_tool=keeper.scope_tool,
+            )
+        }
+        assert keeper.id in selected
+        for rejected_id in group.rejected_ids:
+            if rejected_id in selected:
+                assert keeper.id in selected

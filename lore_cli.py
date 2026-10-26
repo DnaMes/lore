@@ -437,6 +437,18 @@ def cmd_export(args):
     reused_entries: list[dict] = []
     finished_extractors: list = []
     prior_by_id = {str(e["id"]): e for e in prior_sessions if e.get("id")}
+    filtered_run = bool(tool_filter or args.project)
+    pruned_ids: list[str] = []
+
+    def _preserve_prior(seen_ids: set[str]) -> list[dict]:
+        """Prior rows not seen this run; other tools' rows always survive a filter."""
+        return preserve_unobserved_index_entries(
+            prior_by_id,
+            seen_ids,
+            ignored_ids=ignored_ids,
+            tool_filter=tool_filter,
+            pruned=pruned_ids,
+        )
 
     def export_stream():
         """Export each matching session, then yield it — one at a time.
@@ -530,19 +542,25 @@ def cmd_export(args):
 
         # Sources deleted after the last export (retention cleanup) are never
         # skipped or re-yielded; keep their prior rows unless pruned/orphaned.
-        reused_entries.extend(
-            preserve_unobserved_index_entries(prior_by_id, observed_ids, ignored_ids=ignored_ids)
-        )
+        # A filtered run preserves in all_sessions_stream instead (full view).
+        if not filtered_run:
+            reused_entries.extend(_preserve_prior(observed_ids))
 
     def all_sessions_stream():
         """Yield every session from every extractor for the unfiltered index."""
+        seen_ids: set[str] = set()
         for extractor in get_all_extractors():
             if not extractor.is_available():
                 continue
             for session in extractor.extract_sessions():
                 stamp_parser_version(extractor, session)
                 _tag_git_info(session, git_info_cache)
+                seen_ids.add(session.session_id)
                 yield session
+        # Runs after every session was seen; build_index reads reused_entries
+        # only at finalize, so the rows added here are still written.
+        if filtered_run:
+            reused_entries.extend(_preserve_prior(seen_ids))
 
     # Build index. Without a --tool/--project filter the export stream already
     # covers the full set, so it feeds the index directly — re-running every
@@ -556,7 +574,14 @@ def cmd_export(args):
         for _ in export_stream():
             pass
         print("\nBuilding index...")
-        index_builder.build_index(all_sessions_stream(), merged_paths)
+        index_builder.build_index(
+            all_sessions_stream(), merged_paths, reused_entries=reused_entries
+        )
+    if pruned_ids:
+        print(
+            f"Dropped {len(pruned_ids)} index entries whose export and source are both gone.",
+            file=sys.stderr,
+        )
     print(f"Index saved to: {index_builder.index_path}")
     record_discovery(output_dir, finished_extractors)
 

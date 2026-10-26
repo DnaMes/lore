@@ -53,6 +53,41 @@ SEARCH_SCOPES: Dict[str, tuple] = {
 # ``test_scope_tokenizer_matches_the_session_index``.
 SCOPE_FTS_TOKENIZER = "porter unicode61"
 
+# Prefer a bound ``NOT IN`` for small ignore sets; above this, load ids into a
+# TEMP table so we stay under SQLite's ~32766 variable limit.
+_IGNORED_SQL_CHUNK = 500
+
+
+def _bind_ignored_exclusion(
+    conn: sqlite3.Connection,
+    column_sql: str,
+    ignored: set[str],
+) -> tuple[str, tuple]:
+    """Return ``(sql_fragment, params)`` excluding ``ignored`` before LIMIT.
+
+    Empty set → no-op. Small sets → ``AND col NOT IN (?,?,…)``. Larger sets →
+    TEMP table + ``NOT IN (SELECT …)``, inserted in chunks of
+    ``_IGNORED_SQL_CHUNK``.
+    """
+    if not ignored:
+        return "", ()
+    ids = sorted(str(i) for i in ignored if i)
+    if not ids:
+        return "", ()
+    if len(ids) <= _IGNORED_SQL_CHUNK:
+        placeholders = ",".join("?" for _ in ids)
+        return f" AND {column_sql} NOT IN ({placeholders})", tuple(ids)
+
+    conn.execute("CREATE TEMP TABLE IF NOT EXISTS _lore_ignored_ids (id TEXT PRIMARY KEY)")
+    conn.execute("DELETE FROM _lore_ignored_ids")
+    for offset in range(0, len(ids), _IGNORED_SQL_CHUNK):
+        chunk = ids[offset : offset + _IGNORED_SQL_CHUNK]
+        conn.executemany(
+            "INSERT OR IGNORE INTO _lore_ignored_ids(id) VALUES (?)",
+            [(session_id,) for session_id in chunk],
+        )
+    return f" AND {column_sql} NOT IN (SELECT id FROM _lore_ignored_ids)", ()
+
 
 def search_sessions(
     output_dir: Path,
@@ -107,6 +142,7 @@ def search_sessions(
     conn = open_connection(db)
     try:
         exclusion = "" if include_automated else automated_exclusion_sql(conn, "s")
+        ignored_sql, ignored_params = _bind_ignored_exclusion(conn, "s.id", ignored)
         rows = conn.execute(
             f"""
             SELECT s.id, s.tool, s.project, s.thread_id, s.title,
@@ -120,11 +156,11 @@ def search_sessions(
             FROM search_index
             JOIN sessions s ON s.id = search_index.entity_id
             WHERE search_index MATCH ?
-              AND search_index.entity_type = 'session'{exclusion}
+              AND search_index.entity_type = 'session'{exclusion}{ignored_sql}
             ORDER BY score ASC
             LIMIT ?
             """,
-            (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, max(1, limit) * 4),
+            (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, *ignored_params, max(1, limit) * 4),
         ).fetchall()
     except sqlite3.Error:
         return []
@@ -142,8 +178,6 @@ def search_sessions(
     results: List[Dict[str, Any]] = []
     for row in rows:
         session = _row_to_session_dict(row)
-        if str(session.get("id") or "") in ignored:
-            continue
         if tool and session.get("tool") != tool:
             continue
         if project and project not in str(session.get("project") or ""):
@@ -261,7 +295,14 @@ def semantic_max_distance() -> Optional[float]:
     return None if value <= 0 else value
 
 
-def _knn_rows(conn: sqlite3.Connection, packed: bytes, k: int) -> List[sqlite3.Row]:
+def _knn_rows(
+    conn: sqlite3.Connection,
+    packed: bytes,
+    k: int,
+    *,
+    ignored_sql: str = "",
+    ignored_params: tuple = (),
+) -> List[sqlite3.Row]:
     return conn.execute(
         f"""
         SELECT s.id, s.tool, s.project, s.thread_id, s.title,
@@ -274,10 +315,10 @@ def _knn_rows(conn: sqlite3.Connection, packed: bytes, k: int) -> List[sqlite3.R
         FROM session_embeddings se
         JOIN sessions s ON s.id = se.session_id
         WHERE se.embedding MATCH ?
-          AND k = ?
+          AND k = ?{ignored_sql}
         ORDER BY se.distance ASC
         """,
-        (packed, k),
+        (packed, k, *ignored_params),
     ).fetchall()
 
 
@@ -289,16 +330,12 @@ def _filter_semantic_rows(
     include_automated: bool,
     *,
     max_distance: Optional[float],
-    ignored: Optional[set] = None,
 ) -> List[Dict[str, Any]]:
-    ignored_ids = ignored or set()
     results: List[Dict[str, Any]] = []
     for row in rows:
         if max_distance is not None and float(row["score"]) > max_distance:
             continue  # too far away to mean anything (#92) — dropped before fusion
         session = _row_to_session_dict(row)
-        if str(session.get("id") or "") in ignored_ids:
-            continue
         if not include_automated and session.get("origin") in AUTOMATED_ORIGINS:
             continue
         if tool and session.get("tool") != tool:
@@ -356,8 +393,11 @@ def semantic_search_sessions(
     try:
         packed = pack_vector(vector)
         cutoff = semantic_max_distance()
-        k = max(1, limit) * KNN_K_FACTOR
-        rows = _knn_rows(conn, packed, k)
+        ignored_sql, ignored_params = _bind_ignored_exclusion(conn, "se.session_id", ignored)
+        # sqlite-vec applies extra WHERE after the k nearest are chosen, so
+        # inflate k by the ignore-set size or pruned neighbours crowd out keeps.
+        k = min(KNN_K_MAX, max(1, limit) * KNN_K_FACTOR + len(ignored))
+        rows = _knn_rows(conn, packed, k, ignored_sql=ignored_sql, ignored_params=ignored_params)
         results = _filter_semantic_rows(
             rows,
             tool,
@@ -365,14 +405,19 @@ def semantic_search_sessions(
             limit,
             include_automated,
             max_distance=cutoff,
-            ignored=ignored,
         )
         # The filters run after the KNN cut-off, so a neighbourhood made of automated
         # (or other filtered-out) sessions can leave fewer than ``limit`` hits. Ask once
         # more with a wider k, only when the first pass was full (more neighbours exist).
         if len(results) < limit and len(rows) >= k and k < KNN_K_MAX:
-            wider = min(k * KNN_K_RETRY_FACTOR, KNN_K_MAX)
-            rows = _knn_rows(conn, packed, wider)
+            wider = min(k * KNN_K_RETRY_FACTOR + len(ignored), KNN_K_MAX)
+            rows = _knn_rows(
+                conn,
+                packed,
+                wider,
+                ignored_sql=ignored_sql,
+                ignored_params=ignored_params,
+            )
             results = _filter_semantic_rows(
                 rows,
                 tool,
@@ -380,7 +425,6 @@ def semantic_search_sessions(
                 limit,
                 include_automated,
                 max_distance=cutoff,
-                ignored=ignored,
             )
     except sqlite3.Error:
         # No vec table (e.g. extension absent) or a malformed query — FTS covers it.

@@ -189,6 +189,22 @@ def load_ignored_session_ids(output_dir: Path) -> set[str]:
         return set()
 
 
+def ignored_json_stat(output_dir: Path) -> tuple[int, int]:
+    """``(mtime_ns, size)`` of ``ignored.json``, or ``(0, 0)`` when absent.
+
+    Used as a cache-key fragment so a prune/un-prune that only touches
+    ``ignored.json`` (DB stats unchanged) still invalidates the v2 index read.
+    """
+    path = output_dir / "ignored.json"
+    if not path.exists():
+        return (0, 0)
+    try:
+        st = path.stat()
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (0, 0)
+
+
 def load_index_v2(output_dir: Path) -> Dict[str, Any]:
     """Load the v2 store as a legacy-shaped index dict.
 

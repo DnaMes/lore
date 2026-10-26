@@ -69,20 +69,33 @@ LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
+def _parse_port(raw: str) -> Optional[int]:
+    """Parse a TCP port as ``int`` in ``1..65535``; ``None`` when invalid.
+
+    Never raises — a 4500-digit string, ``0``, or ``65536`` are all ``None``
+    so Host/Origin checks can reject them as not-allowed instead of 500-ing.
+    """
+    if not raw or len(raw) > 5 or not raw.isdigit():
+        return None
+    port = int(raw)
+    if 1 <= port <= 65535:
+        return port
+    return None
+
+
 def parse_origin(origin: str) -> Optional[Tuple[str, str, Optional[int]]]:
     """Split an Origin into ``(scheme, host, port)``; ``None`` when it is malformed.
 
     A browser Origin is exactly ``scheme://host[:port]``: a real scheme, a host,
     and no path, query, fragment or userinfo. Everything else (``javascript:``,
-    ``https://``, a userinfo form, a non-numeric port) is malformed and must
-    never be treated as an origin (#193).
+    ``https://``, a userinfo form, a non-numeric / out-of-range port) is
+    malformed and must never be treated as an origin (#193).
     """
     raw = (origin or "").strip()
     if not raw:
         return None
     try:
         parsed = urlparse(raw)
-        port = parsed.port  # raises ValueError for a non-numeric or huge port
     except ValueError:
         return None
     if parsed.scheme not in ("http", "https"):
@@ -94,6 +107,28 @@ def parse_origin(origin: str) -> Optional[Tuple[str, str, Optional[int]]]:
         return None
     if parsed.username is not None or parsed.password is not None:
         return None
+    # Bound the port ourselves — ``parsed.port`` raises on huge values and
+    # accepts ``0``, which must not normalise equal to a portless host.
+    authority = parsed.netloc.rsplit("@", 1)[-1]
+    port: Optional[int] = None
+    if authority.startswith("["):
+        end = authority.find("]")
+        if end == -1:
+            return None
+        rest = authority[end + 1 :]
+        if rest:
+            if not rest.startswith(":"):
+                return None
+            port = _parse_port(rest[1:])
+            if port is None:
+                return None
+    elif authority.count(":") == 1:
+        _host, _sep, port_s = authority.rpartition(":")
+        port = _parse_port(port_s)
+        if port is None:
+            return None
+    elif authority.count(":") > 1:
+        return None  # bare IPv6 without brackets is not a valid Origin host
     return parsed.scheme.lower(), host.lower(), port
 
 
@@ -101,7 +136,7 @@ def normalize_origin(scheme: str, host: str, port: Optional[int]) -> str:
     """Canonical origin: lowercase scheme and host, default port omitted."""
     hostname = f"[{host}]" if ":" in host else host  # bracket IPv6 literals
     base = f"{scheme}://{hostname}"
-    if port and port != _DEFAULT_PORTS.get(scheme):
+    if port is not None and port != _DEFAULT_PORTS.get(scheme):
         return f"{base}:{port}"
     return base
 
@@ -133,7 +168,9 @@ def _split_host(value: str) -> Optional[Tuple[str, Optional[int]]]:
 
     Accepts dotted hostnames and bracketed IPv6 literals with the same rules
     the ``X-Forwarded-Host`` validation from #193 uses, so the Host allowlist
-    and the proxy checks agree on what a well-formed host is.
+    and the proxy checks agree on what a well-formed host is. Ports must be
+    integers in ``1..65535`` (via :func:`_parse_port`); ``0`` / ``65536`` /
+    absurd digit strings are malformed, never an exception.
     """
     raw = (value or "").strip()
     if not raw or any(c in raw for c in " /\\@?#%"):
@@ -149,12 +186,26 @@ def _split_host(value: str) -> Optional[Tuple[str, Optional[int]]]:
         rest = raw[end + 1 :]
         if not rest:
             return raw[1:end].lower(), None
-        if rest.startswith(":") and rest[1:].isdigit():
-            return raw[1:end].lower(), int(rest[1:])
+        if not rest.startswith(":"):
+            return None
+        port = _parse_port(rest[1:])
+        if port is None:
+            return None
+        return raw[1:end].lower(), port
+    # hostname or IPv4, optional ``:port`` — parse the port ourselves so a
+    # 4500-digit suffix cannot raise via ``urlparse(...).port``.
+    host_part, sep, port_s = raw.rpartition(":")
+    port: Optional[int] = None
+    if sep and host_part and host_part.count(":") == 0:
+        port = _parse_port(port_s)
+        if port is None:
+            return None
+        raw = host_part
+    elif sep:
+        # ``host:port:extra`` (or bare IPv6) — not a valid Host spelling.
         return None
     try:
         parsed = urlparse(f"http://{raw}")
-        port = parsed.port  # noqa: B018 - ValueError is the validation
     except ValueError:
         return None
     if parsed.hostname is None or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
@@ -206,9 +257,13 @@ def _is_valid_forwarded_for(hop: str) -> bool:
         except ValueError:
             return False
         rest = hop[end + 1 :]
-        return not rest or (rest.startswith(":") and rest[1:].isdigit())
+        if not rest:
+            return True
+        return rest.startswith(":") and _parse_port(rest[1:]) is not None
     host, sep, port = hop.rpartition(":")
     if sep and port.isdigit() and host.count(":") == 0:
+        if _parse_port(port) is None:
+            return False
         hop = host  # IPv4:port
     try:
         ipaddress.ip_address(hop)

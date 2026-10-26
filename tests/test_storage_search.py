@@ -107,6 +107,41 @@ def test_search_no_match_returns_empty(tmp_path):
     assert search_sessions(tmp_path, "zzzznonexistent") == []
 
 
+def test_fts_ignored_ids_excluded_before_limit(tmp_path):
+    """Pruned hits must not crowd out a valid result under a tight LIMIT.
+
+    Four stronger pruned matches ranked ahead of one keep → limit=1 still
+    returns the keep (ignored ids are filtered in SQL before LIMIT).
+    """
+    import json
+
+    sessions = [_session(f"drop-{i}", body="token token token token token") for i in range(4)] + [
+        _session("keep", body="token")
+    ]
+    IndexBuilder(tmp_path).build_index(sessions, {})
+    (tmp_path / "ignored.json").write_text(
+        json.dumps([f"drop-{i}" for i in range(4)]), encoding="utf-8"
+    )
+    assert [h["session"]["id"] for h in search_sessions(tmp_path, "token", limit=1)] == ["keep"]
+
+
+def test_fts_many_ignored_ids_use_temp_table_path(tmp_path):
+    """More ignored ids than the bound-parameter chunk still exclude correctly."""
+    import json
+
+    from lore.storage import search as search_mod
+
+    count = search_mod._IGNORED_SQL_CHUNK + 100
+    sessions = [_session(f"drop-{i}", body="token token token") for i in range(count)] + [
+        _session("keep", body="token")
+    ]
+    IndexBuilder(tmp_path).build_index(sessions, {})
+    (tmp_path / "ignored.json").write_text(
+        json.dumps([f"drop-{i}" for i in range(count)]), encoding="utf-8"
+    )
+    assert [h["session"]["id"] for h in search_sessions(tmp_path, "token", limit=1)] == ["keep"]
+
+
 # ---------------------------------------------------------------------------
 # web_data.search_index — v2 vs legacy fallback
 # ---------------------------------------------------------------------------

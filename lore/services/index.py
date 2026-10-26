@@ -329,8 +329,18 @@ def _load_index_cached(index_path: str, _mtime_ns: int, _size: int) -> dict:
 
 
 @threadsafe_lru_cache(maxsize=1)
-def _load_index_v2_cached(db_path: str, _mtime_ns: int, _size: int) -> dict:
-    """File-stat-keyed cache of the v2 store read (mirrors _load_index_cached)."""
+def _load_index_v2_cached(
+    db_path: str,
+    _mtime_ns: int,
+    _size: int,
+    _ignored_mtime_ns: int,
+    _ignored_size: int,
+) -> dict:
+    """File-stat-keyed cache of the v2 store read (mirrors _load_index_cached).
+
+    ``ignored.json`` stats are part of the key: prune/un-prune only rewrites
+    that file, so DB mtime/size alone would serve a stale filtered list.
+    """
     from lore.storage import load_index_v2
 
     return load_index_v2(Path(db_path).parent)
@@ -367,10 +377,18 @@ def _processed_index_cached(
 
 @threadsafe_lru_cache(maxsize=4)
 def _processed_index_v2_cached(
-    db_path: str, mtime_ns: int, size: int, deleted: frozenset[str]
+    db_path: str,
+    mtime_ns: int,
+    size: int,
+    deleted: frozenset[str],
+    ignored_mtime_ns: int,
+    ignored_size: int,
 ) -> dict:
     """v2-store mirror of ``_processed_index_cached``."""
-    return _finalize_index_payload(_load_index_v2_cached(db_path, mtime_ns, size), deleted)
+    return _finalize_index_payload(
+        _load_index_v2_cached(db_path, mtime_ns, size, ignored_mtime_ns, ignored_size),
+        deleted,
+    )
 
 
 def clear_index_cache() -> None:
@@ -488,8 +506,16 @@ def _load_index_from_v2(index_path: Path, deleted: set[str]) -> Optional[dict]:
             return None
         v2_db = index_dir / "index_v2.sqlite"
         stat = v2_db.stat()
+        from lore.storage.reader import ignored_json_stat
+
+        ignored_mtime_ns, ignored_size = ignored_json_stat(index_dir)
         payload = _processed_index_v2_cached(
-            str(v2_db), stat.st_mtime_ns, stat.st_size, frozenset(deleted)
+            str(v2_db),
+            stat.st_mtime_ns,
+            stat.st_size,
+            frozenset(deleted),
+            ignored_mtime_ns,
+            ignored_size,
         )
     except Exception as exc:
         logger.warning("v2 index read failed, falling back to JSON: %s", exc)

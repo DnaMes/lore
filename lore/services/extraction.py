@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import stat
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
@@ -208,14 +210,29 @@ def _source_fingerprints(prior_entries: dict[str, dict]) -> tuple[dict[str, int]
     return mtimes, {path: versions[path] for path in mtimes}
 
 
-def _path_present(path_value: object) -> bool:
-    """True when ``path_value`` names an existing filesystem path."""
+def _path_existence(path_value: object) -> Optional[bool]:
+    """Tri-state existence of ``path_value``.
+
+    ``True``: the path exists. ``False``: absence is positively known, i.e. the
+    path itself raised FileNotFoundError while its parent directory exists.
+    ``None``: unknown (any other OSError, an empty or unreadable parent, an
+    unmounted drive). Only ``False`` may justify dropping an index entry.
+    """
     if not path_value:
         return False
+    path = Path(str(path_value)).expanduser()
     try:
-        return Path(str(path_value)).expanduser().exists()
+        os.stat(path)
+        return True
+    except FileNotFoundError:
+        pass
     except OSError:
-        return False
+        return None
+    try:
+        parent_mode = os.stat(path.parent).st_mode
+    except OSError:
+        return None
+    return False if stat.S_ISDIR(parent_mode) else None
 
 
 def preserve_unobserved_index_entries(
@@ -224,13 +241,20 @@ def preserve_unobserved_index_entries(
     *,
     ignored_ids: Optional[set[str]] = None,
     deleted_ids: Optional[set[str]] = None,
+    tool_filter: Optional[str] = None,
+    pruned: Optional[list[str]] = None,
 ) -> list[dict]:
-    """Prior index entries not re-observed this run, minus pruned or orphaned.
+    """Prior index entries not re-observed this run, minus pruned ones.
 
     Keeps every previous entry whose id was not seen again, unless it is listed
-    in ``ignored_ids`` / ``deleted_ids``, or a recorded export path is gone and
-    the source file is gone too. Entries with no recorded export path are kept
-    even when the source disappeared (web sync has no markdown yet).
+    in ``ignored_ids`` / ``deleted_ids``. An entry is pruned only when it has a
+    recorded export path, that export and its source are both positively known
+    to be absent, and it was not observed. Any other filesystem error keeps it.
+    Entries with no recorded export path are kept even when the source
+    disappeared (web sync has no markdown yet).
+
+    With ``tool_filter``, entries of other tools are always kept untouched.
+    Pruned ids are appended to ``pruned`` when that list is given.
     """
     ignored = ignored_ids or set()
     deleted = deleted_ids or set()
@@ -238,13 +262,17 @@ def preserve_unobserved_index_entries(
     for session_id, prior in existing_by_id.items():
         if session_id in observed_ids or session_id in deleted or session_id in ignored:
             continue
+        if tool_filter and str(prior.get("tool") or "") != tool_filter:
+            kept.append(prior)
+            continue
         export_path = prior.get("export_path")
-        # Orphan GC only when a once-exported file vanished with its source.
         if (
             export_path
-            and not _path_present(export_path)
-            and not _path_present(prior.get("source_path"))
+            and _path_existence(export_path) is False
+            and _path_existence(prior.get("source_path")) is False
         ):
+            if pruned is not None:
+                pruned.append(session_id)
             continue
         kept.append(prior)
     return kept
@@ -446,6 +474,7 @@ def build_search_index(
                 seen_ids,
                 ignored_ids=ignored_ids,
                 deleted_ids=deleted,
+                tool_filter=tool_filter,
             )
         )
 

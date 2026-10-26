@@ -3,12 +3,16 @@
 Identity rule: two confirmed memories are duplicates only when *every* content
 and scoping dimension matches — the normalized (whitespace/escaped-quote
 collapsed, casefolded) title, the SHA-256 of the normalized body, the ``kind``,
-and the normalized ``scope_project`` and ``scope_tool`` (``None`` means the
-global/empty scope). Memories are never merged across different scopes: a
-memory scoped to ``/work/a`` is invisible to a recall for ``/work/b`` (or for
-the global scope), so a global memory and an identical project-scoped copy are
-separate memories and both must survive dedupe. ``author`` is provenance, not
-scoping, so it is deliberately not part of the identity key.
+and the scope dimensions. ``scope_project`` uses the same normalizer recall
+uses: :func:`lore.services.improve.normalize_scope_project` followed by
+``Path.expanduser().resolve()``, so ``/work/repo/`` and ``/work/repo`` group
+together but ``/work/repo/a  b`` and ``/work/repo/a b`` do not. ``scope_tool``
+uses exact string equality (``None`` means the global/empty scope). Memories are
+never merged across different scopes: a memory scoped to ``/work/a`` is invisible
+to a recall for ``/work/b`` (or for the global scope), so a global memory and an
+identical project-scoped copy are separate memories and both must survive
+dedupe. ``author`` is provenance, not scoping, so it is deliberately not part of
+the identity key.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..services.memory_context import _resolve_project_path
 from ..storage.memory import (
     MemoryEntry,
     _load_entries,
@@ -48,7 +53,18 @@ def memory_key(title: str, body: str) -> tuple[str, str]:
     ).hexdigest()
 
 
-def dedupe_identity(entry: MemoryEntry) -> tuple[str, str, str, str, str]:
+def _identity_scope_project(scope_project: str | None) -> str | None:
+    """Match the exact path normalization used by context recall."""
+    path = _resolve_project_path(scope_project)
+    return str(path) if path is not None else None
+
+
+def _identity_scope_tool(scope_tool: str | None) -> str | None:
+    """Recall matches tool scopes by exact string equality."""
+    return scope_tool or None
+
+
+def dedupe_identity(entry: MemoryEntry) -> tuple[str, str, str, str | None, str | None]:
     """Full dedupe identity: content key plus kind and scope; never merged across scopes."""
     title, body_hash = memory_key(entry.title, entry.body)
     return (
@@ -56,8 +72,8 @@ def dedupe_identity(entry: MemoryEntry) -> tuple[str, str, str, str, str]:
         body_hash,
         _normalize(entry.kind).casefold(),
         # Paths are case-sensitive on Linux, so scopes are not casefolded.
-        _normalize(entry.scope_project or ""),
-        _normalize(entry.scope_tool or ""),
+        _identity_scope_project(entry.scope_project),
+        _identity_scope_tool(entry.scope_tool),
     )
 
 

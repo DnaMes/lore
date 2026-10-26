@@ -83,6 +83,61 @@ def test_semantic_tool_filter(tmp_path):
     assert all(h["session"]["tool"] == "codex" for h in hits)
 
 
+def test_semantic_ignored_ids_excluded_before_limit(tmp_path, monkeypatch):
+    """Pruned vector neighbours must not empty a limit=1 result.
+
+    Uses hand-packed embeddings so this runs without fastembed; needs
+    sqlite-vec for the vec0 table + KNN.
+    """
+    import json
+
+    from lore.storage.embeddings import EMBEDDING_DIM, pack_vector, sqlite_vec_available
+    from lore.storage.schema import ensure_session_vec_table, open_connection
+
+    if not sqlite_vec_available():
+        pytest.skip("needs sqlite-vec")
+
+    write_sessions(
+        v2_db_path(tmp_path),
+        [_session(f"drop-{i}", body=f"drop body {i}") for i in range(4)]
+        + [_session("keep", body="keep body")],
+    )
+
+    def _vec(scale: float) -> list[float]:
+        v = [0.0] * EMBEDDING_DIM
+        v[0] = scale
+        return v
+
+    query = _vec(1.0)
+    conn = open_connection(v2_db_path(tmp_path))
+    try:
+        assert ensure_session_vec_table(conn)
+        # Replace whatever write_sessions embedded so pruned ids rank first
+        # and would crowd out keep under a tight k without the SQL exclusion.
+        for sid in [f"drop-{i}" for i in range(4)] + ["keep"]:
+            conn.execute("DELETE FROM session_embeddings WHERE session_id = ?", (sid,))
+        for i, scale in enumerate([1.0, 0.99, 0.98, 0.97]):
+            conn.execute(
+                "INSERT INTO session_embeddings(session_id, model, embedding) VALUES (?, ?, ?)",
+                (f"drop-{i}", "test", pack_vector(_vec(scale))),
+            )
+        conn.execute(
+            "INSERT INTO session_embeddings(session_id, model, embedding) VALUES (?, ?, ?)",
+            ("keep", "test", pack_vector(_vec(0.5))),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    (tmp_path / "ignored.json").write_text(
+        json.dumps([f"drop-{i}" for i in range(4)]), encoding="utf-8"
+    )
+    monkeypatch.setattr("lore.storage.embeddings.embed_text", lambda _text: query)
+    monkeypatch.setenv("LORE_SEMANTIC_MAX_DISTANCE", "0")  # disable cutoff
+    hits = semantic_search_sessions(tmp_path, "anything", limit=1)
+    assert [h["session"]["id"] for h in hits] == ["keep"]
+
+
 # ---------------------------------------------------------------------------
 # search_index — hybrid fusion wiring
 # ---------------------------------------------------------------------------
@@ -216,7 +271,10 @@ def test_semantic_search_sessions_applies_the_configured_cutoff(tmp_path, monkey
     rows = _rows_with_distances(tmp_path, {"near": 0.70, "far": 1.10})
     monkeypatch.setattr("lore.storage.embeddings.sqlite_vec_available", lambda: True)
     monkeypatch.setattr("lore.storage.embeddings.embed_text", lambda _t: [0.0, 0.0, 0.0, 0.0])
-    monkeypatch.setattr("lore.storage.search._knn_rows", lambda _conn, _packed, _k: rows)
+    monkeypatch.setattr(
+        "lore.storage.search._knn_rows",
+        lambda _conn, _packed, _k, **_kw: rows,
+    )
 
     hits = semantic_search_sessions(tmp_path, "anything")
     assert [h["session"]["id"] for h in hits] == ["near"]
