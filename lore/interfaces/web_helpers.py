@@ -2,6 +2,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+from lore.utils.datetime import datetime_in_range, parse_date_bound, to_local_naive
+
 TOOL_STYLES = {
     "claude-code": {"color": "#C084FC", "icon": "C", "name": "Claude"},
     "cursor": {"color": "#3B82F6", "icon": "Cu", "name": "Cursor"},
@@ -38,19 +40,14 @@ def project_label(project_path: Optional[str]) -> str:
     return name or project_path
 
 
-def parse_date_param(value: Optional[str]) -> Optional[datetime]:
-    if not value:
-        return None
-    value = value.strip()
-    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
-        try:
-            return datetime.strptime(value, fmt)
-        except ValueError:
-            continue
-    try:
-        return datetime.fromisoformat(value)
-    except ValueError:
-        return None
+def parse_date_param(value: Optional[str], *, end: bool = False) -> Optional[datetime]:
+    """Parse a start/end filter value into a naive local boundary (#172).
+
+    Delegates to :func:`lore.utils.datetime.parse_date_bound`, so a date-only
+    end value covers the whole selected day and an offset-carrying timestamp is
+    converted to the host's local wall clock. Invalid input yields ``None``.
+    """
+    return parse_date_bound(value, end=end)
 
 
 def filter_sessions(sessions, tool=None, tag=None, start=None, end=None):
@@ -67,12 +64,15 @@ def filter_sessions(sessions, tool=None, tag=None, start=None, end=None):
             if not created_raw:
                 continue
             try:
-                created = datetime.fromisoformat(created_raw)
+                # Mixed provider formats: offset-carrying values are converted to
+                # the local wall clock the archive stores instead of raising the
+                # naive/aware TypeError (#172).
+                created = to_local_naive(
+                    datetime.fromisoformat(str(created_raw).replace("Z", "+00:00"))
+                )
             except ValueError:
                 continue
-            if start and created < start:
-                continue
-            if end and created > end:
+            if not datetime_in_range(created, start, end):
                 continue
         filtered.append(session)
     return filtered

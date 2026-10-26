@@ -46,6 +46,12 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
 
 - `/`: Main dashboard displaying recent sessions, high-level activity metrics, and search entry point.
 - `/sessions`: Paginated session explorer with filtering by tool, project, tag, date range, and free-text search.
+  Date filters (`start`, `end`) are interpreted in the host's local timezone, the same
+  frame the archive stores. A date-only `end` value covers the whole selected day
+  (its last microsecond), so a session recorded at 18:00 on the chosen final day is
+  included; a timestamp carrying an offset (`+02:00`, `Z`) is converted to the local
+  wall clock instead of being compared naively. The CLI and MCP surfaces use the same
+  helper (`lore.utils.datetime.parse_date_bound`, `datetime_in_range`).
 - `/projects`: Overview grouping recorded sessions by workspace and repository path.
 - `/threads`: Cross-session threads overview for grouped multi-session conversations.
 - `/thread/<thread_id>`: Thread detail page presenting an interactive session timeline and message history.

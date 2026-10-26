@@ -10,7 +10,7 @@ from ...services.index import (
     is_automated,
     parse_bool_flag,
 )
-from ...utils.datetime import make_naive, parse_duration
+from ...utils.datetime import parse_duration, to_local_naive
 from ...utils.security import (
     validate_search_param,
     validate_search_query,
@@ -142,7 +142,7 @@ def register(server, deps: MCPToolDeps) -> None:
                     created_dt = datetime.fromisoformat(str(created).replace("Z", "+00:00"))
                 except ValueError:
                     created_dt = None
-                if created_dt and make_naive(created_dt) < cutoff:
+                if created_dt and to_local_naive(created_dt) < cutoff:
                     continue
             # Counted after the filters above: a scoped query reports its own number.
             if not include_automated and is_automated(session):

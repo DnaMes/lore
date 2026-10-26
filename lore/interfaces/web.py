@@ -1046,7 +1046,7 @@ def _filtered_sorted_session_ids(tool, tag, start, end, index_mtime, include_aut
     """
     all_s = load_index().get("sessions", [])
     start_dt = parse_date_param(start)
-    end_dt = parse_date_param(end)
+    end_dt = parse_date_param(end, end=True)
     filtered = filter_sessions(
         all_s, tool=tool or None, tag=tag or None, start=start_dt, end=end_dt
     )
@@ -1240,7 +1240,7 @@ def projects():
         return "Invalid tag parameter", 400
 
     start_dt = parse_date_param(start)
-    end_dt = parse_date_param(end)
+    end_dt = parse_date_param(end, end=True)
     filtered = filter_sessions(
         load_index().get("sessions", []),
         tool=tool or None,

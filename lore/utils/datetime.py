@@ -1,5 +1,10 @@
 import re
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta, tzinfo
+
+# The archive stores naive timestamps in the host's local wall clock, so every
+# filter boundary is expressed in that same frame. A date-only end value means
+# the whole selected day, not its midnight.
+END_OF_DAY = time(23, 59, 59, 999999)
 
 
 def parse_duration(duration_str: str) -> timedelta:
@@ -24,10 +29,77 @@ def parse_duration(duration_str: str) -> timedelta:
 
 
 def make_naive(dt: datetime) -> datetime:
-    """Convert datetime to naive (no timezone) for comparison."""
+    """Convert datetime to naive (no timezone) for comparison.
+
+    This only drops the ``tzinfo``; use :func:`to_local_naive` when an aware
+    value must be converted to the host's wall clock first.
+    """
     if dt.tzinfo is not None:
         return dt.replace(tzinfo=None)
     return dt
+
+
+def to_local_naive(dt: datetime) -> datetime:
+    """Convert to the host's local wall clock without tzinfo (the storage frame).
+
+    A naive value is already local wall clock and stays untouched; an aware
+    value is converted, so ``2026-09-12T18:00:00+00:00`` and
+    ``2026-09-12T20:00:00+02:00`` become the same local instant.
+    """
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone().replace(tzinfo=None)
+
+
+def parse_date_bound(value, *, end: bool = False, tz: tzinfo | None = None) -> datetime | None:
+    """Parse a date or timestamp filter value into a naive local boundary.
+
+    ``2026-09-12`` with ``end=False`` is that day's first microsecond, with
+    ``end=True`` its last one, so ``created <= end`` keeps every session of the
+    selected final day (the historical bug dropped it). A timestamp keeps its
+    time of day; one carrying an offset is converted to the local wall clock,
+    and a naive one is taken as already local. An optional ``tz`` anchors
+    date-only values in that timezone instead of the host's: the returned value
+    is still local wall clock, matching what the archive stores.
+    """
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            day = datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+        boundary = datetime.combine(day.date(), END_OF_DAY) if end else day
+        if tz is not None:
+            return boundary.replace(tzinfo=tz).astimezone().replace(tzinfo=None)
+        return boundary
+
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None and tz is not None:
+        parsed = parsed.replace(tzinfo=tz)
+    return to_local_naive(parsed)
+
+
+def datetime_in_range(
+    value: datetime, start: datetime | None = None, end: datetime | None = None
+) -> bool:
+    """Whether ``value`` lies inside the inclusive ``[start, end]`` window.
+
+    Both bounds are boundaries produced by :func:`parse_date_bound`, so an
+    end-of-day bound includes the session stored at 23:59:59 of that day.
+    """
+    if start is not None and value < start:
+        return False
+    if end is not None and value > end:
+        return False
+    return True
 
 
 def parse_timestamp(ts) -> datetime:
