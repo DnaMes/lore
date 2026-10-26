@@ -220,6 +220,28 @@ options:
                         hidden by default
 ```
 
+## metrics
+
+Report evidence-backed workflow metrics. Every metric is labelled with its class
+(`observed`, `computed` or `inferred`), the source fields it reads and its
+coverage (`covered/total` sessions); a metric whose source field is absent
+prints `n/a` with a `no data:` caveat instead of a zero. See
+[WORKFLOW-ANALYSIS.md](WORKFLOW-ANALYSIS.md) for the full definitions.
+
+Mode: read-only and local (extracts sessions, writes nothing, needs no index).
+
+```text
+usage: lore metrics [-h] [--json] [--include-inferred] [--include-automated]
+
+options:
+  -h, --help           show this help message and exit
+  --json               Machine-readable output
+  --include-inferred   Also report inferred outcomes (heuristic, labelled,
+                       never mixed in)
+  --include-automated  Also include automated (exec/cron/subagent) sessions,
+                       hidden by default
+```
+
 ## memory
 
 Manage the shared cross-tool memory store.

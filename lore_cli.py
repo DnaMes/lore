@@ -24,6 +24,7 @@ Usage:
     lore sync TOOL [--session-id ID] [--project PATH]
     lore run TOOL [-- ARGS...]
     lore threads
+    lore metrics [--json] [--include-inferred]
     lore summarize [--session ID] [--since 30d] [--provider ollama] [--dry-run]
 """
 
@@ -2172,6 +2173,35 @@ def cmd_rules(args):
     print(f"Rules saved to: {rules_path}")
 
 
+def _load_sessions_from_extractors(args):
+    """Extract every available tool's sessions (read-only, never touches the index)."""
+    sessions = []
+    for extractor in get_all_extractors():
+        if not extractor.is_available():
+            continue
+        sessions.extend(extractor.extract_sessions())
+    return filter_automated(sessions, _include_automated(args))
+
+
+def cmd_metrics(args):
+    """``lore metrics`` — evidence-backed workflow metrics, read-only and local (#188)."""
+    from lore.services.workflow_metrics import (
+        compute_workflow_metrics,
+        format_metrics,
+        metrics_as_payload,
+    )
+
+    results = compute_workflow_metrics(
+        _load_sessions_from_extractors(args),
+        include_inferred=bool(getattr(args, "include_inferred", False)),
+    )
+    if args.json:
+        print(json.dumps(metrics_as_payload(results), indent=2, sort_keys=True))
+    else:
+        print(format_metrics(results))
+    return 0
+
+
 def cmd_generate_titles(args):
     from lore.titles import TitleGenerator, TitleStrategy
 
@@ -2461,6 +2491,7 @@ COMMANDS = {
     "check": cmd_check,
     "threads": cmd_threads,
     "rules": cmd_rules,
+    "metrics": cmd_metrics,
     "prune": cmd_prune,
     "backup": cmd_backup,
     "restore": cmd_restore,
@@ -2778,6 +2809,18 @@ Examples:
     rules_parser = subparsers.add_parser("rules", help="Generate derived rules")
     rules_parser.add_argument("--limit", type=int, default=30, help="Max rules to extract")
     _add_automated_flag(rules_parser)
+
+    # metrics command — evidence-backed workflow metrics (#188)
+    metrics_parser = subparsers.add_parser(
+        "metrics", help="Report workflow metrics with kind and coverage"
+    )
+    metrics_parser.add_argument("--json", action="store_true", help="Machine-readable output")
+    metrics_parser.add_argument(
+        "--include-inferred",
+        action="store_true",
+        help="Also report inferred outcomes (heuristic, labelled, never mixed in)",
+    )
+    _add_automated_flag(metrics_parser)
 
     # prune command
     prune_parser = subparsers.add_parser("prune", help="Prune sessions by prompt count")
