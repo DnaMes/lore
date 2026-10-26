@@ -264,6 +264,9 @@ which gives the longer explanations.
 - [docs/DOCKER.md](docs/DOCKER.md): container setup and host-specific settings
 - [docs/PRIVACY.md](docs/PRIVACY.md): read locations, data directory, providers
 - [docs/HOWTO.md](docs/HOWTO.md): short recipes for common tasks
+- [docs/API_REFERENCE.md](docs/API_REFERENCE.md): HTTP and MCP integration surfaces
+- [docs/LLM_INTEGRATION.md](docs/LLM_INTEGRATION.md): providers for analysis, summaries and titles
+- [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): operating the Docker stack
 - [CHANGELOG.md](CHANGELOG.md): release notes
 - [CONTRIBUTING.md](CONTRIBUTING.md): development setup and checks
 - [SECURITY.md](SECURITY.md): supported versions and vulnerability reporting

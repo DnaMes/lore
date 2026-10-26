@@ -120,6 +120,7 @@ The version is the single source of truth in `lore/__init__.py`.
 - `docker-compose.yml` reads `LORE_PORT` for the published host port (default 5000), so it can move when 5000 is taken.
 
 ### Removed
+- Internal planning notes, research dumps, homelab leftovers and one-off maintainer scripts left the tree (`docs/archive`, `docs/research`, `docs/superpowers`, `SESSION-MANAGEMENT.md`, `tools/sync.py` and others); they stay reachable in Git history under the tag `archive/pre-cleanup-2026-10-26`. The recall and cutoff calibration scripts and their data moved to `tools/calibration/`.
 - **Warp extractor:** Lore no longer imports Warp chat history; sessions already ingested keep loading as a legacy tool.
 - Legacy `ai-history` compatibility: the `AI_HISTORY_*` env prefix, the `~/.ai-history` auto-migration, and the `X-AI-History-Revision` header are gone. Use `LORE_*` env names, `~/.lore`, and `X-Lore-Revision`.
 - Z.AI provider.
