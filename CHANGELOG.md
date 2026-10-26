@@ -66,6 +66,12 @@ The version is the single source of truth in `lore/__init__.py`.
 - OpenCode no longer truncates tool output at 50k; Codex and OpenCode keep string tool inputs.
 - The cost dashboard persists per-session token totals and counts sessions without token data.
 - Accessibility: visible focus outlines, labelled controls, keyboard and screen-reader affordances, and muted-text contrast in both themes.
+- Archive preservation never drops an entry on a filesystem error (permission denied, unmounted archive), and it also runs for filtered exports.
+- Memory dedupe compares `scope_project` with the same normalisation recall uses, so `/work/repo/` and `/work/repo` form one scope.
+- `lore search` excludes pruned sessions before it applies the result limit.
+- Changes to `ignored.json` invalidate the v2 index cache, so prune and un-prune take effect at once.
+- Install hints name `pipx install git+https://github.com/DnaMes/lore` and `pipx inject`, not the unrelated PyPI package `lore`.
+- `docker-compose.yml` reads `LORE_PORT` for the published host port (default 5000), so it can move when 5000 is taken.
 
 ### Removed
 - **Warp extractor:** Lore no longer imports Warp chat history; sessions already ingested keep loading as a legacy tool.
@@ -74,10 +80,11 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ### Security
 - Requests whose `Host` header is not loopback, the bind host, a public origin, or listed in `LORE_ALLOWED_HOSTS` get a 400.
+- `Host` and `Origin` parsing rejects ports outside 1 to 65535 (for example `0` or `65536`) as not allowed (400 or 403) instead of returning a 500.
 - Mutating requests (POST, PUT, PATCH, DELETE) with an `Origin` header must match their own scheme and host or a configured public origin; anything else gets a 403.
 - `lore prune` deletes export files only inside the output directory; a path that resolves outside it is skipped with a warning.
 - Dedupe undo logs record the store they came from, and `--restore` refuses a log written for a different store.
-- `analyze`, `knowledge`, `format`, and `summarize` require `--allow-cloud` or `LORE_ALLOW_CLOUD=1` for every non-local provider; `improve` and `generate-titles` do not check this opt-in yet.
+- `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles` require `--allow-cloud` or `LORE_ALLOW_CLOUD=1` for every non-local provider; a refused run exits with code 2 and sends nothing.
 - `lore-web` prints a warning at startup when it binds beyond loopback without `LORE_PUBLIC_ORIGINS` or `LORE_ALLOWED_HOSTS`.
 - The web UI binds to `127.0.0.1` by default.
 - Per-window rate limits for the web UI (`LORE_RATE_LIMIT_*`), and honoured public origins behind a proxy (`LORE_PUBLIC_ORIGINS`).

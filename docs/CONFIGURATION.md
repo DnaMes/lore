@@ -1,6 +1,6 @@
 # Configuration
 
-Lore has no config file. Application settings are environment variables. Docker Compose also reads the two Compose-level variables marked below. Where a CLI flag exists for the same setting, the flag overrides the environment variable. The data directory is `~/.lore` unless `--output-dir` is given.
+Lore has no config file. Application settings are environment variables. Docker Compose reads its own variables, listed in [Docker Compose variables](#docker-compose-variables); the app does not read them. Where a CLI flag exists for the same setting, the flag overrides the environment variable. The data directory is `~/.lore` unless `--output-dir` is given.
 
 Defaults below are taken from the code. Where a default depends on the call site, the table says so.
 
@@ -8,8 +8,6 @@ Defaults below are taken from the code. Where a default depends on the call site
 
 | Name | Default | Purpose | Read in |
 | --- | --- | --- | --- |
-| LORE_BIND | 127.0.0.1 | Compose-level only: host address for the published web port. The Python app does not read it. | docker-compose.yml |
-| LORE_DATA_DIR | ./lore-data | Compose-level only: host directory mounted at `/home/ai/.lore`. The Python app does not read it. | docker-compose.yml |
 | LORE_HOME_SCAN_DEPTH | 4; 3 for OpenCode | Maximum directory depth for home-marker discovery. Values below 1 are clamped to 1. | lore/utils/home_discovery.py, lore/extractors/opencode.py |
 | LORE_HOME_SCAN_LIMIT | 64; 16 for OpenCode | Maximum number of marker hits per discovery. Values below 1 are clamped to 1. | lore/utils/home_discovery.py, lore/extractors/opencode.py |
 | LORE_HOME_SCAN_NODE_LIMIT | 25000 | Maximum number of directory nodes visited per discovery. Values below 100 are clamped to 100. | lore/utils/home_discovery.py |
@@ -28,6 +26,8 @@ Defaults below are taken from the code. Where a default depends on the call site
 | LORE_WEB_PORT | 5000 | Bind port for the web UI. A CLI flag overrides it. | lore/cli/web.py |
 | LORE_WEB_DEBUG | off | Runs Flask in debug mode only when set to `true`. A CLI flag overrides it. | lore/cli/web.py |
 | LORE_PUBLIC_ORIGINS | empty (none) | Comma-separated public origins in `scheme://host[:port]` form. Their hosts join the Host allowlist. With `TRUSTED_PROXY` set, they are also accepted as origins for mutating requests. Malformed entries are dropped with a warning. | lore/interfaces/web_utils.py, lore/interfaces/web.py |
+| TRUSTED_PROXY | unset (off) | Any non-empty value (including `0`) makes Lore trust `X-Forwarded-For`, `-Proto` and `-Host` from a reverse proxy, validates them on state-changing requests, and accepts `LORE_PUBLIC_ORIGINS` as origins. Set it only when a proxy you control sits in front. Docker's Traefik overlay sets it to `1`. | lore/interfaces/web.py, lore/interfaces/web_utils.py |
+| FLASK_SECRET_KEY | unset (ephemeral key) | Signing key for Flask session cookies. When unset, Lore generates a random key for each start and logs a warning, so browser sessions do not survive a restart. Use a stable value in production. | lore/interfaces/web.py |
 | LORE_ALLOWED_HOSTS | empty (none) | Comma-separated extra `Host` values, optionally with ports. Loopback hosts, the bind host, and `LORE_PUBLIC_ORIGINS` hosts are also allowed. `*` disables Host validation and logs a warning. `lore-web` warns on a non-loopback bind without this or `LORE_PUBLIC_ORIGINS`. | lore/interfaces/web_utils.py, lore/interfaces/web.py, lore/cli/web.py |
 | LORE_RATE_LIMIT_ENABLED | true | Enables rate limiting. Accepts `1`, `true`, `yes` or `on`. | lore/interfaces/web_utils.py |
 | LORE_RATE_LIMIT_WINDOW_SECONDS | 60 | Length of the rate-limit window in seconds. | lore/interfaces/web_utils.py |
@@ -59,13 +59,14 @@ Defaults below are taken from the code. Where a default depends on the call site
 
 | Name | Default | Purpose | Read in |
 | --- | --- | --- | --- |
-| LORE_LLM_PROVIDER | empty (none) | Default provider when `--provider` is not given. | lore_cli.py, lore/services/improve.py |
+| LORE_LLM_PROVIDER | empty (none) | Provider for the `extract_knowledge` stage of `lore improve` when `--provider` is not given. No other command reads it: `knowledge` always needs an explicit `--provider`, and `analyze`, `format` and `generate-titles` have their own defaults. A non-local value needs the cloud opt-in unless `--dry-run` is given. | lore_cli.py (cmd_improve), lore/services/improve.py |
 | LORE_LLM_TIMEOUT | openrouter 90 s; jev 180 s | Request timeout override in seconds for openrouter and jev only. Invalid or non-positive values use the provider default with a warning. An explicit `timeout` argument wins. | lore/llm/factory.py |
-| LORE_ALLOW_CLOUD | unset (off) | Grants the cloud opt-in for every non-local provider without `--allow-cloud`. Accepts `1`, `true` or `yes`. Non-local means gemini, openrouter, jev, and ollama when `OLLAMA_HOST` resolves off-host. Without the opt-in the command refuses and exits with code 2. | lore/services/summarize_cli.py |
+| LORE_ALLOW_CLOUD | unset (off) | Grants the cloud opt-in for every non-local provider without `--allow-cloud`. Accepts `1`, `true` or `yes`. Non-local means gemini, openrouter, jev, gemini-cli, and ollama when `OLLAMA_HOST` resolves off-host. Applies to `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles`. Without the opt-in the command refuses and exits with code 2 before anything is sent. | lore/services/summarize_cli.py |
 | LORE_OPENROUTER_MODEL | nvidia/nemotron-3-ultra-550b-a55b:free | Default OpenRouter model. | lore/llm/openrouter.py, lore/llm/factory.py, lore/services/summarize_cli.py |
 | LORE_OPENROUTER_BASE_URL | https://openrouter.ai/api/v1 | OpenRouter API base URL. | lore/llm/openrouter.py |
 | LORE_OPENROUTER_ALLOW_PAID | off | Allows OpenRouter models that do not end in `:free` only when set to `1`. | lore/llm/openrouter.py |
 | LORE_JEV_LANES | local,fastcheap | Comma-separated lane order for the jev provider. This default is specific to the owner's delegate broker lanes. | lore/llm/jev.py |
+| OLLAMA_HOST | unset (loopback) | Ollama endpoint. Lore treats Ollama as local only when this resolves to loopback; an off-host value makes `ollama` a cloud provider that needs the opt-in. The `ollama` client library also reads it to pick the endpoint. Not a `LORE_` variable. | lore/services/summarize_cli.py (locality check); the `ollama` client library |
 | LORE_OLLAMA_NUM_CTX | 8192 | Ollama context window size. Clamped to 2048 to 131072. | lore/llm/ollama.py |
 | LORE_SUMMARY_PROVIDER | empty (none) | Local provider for session summaries. Only `ollama` enables web summaries. | lore/services/summarize_cli.py |
 | LORE_SUMMARY_MODEL | llama3.2 (ollama default) | Model for session summaries. | lore/services/summarize_cli.py |
@@ -88,6 +89,18 @@ These names are read from the environment. They are never stored in repo files. 
 - GOOGLE_API_KEY (lore/llm/gemini.py)
 - GOOGLE_APPLICATION_CREDENTIALS (lore/llm/gemini.py)
 - OPENROUTER_API_KEY (lore/llm/openrouter.py)
+
+## Docker Compose variables
+
+These are read by `docker-compose.yml` and `docker-compose.sources.yml` for variable substitution. **The Python app does not read them.** Set them in `.env` or in the shell before `docker compose`.
+
+| Name | Default | Purpose | Read in |
+| --- | --- | --- | --- |
+| LORE_BIND | 127.0.0.1 | Host address for the published web port. `0.0.0.0` exposes the UI on every host interface; there is no login. | docker-compose.yml |
+| LORE_PORT | 5000 | Host port for the published web port. The container always listens on 5000. Change it when 5000 is taken, for example by macOS AirPlay. | docker-compose.yml |
+| LORE_DATA_DIR | unset: named volume `lore-data` | Host directory bind-mounted at `/home/ai/.lore`. Must be writable by the container user (UID 10001, or `LORE_UID` with the sources overlay). With the sources overlay the default is `./lore-data`. | docker-compose.yml, docker-compose.sources.yml |
+| LORE_UID | 10001 | User id the app container runs as. Only the sources overlay reads it. Export `LORE_UID=$(id -u)` so the container can read your `0700` history directories. | docker-compose.sources.yml |
+| LORE_GID | 10001 | Group id the app container runs as. Only the sources overlay reads it. Export `LORE_GID=$(id -g)` alongside `LORE_UID`. | docker-compose.sources.yml |
 
 ## Not configuration
 

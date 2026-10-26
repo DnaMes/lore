@@ -512,13 +512,13 @@ options:
 
 Generate readable titles for sessions.
 
-Writes: the title cache `~/.lore/title_cache/titles.json`. Calls a provider: local by default; `gemini-cli` (cloud) only when selected with `--provider`. Choosing it is the opt-in: no `--allow-cloud` gate applies.
+Writes: the title cache `~/.lore/title_cache/titles.json`. Calls a provider: local by default; `gemini-cli` (cloud) only when selected with `--provider`. Selecting it is not enough: it needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1` (otherwise exit 2, nothing sent). The local default needs no opt-in.
 
 ```text
 usage: lore generate-titles [-h] [--strategy {fast,keyword,smart,auto}]
                             [--tool TOOL] [--since SINCE] [--force]
                             [--provider {local,gemini-cli}] [--model MODEL]
-                            [--include-automated]
+                            [--allow-cloud] [--include-automated]
 
 options:
   -h, --help            show this help message and exit
@@ -533,11 +533,13 @@ options:
                         here — titles send a transcript excerpt.
   --model MODEL         Model for the selected provider (provider default
                         otherwise)
+  --allow-cloud         Allow cloud providers to receive session text (or set
+                        LORE_ALLOW_CLOUD=1)
   --include-automated   Also include automated (exec/cron/subagent) sessions,
                         hidden by default
 ```
 
-Note: Titles use `--provider local` by default and stay on this machine. `gemini-cli` is a cloud provider; it is only used when you choose it, and it receives a transcript excerpt per title.
+Note: Titles use `--provider local` by default and stay on this machine. `gemini-cli` is a cloud provider; it is only used when you choose it, it needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`, and it receives a transcript excerpt per title.
 
 ## reindex
 
@@ -613,10 +615,11 @@ Note: `--provider` is required. Use `--provider ollama` (local), or a cloud prov
 
 Backfill embeddings, extract knowledge and propose memory candidates.
 
-Writes: memory embeddings, knowledge entries and lesson candidates in the output directory. Calls a provider: only the extract_knowledge stage, and only when `--provider` or `LORE_LLM_PROVIDER` is set (`--dry-run` calls nothing). Unlike `analyze`, `knowledge`, `format` and `summarize`, `improve` has no `--allow-cloud` gate: a cloud provider chosen here is used as given, and a notice on stderr names it before the run.
+Writes: memory embeddings, knowledge entries and lesson candidates in the output directory. Calls a provider: only the extract_knowledge stage, and only when `--provider` or `LORE_LLM_PROVIDER` is set (`--dry-run` calls nothing). A non-local provider needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`, as with `analyze`, `knowledge`, `format` and `summarize`; without it the command exits with code 2 and sends nothing. With the opt-in, a notice on stderr names the provider before the run.
 
 ```text
-usage: lore improve [-h] [--provider PROVIDER] [--model MODEL] [--limit LIMIT]
+usage: lore improve [-h] [--provider PROVIDER] [--model MODEL] [--allow-cloud]
+                    [--limit LIMIT]
                     [--stage {embed_memories,extract_knowledge,distill_lessons,from_summaries}]
                     [--dry-run] [--json] [--include-automated]
 
@@ -624,6 +627,8 @@ options:
   -h, --help            show this help message and exit
   --provider PROVIDER   LLM provider for extract_knowledge
   --model MODEL         Model name for extract_knowledge
+  --allow-cloud         Allow cloud providers to receive session text (or set
+                        LORE_ALLOW_CLOUD=1)
   --limit LIMIT         Max sessions for extract_knowledge (default: 50)
   --stage {embed_memories,extract_knowledge,distill_lessons,from_summaries}
                         Run only these stages (repeatable)
@@ -805,8 +810,8 @@ The CLI returns three codes:
 - `1`: an error. Examples are a missing index, an unknown or ambiguous session
   id, an unavailable provider, or a failed write.
 - `2`: a non-local provider was chosen without opt-in. `_cloud_optin_error` in
-  `lore_cli.py` (via `require_cloud_opt_in` in `lore/services/summarize_cli.py`)
-  returns `2` for `gemini`, `openrouter`, `jev`, or an off-host `ollama`
+  `lore_cli.py` (via `require_cloud_opt_in` in `lore/services/summarize_cli.py`; `improve` and `generate-titles` call `require_cloud_opt_in` directly)
+  returns `2` for `gemini`, `gemini-cli`, `openrouter`, `jev`, or an off-host `ollama`
   without `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; nothing is sent and nothing
   is written.
 

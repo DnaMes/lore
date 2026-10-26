@@ -62,7 +62,7 @@ LORE_LLM_PROVIDER=ollama lore improve --provider ollama
 ```
 
 The `extract_knowledge` stage uses `--provider` or `LORE_LLM_PROVIDER`; if neither
-is set it is skipped with `no_llm`. Exit code 1 only when a stage errors.
+is set it is skipped with `no_llm`. A non-local provider also needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; without it the command exits 2 and sends nothing. Exit code 1 only when a stage errors.
 
 ### 4. `lore summarize` - AI session summaries
 
@@ -358,7 +358,7 @@ provider, so the provider is explicit and defaults to **local**:
 | Flag | Effect |
 | --- | --- |
 | `--provider local` (default) | Ollama with `--model` or `phi3:mini`. Nothing leaves the machine. |
-| `--provider gemini-cli` | The Gemini CLI on `PATH` — **cloud**, used only when selected here. |
+| `--provider gemini-cli` | The Gemini CLI on `PATH` — **cloud**, used only when selected here, and it also needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. |
 | `--model NAME` | Model for the selected provider. |
 
 The Gemini CLI is no longer picked because its binary happens to exist: before this change a

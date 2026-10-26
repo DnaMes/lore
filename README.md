@@ -27,8 +27,13 @@ Experimental:
 - the shared memory write tools
 - the AI analysis commands: `analyze`, `knowledge`, `improve`, `summarize`, `format`
 - the MCP write tools
-- the Docker setup: self-contained, loopback-published by default, no built-in login
-  (see [docs/DOCKER.md](docs/DOCKER.md))
+
+Verified on one host only:
+
+- the Docker setup, default stack (`docker compose up -d`): built, started, written to,
+  restarted and read back on one Linux host (Docker Engine 29.9.2). The sources and
+  Traefik overlays are checked for configuration only. The image has no built-in login.
+  The verification log is in [docs/DOCKER.md](docs/DOCKER.md).
 
 ## Quickstart (about 3 minutes)
 
@@ -102,7 +107,8 @@ Full reference, flags and examples: [docs/CLI.md](docs/CLI.md).
 Start it with `lore-web`; it serves `http://127.0.0.1:5000` by default.
 
 The bind is loopback only and the UI has no login. Any other exposure needs a
-reverse proxy that enforces authentication and TLS.
+reverse proxy that enforces authentication and TLS. The Docker stack publishes the
+same UI on `${LORE_BIND:-127.0.0.1}:${LORE_PORT:-5000}`.
 
 The `Host` header is checked on every request: it must name `localhost`,
 `127.0.0.1` or `[::1]`, the bind host, a host from `LORE_PUBLIC_ORIGINS`, or one
@@ -137,13 +143,16 @@ Kinds, statuses, ranking and the import rules: [docs/MEMORY.md](docs/MEMORY.md).
 Everything stays on this machine by default: archive, search, web UI, memory and
 export.
 
-A provider receives text only when you run an AI command with one and opt in with
-`--allow-cloud` or `LORE_ALLOW_CLOUD=1`. `lore knowledge` has no default provider:
-it exits with code 2 until you pass `--provider`. `analyze` and `format` default to
-`gemini`, a cloud provider, so without the opt-in they exit with code 2 and send
-nothing; to stay local, pass `--no-llm` (`analyze` only) or `--provider ollama`.
-`improve` and `generate-titles` do not check the opt-in. The full per-command
-provider table is in [docs/PRIVACY.md](docs/PRIVACY.md).
+A provider receives text only when you run an AI command with one. Every command that
+can send session text to a non-local provider requires the opt-in, `--allow-cloud` or
+`LORE_ALLOW_CLOUD=1`: `analyze`, `knowledge`, `format`, `summarize`, `improve`, and
+`generate-titles` with `--provider gemini-cli`. Without it they exit with code 2 and send
+nothing. `lore knowledge` has no default provider: it exits with code 2 until you pass
+`--provider`. `analyze` and `format` default to `gemini`, a cloud provider; to stay local,
+pass `--no-llm` (`analyze` only) or `--provider ollama`. `improve` sends text only when
+`--provider` or `LORE_LLM_PROVIDER` is set, and `--dry-run` sends nothing. `generate-titles`
+uses the local provider by default and needs no opt-in. The full per-command provider
+table is in [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Configuration
 
@@ -157,15 +166,22 @@ The cloud opt-in can also be set with `LORE_ALLOW_CLOUD=1` (see docs/CONFIGURATI
 `docker-compose.yml` is self-contained: `docker compose up -d` builds the local
 `Dockerfile` and starts the `app` service as `lore-app`.
 
-- **Port:** published on `${LORE_BIND:-127.0.0.1}:5000`, loopback only by default.
-- **Data:** `${LORE_DATA_DIR:-./lore-data}` is mounted at `/home/ai/.lore`. The image
-  runs as uid 10001, so the host data directory must be writable by that uid.
-- **Tool history** is not mounted by default. Add `-f docker-compose.sources.yml` to
-  mount your AI tool directories read-only.
-- **Reverse proxy:** the only Traefik config is `docker-compose.traefik.example.yml`.
-  It needs `docker network create traefik_local`, a hostname and
-  `LORE_PUBLIC_ORIGINS=https://your.host` set in that file, and an auth middleware,
-  because Lore has no login.
+- **Build:** the image build downloads the semantic embedding model from Hugging Face
+  unless you pass `--build-arg PREFETCH_EMBEDDING_MODEL=off`.
+- **Port:** published on `${LORE_BIND:-127.0.0.1}:${LORE_PORT:-5000}`. Loopback only by
+  default. Set `LORE_PORT=5001` if port 5000 is taken (macOS AirPlay often uses it).
+- **Data:** the named volume `lore-data` is mounted at `/home/ai/.lore`. It is owned by
+  the image user (uid 10001), so no `chown` is needed. `LORE_DATA_DIR=/host/path` switches
+  to a bind mount; that path must be writable by uid 10001.
+- **Tool history** is not mounted by default. For the sources overlay, run
+  `export LORE_UID=$(id -u) LORE_GID=$(id -g)` and add `-f docker-compose.sources.yml`. That
+  overlay bind-mounts `${LORE_DATA_DIR:-./lore-data}` writable by your uid and mounts your
+  AI tool directories read-only.
+- **Reverse proxy:** the only Traefik config is `docker-compose.traefik.example.yml`. It
+  needs `docker network create traefik_local`, your hostname in the router rule and
+  `LORE_PUBLIC_ORIGINS` (both set in that file), and an auth middleware, because Lore has
+  no login. The base file still publishes the port on loopback, which skips the proxy.
+- **Secret key:** set `FLASK_SECRET_KEY` in `.env`, so sessions survive a restart.
 
 Details, upgrade and backup: [docs/DOCKER.md](docs/DOCKER.md).
 
@@ -189,7 +205,7 @@ data in your tool directories is not touched.
 - Search returns nothing: build the index first with `lore export --all` or
   `lore sync <tool>`.
 - Port 5000 is busy: start the UI with `lore-web --port 5001` or set
-  `LORE_WEB_PORT`.
+  `LORE_WEB_PORT`. For Docker, use `LORE_PORT=5001 docker compose up -d`.
 - Semantic search behaves like keyword search: run `pipx inject lore fastembed sqlite-vec`,
   or install the `semantic` extra from the Git repository (PyPI `lore` is a different
   project).

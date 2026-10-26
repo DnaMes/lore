@@ -25,7 +25,7 @@ You will receive a response within 72 hours. If confirmed, a patch will be relea
 
 - **Host allowlist**: The web UI allows `localhost`, `127.0.0.1`, `[::1]`, the bind host, and hosts from `LORE_PUBLIC_ORIGINS`. `LORE_ALLOWED_HOSTS` adds hosts. Its `*` value disables validation with a warning. Other hosts receive HTTP 400. `lore-web` warns on stderr when a non-loopback bind has neither host nor public-origin configuration.
 - **Origin check**: Web requests using `POST`, `PUT`, `PATCH`, or `DELETE` must be same-origin when they carry an `Origin` header. Origins from `LORE_PUBLIC_ORIGINS` are also accepted with `TRUSTED_PROXY` enabled. Rejected origins receive HTTP 403.
-- **Cloud opt-in**: Cloud AI providers require `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. The values `true` and `yes` are also accepted.
+- **Cloud opt-in**: Cloud AI providers require `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. This applies to every command that can send session text to a non-local provider. The values `true` and `yes` are also accepted.
 - **Prune confinement**: `lore prune` deletes exports only inside the export root. It refuses paths and symlink targets outside that root.
 - **Memory dedupe**: `lore memory dedupe` is a dry run by default; `--apply` writes changes. It never merges across `kind`, `scope_project`, or `scope_tool`. Undo logs record the store identity, and restore refuses a log from another store.
 
@@ -35,4 +35,4 @@ This tool runs **locally** — it reads AI tool config directories on your machi
 
 Known limitations:
 - The web UI has no built-in authentication. If you expose it publicly, use a reverse proxy with Basic Auth or similar.
-- The Docker setup mounts your AI tool directories read-only and `~/.lore` read-write; see [docs/DOCKER.md](docs/DOCKER.md). Remove the Traefik labels and external network before any networked deployment.
+- The default Docker stack publishes the UI on loopback only, has no login, and keeps its data in a named volume. The sources overlay mounts your AI tool directories read-only. Before any networked deployment, put an authenticating reverse proxy in front; see [docs/DOCKER.md](docs/DOCKER.md).

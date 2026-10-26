@@ -1,97 +1,82 @@
-# Deployment Guide
+# Deployment
 
-## Docker Deployment
+Operations page for the running Docker stack. For setup, environment variables and
+the opt-in overlays, use [DOCKER.md](./DOCKER.md), the runtime-verified Docker guide.
 
-### Prerequisites
+The stack is a single service `app` built from `Dockerfile` by `docker-compose.yml`.
+Compose has no `image:` key; the image is built locally and named after the checkout
+directory and service (for a checkout in `lore/`: `lore-app`). The container name
+`lore-app` is set in `docker-compose.yml`.
 
-- Docker and Docker Compose installed
-- Access to the project directory
-
-### Building and Deploying
+## Day-to-day operations
 
 ```bash
-# Build the Docker image (recommended before deploying)
-docker compose build --no-cache
+docker compose build app       # build the image
+docker compose up -d           # start; recreates the container, keeps the lore-data volume
+docker compose stop app        # stop
+docker compose down            # stop and remove the container; lore-data volume stays
+docker compose ps              # status; "(healthy)" once the health check passes
+docker compose logs -f app     # follow logs
+docker exec lore-app ...       # run a command inside the container (name from compose)
+```
 
-# Deploy/start the stack
-docker compose up -d
+`docker compose start app` restarts a stopped container; `docker compose down -v` also
+deletes the `lore-data` volume and all data with it.
 
-# Watch logs
+## Health checks
+
+- `GET /api/health` — liveness. Returns `{"status": "ok", "revision": ..., ...}`; this is the endpoint the Dockerfile and compose health checks request over loopback.
+- `GET /api/ready` — readiness. Checks that the output directory is writable and the index parent exists; answers `ready` or `degraded` with per-check details.
+
+## Rebuilding after an update
+
+The named volume `lore-data` (mounted at `/home/ai/.lore`; holds the SQLite store,
+exports, memory and caches) survives a rebuild: `up -d` recreates the container, not
+the volume. Lore applies its own migrations when the store opens.
+
+```bash
+git pull
+docker compose build app
+docker compose up -d app
 docker compose logs -f app
-
-# Check status
-docker compose ps
 ```
 
-### Important Notes
+## Backup and restore
 
-1. **The container name is `lore-app`** (defined in docker-compose.yml)
-2. **The image tag is `lore-app:latest`**
-3. **Container is healthy** if `docker compose ps` shows `(healthy)` status
+SQLite runs in WAL mode, so stop the app before copying. The recipe (also in
+[DOCKER.md](./DOCKER.md#backup-and-restore)) reads the volume through a throwaway
+container via `--volumes-from lore-app`:
 
-### Version Mismatch Warning
+```bash
+# backup: writes the archive to the current directory
+docker compose stop app
+docker run --rm --volumes-from lore-app alpine \
+  tar -C /home/ai/.lore -czf - . > "lore-data-$(date +%F).tar.gz"
+docker compose start app
 
-The local codebase and container may occasionally get out of sync:
+# restore: replaces the volume contents (keep a copy of the current data first)
+docker compose stop app
+docker run --rm -i --volumes-from lore-app alpine \
+  sh -c 'find /home/ai/.lore -mindepth 1 -delete && tar -C /home/ai/.lore -xzf -' \
+  < lore-data-YYYY-MM-DD.tar.gz
+docker compose start app
+```
 
-If you see unexpected behavior after pulling updates:
+For a bind-mounted `LORE_DATA_DIR`, tar the host directory directly instead.
 
-1. Rebuild: `docker compose build --no-cache`
-2. Restart: `docker compose restart app`
-3. Check container logs: `docker compose logs app`
+## Logs
 
-### Environment Variables
+Logs go to stdout/stderr only; gunicorn writes to the console and the compose
+`json-file` driver caps them at 10 MB with 3 rotated files. Read them with
+`docker compose logs -f app`.
 
-See README.md "Production Ops" section for rate limiting and logging configuration.
+## Troubleshooting
 
-### Accessing the Application
-
-- **Local**: http://localhost:5000
-- **Deployed (via Traefik or reverse proxy)**: https://your-domain.example.com/
-
-### Behind a reverse proxy
-
-Two environment variables control what the app believes about the client (#193):
-
-| Variable | Effect |
+| Symptom | Fix |
 | --- | --- |
-| `TRUSTED_PROXY=1` | Read `X-Forwarded-For` / `-Proto` / `-Host` at all. Unset (the default): the headers are ignored, never parsed, never trusted. |
-| `LORE_PUBLIC_ORIGINS` | Comma-separated `scheme://host[:port]` origins a browser may send as `Origin` on state-changing requests, e.g. `https://lore.example.com,https://lore.example.com:8443`. Honoured **only** together with `TRUSTED_PROXY`. |
+| Port busy on start (port 5000 is taken, e.g. by macOS AirPlay Receiver) | `LORE_PORT=5001 docker compose up -d`, or set `LORE_PORT` in `.env` |
+| `Permission denied` writing a bind-mounted `LORE_DATA_DIR` | The host path must be writable by container UID 10001: `sudo chown -R 10001:10001 <path>`. The container can still report `healthy`; `/api/ready` shows the failure |
+| HTTP 400 behind a reverse proxy (foreign or missing `Host`) | Set `TRUSTED_PROXY=1`, list the public origin in `LORE_PUBLIC_ORIGINS` and/or extra `Host` values in `LORE_ALLOWED_HOSTS` (see [DOCKER.md](./DOCKER.md#reverse-proxy-with-traefik-opt-in-example)) |
 
-```bash
-TRUSTED_PROXY=1 \
-LORE_PUBLIC_ORIGINS=https://lore.example.com \
-docker compose up -d
-```
-
-Scheme and port are part of an origin, so `https://host:8443` never authorises `http://host`
-or `https://host`. Entries that are not `scheme://host[:port]` are dropped with a warning.
-Without `LORE_PUBLIC_ORIGINS` only loopback origins (`localhost`, `127.0.0.1`, `::1`) pass the
-cross-origin guard, so a UI reached through a proxy gets `403` on every state-changing POST
-until its origin is listed. While `TRUSTED_PROXY` is set, a state-changing request whose
-`X-Forwarded-*` headers do not parse (bad scheme, host or address list) is rejected with `400`
-before the origin check.
-
-### Clearing Container State
-
-```bash
-# Restart fresh (keeps volumes)
-docker compose restart app
-
-# Full rebuild (no cache)
-docker compose build --no-cache && docker compose up -d
-
-# Stop everything
-docker compose down
-```
-
-### Database and Redis
-
-- **db container**: PostgreSQL 15 Alpine (persistent via `db_data` volume)
-- **redis container**: Redis Alpine (persistent via `redis_data` volume)
-
-To reset data:
-
-```bash
-docker compose down -v  # WARNING: Deletes all data volumes
-docker compose up -d
-```
+See [DOCKER.md](./DOCKER.md) for setup and [CONFIGURATION.md](./CONFIGURATION.md) for
+app settings and environment variable reference.
