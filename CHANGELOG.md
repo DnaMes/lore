@@ -4,30 +4,81 @@ All notable changes to this project are documented here.
 The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
-### Changed
-- `lore memory dedupe --apply` rejects all planned duplicates in one transaction, writes a JSON
-  undo log under the store, and `lore memory dedupe --restore FILE` reverses still-rejected rows.
-- `lore memory context` no longer treats `/`, the user home directory, or other overly broad
-  ancestor `scope_project` paths as related to a working project (descendant scopes unchanged).
+
+## [2.4.0] - 2026-10-26 (unreleased until tagged)
+
 ### Added
-- `lore memory dedupe [--apply]` groups active confirmed memories by normalized title and
-  body hash. Dry run by default; keeps the highest feedback weight, then longest project
-  scope, then newest update, and reversibly rejects the rest without deleting rows (AB#1606).
-- `lore memory import-claude` skips duplicate normalized title/body content already confirmed
-  in any scope, including duplicates within one run, and reports the duplicate count.
-- `lore memory context` builds a token-budgeted prompt block from shared memory for a project path.
-- `lore memory show` prints one memory entry by id (status, kind, scope, supersession links, body).
-- `lore memory import-claude` seeds shared memory from Claude Code auto-memory files
-  (`~/.claude/projects/*/memory/*.md`). Dry run by default; `--apply` writes. Idempotent by
-  file path and content hash, edited files supersede their previous import, and text is
-  redacted before writing.
+- Semantic search over sessions via sqlite-vec (`semantic` extra), fused with keyword hits by reciprocal rank fusion behind a calibrated distance cutoff.
+- Exact-phrase queries, result snippets, and source tags on session and memory hits.
+- `lore summarize` writes AI session summaries for archived sessions, with `--dry-run` estimates and citation-checked output.
+- `lore improve` backfills embeddings, extracts knowledge, and proposes memory candidates.
+- `lore digest`, `lore threads`, and `lore rules` print an activity digest, open threads, and derived rules.
+- `lore run --no-pty` disables PTY capture; `lore check --deep` runs every extractor without writing and reports discovery counters.
+- OpenRouter provider, opt-in cloud; non-free models are refused unless `LORE_OPENROUTER_ALLOW_PAID=1`.
+- jev provider over text-only delegate lanes, opt-in cloud.
+- MCP `get_session_summary` (read-only) and `summarize_session` (local only, enabled by `LORE_MCP_ALLOW_SUMMARIZE=1`).
+- Session summaries are stored (migration 18) and removed with their session.
+- Origin, relations, message kinds, and tool events are stored (migration 17); user-editable session tags and bookmarks.
+- Session readers for Cline, Roo Code, Kilo Code, Goose, Crush, Kimi CLI, Qwen Code, Zed, and Factory Droid.
+- Session readers for Cursor agent transcripts, Hermes, Pi (version 3 tree), Command Code (including checkpoint-only runs), OpenCode v2, Antigravity plaintext transcripts, and Codex archived rollouts.
+- `lore memory dedupe [--apply]` lists exact confirmed duplicates (same title, body, kind, and scope); dry run by default; `--apply` runs in one transaction and writes a JSON undo log.
+- `lore memory dedupe --restore FILE` reverses the rejections recorded in a dedupe undo log.
+- `lore memory context` renders a token-budgeted memory block for a project path.
+- `lore memory show` prints one memory in full: status, kind, scope, supersession links, and body.
+- `lore memory import-claude` seeds shared memory from Claude Code auto-memory files; dry run by default, `--apply` writes, idempotent by file path and content hash.
+- `lore memory rate` records feedback ratings for confirmed memories, with a bounded derived weight.
+- Memory candidate status and atomic supersession, with similar-memory hints; recall is hybrid by default with a 0.6 relevance floor and source tags.
+- Web UI: peek preview pane, keyboard shortcuts with a help dialog, and in-session find across all pages with highlight and next/prev.
+
+### Changed
+- **BREAKING:** `lore analyze` and `lore format` need `--allow-cloud` or `LORE_ALLOW_CLOUD=1` by default, because their default provider, gemini, is a cloud provider. Without it they exit with code 2 and send nothing.
+- **BREAKING:** `lore knowledge` has no default provider; `--provider` is required, and a bare `lore knowledge` exits with code 2.
+- **BREAKING:** the `watch` extra is removed; `lore watch` polls for new sessions and needs no extra package.
+- **BREAKING:** the Python package `ai_history` is renamed to `lore`; CLI modules are `lore_cli` and `lore_session_cli`, and environment variables use the `LORE_*` prefix.
+- `lore memory dedupe` respects scope: memories are never merged across kinds or scopes, and the kept copy is the one with the highest feedback weight, then the newest update.
+- Sessions need at least 3 user prompts to be imported by default (`LORE_MIN_USER_PROMPTS`; `LORE_IMPORT_PROFILE` selects the profile); Claude Code subagent transcripts are included.
+- `lore export` and `lore sync` print skipped-session counts and their reasons to stderr after the run.
+- `lore search` says "Found 1 result" for a single hit and prints scores to three decimals.
+- Extractors keep more detail: Claude thinking, model, native titles and compaction; Codex tool results, tokens and context; Cursor bubble times, model, thinking and tools.
+- Sync skips unchanged sources before opening them and re-extracts sessions when the parser version rises.
+- Automated sessions (exec, cron, subagent) are hidden by default; `include_automated` shows them.
+- Web UI uses light and dark themes only, and a precompiled stylesheet replaces the Tailwind JIT runtime.
+- Bounded reload memory: `IndexBuilder` streams sessions, and OpenCode extraction is two-pass.
+- Session list and conversation UI: day-grouped list, folded tool-call groups, AI summary card, bulk select with delete and tag, bottom sheets for outline and filters.
+
+### Fixed
+- `lore export` keeps index entries whose source file was deleted, unless their exported file is also gone.
+- `lore prune` honours `ignored.json` in the v2 store views, so pruned sessions stay hidden.
+- MCP `switch_to_tool` and the web "continue" command call `lore-session` instead of the removed `ai-session` command.
+- `lore search` and `lore prune` tell you to run `lore export --all` when no index exists.
+- `lore memory context` ignores overly broad ancestor scopes (`/`, the home directory, and similar); descendant scopes are unchanged.
+- Search accepts apostrophes in queries and handles whitespace at the edges correctly.
+- Knowledge extraction reports why it failed and commits its writes; a stale knowledge base is cleared when every session is deleted.
+- Sync no longer scans the FTS table once per written session.
+- Session titles are generated through the selected provider.
+- Gemini CLI JSONL sessions use the current format; Antigravity and Copilot drops are reported instead of silently counted as zero.
+- OpenCode no longer truncates tool output at 50k; Codex and OpenCode keep string tool inputs.
+- The cost dashboard persists per-session token totals and counts sessions without token data.
+- Accessibility: visible focus outlines, labelled controls, keyboard and screen-reader affordances, and muted-text contrast in both themes.
+
 ### Removed
-- Legacy `ai-history` compatibility removed: the `AI_HISTORY_*` env prefix, the `~/.ai-history`
-  auto-migration and the `X-AI-History-Revision` response header are gone. Use `LORE_*` env names,
-  `~/.lore` as the data dir and `X-Lore-Revision`.
-- **Warp extractor.** Lore no longer imports chat history from the Warp terminal (`lore/extractors/warp.py`,
-  its noise rules, formatter and docker mount are gone). Sessions already ingested keep loading: the `warp`
-  source value stays readable as a legacy tool.
+- **Warp extractor:** Lore no longer imports Warp chat history; sessions already ingested keep loading as a legacy tool.
+- Legacy `ai-history` compatibility: the `AI_HISTORY_*` env prefix, the `~/.ai-history` auto-migration, and the `X-AI-History-Revision` header are gone. Use `LORE_*` env names, `~/.lore`, and `X-Lore-Revision`.
+- Z.AI provider.
+
+### Security
+- Requests whose `Host` header is not loopback, the bind host, a public origin, or listed in `LORE_ALLOWED_HOSTS` get a 400.
+- Mutating requests (POST, PUT, PATCH, DELETE) with an `Origin` header must match their own scheme and host or a configured public origin; anything else gets a 403.
+- `lore prune` deletes export files only inside the output directory; a path that resolves outside it is skipped with a warning.
+- Dedupe undo logs record the store they came from, and `--restore` refuses a log written for a different store.
+- `analyze`, `knowledge`, `format`, and `summarize` require `--allow-cloud` or `LORE_ALLOW_CLOUD=1` for every non-local provider; `improve` and `generate-titles` do not check this opt-in yet.
+- `lore-web` prints a warning at startup when it binds beyond loopback without `LORE_PUBLIC_ORIGINS` or `LORE_ALLOWED_HOSTS`.
+- The web UI binds to `127.0.0.1` by default.
+- Per-window rate limits for the web UI (`LORE_RATE_LIMIT_*`), and honoured public origins behind a proxy (`LORE_PUBLIC_ORIGINS`).
+- Secret redaction for prompts and exports; `lore export --redact` produces shareable exports, and structured tool data is redacted by field name.
+- Inline event handlers are replaced with CSP-safe delegation.
+- Secret-named tool inputs from Cursor agent transcripts are never rendered.
+- An off-host `OLLAMA_HOST` is treated as cloud, and transcripts stay out of the disk LLM cache.
 
 ## [2.3.0] - 2026-05-18
 ### Changed
