@@ -8,6 +8,8 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Added
 - `accessibility`: accessible names for the project filter controls (tool, tag, start and end date), the noise-rules preview textarea and the resume copy button; the labels are checked by `tests/test_a11y_form_labels.py` (cluster of PRs #200, #201, #205, #208, #210).
 
+### Changed
+- Markdown rendering reuses one parser per thread (`thread_local_markdown_parser`) instead of building a parser for every conversion: measured 1.37x faster on 1 KB and 1.27x on 10 KB messages, with identical output (cluster of PRs #202-#215).
 
 ## [2.4.0] - 2026-10-26 (unreleased until tagged)
 
