@@ -1330,6 +1330,17 @@ def cmd_sync(args):
     _print_skip_summary(built_extractors)
 
 
+def _open_private_append(path: Path):
+    """Open ``path`` for binary append: created 0600, and an existing file is tightened."""
+    handle = os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "ab")
+    try:
+        restrict_file(path)
+    except BaseException:
+        handle.close()
+        raise
+    return handle
+
+
 def cmd_run(args):
     """Run a tool and sync history after it exits."""
     tool = normalize_tool_name(args.tool) or args.tool
@@ -1359,8 +1370,7 @@ def cmd_run(args):
         # Unix only: importing pty at module level made the whole CLI unusable on Windows.
         import pty
 
-        log_file = os.fdopen(os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600), "ab")
-        restrict_file(log_path)
+        log_file = _open_private_append(log_path)
 
         def read(fd):
             data = os.read(fd, 1024)
@@ -1410,7 +1420,8 @@ def cmd_run(args):
         "exit_status": exit_status,
         "log_path": str(log_path),
     }
-    with open(meta_path, "w", encoding="utf-8") as f:
+    meta_fd = os.open(meta_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(meta_fd, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
     restrict_file(meta_path)
 

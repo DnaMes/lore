@@ -217,8 +217,8 @@ def test_gemini_cli_title_without_optin_never_calls_subprocess(
 def _install_subprocess_capture(monkeypatch: pytest.MonkeyPatch) -> list:
     seen: list = []
 
-    def fake_run(cmd, **_kwargs):
-        seen.append(cmd)
+    def fake_run(cmd, **kwargs):
+        seen.append((cmd, kwargs))
         return SimpleNamespace(returncode=0, stdout="A Title")
 
     monkeypatch.setattr("subprocess.run", fake_run)
@@ -236,8 +236,8 @@ def test_gemini_cli_title_env_optin_sends_redacted_prompt(
 
     assert title == "A Title"
     assert len(calls) == 1
-    assert calls[0][0] == "gemini"
-    prompt = calls[0][1]
+    assert calls[0][0][0] == "gemini"
+    prompt = calls[0][1]["input"]
     assert TOKEN not in prompt
     assert redact(TOKEN).text in prompt or "[REDACTED:" in prompt
 
@@ -253,7 +253,7 @@ def test_gemini_cli_title_arg_optin_sends_redacted_prompt(
     generator.generate(_session(), force=True)
 
     assert len(calls) == 1
-    prompt = calls[0][1]
+    prompt = calls[0][1]["input"]
     assert TOKEN not in prompt
 
 

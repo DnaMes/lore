@@ -80,7 +80,7 @@ def _install_subprocess_capture(monkeypatch: pytest.MonkeyPatch) -> List[Any]:
     seen: List[Any] = []
 
     def fake_run(cmd: Any, **kwargs: Any) -> SimpleNamespace:
-        seen.append(cmd)
+        seen.append((cmd, kwargs))
         return SimpleNamespace(returncode=0, stdout="A Title")
 
     monkeypatch.setattr("subprocess.run", fake_run)
@@ -99,7 +99,10 @@ def test_gemini_cli_title_optin_redacts_project_path_token(
 
     assert title == "A Title"
     assert len(calls) == 1
-    prompt = calls[0][1]
+    cmd, kwargs = calls[0]
+    prompt = kwargs["input"]
+    # The excerpt travels through stdin; argv holds no session text.
+    assert all(prompt not in part for part in cmd)
     assert TOKEN not in prompt
     assert "[REDACTED:github_token]" in prompt
     # Redaction runs over the finished prompt: its structure survives intact.
@@ -119,7 +122,7 @@ def test_gemini_cli_title_optin_redacts_session_title_token(
     gen.generate(_session(title=f"rotate {TOKEN}"), force=True)
 
     assert len(calls) == 1
-    assert TOKEN not in calls[0][1]
+    assert TOKEN not in calls[0][1]["input"]
 
 
 def test_gemini_cli_title_without_optin_zero_subprocess_calls(

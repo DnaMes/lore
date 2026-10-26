@@ -754,15 +754,18 @@ session stopped.
 Writes: the redacted handoff context to a unique mode-0600 file
 `~/.lore/handoff/context-<id>.md` (no longer the shared
 `/tmp/ai-session-context.md`). The file is removed after the launched tool
-exits (kept for the manual tools, whose block you paste from it), and stale
-files older than 24 hours are removed.
+exits (kept for the manual tools, whose block you paste from it). Stale files older
+than 24 hours are removed the next time a handoff file is written, not on a timer.
 
 Sends nothing by itself. Switching to `gemini` or `codex` -- they receive the
-context as an argument or referenced file -- requires the cloud opt-in
+context as a referenced file (the process list shows only its path, never the text) -- requires the cloud opt-in
 `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; without it the command prints an
-error and exits with code 2. The context is redacted before it is written or
+error and exits with code 2 (the MCP tool `switch_to_tool` returns the same refusal as text). The context is redacted before it is written or
 passed. `claude` is continued with `--continue`, and the manual tools
 (`cursor`, `vscode`) only print how to paste the block; both send nothing.
+
+The Gemini handoff needs a Gemini CLI that supports `--include-directories` and `@path`
+references; it gets read access to the one private folder of this handoff only.
 
 ```text
 usage: lore_session_cli.py [-h] {list,switch,continue} ...

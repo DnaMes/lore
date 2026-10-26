@@ -36,8 +36,8 @@ from lore.utils.redact import redact
 from lore.utils.security import get_safe_executable
 from lore.utils.tooling import normalize_tool_name, to_session_switch_tool
 
-# Tools whose launched process receives OUR session context (gemini as argv, codex
-# via @file). They require an explicit cloud opt-in. claude --continue never
+# Tools whose launched process receives OUR session context (gemini and codex, both via
+# a @file reference). They require an explicit cloud opt-in. claude --continue never
 # receives our context and the manual tools (cursor, vscode) only produce a local
 # file for the user to paste, so both stay ungated.
 CLOUD_CONTEXT_TOOLS = frozenset({"gemini", "codex"})
@@ -53,24 +53,41 @@ def _cleanup_stale_context_files() -> None:
     """Delete handoff context files older than 24h (best effort, ignore OSError)."""
     cutoff = time.time() - _CONTEXT_FILE_STALE_SECONDS
     try:
-        for path in _handoff_dir().glob("context-*.md"):
+        # Each handoff has its own folder (h-<id>/context-<id>.md); bare files are legacy.
+        for path in [
+            *_handoff_dir().glob("h-*/context-*.md"),
+            *_handoff_dir().glob("context-*.md"),
+        ]:
             try:
                 if path.stat().st_mtime < cutoff:
                     path.unlink()
+                    _remove_if_empty(path.parent)
             except OSError:
                 continue
     except OSError:
         return
 
 
+def _remove_if_empty(folder: Path) -> None:
+    """Remove a per-handoff folder once its context file is gone (never the handoff root)."""
+    if folder.name.startswith("h-"):
+        try:
+            folder.rmdir()
+        except OSError:
+            pass
+
+
 def _write_context_file(context: str) -> Path:
-    """Write ``context`` to a unique 0600 file in the private handoff directory.
+    """Write ``context`` to a unique 0600 file in its own folder under the handoff directory.
+
+    The own folder lets Gemini be granted read access to this one file only.
 
     O_EXCL on a fresh random name means an attacker cannot win the race with a
     symlink or pre-planted file (unlike the old fixed /tmp path).
     """
     _cleanup_stale_context_files()
-    path = _handoff_dir() / f"context-{uuid.uuid4().hex}.md"
+    folder = secure_dir(_handoff_dir() / f"h-{uuid.uuid4().hex}")
+    path = folder / f"context-{uuid.uuid4().hex}.md"
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
         f.write(context)
@@ -122,7 +139,7 @@ def switch_to_tool(tool: str, context: str, allow_cloud: bool = False):
     switch_tool = to_session_switch_tool(normalized_tool) or tool
 
     commands = {
-        "gemini": "argv",  # context is passed as an argv element
+        "gemini": "file",  # context is referenced via @<file>; argv holds only the path
         "codex": "file",  # context is referenced via @<file>
         "cursor": None,  # Manual
         "vscode": None,  # Manual
@@ -169,7 +186,8 @@ def switch_to_tool(tool: str, context: str, allow_cloud: bool = False):
         return True
 
     if switch_tool == "gemini":
-        cmd = ["gemini", "<session context as argument>"]
+        prompt = f"Continue the coding session described in @{context_path}"
+        cmd = ["gemini", "--include-directories", str(context_path.parent), prompt]
     elif switch_tool == "codex":
         cmd = ["codex", f"@{context_path}"]
     else:
@@ -186,12 +204,8 @@ def switch_to_tool(tool: str, context: str, allow_cloud: bool = False):
             print(f"❌ {switch_tool} not found or not safe. Install it first.")
             return False
 
-        if switch_tool == "gemini":
-            subprocess.run([executable, context], shell=False, timeout=3600)
-        elif switch_tool == "codex":
-            subprocess.run([executable, f"@{context_path}"], shell=False, timeout=3600)
-        elif switch_tool == "claude":
-            subprocess.run([executable, "--continue"], shell=False, timeout=3600)
+        # Run the command printed above, with the resolved executable in front.
+        subprocess.run([executable, *cmd[1:]], shell=False, timeout=3600)
     except FileNotFoundError:
         print(f"❌ {tool} not found. Install it first.")
         return False
@@ -206,6 +220,7 @@ def switch_to_tool(tool: str, context: str, allow_cloud: bool = False):
         if context_path is not None:
             try:
                 context_path.unlink()
+                _remove_if_empty(context_path.parent)
             except OSError:
                 pass
 

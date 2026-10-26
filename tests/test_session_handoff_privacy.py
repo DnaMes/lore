@@ -14,6 +14,7 @@ import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -72,7 +73,7 @@ def test_gemini_and_codex_refused_without_opt_in(isolated_home, runs, capsys):
         stderr = capsys.readouterr().err
         assert refusal in stderr
     handoff = _handoff_dir(isolated_home)
-    assert not handoff.exists() or list(handoff.glob("context-*.md")) == []
+    assert not handoff.exists() or list(handoff.glob("h-*/context-*.md")) == []
 
 
 def test_gemini_allowed_with_allow_cloud_flag(isolated_home, runs):
@@ -93,7 +94,7 @@ def test_codex_allowed_with_opt_in_and_receives_file(monkeypatch, isolated_home)
     def fake_run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
         captured.append(cmd)
         # Snapshot the context file while the launched process would read it.
-        files = list(_handoff_dir(isolated_home).glob("context-*.md"))
+        files = list(_handoff_dir(isolated_home).glob("h-*/context-*.md"))
         assert len(files) == 1
         assert NAME_RE.match(files[0].name)
         return subprocess.CompletedProcess(cmd, 0)
@@ -108,7 +109,7 @@ def test_codex_allowed_with_opt_in_and_receives_file(monkeypatch, isolated_home)
     assert lore_session_cli.switch_to_tool("codex", CONTEXT, allow_cloud=True) is True
     assert len(captured) == 1
     assert captured[0][1].startswith("@")
-    assert list(_handoff_dir(isolated_home).glob("context-*.md")) == []
+    assert list(_handoff_dir(isolated_home).glob("h-*/context-*.md")) == []
 
 
 def test_argv_does_not_contain_secret(isolated_home, runs):
@@ -118,9 +119,21 @@ def test_argv_does_not_contain_secret(isolated_home, runs):
     assert TOKEN in CONTEXT  # sanity: the fixture really contains the token
 
 
+def test_argv_carries_a_file_reference_not_the_context(isolated_home, runs):
+    assert lore_session_cli.switch_to_tool("gemini", CONTEXT, allow_cloud=True) is True
+    argv = runs[0]
+    folder = argv[argv.index("--include-directories") + 1]
+    # Access is limited to this handoff's own folder, not the shared handoff root.
+    assert Path(folder).parent == _handoff_dir(isolated_home)
+    assert Path(folder).name.startswith("h-")
+    # No part of the session text reaches the process list, only the file path.
+    assert all(CONTEXT[:40] not in part for part in argv)
+    assert any(part.startswith("Continue the coding session described in @") for part in argv)
+
+
 def test_manual_file_is_redacted(isolated_home, runs):
     assert lore_session_cli.switch_to_tool("cursor", CONTEXT) is True
-    files = list(_handoff_dir(isolated_home).glob("context-*.md"))
+    files = list(_handoff_dir(isolated_home).glob("h-*/context-*.md"))
     assert len(files) == 1
     content = files[0].read_text(encoding="utf-8")
     assert TOKEN not in content
@@ -130,7 +143,7 @@ def test_context_file_location_name_mode_and_removal(monkeypatch, isolated_home)
     seen: dict[str, list] = {}
 
     def fake_run(cmd: list[str], **kwargs) -> subprocess.CompletedProcess:
-        files = list(_handoff_dir(isolated_home).glob("context-*.md"))
+        files = list(_handoff_dir(isolated_home).glob("h-*/context-*.md"))
         seen["names"] = [f.name for f in files]
         seen["modes"] = [os.stat(f).st_mode & 0o777 for f in files]
         return subprocess.CompletedProcess(cmd, 0)
@@ -149,13 +162,13 @@ def test_context_file_location_name_mode_and_removal(monkeypatch, isolated_home)
     if sys.platform != "win32":  # the mode argument is ignored on Windows
         assert seen["modes"] == [0o600]
     # Removed after the launched run.
-    assert list(_handoff_dir(isolated_home).glob("context-*.md")) == []
+    assert list(_handoff_dir(isolated_home).glob("h-*/context-*.md")) == []
 
 
 def test_manual_tools_keep_the_file(isolated_home, runs, capsys):
     for tool in ("cursor", "vscode"):
         assert lore_session_cli.switch_to_tool(tool, CONTEXT) is True
-        files = list(_handoff_dir(isolated_home).glob("context-*.md"))
+        files = list(_handoff_dir(isolated_home).glob("h-*/context-*.md"))
         assert len(files) == 1
         out = capsys.readouterr().out
         assert str(files[0]) in out
@@ -167,7 +180,7 @@ def test_two_calls_produce_different_files(isolated_home, runs, capsys):
     for _ in range(2):
         assert lore_session_cli.switch_to_tool("cursor", CONTEXT) is True
         out = capsys.readouterr().out
-        (path,) = _handoff_dir(isolated_home).glob("context-*.md")
+        (path,) = _handoff_dir(isolated_home).glob("h-*/context-*.md")
         paths.append(path)
         assert path.name in out
         path.unlink()
@@ -177,7 +190,7 @@ def test_two_calls_produce_different_files(isolated_home, runs, capsys):
 def test_stale_context_files_removed_fresh_kept(isolated_home, runs):
     handoff = _handoff_dir(isolated_home)
     handoff.mkdir(parents=True)
-    stale = handoff / ("context-" + "a" * 32 + ".md")
+    stale = handoff / ("context-" + "a" * 32 + ".md")  # legacy bare file
     stale.write_text("old", encoding="utf-8")
     old = time.time() - 25 * 60 * 60
     os.utime(stale, (old, old))
@@ -210,7 +223,7 @@ def test_claude_needs_no_opt_in(isolated_home, runs):
     assert lore_session_cli.switch_to_tool("claude", CONTEXT) is True
     assert len(runs) == 1
     assert runs[0][1] == "--continue"
-    assert list(_handoff_dir(isolated_home).glob("context-*.md")) == []
+    assert list(_handoff_dir(isolated_home).glob("h-*/context-*.md")) == []
 
 
 # --- MCP tool (lore/interfaces/mcp_tools/sessions.py) -------------------------

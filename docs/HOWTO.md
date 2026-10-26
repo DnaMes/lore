@@ -79,7 +79,7 @@ Typical use, when one tool has hit its usage limit:
 lore-session switch gemini
 ```
 
-The context block holds the last 15 messages of the project's recorded sessions, oldest first, each message truncated to 2000 characters. `--messages N` changes the count, and `--thread-id ID` continues one specific thread instead of the project's sessions. Secrets are redacted from the block first, and it is written to a unique owner-only file `~/.lore/handoff/context-<id>.md`. `gemini` receives it as an argument and `codex` receives it as `@<that file>`; both send it to the cloud, so they need `--allow-cloud` or `LORE_ALLOW_CLOUD=1` and are otherwise refused with exit code 2. The file is removed after the tool exits. `claude` is started with `--continue` and receives nothing from Lore. For a manual tool such as `cursor` or `vscode` the command keeps the file and prints how to paste it.
+The context block holds the last 15 messages of the project's recorded sessions, oldest first, each message truncated to 2000 characters. `--messages N` changes the count, and `--thread-id ID` continues one specific thread instead of the project's sessions. Secrets are redacted from the block first, and it is written to a unique owner-only file `~/.lore/handoff/context-<id>.md`. `gemini` and `codex` receive it as `@<that file>`, so the text never appears in the process list; both send it to the cloud, so they need `--allow-cloud` or `LORE_ALLOW_CLOUD=1` and are otherwise refused with exit code 2. The file is removed after the tool exits. `claude` is started with `--continue` and receives nothing from Lore. For a manual tool such as `cursor` or `vscode` the command keeps the file and prints how to paste it.
 
 ## Wiring memory recall into an agent session
 

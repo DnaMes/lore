@@ -35,7 +35,7 @@ from .deps import MCPToolDeps
 SESSION_COMMAND = "lore-session"
 
 # Tools whose lore-session switch launches a process that receives OUR session
-# context (gemini as argv, codex via @file). They need an explicit cloud opt-in.
+# context (gemini and codex, both via a @file reference). They need an explicit cloud opt-in.
 CLOUD_CONTEXT_TOOLS = frozenset({"gemini", "codex"})
 
 

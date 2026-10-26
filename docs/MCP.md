@@ -11,7 +11,7 @@ The server speaks JSON-RPC 2.0 over stdin/stdout. Requests are read line by line
 Read versus write:
 
 - `memory_write` and `memory_feedback` are the only tools that write to the shared memory store (the `memory` and `memory_feedback` tables in `<output-dir>/index_v2.sqlite`, default `~/.lore/index_v2.sqlite`).
-- Every other tool reads. `switch_to_tool` is read-only for Lore but shells out to `lore-session switch`, which prepares a handoff for another tool. When the target is `gemini` or `codex` (they receive the context as an argument or file), the server needs the cloud opt-in `LORE_ALLOW_CLOUD=1` in its environment; the context is redacted before it is written or passed and kept in a private mode-0600 file under `~/.lore/handoff/`. `claude` and the manual tools (`cursor`, `vscode`) send nothing.
+- Every other tool reads. `switch_to_tool` is read-only for Lore but shells out to `lore-session switch`, which prepares a handoff for another tool. When the target is `gemini` or `codex` (they receive the context as a referenced file), the server needs the cloud opt-in `LORE_ALLOW_CLOUD=1` in its environment; the context is redacted before it is written or passed and kept in a private mode-0600 file under `~/.lore/handoff/`. `claude` and the manual tools (`cursor`, `vscode`) send nothing.
 - `summarize_session` is the one exception outside the memory store: when enabled it can persist an AI summary row for a session.
 
 ## Tools

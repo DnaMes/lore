@@ -281,7 +281,15 @@ Conversation:
         )
 
         try:
-            result = subprocess.run(["gemini", prompt], capture_output=True, text=True, timeout=10)
+            # The transcript excerpt goes through stdin, never argv: argv is readable by
+            # other local users through the process list.
+            result = subprocess.run(
+                ["gemini", "-p", "Follow the instructions in the input."],
+                input=prompt,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
 
             if result.returncode == 0:
                 title = result.stdout.strip()
