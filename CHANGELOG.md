@@ -15,6 +15,9 @@ The version is the single source of truth in `lore/__init__.py`.
 - Antigravity availability means readable data now: a `brain/` directory alone is not "available", and `lore check --deep` still inspects such a tree and reports its coverage — sources matched, sessions parsed, skip reasons and a `Coverage:` line with Antigravity's `unsupported_artifacts`, `task_artifacts_parsed`/`transcript(s)_parsed` split instead of a bare "not found".
 
 ### Added
+- Generated memories can carry a claim (observation, hypothesis, rule) with a confidence, the source span (`session_id`, `message_id`, `revision`) and the model request that produced it, stored as a candidate by default. `claim_state` distinguishes observation, hypothesis, confirmed, rejected and superseded; review changes only the status, so the evidence survives, and `lore memory list --json` is the audit export (claim, evidence, sources).
+
+### Added
 - Memory candidate review: `lore memory review` lists the queue and `lore memory review accept|reject <id> [...]` decides it (rejection keeps the row and is reversible), and the web UI gained a Candidates tab at `/memory?status=candidate` with per-card Accept/Reject posting to `/memory/<id>/review`. Candidates stay out of recall and out of the default list until they are accepted.
 
 ### Added

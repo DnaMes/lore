@@ -184,6 +184,23 @@ class MemoryEntry:
     feedback_weight: float = 0.5
     feedback_count: int = 0
     status: str = "confirmed"
+    # Free-form provenance: ``claim_type``, ``confidence``, ``evidence`` and
+    # ``request`` for a generated claim (#187).
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def claim(self) -> Dict[str, Any]:
+        """The claim view of this memory: type, confidence and evidence."""
+        return {
+            "type": str(self.metadata.get("claim_type") or ""),
+            "confidence": self.metadata.get("confidence"),
+            "evidence": self.metadata.get("evidence"),
+            "request": self.metadata.get("request"),
+        }
+
+    @property
+    def claim_state(self) -> str:
+        return claim_state(self)
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -204,6 +221,9 @@ class MemoryEntry:
             "feedback_weight": self.feedback_weight,
             "feedback_count": self.feedback_count,
             "status": self.status,
+            "claim": self.claim,
+            "claim_state": self.claim_state,
+            "metadata": self.metadata,
         }
 
 
@@ -535,6 +555,7 @@ def _load_entries(conn: sqlite3.Connection, rows: List[sqlite3.Row]) -> List[Mem
                 feedback_weight=weight,
                 feedback_count=count,
                 status=row["status"],
+                metadata=_metadata_from_row(row),
             )
         )
     return entries
@@ -1200,6 +1221,117 @@ def list_superseded_by(output_dir: Path, memory_id: int) -> List[int]:
         return [int(row["id"]) for row in rows]
     finally:
         conn.close()
+
+
+# Claim vocabulary (#187): a generated statement is an observation or a
+# hypothesis until a human promotes it; a confirmed memory can be a rule.
+CLAIM_TYPES = ("observation", "hypothesis", "rule")
+CLAIM_STATES = ("observation", "hypothesis", "confirmed", "rejected", "superseded")
+
+
+def _metadata_from_row(row) -> Dict[str, Any]:
+    """Decode a memory row's ``metadata_json`` (empty dict when absent/invalid)."""
+    try:
+        keys = row.keys()
+    except AttributeError:  # pragma: no cover - defensive for plain rows
+        keys = ()
+    if "metadata_json" not in keys:
+        return {}
+    raw = row["metadata_json"]
+    if not raw:
+        return {}
+    try:
+        value = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def claim_state(entry: MemoryEntry) -> str:
+    """One of :data:`CLAIM_STATES` for a memory (#187).
+
+    ``superseded`` wins over the stored status (a replaced claim is history even
+    if it was confirmed), then the status decides. An observation or hypothesis
+    that is still a candidate keeps its claim type as the state, which is what the
+    review queue shows.
+    """
+    if entry.superseded_by:
+        return "superseded"
+    if entry.status == "rejected":
+        return "rejected"
+    if entry.status == "confirmed":
+        return "confirmed"
+    claim_type = str((entry.metadata or {}).get("claim_type") or "").strip().lower()
+    return claim_type if claim_type in ("observation", "hypothesis") else "observation"
+
+
+def record_claim(
+    output_dir: Path,
+    *,
+    kind: str,
+    title: str,
+    body: str,
+    claim_type: str = "observation",
+    confidence: Optional[float] = None,
+    evidence: Optional[Dict[str, Any]] = None,
+    request: Optional[Dict[str, Any]] = None,
+    author: str = "agent",
+    scope_project: Optional[str] = None,
+    scope_tool: Optional[str] = None,
+    source_session: Optional[str] = None,
+    source_message_id: Optional[int] = None,
+    status: str = "candidate",
+) -> int:
+    """Store a generated claim as a reviewable candidate with its evidence (#187).
+
+    The claim type, confidence, the source span (session and message) and the
+    model/request that produced it live in the memory's metadata, so nothing about
+    the provenance depends on the chat transcript staying unchanged. Generation
+    never confirms anything by itself: the default status is ``candidate``.
+
+    Returns the new memory id. Raises ``ValueError`` for an unknown claim type, a
+    confidence outside 0-1, or a status other than ``candidate``/``confirmed``.
+    """
+    normalized_type = str(claim_type or "").strip().lower()
+    if normalized_type not in CLAIM_TYPES:
+        raise ValueError(f"invalid claim_type {claim_type!r}; expected one of {CLAIM_TYPES}")
+    if confidence is not None:
+        if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
+            raise ValueError("confidence must be a number between 0 and 1")
+        if not 0.0 <= float(confidence) <= 1.0:
+            raise ValueError("confidence must be between 0 and 1")
+
+    metadata: Dict[str, Any] = {"claim_type": normalized_type}
+    if confidence is not None:
+        metadata["confidence"] = round(float(confidence), 4)
+    if evidence:
+        metadata["evidence"] = dict(evidence)
+    if request:
+        metadata["request"] = dict(request)
+
+    memory_id = add_memory(
+        output_dir,
+        kind=kind,
+        title=title,
+        body=body,
+        author=author,
+        scope_project=scope_project,
+        scope_tool=scope_tool,
+        metadata=metadata,
+        source_session=source_session,
+        status=status,
+    )
+    if source_session and source_message_id is not None:
+        # The span the claim was read from, kept with the memory rather than the
+        # transcript, so it stays auditable after a reindex (#160 will resolve it).
+        link_memory_to_session(
+            output_dir,
+            memory_id,
+            source_session,
+            message_id=source_message_id,
+            note=f"{normalized_type} from message {source_message_id}",
+        )
+    return memory_id
 
 
 def link_memory_to_session(

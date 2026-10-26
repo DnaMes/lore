@@ -138,6 +138,30 @@ lore memory dedupe --restore dedupe-undo-2026-10-14T10-00-00Z.json
   case-sensitive. Dedupe never merges across `kind`, `scope_project` or `scope_tool`.
 - Keeper order: highest feedback weight, then newest update, then highest id.
 
+## Claims, confidence and evidence
+
+A memory generated from a session can carry a *claim*: what kind of statement it is
+and how it was produced.
+
+| Field | Values |
+|-------|--------|
+| `claim_type` | `observation`, `hypothesis`, `rule` |
+| `confidence` | 0.0 – 1.0, as reported by the model |
+| `evidence` | `{session_id, message_id, revision}` — the span it was read from |
+| `request` | `{provider, model, prompt_version}` — what produced it |
+
+```bash
+lore memory list --status candidate          # what waits for review
+lore memory list --status confirmed --json   # audit export with claim + evidence
+```
+
+`record_claim()` (Python) stores these as a **candidate** by default: generation
+never confirms a rule as a side effect. Reviewing it (`accept`/`reject`) changes
+only the status, so the evidence survives; `supersede_memory()` keeps the replaced
+row with its own claim and evidence and points `superseded_by` at the replacement.
+The five states — `observation`, `hypothesis`, `confirmed`, `rejected`,
+`superseded` — are reported as `claim_state` and never collapse into each other.
+
 ## Review queue
 
 A memory written by an agent can arrive as `candidate`: stored, but outside recall

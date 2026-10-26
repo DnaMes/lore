@@ -1878,6 +1878,7 @@ def cmd_memory(args):
             scope_project=args.project,
             include_superseded=args.all,
             limit=args.limit,
+            status=getattr(args, "status", None) or "confirmed",
         )
     elif action == "search":
         entries = recall_memory(
@@ -1892,6 +1893,12 @@ def cmd_memory(args):
         print("Unknown memory action.", file=sys.stderr)
         sys.exit(1)
 
+    if getattr(args, "json", False):
+        # The audit export (#187): each memory with its claim type, confidence,
+        # evidence and source sessions, so a rule can be traced back.
+        print(json.dumps([entry.to_dict() for entry in entries], indent=2))
+        return
+
     if not entries:
         print("No memories found.")
         return
@@ -1901,6 +1908,19 @@ def cmd_memory(args):
         scope = f" · {entry.scope_project}" if entry.scope_project else ""
         print(f"#{entry.id} ({entry.kind}) {entry.title}{tag_str}")
         print(f"   {entry.body}")
+        claim = entry.claim
+        if claim["type"]:
+            confidence = (
+                f" {claim['confidence']:.2f}"
+                if isinstance(claim["confidence"], (int, float))
+                else ""
+            )
+            print(f"   claim: {claim['type']}{confidence} · state: {entry.claim_state}")
+            evidence = claim.get("evidence") or {}
+            if evidence.get("session_id"):
+                print(
+                    f"   evidence: session {evidence['session_id']} message {evidence.get('message_id')}"
+                )
         print(f"   — {entry.author or 'unknown'} · {entry.created[:10]}{scope}")
         print()
 
@@ -2420,6 +2440,14 @@ Examples:
     mem_list.add_argument("--project", help="filter by project scope")
     mem_list.add_argument("--all", action="store_true", help="include superseded memories")
     mem_list.add_argument("--limit", type=int, default=50, help="max results")
+    mem_list.add_argument(
+        "--status",
+        choices=["confirmed", "candidate", "rejected"],
+        help="filter by review status (default: confirmed)",
+    )
+    mem_list.add_argument(
+        "--json", action="store_true", help="full audit export: claim, evidence and sources"
+    )
 
     mem_search = memory_sub.add_parser("search", help="Search memories")
     mem_search.add_argument("query", help="search query")
