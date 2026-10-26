@@ -56,10 +56,13 @@ def _session(project_path: str = "/work/repo") -> UnifiedSession:
     )
 
 
-def _title_generator(tmp_path: Path, **kwargs: Any) -> TitleGenerator:
-    import lore.titles.generator as gen_mod
+@pytest.fixture(autouse=True)
+def _ollama_available(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Pretend the ollama module is importable; monkeypatch restores it after each test."""
+    monkeypatch.setattr("lore.titles.generator.OLLAMA_AVAILABLE", True)
 
-    gen_mod.OLLAMA_AVAILABLE = True
+
+def _title_generator(tmp_path: Path, **kwargs: Any) -> TitleGenerator:
     return TitleGenerator(cache_dir=tmp_path / "title_cache", **kwargs)
 
 
