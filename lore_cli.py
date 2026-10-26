@@ -1400,25 +1400,19 @@ def cmd_search(args):
         print("No index found. Run 'lore export --all' first.")
         return
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
-    results = search_index(
-        index_path,
-        args.query,
-        deleted,
-        tool=args.tool,
-        project=args.project,
-        include_automated=_include_automated(args),
-    )
-    if getattr(args, "tag", None):
-        from lore.storage import all_tags_by_session
-
-        user_tags = all_tags_by_session(output_dir)
-        wanted = args.tag.strip().lower()
-        results = [
-            result
-            for result in results
-            if wanted
-            in [str(tag).lower() for tag in user_tags.get(str(result["session"].get("id")), [])]
-        ]
+    try:
+        results = search_index(
+            index_path,
+            args.query,
+            deleted,
+            tool=args.tool,
+            project=args.project,
+            include_automated=_include_automated(args),
+            tag=getattr(args, "tag", None) or None,
+        )
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
 
     if not results:
         print("No results found.")
