@@ -55,7 +55,7 @@ The version is the single source of truth in `lore/__init__.py`.
 ### Changed
 - Markdown rendering reuses one parser per thread (`thread_local_markdown_parser`) instead of building a parser for every conversion: measured 1.37x faster on 1 KB and 1.27x on 10 KB messages, with identical output (cluster of PRs #202-#215).
 
-## [2.4.0] - 2026-10-26 (unreleased until tagged)
+## [2.4.0] - 2026-10-26
 
 ### Added
 - Semantic search over sessions via sqlite-vec (`semantic` extra), fused with keyword hits by reciprocal rank fusion behind a calibrated distance cutoff.

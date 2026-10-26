@@ -14,6 +14,7 @@ include lore_session_cli.py
 graft lore
 graft tests
 graft docs
+graft tools
 
 # Maintainer working notes live in the tree while a backlog sweep runs; never ship them.
 prune docs/triage
