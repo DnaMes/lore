@@ -480,3 +480,64 @@ Observed:
   (`.bottom-sheet-panel`, absolute at the document bottom) intercepts pointer
   events over the "Load more" button. The pagination test activates the button
   from the keyboard; the layout overlap is a separate UI bug, not fixed here.
+## Native-CLI adapter layer — #180, #181, #182, #183, #184 (branch `sweep/adapters`)
+
+Implemented as one coherent layer in the order the issues require: #180 first (the
+provider boundary), then #181/#182/#184 (installed-CLI adapters), then #183 (the
+contract note plus an availability-gated stub). Branch `sweep/adapters`, worktree
+`/home/dnames/.worktrees/lore/adapters`; nothing pushed.
+
+| Issue | Status | Evidence |
+|-------|--------|----------|
+| #180 — explicit native-CLI and local-model provider boundaries | **CLOSED** | `lore/llm/adapters/contract.py` (`ProviderRequest`: provider, model, auth mode, timeout, cancellation token, execution policy; `to_dict`/`from_dict`/`to_json` round-trip), `native_cli.py` (detect/invoke/parse/bound/cancel), `selection.py` (one provider table; `select_provider`), `factory.get_provider()` builds every provider from that request; `lore/llm/base.py` gained `provider_identity()` |
+| #181 — native Codex CLI analysis adapter | **CLOSED** (adapter + factory routing) | `lore/llm/adapters/codex.py`: `codex --version`, `codex exec --json --sandbox read-only --skip-git-repo-check ... -` with the prompt on stdin, JSONL parsing of the last `agent_message` (current `item.completed/item.item_type` and legacy `msg.type`), partial trailing line reported as partial output |
+| #182 — native Claude Code analysis adapter | **CLOSED** (adapter + factory routing) | `lore/llm/adapters/claude.py`: `claude --version`, `claude --print --output-format json [--model M]`, prompt on stdin, `is_error` reported as auth/execution failure instead of an answer |
+| #183 — native Antigravity CLI analysis adapter | **CLOSED** (contract note + gated stub) | `lore/llm/adapters/antigravity.py`: always `available=False` with a reason that distinguishes "not installed" from "installed but no confirmed contract"; five open questions listed in the module docstring; no flag invented, nothing invoked |
+| #184 — native Gemini CLI analysis adapter | **CLOSED** (adapter + factory routing) | `lore/llm/adapters/gemini.py`: `gemini --version`, `gemini --output-format json -p "<constant instruction>"`, prompt on stdin, `response` parsed; `lore/llm/gemini.py` no longer reads `~/.gemini/oauth_creds.json` |
+
+### Exact remaining gaps (not closed by this work)
+
+- **CLI `--provider` choice lists**: `lore analyze|knowledge|summarize|format
+  --provider` still enumerates `gemini, jev, ollama, openrouter`
+  (`PROVIDER_CHOICES` in `lore/services/summarize_cli.py`). The adapters are
+  reachable through `get_provider()` and `LORE_LLM_PROVIDER` (e.g. `lore improve`);
+  adding them to every command's argparse choices is a separate CLI change with its
+  own `default_model`/dry-run implications, deliberately not widened here.
+- **#183 real invocation** stays blocked on the Antigravity CLI contract (the five
+  open questions in the module docstring). Today an Antigravity conversation is
+  archived as a source artifact and the adapter reports unavailability.
+- **Model names are not validated** by Lore: `--model` is passed through as the CLI
+  documents it; an unknown name fails with the CLI's own non-zero exit.
+
+### Commands and observed results
+
+| Command | Observed |
+|---------|----------|
+| `pytest tests/test_llm_adapters.py -o addopts="" -q` | `44 passed` (fake executables written to a tmp bin directory and prepended to `PATH`; no real CLI, no network) |
+| `pytest tests -k "llm or provider or factory or gate or gemini" -o addopts="" -q` | `341 passed, 2 skipped, 3096 deselected` |
+| `ruff check .` | `All checks passed!` |
+| `ruff format --check .` | `352 files already formatted` |
+| `python -c "get_provider('claude-cli', allow_cloud=True).probe()"` on this host | `CliProbe(... available=True, version='2.1.310', capabilities=('--print', '--output-format'))` — the capability probe really reads the installed CLI's `--help`; the result is not hardcoded |
+
+Covered by `tests/test_llm_adapters.py`: missing CLI (unavailable + reason, explicit
+error, no API fallback), version detection, capability-probe failure, timeout,
+cancellation (including an already-cancelled token that starts nothing), malformed
+and empty output, partial JSONL, non-zero exit, refused login, documented structured
+output for all three adapters, prompt-on-stdin (prompt text absent from argv),
+credential variables absent from the child environment, credential files never
+opened (planted `~/.codex/auth.json`, `~/.claude/.credentials.json`,
+`~/.gemini/oauth_creds.json`), request-descriptor round-trip, cache/provider
+identity per adapter, factory routing, and the Antigravity gate.
+
+### NOT VERIFIED
+
+- **Real invocations of `claude`, `codex` and `gemini`** were not executed: every
+  adapter test uses a fake executable, and no real prompt left this machine. Argv
+  construction is checked against the CLIs' documented interfaces, not against live
+  runs.
+- **The Antigravity CLI contract** (existence, prompt transport, structured output,
+  credit behaviour, version range) is unconfirmed; that is why #183 ships a stub.
+- `codex exec --json` event shapes were implemented from the documented current and
+  legacy event names; releases that differ in both would report
+  `AdapterOutputError` instead of an answer.
+
