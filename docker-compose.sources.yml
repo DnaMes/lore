@@ -1,0 +1,29 @@
+# Opt-in override: mount host AI tool history directories read-only so Lore can
+# extract sessions. Use only when those paths exist on the host — Docker may
+# otherwise create empty root-owned directories for missing bind sources.
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.sources.yml up -d
+#
+# Mount list (host → container, all :ro):
+#   ~/.claude                          → /home/ai/.claude
+#   ~/.gemini                          → /home/ai/.gemini
+#   ~/.codex                           → /home/ai/.codex
+#   ~/.cursor                          → /home/ai/.cursor
+#   ~/.config/Cursor                   → /home/ai/.config/Cursor
+#   ~/.config/Code                     → /home/ai/.config/Code
+#   ~/.copilot                         → /home/ai/.copilot
+#   ~/.local/share/opencode            → /home/ai/.local/share/opencode
+#   ~/.local/share/opencode/storage    → /home/ai/.local/share/opencode/storage
+services:
+  app:
+    volumes:
+      - ${HOME}/.claude:/home/ai/.claude:ro
+      - ${HOME}/.gemini:/home/ai/.gemini:ro
+      - ${HOME}/.codex:/home/ai/.codex:ro
+      - ${HOME}/.cursor:/home/ai/.cursor:ro
+      - ${HOME}/.config/Cursor:/home/ai/.config/Cursor:ro
+      - ${HOME}/.config/Code:/home/ai/.config/Code:ro
+      - ${HOME}/.copilot:/home/ai/.copilot:ro
+      - ${HOME}/.local/share/opencode:/home/ai/.local/share/opencode:ro
+      - ${HOME}/.local/share/opencode/storage:/home/ai/.local/share/opencode/storage:ro

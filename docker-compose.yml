@@ -1,52 +1,28 @@
----
+# Default, self-contained Lore stack for a clean machine.
+# Usage: docker compose up -d
+# Optional overlays:
+#   docker compose -f docker-compose.yml -f docker-compose.sources.yml up -d
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.example.yml up -d
 services:
   app:
     build: .
     container_name: lore-app
     restart: unless-stopped
-    # Run as the host user so the bind-mounted ~/.lore (owner-only, 0700)
-    # stays writable without loosening its permissions. Override via a .env
-    # file if your uid/gid differ from 1000.
-    user: "${LORE_UID:-1000}:${LORE_GID:-1000}"
-    # localhost-bind (sofort nutzbar). Die traefik-labels greifen ZUSÄTZLICH, sobald
-    # traefik wieder TLS-certs holen kann (aktuell blockt der container-DNS-bug, s.
-    # docs/issues — bis dahin ist 127.0.0.1:5000 der Zugang).
     ports:
-      - "127.0.0.1:5000:5000"
-    dns:
-      - 192.168.50.1
-      - 192.168.1.1
-    networks:
-      - traefik_local
-    labels:
-      # Locally built image (build: .), no upstream registry → WUD can't track a
-      # "latest" version for it. Exclude it so it doesn't error every watch cycle.
-      wud.watch: "false"
-      traefik.enable: "true"
-      traefik.docker.network: traefik_local
-      traefik.http.routers.lore.rule: Host(`lore.local.erdlabs.com`)
-      traefik.http.routers.lore.entrypoints: websecure
-      traefik.http.routers.lore.tls: "true"
-      traefik.http.routers.lore.tls.certresolver: dns-cloudflare
-      traefik.http.routers.lore.middlewares: local-only@file,secure-headers@file
-      traefik.http.services.lore.loadbalancer.server.port: "5000"
+      # Loopback by default. Set LORE_BIND=0.0.0.0 only if you intentionally expose the host.
+      - "${LORE_BIND:-127.0.0.1}:5000:5000"
     volumes:
-      # Mount config directories (ReadOnly)
-      - ${HOME}/.claude:/home/ai/.claude:ro
-      - ${HOME}/.gemini:/home/ai/.gemini:ro
-      - ${HOME}/.codex:/home/ai/.codex:ro
-      - ${HOME}/.config/Cursor:/home/ai/.config/Cursor:ro
-      - ${HOME}/.config/Code:/home/ai/.config/Code:ro
-      - ${HOME}/.local/share/opencode/storage:/home/ai/.local/share/opencode/storage:ro
-      - ${HOME}/.local/share/opencode:/home/ai/.local/share/opencode:ro
-      - ${HOME}/.copilot:/home/ai/.copilot:ro
-      # Mount Lore's data directory (ReadWrite)
-      - ${HOME}/.lore:/home/ai/.lore
+      # Named volume by default (seeded from image ownership uid 10001). Override with
+      # LORE_DATA_DIR=/host/path — that host path must be writable by container uid 10001.
+      - ${LORE_DATA_DIR:-lore-data}:/home/ai/.lore
     environment:
       - HOME=/home/ai
-      # Set a stable secret key so sessions survive container restarts.
-      # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
-      # - FLASK_SECRET_KEY=your-secret-key-here
+      # Set a stable secret so sessions survive restarts:
+      # python -c "import secrets; print(secrets.token_hex(32))"
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-}
+      - TRUSTED_PROXY=${TRUSTED_PROXY:-}
+      - LORE_PUBLIC_ORIGINS=${LORE_PUBLIC_ORIGINS:-}
+      - LORE_ALLOWED_HOSTS=${LORE_ALLOWED_HOSTS:-}
       - LORE_RATE_LIMIT_ENABLED=${LORE_RATE_LIMIT_ENABLED:-true}
       - LORE_RATE_LIMIT_WINDOW_SECONDS=${LORE_RATE_LIMIT_WINDOW_SECONDS:-60}
       - LORE_RATE_LIMIT_MAX_API_REQUESTS=${LORE_RATE_LIMIT_MAX_API_REQUESTS:-240}
@@ -75,6 +51,5 @@ services:
         max-size: "10m"
         max-file: "3"
 
-networks:
-  traefik_local:
-    external: true
+volumes:
+  lore-data:

@@ -1,57 +1,72 @@
-FROM python:3.11-slim
+# Multi-stage image for Lore (JSON + SQLite; no Postgres/Redis).
+# Pin: concrete 3.11 slim tag (not :latest). Rebuild periodically to pick up patches.
+FROM python:3.11.17-slim AS builder
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    sqlite3 \
+# Package versions float with the Debian slim snapshot; pinning apt packages is brittle.
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        sqlite3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create the non-root user. Its home is made traversable (0711) so the
-# container can also run as the host user via compose's `user:` override —
-# the process must be able to *enter* /home/ai to reach the bind-mounted
-# /home/ai/.lore data volume. 0711 allows traversal without listing.
-RUN useradd -m -u 10001 ai && chmod 0711 /home/ai
-
-# Copy package files
 COPY pyproject.toml README.md ./
 COPY lore ./lore/
-# Top-level CLI entry modules referenced by [project.scripts] / py-modules.
 COPY lore_cli.py lore_session_cli.py ./
-# COPY preserves the host's directory modes. A checkout restored from a
-# backup (rsync -a) or a stricter umask can leave lore/ at 0750; the process
-# runs as the non-root `ai` user (or compose's `user:` override) and then
-# fails at import with "No module named 'lore.interfaces.web'" — twice now
-# (2026-09-15, 2026-09-16). Normalise inside the image so builds do not
-# depend on host permissions.
-RUN chmod -R a+rX /app/lore /app/pyproject.toml /app/README.md /app/lore_cli.py /app/lore_session_cli.py
 
-# Install dependencies (no postgres or redis — this app uses JSON + SQLite).
-# [semantic] pulls fastembed + sqlite-vec so hybrid search works in the
-# container (#94); without it search silently degrades to FTS-only.
-RUN pip install --no-cache-dir ".[semantic]" gunicorn
-
-# Pre-download the embedding model at build time (#94). fastembed fetches
-# bge-small from HuggingFace on first use — an offline container would fail
-# that download and silently fall back to FTS. FASTEMBED_CACHE_PATH pins the
-# cache to a fixed image path (the default is /tmp, which tmpfs mounts would
-# shadow); a+rX keeps it readable when compose overrides `user:`.
+# Install from pyproject (versions pinned there). Prefetch embedding model (default on).
+# Offline HuggingFace failures must fail the build with a clear message.
+# Disable prefetch: --build-arg PREFETCH_EMBEDDING_MODEL=off
+ARG PREFETCH_EMBEDDING_MODEL=on
 ENV FASTEMBED_CACHE_PATH=/opt/fastembed-cache
-RUN python -c "from lore.storage.embeddings import embed_text; \
-    v = embed_text('warmup'); assert v and len(v) == 384, 'model warmup failed'" \
-    && chmod -R a+rX /opt/fastembed-cache
+# hadolint ignore=DL3013
+RUN chmod -R a+rX /app/lore /app/pyproject.toml /app/README.md \
+        /app/lore_cli.py /app/lore_session_cli.py \
+    && pip install --no-cache-dir ".[semantic]" gunicorn \
+    && if [ "$PREFETCH_EMBEDDING_MODEL" = "on" ]; then \
+         if ! python -c "from lore.storage.embeddings import embed_text; \
+v = embed_text('warmup'); \
+assert v and len(v) == 384, 'model warmup failed'"; then \
+           echo "ERROR: Failed to prefetch the embedding model (network/HuggingFace unavailable)."; \
+           echo "Retry with network, or rebuild with --build-arg PREFETCH_EMBEDDING_MODEL=off"; \
+           exit 1; \
+         fi; \
+         chmod -R a+rX /opt/fastembed-cache; \
+       else \
+         echo "Skipping embedding model prefetch (PREFETCH_EMBEDDING_MODEL=$PREFETCH_EMBEDDING_MODEL)"; \
+         mkdir -p /opt/fastembed-cache && chmod -R a+rX /opt/fastembed-cache; \
+       fi
 
-# Switch to non-root user
-USER ai
+
+FROM python:3.11.17-slim AS runtime
+
+WORKDIR /app
+
+# hadolint ignore=DL3008
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        git \
+        sqlite3 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd -m -u 10001 ai \
+    && chmod 0711 /home/ai
+
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /app /app
+COPY --from=builder /opt/fastembed-cache /opt/fastembed-cache
+
+ENV FASTEMBED_CACHE_PATH=/opt/fastembed-cache
 ENV HOME=/home/ai
 
-# Set TRUSTED_PROXY=1 when a reverse proxy (nginx, Caddy, Traefik…) sits in
-# front of this container. Without it, X-Forwarded-For is ignored so clients
-# cannot spoof their IP address. Leave unset for direct exposure.
-# ENV TRUSTED_PROXY=1
+USER ai
 
-# Expose port
+# Set TRUSTED_PROXY=1 when a reverse proxy sits in front of this container.
 EXPOSE 5000
 
-CMD ["gunicorn", "--workers", "1", "--threads", "8", "--bind", "0.0.0.0:5000", "--access-logfile", "-", "--error-logfile", "-", "lore.interfaces.web:app"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=3)"
+
+CMD ["gunicorn", "--workers", "1", "--threads", "8", "--bind", "0.0.0.0:5000", \
+     "--access-logfile", "-", "--error-logfile", "-", "lore.interfaces.web:app"]

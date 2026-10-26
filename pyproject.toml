@@ -34,7 +34,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-watch = ["watchdog>=3.0"]
 # Local semantic search — a small CPU-only ONNX model (no torch) plus
 # sqlite-vec for native KNN over the session archive. Both optional; without
 # them search degrades to FTS-only.

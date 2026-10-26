@@ -1,0 +1,32 @@
+# Example Traefik override — copy/adapt for your reverse proxy. Not used by default.
+#
+# Usage (after creating the external network):
+#   docker network create traefik_local
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.example.yml up -d
+#
+# Replace lore.example.com with your hostname. TRUSTED_PROXY=1 makes Lore trust
+# X-Forwarded-* headers from the proxy; LORE_PUBLIC_ORIGINS tells it which public
+# origin (and therefore Host header) is legitimate, otherwise it answers 400.
+# Lore has no login: add an auth middleware (e.g. basic auth) to the router below.
+services:
+  app:
+    environment:
+      - TRUSTED_PROXY=1
+      - LORE_PUBLIC_ORIGINS=https://lore.example.com
+    networks:
+      - traefik_local
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: traefik_local
+      traefik.http.routers.lore.rule: Host(`lore.example.com`)
+      traefik.http.routers.lore.entrypoints: websecure
+      traefik.http.routers.lore.tls: "true"
+      # Optional: cert resolver / middleware names must match your Traefik static config.
+      # traefik.http.routers.lore.tls.certresolver: myresolver
+      # traefik.http.routers.lore.middlewares: secure-headers@file
+      traefik.http.services.lore.loadbalancer.server.port: "5000"
+
+networks:
+  # Example external network shared with a Traefik container on the same Docker host.
+  traefik_local:
+    external: true
