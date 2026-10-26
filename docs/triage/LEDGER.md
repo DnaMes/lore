@@ -205,3 +205,58 @@ All five closed as superseded by that commit.
 Fixes that came out of the review gate on the release-readiness commit are being
 committed by the session that owns them (see the coordination note in the
 session log); they are listed in the final report.
+
+---
+
+## Final status (2026-10-26)
+
+Pull requests: **16 of 16 closed**, none merged as-is (each cluster was replaced by
+one reviewed implementation). Open pull requests after the sweep: **0**.
+
+| Item | Final status | Evidence / link |
+|------|--------------|-----------------|
+| #200, #201, #205, #208, #210 | CLOSED (superseded) | closed with a comment pointing at `b65cde8` |
+| #202, #203, #204, #206, #207, #209, #211-#215 | CLOSED (superseded) | closed with a comment pointing at `3e0ebfd` and its measurement |
+| #176 | CLOSED (already done) | `pytest tests/test_session_detail_markup.py tests/test_render_smoke.py -o addopts="" -q` -> 25 passed; browser proof stays with #194 |
+| #192 | CLOSED (already done) | `docker compose -f docker-compose.yml config --quiet` -> exit 0; overlay -> exit 0; shipped in `9dbff6d` |
+| #191 | CLOSED (decision) | no PyPI publication; `grep -rn "pip install lore" README.md docs/` -> no output |
+| #29, #48 | OPEN, labelled `deferred` | owner decision, recorded in `docs/TODO.md` (`#29` after #174/#175, `#48` after the CI equivalence test) |
+| #151, #153-#175, #177-#190, #194, #197 | OPEN, decision recorded | confirmed gaps, each with the recommended order in `docs/TODO.md` "Backlog sweep 2026-10-26 — deferral decisions"; sizes and file:line evidence in the group tables above |
+
+### Why the remaining issues stay open
+
+The sweep verified 44 issues against the code. Three were already done or decided
+(#176, #191, #192). Two are owner-deferred (#29, #48). The remaining 39 are real,
+confirmed gaps — but 33 of them are the "Archive" epic, which the repo's own
+archived plan sequences as spec-first, migration-carrying work (source-revision
+store, canonical message envelope, namespaced identity, backup bundle, adapter
+layer). Shipping one of those within this sweep would mean writing a schema
+migration without the required design spec and without the backup-verified
+migration test — the exact failure mode the archived plan forbids and the one
+with real data-loss risk. They are therefore recorded with a decided order, not
+silently reshuffled or half-implemented.
+
+The remaining five smaller items (#119, #167, #172, #173, #194) are independent of
+the migrations and are the shortest path back into the backlog; their
+recommended order is in `docs/TODO.md`.
+
+### Review gate
+
+`review-gate --repo /home/dnames/projects/ai-stack/lore --sha 3e0ebfd` reviewed the
+pushed range in six parts (report
+`~/.local/state/ai-stack/review-gate/20261026T152932-3e0ebfd.md`). Both reviewers
+approved the Markdown change itself; the aggregate verdict was BLOCK from one
+reviewer on a real documentation/data-location mismatch:
+`docker-compose.yml` defaults to the named volume `lore-data` while
+`docs/DOCKER.md` and `docs/CONFIGURATION.md` described a host directory
+`./lore-data`, so the documented `tar lore-data` backup would have archived an
+empty directory. Fixed in `5f4e852` (compose defaults, overlay ports, source
+mount) and `0f268a8` (`docs/DOCKER.md` now describes the named volume, the
+bind-mount override and a backup/restore through `--volumes-from`).
+`codex:gpt-6.1-sol` was unavailable for one of the six parts.
+
+The other non-blocking notes from that gate were worked off in `f5861f2`
+(ignored ids excluded in the SQL before `LIMIT`, `ignored.json` in the v2 index
+cache key, port parsing bounded to 1-65535, ambiguous-existence handling for the
+index preservation) and `0f268a8` (stale statements about the cloud opt-in,
+Traefik and the data directory).
