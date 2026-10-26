@@ -225,20 +225,22 @@ one reviewed implementation). Open pull requests after the sweep: **0**.
 
 ### Why the remaining issues stay open
 
-The sweep verified 44 issues against the code. Three were already done or decided
-(#176, #191, #192). Two are owner-deferred (#29, #48). The remaining 39 are real,
-confirmed gaps — but 33 of them are the "Archive" epic, which the repo's own
-archived plan sequences as spec-first, migration-carrying work (source-revision
-store, canonical message envelope, namespaced identity, backup bundle, adapter
-layer). Shipping one of those within this sweep would mean writing a schema
-migration without the required design spec and without the backup-verified
-migration test — the exact failure mode the archived plan forbids and the one
-with real data-loss risk. They are therefore recorded with a decided order, not
-silently reshuffled or half-implemented.
+The sweep verified 44 issues against the code: 3 are closed (#176, #191, #192),
+2 are owner-deferred (#29, #48), 39 are real, confirmed gaps (`gh issue list
+--state open` -> 41 rows). 36 of those 39 belong to the "Archive" epic
+(#151-#190), which the repo's own archived plan sequences as spec-first,
+migration-carrying work (source-revision store, canonical message envelope,
+namespaced identity, backup bundle, adapter layer). Shipping one of those within
+this sweep would mean writing a schema migration without the required design
+spec and without the backup-verified migration test — the exact failure mode the
+archived plan forbids and the one with real data-loss risk. They are therefore
+recorded with a decided order, not silently reshuffled or half-implemented.
 
-The remaining five smaller items (#119, #167, #172, #173, #194) are independent of
-the migrations and are the shortest path back into the backlog; their
-recommended order is in `docs/TODO.md`.
+Three of the four non-epic gaps (#119, #194, #197) are independent of the
+migrations and are the shortest path back into the backlog; #194 and #197 also
+depend on nothing that is still unbuilt (the Playwright script and the memory
+review CLI are the only missing pieces). Their recommended order is in
+`docs/TODO.md`.
 
 ### Review gate
 
