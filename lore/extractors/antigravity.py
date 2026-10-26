@@ -322,6 +322,61 @@ class AntigravityExtractor(BaseExtractor):
                     seen_ids.add(session_dir.name)
                     yield session
 
+    #: Undecoded protobuf blobs are preserved as raw evidence, bounded per file.
+    _MAX_ARTIFACT_BYTES = 32 * 1024 * 1024
+    _MAX_ARTIFACTS_PER_RUN = 200
+
+    def source_artifacts(self) -> Iterator[tuple]:
+        """Undecoded ``.pb`` conversations, preserved instead of dropped (#158).
+
+        Antigravity's protobuf conversations cannot be decoded here, so the raw
+        bytes are handed to the store as source revisions with
+        ``decode_status='unparsed'``. A later parser version can read them; until
+        then they are counted as unsupported, never as parsed sessions.
+        """
+        emitted = 0
+        for base_path in self.base_paths:
+            brain_path = base_path / "brain"
+            try:
+                if brain_path.is_symlink() or not brain_path.is_dir():
+                    continue
+                children = list(brain_path.iterdir())
+            except OSError:
+                continue
+            for session_dir in children:
+                try:
+                    if not session_dir.is_dir() or session_dir.is_symlink():
+                        continue
+                except OSError:
+                    continue
+                if not _valid_session_id(session_dir.name):
+                    continue
+                for blob in sorted(session_dir.rglob("*.pb")):
+                    if emitted >= self._MAX_ARTIFACTS_PER_RUN:
+                        return
+                    try:
+                        if blob.is_symlink() or not blob.is_file():
+                            continue
+                        if blob.stat().st_size > self._MAX_ARTIFACT_BYTES:
+                            self._count("artifacts_oversized")
+                            continue
+                        content = blob.read_bytes()
+                    except OSError:
+                        self._count("artifacts_unreadable")
+                        continue
+                    if not content:
+                        continue
+                    emitted += 1
+                    self._count("artifacts_preserved")
+                    yield (
+                        str(blob),
+                        str(blob.relative_to(session_dir)),
+                        content,
+                        "protobuf",
+                        "unparsed",
+                        "Antigravity protobuf conversation; not decoded by this parser version",
+                    )
+
     def _parse_session_dir(
         self,
         session_dir: Path,

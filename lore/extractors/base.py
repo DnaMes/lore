@@ -244,6 +244,16 @@ class BaseExtractor(ABC):
         """
         return self.is_available()
 
+    def source_artifacts(self) -> Iterator[tuple]:
+        """Undecoded source material this extractor could not turn into sessions.
+
+        Yields ``(source_path, artifact_key, content, media_type, decode_status,
+        decode_note)`` so the sync can preserve the raw bytes even when the parser
+        cannot read them (#158). Extractors without undecoded artifacts yield
+        nothing; the default is therefore an empty iterator.
+        """
+        return iter(())
+
     def is_available(self) -> bool:
         """Check if the tool's data is available on this system."""
         return True

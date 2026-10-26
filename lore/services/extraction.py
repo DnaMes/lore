@@ -20,6 +20,7 @@ from lore.exporters.index import IndexBuilder, _stat_mtime_ns
 from lore.extractors.base import BaseExtractor, stamp_parser_version
 from lore.extractors.factory import get_all_extractors
 from lore.services.discovery import record_discovery
+from lore.storage.writer import v2_db_path
 from lore.titles.generator import TitleGenerator, TitleStrategy
 
 logger = logging.getLogger(__name__)
@@ -454,3 +455,70 @@ def build_search_index(
         progress_callback(62, message)
 
     return errors
+
+
+def capture_source_artifacts(
+    output_dir: Path,
+    extractors: Iterable[BaseExtractor],
+) -> dict[str, int]:
+    """Preserve undecoded source material as raw revisions (#158).
+
+    Extractors that cannot parse a format (today: Antigravity's protobuf
+    conversations) still know where the bytes are. Storing them as
+    ``source_revisions`` with a non-``parsed`` decode status keeps the evidence
+    without pretending it was understood, and feeds the per-source health report.
+
+    Best effort: a store that is missing or locked never breaks a sync.
+    """
+    from lore.storage.schema import open_v2_connection
+    from lore.storage.source_health import record_source_state
+    from lore.storage.source_revisions import capture_source_revision, source_identity_for
+
+    counts: dict[str, int] = {}
+    db_path = v2_db_path(output_dir)
+    if not db_path.exists():
+        return counts
+    try:
+        conn = open_v2_connection(db_path)
+    except Exception as exc:  # noqa: BLE001 - capture is never fatal
+        logger.warning("Source artifact capture skipped: %s", exc)
+        return counts
+    try:
+        for extractor in extractors:
+            try:
+                artifacts = extractor.source_artifacts()
+            except Exception as exc:  # noqa: BLE001 - one broken extractor is isolated
+                logger.debug("%s artifact scan failed: %s", extractor.tool.value, exc)
+                continue
+            for source_path, artifact_key, content, media_type, status, note in artifacts:
+                try:
+                    capture_source_revision(
+                        conn,
+                        tool=extractor.tool.value,
+                        source_path=source_path,
+                        content=content,
+                        decode_status=status,
+                        decode_note=note,
+                    )
+                    record_source_state(
+                        conn,
+                        source_identity=source_identity_for(extractor.tool.value, source_path),
+                        tool=extractor.tool.value,
+                        source_path=str(source_path),
+                        state="unsupported",
+                        detail={
+                            "artifact_key": artifact_key,
+                            "media_type": media_type,
+                            "decode_status": status,
+                            "note": note,
+                        },
+                    )
+                    counts[f"{extractor.tool.value}:{status}"] = (
+                        counts.get(f"{extractor.tool.value}:{status}", 0) + 1
+                    )
+                except Exception as exc:  # noqa: BLE001 - one artifact never stops the rest
+                    logger.debug("Artifact capture failed for %s: %s", source_path, exc)
+        conn.commit()
+    finally:
+        conn.close()
+    return counts

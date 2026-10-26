@@ -1415,6 +1415,11 @@ def cmd_sync(args):
     print(f"\nSynced {len(sessions)} sessions to {output_dir}")
     _print_skip_summary(built_extractors)
     _record_source_health(output_dir, built_extractors)
+    from lore.services.extraction import capture_source_artifacts
+
+    preserved = capture_source_artifacts(output_dir, built_extractors)
+    if preserved:
+        print(f"Preserved undecoded source artifacts: {preserved}")
 
 
 def _open_private_append(path: Path):
