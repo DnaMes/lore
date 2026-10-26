@@ -70,7 +70,8 @@ DEFAULT_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "[::1]")
 LORE_ALLOWED_HOSTS_ENV = "LORE_ALLOWED_HOSTS"
 
 # Bind hosts that listen on every interface; they never appear as a Host value.
-WILDCARD_BIND_HOSTS = ("0.0.0.0", "::")
+# Matched against the Host header only, never bound: bandit B104 false positive.
+WILDCARD_BIND_HOSTS = ("0.0.0.0", "::")  # nosec B104
 
 # ``LORE_ALLOWED_HOSTS='*'`` turns Host validation off entirely; complain about
 # that exactly once per process instead of once per request.
