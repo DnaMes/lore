@@ -14,6 +14,7 @@ import markdown
 import nh3
 
 from lore.core.models import AUTOMATED_ORIGINS
+from lore.services.cache import threadsafe_lru_cache
 from lore.utils.html_sanitize import SANITIZE_ATTRS as _SHARED_SANITIZE_ATTRS
 from lore.utils.html_sanitize import SANITIZE_TAGS as _SHARED_SANITIZE_TAGS
 from lore.utils.html_sanitize import SANITIZE_URL_SCHEMES as _SHARED_SANITIZE_URL_SCHEMES
@@ -275,6 +276,7 @@ def sanitize_rendered_html(rendered_html: str) -> str:
     return sanitize_html(rendered_html)
 
 
+@threadsafe_lru_cache(maxsize=128)
 def _format_message_content_cached(raw_content: str) -> str:
     """Format message content with caching for performance."""
     from lore.utils.text_processing import (

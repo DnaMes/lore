@@ -1,0 +1,7 @@
+1. **Understand the problem**: We need to find ONE small performance improvement in the codebase, adhering to the "Bolt" persona. I've found `_format_message_content_cached` in `lore/interfaces/web_formatting.py` which implies it's cached by its name, but it isn't decorated with a caching mechanism (like `threadsafe_lru_cache` or `functools.lru_cache`).
+2. **Review LEDGER.md**: `docs/triage/LEDGER.md` claims: "`_format_message_content_cached` is already wrapped in `threadsafe_lru_cache`." But a grep of the code shows it is **not** wrapped in `@threadsafe_lru_cache(maxsize=128)` in `lore/interfaces/web_formatting.py`. It appears this was either lost during a refactor, or LEDGER.md was mistaken.
+3. **Verify Performance**: A quick benchmark shows rendering 100 times without cache takes ~0.96s and with cache takes ~0.06s. Since this formats large messages often and frequently re-renders on the web interface, it's a huge win to correctly apply the cache.
+4. **Action**: Import `threadsafe_lru_cache` from `lore.services.cache` and apply `@threadsafe_lru_cache(maxsize=128)` to `_format_message_content_cached` in `lore/interfaces/web_formatting.py`.
+5. **Verify**: Ensure the test suite passes, including `test_web_formatters.py` and `test_web_titles.py`.
+6. **Pre-commit**: Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.
+7. **Submit**: Create a PR with the required Bolt PR format.
