@@ -1,10 +1,12 @@
 """Reload/audit job endpoints and the incremental index reload (#119)."""
 
 import json
+import os
+import time
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Optional
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 from lore.interfaces import web as _web
 from lore.utils.security import validate_tool_name
@@ -12,13 +14,91 @@ from lore.utils.tooling import normalize_tool_name
 
 from ..web_data import _build_index_from_extractors, clear_index_cache, clear_sessions_cache
 from ..web_jobs import (
+    APP_STARTED_EPOCH,
     _cancel_action_job,
     _get_reload_job,
     _run_audit,
 )
-from ..web_utils import ActionJobCancelledError
+from ..web_utils import ActionJobCancelledError, _metrics_snapshot
 
 bp = Blueprint("jobs", __name__)
+
+
+@bp.route("/api/build-info")
+def api_build_info():
+    return jsonify(_web._build_info_payload())
+
+
+@bp.route("/api/health")
+def api_health():
+    uptime_seconds = max(0, int(time.time() - APP_STARTED_EPOCH))
+    return jsonify(
+        {
+            "status": "ok",
+            "revision": _web._current_revision(),
+            "uptime_seconds": uptime_seconds,
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        }
+    )
+
+
+@bp.route("/api/ready")
+def api_ready():
+    checks: dict[str, Any] = {
+        "output_dir_writable": False,
+        "index_path_parent_exists": False,
+    }
+    errors: list[str] = []
+
+    try:
+        _web.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        checks["output_dir_writable"] = _web.OUTPUT_DIR.exists() and os.access(
+            _web.OUTPUT_DIR, os.W_OK
+        )
+    except OSError as exc:
+        errors.append(f"output_dir_error: {exc}")
+
+    checks["index_path_parent_exists"] = _web.INDEX_PATH.parent.exists()
+    checks["index_exists"] = _web.INDEX_PATH.exists()
+
+    ready = bool(checks["output_dir_writable"] and checks["index_path_parent_exists"])
+    payload = {
+        "ready": ready,
+        "status": "ready" if ready else "degraded",
+        "revision": _web._current_revision(),
+        "checks": checks,
+        "errors": errors,
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    return jsonify(payload), (200 if ready else 503)
+
+
+@bp.route("/api/metrics")
+def api_metrics():
+    metrics_snapshot = _metrics_snapshot()
+    uptime_seconds = max(0, int(time.time() - APP_STARTED_EPOCH))
+    out_format = (request.args.get("format") or "json").strip().lower()
+
+    if out_format in {"prom", "prometheus", "text"}:
+        lines = [
+            "# HELP lore_uptime_seconds Process uptime in seconds",
+            "# TYPE lore_uptime_seconds gauge",
+            f"lore_uptime_seconds {uptime_seconds}",
+        ]
+        for key in sorted(metrics_snapshot.keys()):
+            metric_name = f"lore_{key}"
+            lines.append(f"# TYPE {metric_name} counter")
+            lines.append(f"{metric_name} {metrics_snapshot[key]}")
+        body = "\n".join(lines) + "\n"
+        return Response(body, mimetype="text/plain")
+
+    payload = {
+        "revision": _web._current_revision(),
+        "uptime_seconds": uptime_seconds,
+        "metrics": metrics_snapshot,
+        "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+    return jsonify(payload)
 
 
 def _reload_sessions_index(
