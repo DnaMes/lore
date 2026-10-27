@@ -34,6 +34,7 @@ from lore.storage import (
     write_sessions,
 )
 from lore.storage.backup import DB_MEMBER, MANIFEST_NAME
+from lore.storage.freshness import store_freshness
 from lore.storage.portable import (
     PORTABLE_FORMAT,
     PORTABLE_FORMAT_VERSION,
@@ -41,6 +42,7 @@ from lore.storage.portable import (
     import_bundle,
     verify_portable_bundle,
 )
+from lore.storage.reader import v2_is_available
 from lore.storage.schema import SCHEMA_VERSION
 from lore.storage.source_health import record_source_state
 from lore.storage.source_revisions import (
@@ -196,6 +198,16 @@ def live(machine_a: Path, tmp_path: Path) -> Path:
 
 def _export(store: Path, destination: Path) -> Path:
     return create_portable_bundle(store, destination).bundle
+
+
+def _age_store(directory: Path, stamp: str = "2020-01-01T00:00:00+00:00") -> None:
+    """Backdate a store's ``generated_at`` stamp, as an old archive would carry it."""
+    conn = sqlite3.connect(str(v2_db_path(directory)))
+    try:
+        conn.execute("UPDATE store_meta SET value = ? WHERE key = 'generated_at'", (stamp,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _conn(store: Path) -> sqlite3.Connection:
@@ -424,6 +436,52 @@ def test_local_session_is_never_overwritten(live: Path, machine_b: Path, tmp_pat
 
     after = _conn(live).execute("SELECT content_sha256 FROM sessions WHERE id='s1'").fetchone()[0]
     assert after == before
+
+
+def test_merge_leaves_a_store_the_freshness_gate_still_accepts(
+    live: Path, machine_b: Path, tmp_path: Path
+):
+    """A merge writes session rows outside the index build, so it must re-stamp them.
+
+    The freshness gate rejects a store whose rows changed under its stamp (#48).
+    Without the re-stamp one merged bundle hides every session in the store, the
+    imported ones included.
+    """
+    bundle = _export(machine_b, tmp_path / "bundle.zip")
+    assert v2_is_available(live) is True
+
+    report = import_bundle(bundle, live)
+
+    assert report.wrote_anything is True
+    assert _count(live, "sessions") == 2
+    freshness = store_freshness(live)
+    assert freshness["hash_matches"] is True, freshness["reasons"]
+    assert freshness["ok"] is True, freshness["reasons"]
+    assert v2_is_available(live) is True
+
+
+def test_replace_stamps_the_installed_store_instead_of_keeping_the_source_stamp(
+    live: Path, tmp_path: Path
+):
+    """``--replace`` installs a foreign store, so its stamp must describe *this* archive.
+
+    The imported snapshot carries the stamp of the machine it came from. Against a
+    local ``index.json`` the reader calls it stale and serves the archive the import
+    just replaced, which makes the import look like it did nothing.
+    """
+    old = _build_store(tmp_path / "old-machine", scope="machine-c")
+    _age_store(old)
+    bundle = _export(old, tmp_path / "bundle.zip")
+    index = live / "index.json"
+    index.write_text("{}", encoding="utf-8")
+
+    report = import_bundle(bundle, live, mode="replace")
+
+    assert report.sessions_added == 1
+    freshness = store_freshness(live)
+    assert freshness["ok"] is True, freshness["reasons"]
+    assert freshness["generated_at"] > "2020-01-01", freshness["generated_at"]
+    assert v2_is_available(live, compare_to=index) is True
 
 
 # ---------------------------------------------------------------------------

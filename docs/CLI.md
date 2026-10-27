@@ -767,7 +767,11 @@ refuses and exits `1`. The snapshot is extracted to a sibling temp file, its
 sha256 is re-checked there, and only then moved over the store with an atomic
 replace, so a failed restore leaves the existing store as it was. A bundle
 recorded by an older Lore is restored as it was written and migrated on the
-next open; a bundle from a newer schema is refused.
+next open; a bundle from a newer schema is refused. A completed restore stamps
+`store_meta.generated_at` and `content_hash` as the write it is: the snapshot
+carries the stamp of the moment it was taken, and against a newer local
+`index.json` the reader would otherwise treat the restored store as stale and
+serve the archive the restore just replaced.
 
 ```text
 usage: lore restore [-h] [--force] bundle
@@ -820,7 +824,11 @@ nothing. It then merges:
 `--merge` (the default) keeps everything local. `--replace` installs the archived
 store as the live one — the first import onto an empty machine — and `--dry-run`
 merges into a temporary copy, so it reports the exact counts of a real import while
-writing nothing. Neither form can import a credential: the bundle holds the store and
+writing nothing. Whichever form writes, it re-stamps `store_meta.generated_at` and
+`content_hash`: a merged store then holds session rows the index build did not write,
+and an installed snapshot carries the stamp of the machine it came from — either one
+would make the freshness gate skip the store and serve the archive instead. Neither
+form can import a credential: the bundle holds the store and
 nothing else (see [CONFIGURATION.md](./CONFIGURATION.md#data-directory-and-backups)).
 
 ```text

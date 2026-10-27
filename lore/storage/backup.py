@@ -41,7 +41,8 @@ from uuid import uuid4
 
 from .. import __version__
 from ..utils.paths import restrict_file
-from .schema import SCHEMA_VERSION
+from .freshness import stamp_store
+from .schema import SCHEMA_VERSION, open_v2_connection
 from .writer import v2_db_path
 
 BUNDLE_FORMAT = "lore-backup"
@@ -304,6 +305,14 @@ def restore_backup(bundle: Path, output_dir: Path, *, force: bool = False) -> Re
         raise
 
     restrict_file(store)
+    conn = open_v2_connection(store)
+    try:
+        # A restored snapshot carries the stamp of the moment it was taken. Against
+        # a newer index.json the reader would call the restored store stale and serve
+        # the archive this restore just replaced, so stamp it as the write it is (#48).
+        stamp_store(conn)
+    finally:
+        conn.close()
     return RestoreReport(bundle=bundle, store=store, replaced=replaced, manifest=manifest)
 
 

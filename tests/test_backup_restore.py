@@ -30,6 +30,8 @@ from lore.storage import (
     verify_bundle,
 )
 from lore.storage.backup import BUNDLE_FORMAT_VERSION, DB_MEMBER, MANIFEST_NAME
+from lore.storage.freshness import store_freshness
+from lore.storage.reader import v2_is_available
 from lore.storage.schema import MIGRATIONS, SCHEMA_VERSION
 from lore.storage.writer import v2_db_path, write_sessions
 from lore.utils.paths import lore_home
@@ -71,6 +73,16 @@ def _build_store(output_dir: Path) -> None:
     )
     add_memory(output_dir, "fact", "backup test fact", "the body", tags=["backup"])
     add_session_tag(output_dir, "s1", "important")
+
+
+def _age_store(output_dir: Path, stamp: str = "2020-01-01T00:00:00+00:00") -> None:
+    """Backdate a store's ``generated_at`` stamp, as an old snapshot carries it."""
+    conn = sqlite3.connect(str(v2_db_path(output_dir)))
+    try:
+        conn.execute("UPDATE store_meta SET value = ? WHERE key = 'generated_at'", (stamp,))
+        conn.commit()
+    finally:
+        conn.close()
 
 
 @pytest.fixture(scope="module")
@@ -251,6 +263,29 @@ def test_restored_store_is_usable_without_rebuilding(tmp_path: Path):
         assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
     finally:
         conn.close()
+
+
+def test_restore_stamps_the_store_so_the_freshness_gate_still_accepts_it(tmp_path: Path):
+    """The installed snapshot carries the stamp of the moment it was taken.
+
+    Against a newer local index.json the reader would call the restored store stale
+    and serve the archive the restore just replaced.
+    """
+    source = tmp_path / "source"
+    _build_store(source)
+    _age_store(source)
+    bundle = create_backup(source, tmp_path / "bundle.zip").bundle
+    target = tmp_path / "target"
+    target.mkdir()
+    index = target / "index.json"
+    index.write_text("{}", encoding="utf-8")
+
+    restore_backup(bundle, target)
+
+    freshness = store_freshness(target)
+    assert freshness["ok"] is True, freshness["reasons"]
+    assert freshness["generated_at"] > "2020-01-01", freshness["generated_at"]
+    assert v2_is_available(target, compare_to=index) is True
 
 
 # ---------------------------------------------------------------------------

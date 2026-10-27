@@ -23,6 +23,7 @@ D
 - `accessibility`: accessible names for the project filter controls (tool, tag, start and end date), the noise-rules preview textarea and the resume copy button; the labels are checked by `tests/test_a11y_form_labels.py` (cluster of PRs #200, #201, #205, #208, #210).
 
 ### Fixed
+- A bundle import or a restore leaves a store the reader still trusts: `lore bundle import --merge` re-stamps `store_meta.content_hash` and `generated_at` inside the merge transaction (without it the freshness gate rejected the whole store once a bundle was merged, hiding the imported sessions), `--replace` and `lore restore` stamp the installed snapshot instead of keeping the stamp of the moment it was taken (otherwise a newer local `index.json` made the reader serve the archive the import or restore had just replaced).
 - Date filters agree across the web UI, the CLI and MCP: a date-only end value covers the whole selected day (sessions on the chosen final day were dropped), timestamps carrying an offset are converted to the local wall clock instead of raising a naive/aware comparison error, and date-only values are anchored in the host's timezone (or an explicit one) through one shared helper.
 
 ### Changed

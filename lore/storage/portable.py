@@ -75,6 +75,7 @@ from .backup import (
     _sha256_file,
     _snapshot_database,
 )
+from .freshness import stamp_store
 from .identity import NAMESPACE_ENV, content_hash_from_rows, resolve_store_identity
 from .schema import SCHEMA_VERSION, open_v2_connection
 from .writer import v2_db_path
@@ -515,6 +516,11 @@ def import_bundle(
                 conn = open_v2_connection(store)
                 try:
                     _record_import(conn, bundle_sha, report)
+                    # The installed snapshot carries the *source* machine's
+                    # generated_at, so against a local index.json the reader would
+                    # call this store stale and serve the archive the import just
+                    # replaced. Stamp it as the write it is (#48).
+                    stamp_store(conn)
                 finally:
                     conn.close()
             return report
@@ -702,6 +708,10 @@ def _merge_into(target_dir: Path, snapshot: Path, report: ImportReport, *, bundl
                 _Merger(conn, report).run()
                 if not report.dry_run:
                     _record_import(conn, bundle_sha, report)
+                    # The merge writes session rows outside the index build, so the
+                    # freshness gate would reject the whole store afterwards (#48).
+                    # Stamp inside the same transaction, after the last session row.
+                    stamp_store(conn)
                 conn.execute("COMMIT")
             except BaseException:
                 conn.execute("ROLLBACK")
