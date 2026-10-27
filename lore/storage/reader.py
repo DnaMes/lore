@@ -24,7 +24,7 @@ from typing import Any, Dict, List, Optional
 from lore.core.models import AUTOMATED_ORIGINS
 
 from .envelope import load_envelope_value, normalise_status
-from .freshness import CONTENT_HASH_KEY, GENERATED_AT_KEY, compute_content_hash
+from .freshness import GENERATED_AT_KEY, store_state
 from .schema import current_version, open_connection
 from .writer import v2_db_path
 
@@ -97,9 +97,10 @@ def v2_is_available(output_dir: Path, compare_to: Optional[Path] = None) -> bool
             if reason is None:
                 # A store whose rows changed without a rewrite of its stamp was
                 # not written by the index build (#48): serving it would mix two
-                # generations of rows under one generated_at.
-                stored = _read_meta_value(conn, CONTENT_HASH_KEY)
-                if stored and stored != compute_content_hash(conn):
+                # generations of rows under one generated_at. Stamp and rows come
+                # from one snapshot, so a concurrent commit cannot look like damage.
+                _generated_at, stored, computed = store_state(conn)
+                if stored and stored != computed:
                     reason = (
                         "content hash does not match the stored sessions "
                         "(rows were written outside the index build)"

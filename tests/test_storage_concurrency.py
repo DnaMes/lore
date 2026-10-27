@@ -75,6 +75,58 @@ def test_concurrent_writes_do_not_raise_busy(tmp_path):
     assert errors == [], f"concurrent writes raised: {errors}"
 
 
+def _inject_commit_during_hash(tmp_path, monkeypatch):
+    """Make the freshness check commit another write halfway through its reads."""
+    from lore.storage import freshness
+    from lore.storage.writer import v2_db_path as _db_path
+
+    db = _db_path(tmp_path)
+    real = freshness.compute_content_hash
+    raced: list[bool] = []
+
+    def racing(conn):
+        if not raced:
+            raced.append(True)
+            write_sessions(db, [_session("committed-in-between")])
+        return real(conn)
+
+    monkeypatch.setattr(freshness, "compute_content_hash", racing)
+    return raced
+
+
+def test_store_freshness_reads_stamp_and_rows_in_one_snapshot(tmp_path, monkeypatch):
+    """A commit between the two reads must not look like a tampered store (#48)."""
+    from lore.storage import freshness
+    from lore.storage.writer import v2_db_path
+
+    db = v2_db_path(tmp_path)
+    initialise(db).close()
+    write_sessions(db, [_session("first")])
+    raced = _inject_commit_during_hash(tmp_path, monkeypatch)
+
+    report = freshness.store_freshness(tmp_path)
+
+    assert raced, "the probe never injected a concurrent write"
+    assert report["ok"] is True, report["reasons"]
+    assert report["hash_matches"] is True
+
+
+def test_v2_is_available_reads_stamp_and_rows_in_one_snapshot(tmp_path, monkeypatch):
+    """The reader's gate has the same race, so it takes the same snapshot."""
+    from lore.storage.reader import v2_is_available
+    from lore.storage.writer import v2_db_path
+
+    db = v2_db_path(tmp_path)
+    initialise(db).close()
+    write_sessions(db, [_session("first")])
+    raced = _inject_commit_during_hash(tmp_path, monkeypatch)
+
+    available = v2_is_available(tmp_path)
+
+    assert raced, "the probe never injected a concurrent write"
+    assert available is True
+
+
 def test_reader_during_write_sees_consistent_state(tmp_path):
     """A reader running while writes happen must never see a half-written
     store — it sees either the pre- or post-write committed state."""

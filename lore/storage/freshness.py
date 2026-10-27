@@ -111,6 +111,22 @@ def stamp_store(conn: sqlite3.Connection) -> str:
     return digest
 
 
+def store_state(conn: sqlite3.Connection) -> tuple[Optional[str], Optional[str], str]:
+    """``generated_at``, stored content hash and the row hash, from ONE snapshot.
+
+    Read as separate statements they can straddle a commit: the stamps one writer
+    left would be compared with the rows the next writer committed, and the caller
+    would report a mismatch that never existed (#40, #48). A read transaction pins
+    all three to the same committed state.
+    """
+    conn.execute("BEGIN")
+    try:
+        meta = _read_meta(conn)
+        return meta[GENERATED_AT_KEY], meta[CONTENT_HASH_KEY], compute_content_hash(conn)
+    finally:
+        conn.execute("COMMIT")
+
+
 def _read_meta(conn: sqlite3.Connection) -> Dict[str, Optional[str]]:
     try:
         rows = conn.execute("SELECT key, value FROM store_meta").fetchall()
@@ -157,10 +173,11 @@ def store_freshness(target: Path, compare_to: Optional[Path] = None) -> Dict[str
         if current_version(conn) < STORE_META_VERSION:
             reasons.append(f"store schema is older than migration {STORE_META_VERSION}")
             return report
-        meta = _read_meta(conn)
-        report["generated_at"] = meta[GENERATED_AT_KEY]
-        report["stored_hash"] = meta[CONTENT_HASH_KEY]
-        report["computed_hash"] = compute_content_hash(conn)
+        (
+            report["generated_at"],
+            report["stored_hash"],
+            report["computed_hash"],
+        ) = store_state(conn)
     finally:
         conn.close()
 
