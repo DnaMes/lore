@@ -41,7 +41,7 @@ from uuid import uuid4
 
 from .. import __version__
 from ..utils.paths import restrict_file
-from .schema import MIGRATIONS
+from .schema import SCHEMA_VERSION
 from .writer import v2_db_path
 
 BUNDLE_FORMAT = "lore-backup"
@@ -180,7 +180,7 @@ def create_backup(output_dir: Path, destination: Path) -> BackupResult:
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             lore_version=__version__,
             schema_version=schema_version,
-            expected_schema_version=len(MIGRATIONS),
+            expected_schema_version=SCHEMA_VERSION,
             migrations=migrations,
             counts=_read_counts(snapshot),
             members=(
@@ -407,7 +407,7 @@ def _snapshot_problems(archive: zipfile.ZipFile, manifest: BackupManifest) -> Li
                 f"the snapshot is at schema {schema_version}, the manifest says "
                 f"{manifest.schema_version}"
             )
-        supported = len(MIGRATIONS)
+        supported = SCHEMA_VERSION
         if schema_version > supported:
             problems.append(
                 f"the snapshot uses schema {schema_version}, newer than this Lore "

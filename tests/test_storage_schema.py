@@ -19,7 +19,7 @@ from lore.storage import (
 )
 from lore.storage import schema as schema_module
 from lore.storage.memory import add_memory
-from lore.storage.schema import MIGRATIONS, open_v2_connection
+from lore.storage.schema import MIGRATIONS, SCHEMA_VERSION, open_v2_connection
 from lore.storage.tags import add_session_tag, get_session_tags
 
 # ---------------------------------------------------------------------------
@@ -126,6 +126,8 @@ def test_expected_tables_exist(tmp_path):
         "memory_feedback",
         "source_revisions",
         "source_artifacts",
+        "source_health",
+        "bundle_imports",
     }
     tables = _tables(conn)
     # The vec0 session_embeddings table only exists when sqlite-vec loaded;
@@ -282,7 +284,7 @@ def test_open_v2_connection_migrates_fresh_db(tmp_path):
     db = tmp_path / "v2.sqlite"
     conn = open_v2_connection(db)
     try:
-        assert current_version(conn) == len(MIGRATIONS)
+        assert current_version(conn) == SCHEMA_VERSION
     finally:
         conn.close()
 
@@ -305,7 +307,7 @@ def test_open_v2_connection_skips_migration_bookkeeping_on_current_schema(tmp_pa
 
     conn = open_v2_connection(db)
     try:
-        assert current_version(conn) == len(MIGRATIONS)
+        assert current_version(conn) == SCHEMA_VERSION
     finally:
         conn.close()
 
@@ -328,7 +330,7 @@ def test_open_v2_connection_migrates_behind_version_db(tmp_path):
 
     conn = open_v2_connection(db)
     try:
-        assert current_version(conn) == len(MIGRATIONS)
+        assert current_version(conn) == SCHEMA_VERSION
     finally:
         conn.close()
 

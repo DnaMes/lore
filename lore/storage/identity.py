@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from typing import Optional
+from typing import Dict, Iterable, Optional, Tuple
 
 from ..core.models import UnifiedMessage, UnifiedSession
 
@@ -53,6 +53,33 @@ def _message_fingerprint(message: UnifiedMessage) -> dict:
     }
 
 
+def content_hash_from_parts(
+    *,
+    tool: str,
+    project: Optional[str],
+    thread: Optional[str],
+    created: Optional[str],
+    updated: Optional[str],
+    messages: Iterable[Dict],
+) -> str:
+    """Hash a session's content from already-fingerprinted messages.
+
+    The single hash implementation: :func:`canonical_content_hash` fingerprints a
+    live session, :func:`content_hash_from_rows` fingerprints stored rows, and
+    both must agree for identical content (an importer compares them).
+    """
+    payload = {
+        "tool": tool,
+        "project": project,
+        "thread": thread,
+        "created": created,
+        "updated": updated,
+        "messages": list(messages),
+    }
+    serialised = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
+    return hashlib.sha256(serialised.encode("utf-8", "surrogatepass")).hexdigest()
+
+
 def canonical_content_hash(session: UnifiedSession) -> str:
     """Stable hash of a session's meaningful content (used for copy detection).
 
@@ -60,23 +87,70 @@ def canonical_content_hash(session: UnifiedSession) -> str:
     message order, text, role or model) hashes differently. Storage details
     such as the export path or the parser version are deliberately excluded.
     """
-    payload = {
-        "tool": session.tool.value,
-        "project": session.project_path,
-        "thread": session.thread_id,
-        "created": session.created_at.isoformat() if session.created_at else None,
-        "updated": session.last_updated.isoformat() if session.last_updated else None,
-        "messages": [_message_fingerprint(message) for message in session.messages],
-    }
-    serialised = json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str)
-    return hashlib.sha256(serialised.encode("utf-8", "surrogatepass")).hexdigest()
+    return content_hash_from_parts(
+        tool=session.tool.value,
+        project=session.project_path,
+        thread=session.thread_id,
+        created=session.created_at.isoformat() if session.created_at else None,
+        updated=session.last_updated.isoformat() if session.last_updated else None,
+        messages=[_message_fingerprint(message) for message in session.messages],
+    )
+
+
+def _stored_tool_names(tool_calls_json: Optional[str]) -> list:
+    """Tool names from a stored ``tool_calls_json`` envelope column."""
+    try:
+        calls = json.loads(tool_calls_json) if tool_calls_json else []
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(calls, list):
+        return []
+    return [
+        str(call.get("tool") or call.get("name") or "") for call in calls if isinstance(call, dict)
+    ]
+
+
+def content_hash_from_rows(session_row, message_rows: Iterable) -> str:
+    """Hash a stored session exactly as :func:`canonical_content_hash` would.
+
+    Rows written before migration 21 — and rows read out of an imported archive —
+    can lack ``content_sha256``. Recomputing it from the stored columns keeps the
+    comparison against a live session honest instead of reporting a divergence
+    that does not exist.
+    """
+    fingerprints = [
+        {
+            "role": row["role"],
+            "kind": row["kind"],
+            "content": row["content"] or "",
+            "timestamp": row["timestamp"],
+            "model": row["model"],
+            "message_id": row["native_id"],
+            "tools": _stored_tool_names(row["tool_calls_json"]),
+        }
+        for row in message_rows
+    ]
+    return content_hash_from_parts(
+        tool=session_row["tool"],
+        project=session_row["project"],
+        thread=session_row["thread_id"],
+        created=session_row["created"],
+        updated=session_row["updated"],
+        messages=fingerprints,
+    )
+
+
+def _copy_id(tool: str, scope: str, record_id: str, index: int) -> str:
+    return f"{tool}:{scope}:{record_id}{COPY_SEPARATOR}{index}"
 
 
 def qualified_copy_id(session: UnifiedSession, index: int) -> str:
     """Id for the ``index``-th divergent copy of ``session``."""
-    return (
-        f"{session.tool.value}:{source_namespace_for(session).split(':', 1)[-1]}:"
-        f"{session.session_id}{COPY_SEPARATOR}{index}"
+    return _copy_id(
+        session.tool.value,
+        source_namespace_for(session).split(":", 1)[-1],
+        session.session_id,
+        index,
     )
 
 
@@ -89,13 +163,19 @@ def _existing_row(conn, session_id: str) -> Optional[dict]:
     return {key: row[key] for key in row.keys()} if row is not None else None
 
 
-def resolve_store_id(
+def resolve_store_identity(
     conn,
-    session: UnifiedSession,
     *,
-    content_hash: Optional[str] = None,
-) -> tuple[str, Optional[str]]:
-    """Decide which primary key a session must be written under.
+    record_id: str,
+    tool: str,
+    namespace: str,
+    content_sha256: str,
+) -> Tuple[str, Optional[str]]:
+    """Decide which primary key a provider record must be written under.
+
+    The identity rules expressed on stored values rather than on a live session:
+    an importer holds another store's ``record_id``/``namespace`` and must not
+    re-derive the namespace from this host's environment.
 
     Returns ``(store_id, copy_of)``:
 
@@ -107,19 +187,35 @@ def resolve_store_id(
     taken) is handled by the same branch: the content differs, so the newcomer
     is the copy.
     """
-    digest = content_hash or canonical_content_hash(session)
-    existing = _existing_row(conn, session.session_id)
+    existing = _existing_row(conn, record_id)
     if existing is None:
-        return session.session_id, None
-    if existing["content_sha256"] in (None, digest):
+        return record_id, None
+    if existing["content_sha256"] in (None, content_sha256):
         # No hash recorded (legacy row) or identical content: refresh in place.
-        return session.session_id, existing["copy_of_session_id"]
+        return record_id, existing["copy_of_session_id"]
+    scope = namespace.split(":", 1)[-1]
     index = 2
     while True:
-        candidate = qualified_copy_id(session, index)
+        candidate = _copy_id(tool, scope, record_id, index)
         if _existing_row(conn, candidate) is None:
-            return candidate, session.session_id
+            return candidate, record_id
         index += 1
+
+
+def resolve_store_id(
+    conn,
+    session: UnifiedSession,
+    *,
+    content_hash: Optional[str] = None,
+) -> Tuple[str, Optional[str]]:
+    """Decide which primary key ``session`` must be written under."""
+    return resolve_store_identity(
+        conn,
+        record_id=session.session_id,
+        tool=session.tool.value,
+        namespace=source_namespace_for(session),
+        content_sha256=content_hash or canonical_content_hash(session),
+    )
 
 
 def store_identity_columns(

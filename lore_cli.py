@@ -1010,6 +1010,114 @@ def cmd_restore(args):
     return 0
 
 
+def _print_portable_manifest(manifest) -> None:
+    """Print the fields of a portable bundle manifest a person needs to see."""
+    from lore.storage.portable import PORTABLE_FORMAT
+
+    provenance = manifest.provenance
+    print(
+        f"  format:     {PORTABLE_FORMAT} v{manifest.format_version}, "
+        f"created {provenance.created_at}"
+    )
+    print(f"  origin:     namespace={provenance.namespace} machine={provenance.machine_scope}")
+    print(
+        f"  lore:       {provenance.lore_version} "
+        f"(store schema {manifest.schema_version}, this Lore {manifest.expected_schema_version})"
+    )
+    rows = " ".join(f"{table}={count}" for table, count in sorted(manifest.counts.items()))
+    print(f"  rows:       {rows}")
+    evidence = manifest.evidence
+    print(
+        f"  evidence:   source_revisions={evidence['source_revisions']} "
+        f"source_artifacts={evidence['source_artifacts']} "
+        f"digest={str(evidence['digest'])[:16]}…"
+    )
+    for member in manifest.members:
+        print(f"  member:     {member.name} sha256={member.sha256[:16]}… {member.size} bytes")
+
+
+def _print_import_report(report) -> None:
+    """Print what an import changed, and which origin the rows came from."""
+    action = "Would import" if report.dry_run else "Imported"
+    print(f"{action} from {report.bundle} ({report.mode})")
+    print(
+        f"  sessions:   {report.sessions_added} added, {report.sessions_copies} divergent "
+        f"cop{'y' if report.sessions_copies == 1 else 'ies'}, "
+        f"{report.sessions_identical} identical, "
+        f"{report.sessions_messages_refilled} refilled"
+    )
+    print(f"  messages:   {report.messages_added} added")
+    print(
+        f"  revisions:  {report.revisions_added} added, "
+        f"{report.revisions_deduplicated} deduplicated"
+    )
+    print(
+        f"  artifacts:  {report.artifacts_added} added, "
+        f"{report.artifacts_deduplicated} deduplicated, "
+        f"{report.artifacts_kept} kept local"
+    )
+    print(
+        f"  annotations: tags={report.tags_added} knowledge={report.knowledge_added} "
+        f"summaries={report.summaries_added}"
+    )
+    print(
+        f"  memory:     {report.memories_added} added, "
+        f"{report.memories_identical} identical, tags={report.memory_tags_added} "
+        f"ratings={report.memory_feedback_added} "
+        f"evidence_links={report.evidence_links_added}"
+    )
+    print(
+        f"  health:     {report.health_added} added, {report.health_updated} updated, "
+        f"{report.health_kept} kept"
+    )
+    if report.tombstones_added or report.tombstones_skipped:
+        print(
+            f"  tombstones: {report.tombstones_added} added, "
+            f"{report.tombstones_skipped} skipped (session exists locally)"
+        )
+    if report.origins:
+        parts = [
+            f"{origin}: sessions={counts['sessions']} revisions={counts['revisions']}"
+            for origin, counts in sorted(report.origins.items())
+        ]
+        print(f"  origins:    {'; '.join(parts)}")
+    if report.dry_run:
+        print("Dry run: nothing was written.")
+
+
+def cmd_bundle(args):
+    """``lore bundle export <path>`` writes a portable archive; ``import`` merges one.
+
+    A portable bundle is the backup bundle plus source provenance, and is the form
+    meant to travel between machines: importing merges instead of replacing, and
+    never overwrites local content (see :mod:`lore.storage.portable`).
+    """
+    from lore.storage.backup import BackupError
+    from lore.storage.portable import create_portable_bundle, import_bundle
+
+    path = Path(args.path).expanduser()
+    output_dir = Path(args.output_dir).expanduser()
+
+    if args.bundle_action == "export":
+        try:
+            result = create_portable_bundle(output_dir, path)
+        except BackupError as exc:
+            print(f"Bundle export failed: {exc}", file=sys.stderr)
+            return 1
+        print(f"Bundle written: {result.bundle}")
+        _print_portable_manifest(result.manifest)
+        return 0
+
+    mode = "replace" if args.replace else "merge"
+    try:
+        report = import_bundle(path, output_dir, mode=mode, dry_run=bool(args.dry_run))
+    except BackupError as exc:
+        print(f"Bundle import refused: {exc}", file=sys.stderr)
+        return 1
+    _print_import_report(report)
+    return 0
+
+
 def cmd_analyze(args):
     """Generate AI-powered statistics and insights."""
     from lore.llm import LLMConfig, get_provider
@@ -2718,6 +2826,7 @@ COMMANDS = {
     "prune": cmd_prune,
     "backup": cmd_backup,
     "restore": cmd_restore,
+    "bundle": cmd_bundle,
     "sync": cmd_sync,
     "run": cmd_run,
     "generate-titles": cmd_generate_titles,
@@ -3139,6 +3248,34 @@ Examples:
     )
     restore_parser.add_argument("bundle", help="bundle written by `lore backup`")
     restore_parser.add_argument("--force", action="store_true", help="Replace an existing store")
+
+    # bundle command — portable archive with source provenance (#163)
+    bundle_parser = subparsers.add_parser(
+        "bundle",
+        help="Export or import a portable archive bundle",
+        description=(
+            "Write a portable bundle of the v2 store (snapshot plus source "
+            "provenance), or merge one from another machine into this store "
+            "without overwriting local content"
+        ),
+    )
+    bundle_parser.add_argument(
+        "bundle_action",
+        choices=("export", "import"),
+        metavar="{export,import}",
+        help="write a bundle, or import one",
+    )
+    bundle_parser.add_argument("path", help="destination for export, bundle file for import")
+    bundle_mode = bundle_parser.add_mutually_exclusive_group()
+    bundle_mode.add_argument(
+        "--merge", action="store_true", help="Merge into the local store (default)"
+    )
+    bundle_mode.add_argument(
+        "--replace", action="store_true", help="Replace the local store with the archive"
+    )
+    bundle_parser.add_argument(
+        "--dry-run", action="store_true", help="Report what import would change and write nothing"
+    )
 
     # sync command
     sync_parser = subparsers.add_parser("sync", help="Sync sessions for a tool")

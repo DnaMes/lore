@@ -30,7 +30,7 @@ from lore.storage import (
     verify_bundle,
 )
 from lore.storage.backup import BUNDLE_FORMAT_VERSION, DB_MEMBER, MANIFEST_NAME
-from lore.storage.schema import MIGRATIONS
+from lore.storage.schema import MIGRATIONS, SCHEMA_VERSION
 from lore.storage.writer import v2_db_path, write_sessions
 from lore.utils.paths import lore_home
 
@@ -135,11 +135,11 @@ def test_backup_writes_a_zip_with_a_format_version_marker(store: Path, tmp_path:
     assert manifest["format_version"] == BUNDLE_FORMAT_VERSION
     assert manifest["lore_version"]
     assert manifest["created_at"]
-    assert manifest["schema"]["version"] == len(MIGRATIONS)
-    assert manifest["schema"]["expected_version"] == len(MIGRATIONS)
-    assert [entry["version"] for entry in manifest["schema"]["migrations"]] == list(
-        range(1, len(MIGRATIONS) + 1)
-    )
+    assert manifest["schema"]["version"] == SCHEMA_VERSION
+    assert manifest["schema"]["expected_version"] == SCHEMA_VERSION
+    assert [entry["version"] for entry in manifest["schema"]["migrations"]] == [
+        version for version, _, _ in MIGRATIONS
+    ]
     (member,) = manifest["members"]
     assert member["name"] == DB_MEMBER
     assert member["size"] > 0
@@ -367,14 +367,14 @@ def test_bundle_from_a_newer_schema_is_refused(store: Path, tmp_path: Path):
     try:
         conn.execute(
             "INSERT INTO schema_version(version, description, applied_at) VALUES (?, ?, ?)",
-            (len(MIGRATIONS) + 1, "a migration this Lore does not have", T0.isoformat()),
+            (SCHEMA_VERSION + 1, "a migration this Lore does not have", T0.isoformat()),
         )
         conn.commit()
     finally:
         conn.close()
 
     result = create_backup(store, tmp_path / "bundle.zip")
-    assert result.manifest.schema_version == len(MIGRATIONS) + 1
+    assert result.manifest.schema_version == SCHEMA_VERSION + 1
 
     report = verify_bundle(result.bundle)
     assert not report.ok

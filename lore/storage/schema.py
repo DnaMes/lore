@@ -532,7 +532,37 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
             ON message_embedding_meta(session_id, seq);
         """,
     ),
+    (
+        26,
+        "append-only log of portable bundle imports (#163)",
+        # One row per completed `lore bundle import`: which archive, in which
+        # mode, from which origin, and what it changed. Append-only like
+        # source_revisions — a second import of the same bundle adds a second
+        # row instead of rewriting the first, so the history is auditable.
+        """
+        CREATE TABLE IF NOT EXISTS bundle_imports (
+            id              INTEGER PRIMARY KEY AUTOINCREMENT,
+            bundle_sha256   TEXT    NOT NULL,
+            format_version  INTEGER NOT NULL,
+            mode            TEXT    NOT NULL,
+            imported_at     TEXT    NOT NULL,
+            provenance_json TEXT    NOT NULL,
+            counts_json     TEXT    NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_bundle_imports_at
+            ON bundle_imports(imported_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_bundle_imports_sha
+            ON bundle_imports(bundle_sha256);
+        """,
+    ),
 ]
+
+
+#: The schema version this Lore builds: the highest migration it knows. Derived
+#: from the last entry rather than ``len(MIGRATIONS)`` — migrations are numbered
+#: and append-only, so a branch that adds a later number while an earlier one is
+#: still in flight must not claim a version it does not build.
+SCHEMA_VERSION = MIGRATIONS[-1][0]
 
 
 def open_connection(path: Path) -> sqlite3.Connection:
@@ -716,7 +746,7 @@ def open_v2_connection(db_path: Path) -> sqlite3.Connection:
     ``initialise``.
     """
     conn = open_connection(db_path)
-    if current_version(conn) < len(MIGRATIONS):
+    if current_version(conn) < SCHEMA_VERSION:
         apply_migrations(conn)
         # Create the optional vector table once the base schema is in
         # place. No-op when sqlite-vec is unavailable — FTS-only search.
