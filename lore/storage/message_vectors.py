@@ -4,9 +4,12 @@ One vector per message, stored in the vec0 ``message_embeddings`` table
 (created lazily by :func:`lore.storage.embeddings.ensure_message_vec_table`)
 and keyed by the stable ``<session_id>#m<seq>`` identity the message permalink
 uses — not the ``messages`` rowid, which a reindex renumbers.
-``message_embedding_meta`` (migration 25) records which model produced each
-vector, so the pass is incremental by ``(session_id, seq, model)``: a message
-that already has a vector from the current model is skipped.
+``message_embedding_meta`` (migration 25, content hash in migration 28) records
+which model produced each vector and a sha256 of the embedded text, so the pass
+is incremental by ``(session_id, seq, model, content)``: a message that already
+has a current-model vector for its current content is skipped. The writer can
+replace message bodies; without the hash, such a message kept scoring against
+its stale vector.
 
 The pass is **store-driven**: it selects the messages that still lack a
 current-model vector instead of taking a caller-supplied list. A run stopped by
@@ -27,6 +30,7 @@ an orphan can never surface stale content, and vec0 has no efficient
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import sqlite3
 import time
@@ -48,32 +52,55 @@ logger = logging.getLogger(__name__)
 PendingMessage = Tuple[str, int, str]
 
 
+def _content_hash(content: str) -> str:
+    """sha256 of the text a vector is computed from (hex), or '' for empty.
+
+    Hashes the same truncation ``embed_messages`` embeds, so the stored hash
+    always describes the text behind the stored vector.
+    """
+    return hashlib.sha256(content[:_MAX_EMBED_CHARS].encode("utf-8")).hexdigest()
+
+
 def message_key(session_id: str, seq: int) -> str:
     """Stable vector-store identity of one message (same identity as the permalink)."""
     return f"{session_id}#m{int(seq)}"
 
 
 def pending_messages(conn: sqlite3.Connection) -> List[PendingMessage]:
-    """Messages that have no vector for the current model, in session/seq order.
+    """Messages that have no current vector for their content, in session/seq order.
 
     The ``LEFT JOIN`` is on ``(session_id, seq)`` — the columns
-    ``message_embedding_meta`` indexes — so a message whose stored vector came
-    from another model is re-embedded and a fresh one is picked up. Empty and
-    whitespace-only bodies are skipped: they carry nothing to search.
+    ``message_embedding_meta`` indexes — so a message is re-embedded when its
+    stored vector came from another model, or when its stored ``content_hash``
+    is missing (pre-migration-28 rows, re-embedded exactly once) or differs
+    from the hash of the current body (the writer replaced the text). Empty and
+    whitespace-only bodies are skipped: they carry nothing to search. The hash
+    comparison runs in Python — SQLite has no built-in sha256.
     """
     rows = conn.execute(
         """
-        SELECT m.session_id, m.seq, m.content
+        SELECT m.session_id, m.seq, m.content,
+               meta.model, meta.content_hash
         FROM messages m
         LEFT JOIN message_embedding_meta meta
                ON meta.session_id = m.session_id AND meta.seq = m.seq
         WHERE TRIM(COALESCE(m.content, '')) <> ''
-          AND (meta.message_key IS NULL OR meta.model <> ?)
         ORDER BY m.session_id, m.seq
-        """,
-        (DEFAULT_MODEL,),
+        """
     ).fetchall()
-    return [(str(row[0]), int(row[1]), str(row[2] or "")) for row in rows]
+    pending = []
+    for row in rows:
+        content = str(row[2] or "")
+        stored_hash = row[4]
+        current_hash = _content_hash(content)
+        # A row is current only when it exists, came from the current model,
+        # and its hash matches the current body. NULL hash (pre-migration-28
+        # legacy rows) never matches — such a row is re-embedded exactly once,
+        # after which a real hash is stored.
+        if row[3] == DEFAULT_MODEL and stored_hash == current_hash:
+            continue
+        pending.append((str(row[0]), int(row[1]), content))
+    return pending
 
 
 def embed_messages(
@@ -128,8 +155,16 @@ def embed_messages(
             )
             conn.execute(
                 "INSERT OR REPLACE INTO message_embedding_meta"
-                "(message_key, session_id, seq, model, created) VALUES (?, ?, ?, ?, ?)",
-                (key, session_id, seq, DEFAULT_MODEL, created),
+                "(message_key, session_id, seq, model, content_hash, created) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    key,
+                    session_id,
+                    seq,
+                    DEFAULT_MODEL,
+                    _content_hash(content),
+                    created,
+                ),
             )
             written += 1
         conn.execute("COMMIT")

@@ -570,6 +570,20 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         );
         """,
     ),
+    (
+        28,
+        "content hash for message embedding metadata (#190)",
+        # The message pass was incremental by (session_id, seq, model) only, so
+        # a message whose content was later replaced kept its stale vector.
+        # ``content_hash`` (sha256 of the text that was embedded) lets
+        # ``pending_messages`` detect a changed body and re-embed it. Rows
+        # predating this migration keep NULL: a NULL hash counts as changed,
+        # so every existing vector is re-embedded exactly once, then current.
+        # No data is rewritten or deleted — a pure, idempotent column add.
+        """
+        ALTER TABLE message_embedding_meta ADD COLUMN content_hash TEXT;
+        """,
+    ),
 ]
 
 
