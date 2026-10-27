@@ -325,8 +325,8 @@ def list_sessions_cmd():
     print(f"Total: {len(sessions)} sessions\n")
 
 
-def main():
-    make_console_safe()
+def build_parser() -> argparse.ArgumentParser:
+    """Construct the top-level ``lore-session`` argument parser."""
     parser = argparse.ArgumentParser(
         description="AI Session Manager - Seamless tool switching",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -364,6 +364,12 @@ def main():
         help="Confirm sending the session context to cloud-bound tools (gemini, codex)",
     )
 
+    return parser
+
+
+def main():
+    make_console_safe()
+    parser = build_parser()
     args = parser.parse_args()
 
     if not args.command:
