@@ -17,12 +17,12 @@ import json
 import logging
 import sqlite3
 from dataclasses import replace
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from ..core.models import MESSAGE_KINDS, ORIGINS, RELATIONS, UnifiedMessage, UnifiedSession
 from .envelope import ENVELOPE_VERSION, envelope_for
+from .freshness import assert_store_fresh, stamp_store
 from .identity import canonical_content_hash, resolve_store_id, store_identity_columns
 from .schema import initialise
 from .session_vectors import _MAX_EMBED_CHARS, embed_sessions
@@ -647,12 +647,8 @@ def _write_reused_full_session(
 
 
 def _stamp_and_commit(conn: sqlite3.Connection) -> None:
-    """Stamp the write time (#36) and commit the v2 transaction."""
-    conn.execute(
-        "INSERT INTO store_meta(key, value) VALUES('generated_at', ?) "
-        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-        (datetime.now(timezone.utc).isoformat(timespec="seconds"),),
-    )
+    """Stamp write time + content hash (#36, #48) and commit the v2 transaction."""
+    stamp_store(conn)
     conn.execute("COMMIT")
 
 
@@ -741,6 +737,10 @@ class StreamingV2Writer:
             if session_id not in embedded_ids:
                 self._embed_inputs.append((session_id, None, None))
         _stamp_and_commit(self.conn)
+        # Loud self-check (#48): the stamp written above must match the rows that
+        # just committed. A store that did not persist what was written raises
+        # instead of being served, and the caller logs it as a v2 failure.
+        assert_store_fresh(self.db_path)
         # Embed AFTER the commit — holding the write lock across model calls
         # would block web-UI reads, and a vector failure must never roll back
         # the committed index.
