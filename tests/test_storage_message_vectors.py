@@ -260,6 +260,92 @@ def test_legacy_row_without_hash_is_reembedded_exactly_once(tmp_path, fake_embed
         conn.close()
 
 
+@requires_vec
+def test_message_emptied_after_reembed_deletes_the_stale_vector(store, fake_embedder):
+    """'old' -> 'new' re-embeds; 'new' -> '' must drop the stale vector.
+
+    The writer emptied a body that already had a vector for its previous text:
+    the empty body must still be compared by content hash (so the message is
+    pending), the pass must not compute an embedding for the empty text, and
+    the old vector must be deleted so the removed text is no longer searchable.
+    """
+    conn = _conn(store)
+    try:
+        embed_messages(conn, budget_seconds=0)
+        assert fake_embedder == ["first body", "second body", "third body"]
+        conn.execute(
+            "UPDATE messages SET content = 'brand new body' WHERE session_id = 'a' AND seq = 0"
+        )
+        assert [(p[0], p[1]) for p in pending_messages(conn)] == [("a", 0)]
+        assert embed_messages(conn, budget_seconds=0) == 1
+        assert fake_embedder[-1] == "brand new body"
+
+        # The writer empties the body: the 'brand new body' vector is stale now.
+        conn.execute("UPDATE messages SET content = '' WHERE session_id = 'a' AND seq = 0")
+        pending = pending_messages(conn)
+        assert [(p[0], p[1], p[2]) for p in pending] == [("a", 0, "")]
+        calls = len(fake_embedder)
+        assert embed_messages(conn, budget_seconds=0) == 0  # no embedding for empty text
+        assert len(fake_embedder) == calls
+        assert _vec_count(conn) == 2  # the stale vector was deleted, not kept
+        meta = conn.execute(
+            "SELECT model, content_hash FROM message_embedding_meta WHERE message_key = ?",
+            (message_key("a", 0),),
+        ).fetchone()
+        assert meta[0] == message_vectors.DEFAULT_MODEL
+        assert meta[1] == message_vectors._content_hash("")
+        # Done stays done: the emptied message is not pending again, no writes.
+        assert pending_messages(conn) == []
+        assert embed_messages(conn, budget_seconds=0) == 0
+    finally:
+        conn.close()
+
+
+@requires_vec
+def test_unchanged_empty_message_is_not_pending_and_never_written(tmp_path, fake_embedder):
+    """A body that has always been empty carries no vector and costs no work."""
+    db = v2_db_path(tmp_path)
+    write_sessions(db, [_session("a", ["real body", ""])])
+    conn = initialise(db)
+    try:
+        assert embed_messages(conn, budget_seconds=0) == 1
+        assert _vec_count(conn) == 1
+        assert fake_embedder == ["real body"]
+        assert pending_messages(conn) == []
+        assert embed_messages(conn, budget_seconds=0) == 0
+        assert _vec_count(conn) == 1
+        assert fake_embedder == ["real body"]  # the empty body was never embedded
+    finally:
+        conn.close()
+
+
+@requires_vec
+def test_search_does_not_return_a_vector_with_a_stale_hash(store, fake_embedder, monkeypatch):
+    """Between the writer and the next embedding pass the vector is outdated.
+
+    The KNN path must not surface a hit whose stored content hash differs from
+    the hash of the message's current body.
+    """
+    from lore.storage import message_search
+    from lore.storage.message_search import search_messages
+
+    conn = _conn(store)
+    try:
+        embed_messages(conn, budget_seconds=0)
+        conn.execute(
+            "UPDATE messages SET content = 'brand new body' WHERE session_id = 'a' AND seq = 0"
+        )
+    finally:
+        conn.close()
+    monkeypatch.setattr(message_search, "embeddings_available", lambda: True)
+    monkeypatch.setattr(message_search, "embed_text", lambda text: [1.0] * EMBEDDING_DIM)
+    result = search_messages(store.parent, "anything", limit=5)
+    assert result.path == "vector"
+    found = {(hit["session_id"], hit["seq"]) for hit in result.hits}
+    assert ("a", 0) not in found  # its vector belongs to the replaced body
+    assert found == {("a", 1), ("b", 0)}
+
+
 def test_migration_28_is_idempotent_on_rerun(tmp_path, monkeypatch):
     """The content-hash migration is a guarded ALTER; a re-run must be a no-op.
 

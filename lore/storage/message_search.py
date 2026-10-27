@@ -41,6 +41,7 @@ from lore.core.models import AUTOMATED_ORIGINS
 from .embeddings import embed_text, embeddings_available, pack_vector, sqlite_vec_available
 from .evidence import identity_for_message
 from .fts import SNIPPET_CLOSE, SNIPPET_OPEN, build_fts_query, snippet_to_text
+from .message_vectors import _content_hash
 from .reader import automated_exclusion_sql, load_ignored_session_ids
 from .schema import open_connection
 from .search import (
@@ -140,6 +141,10 @@ def _search_messages_vector(
     ``None`` (not ``[]``) is the "no vector path here" signal: the caller then
     runs the FTS path. Any sqlite or embedding failure degrades the same way,
     so a broken optional backend is never fatal.
+
+    A hit whose stored ``content_hash`` differs from the hash of the current
+    body is skipped: between the embedding pass and the writer replacing the
+    text, the vector still describes the old content and must not surface it.
     """
     if not sqlite_vec_available() or not embeddings_available():
         return None
@@ -157,7 +162,7 @@ def _search_messages_vector(
         rows = conn.execute(
             """
             SELECT meta.session_id, meta.seq, s.origin, m.role, m.content,
-                   mem.distance AS score
+                   meta.content_hash, mem.distance AS score
             FROM message_embeddings mem
             JOIN message_embedding_meta meta ON meta.message_key = mem.message_key
             JOIN messages m ON m.session_id = meta.session_id AND m.seq = meta.seq
@@ -176,6 +181,8 @@ def _search_messages_vector(
             if session_id in ignored or row["origin"] in AUTOMATED_ORIGINS:
                 continue
             content = str(row["content"] or "")
+            if row["content_hash"] != _content_hash(content):
+                continue  # the vector belongs to a replaced body, not this text
             excerpt = content.strip()
             truncated = len(excerpt) > EXCERPT_CHARS
             hits.append(

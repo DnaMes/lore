@@ -74,8 +74,11 @@ def pending_messages(conn: sqlite3.Connection) -> List[PendingMessage]:
     stored vector came from another model, or when its stored ``content_hash``
     is missing (pre-migration-28 rows, re-embedded exactly once) or differs
     from the hash of the current body (the writer replaced the text). Empty and
-    whitespace-only bodies are skipped: they carry nothing to search. The hash
-    comparison runs in Python — SQLite has no built-in sha256.
+    whitespace-only bodies are included so their hash is compared too: a body
+    that became empty is pending until its stale vector is dropped (see
+    :func:`embed_messages`), which keeps a deleted text from staying searchable
+    through its old vector. The hash comparison runs in Python — SQLite has no
+    built-in sha256.
     """
     rows = conn.execute(
         """
@@ -84,7 +87,6 @@ def pending_messages(conn: sqlite3.Connection) -> List[PendingMessage]:
         FROM messages m
         LEFT JOIN message_embedding_meta meta
                ON meta.session_id = m.session_id AND meta.seq = m.seq
-        WHERE TRIM(COALESCE(m.content, '')) <> ''
         ORDER BY m.session_id, m.seq
         """
     ).fetchall()
@@ -143,10 +145,22 @@ def embed_messages(
             if deadline and time.monotonic() > deadline:
                 skipped = len(pending) - idx
                 break
+            key = message_key(session_id, seq)
+            if not content.strip():
+                # Empty or whitespace-only body: nothing to embed. Drop the
+                # stale vector so the deleted text is no longer searchable and
+                # record the empty hash so the message is not pending again.
+                conn.execute("DELETE FROM message_embeddings WHERE message_key = ?", (key,))
+                conn.execute(
+                    "INSERT OR REPLACE INTO message_embedding_meta"
+                    "(message_key, session_id, seq, model, content_hash, created) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (key, session_id, seq, DEFAULT_MODEL, _content_hash(content), created),
+                )
+                continue
             vector = embed_text(content[:_MAX_EMBED_CHARS])
             if vector is None:
                 continue  # an embed failure must not abort the pass
-            key = message_key(session_id, seq)
             # vec0 has no working OR REPLACE — an update is DELETE + INSERT.
             conn.execute("DELETE FROM message_embeddings WHERE message_key = ?", (key,))
             conn.execute(
