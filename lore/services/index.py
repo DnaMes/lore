@@ -39,28 +39,43 @@ def _load_deleted_session_ids_cached(path: str, mtime_ns: int, size: int) -> set
 
 
 def load_deleted_session_ids(deleted_sessions_path: Path) -> set[str]:
-    """Load the set of tombstoned session ids from ``deleted_sessions_path``."""
-    if not deleted_sessions_path.exists():
-        return set()
-    stat = deleted_sessions_path.stat()
-    try:
-        return set(
-            _load_deleted_session_ids_cached(
-                str(deleted_sessions_path), stat.st_mtime_ns, stat.st_size
+    """Load the set of tombstoned session ids.
+
+    The v2 store's ``deleted_sessions`` table is the source of truth (#48); the
+    JSON file beside it is a compatibility mirror for builds that predate the
+    table. The two are unioned so a store without the mirror, or a mirror that
+    predates the store, still hides every tombstoned session.
+    """
+    ids: set[str] = set()
+    if deleted_sessions_path.exists():
+        stat = deleted_sessions_path.stat()
+        try:
+            ids = set(
+                _load_deleted_session_ids_cached(
+                    str(deleted_sessions_path), stat.st_mtime_ns, stat.st_size
+                )
             )
-        )
-    except Exception as exc:
-        logger.warning("Failed to load deleted session ids from %s: %s", deleted_sessions_path, exc)
-        return set()
+        except Exception as exc:
+            logger.warning(
+                "Failed to load deleted session ids from %s: %s", deleted_sessions_path, exc
+            )
+    from lore.storage.retention import load_tombstones
+
+    stored = load_tombstones(deleted_sessions_path.parent)
+    if stored:
+        ids |= stored
+    return ids
 
 
 def save_deleted_session_ids(
     session_ids: set[str], output_dir: Path, deleted_sessions_path: Path
 ) -> None:
-    """Persist ``session_ids`` to ``deleted_sessions_path`` (owner-only, #41)."""
+    """Persist ``session_ids`` to the v2 store and its JSON mirror (owner-only, #41)."""
+    from lore.storage.retention import record_tombstones
     from lore.utils.paths import restrict_file, secure_dir
 
     secure_dir(output_dir)
+    record_tombstones(output_dir, session_ids)
     with open(deleted_sessions_path, "w", encoding="utf-8") as handle:
         json.dump({"session_ids": sorted(session_ids)}, handle, indent=2)
     restrict_file(deleted_sessions_path)
@@ -463,6 +478,17 @@ def _hybrid_enabled() -> bool:
 _HYBRID_WINDOW = 200
 
 
+def _serving_legacy(reason: str, *, level: int = logging.INFO) -> None:
+    """Record that a read is served from the legacy JSON store, and why (#48).
+
+    v2 is the store search and the session list read from. The legacy
+    ``index.json`` path stays only as an explicit fallback — switched off, no
+    store yet, stale, or unreadable — and every fallback names its reason in the
+    log instead of switching stores silently.
+    """
+    logger.log(level, "serving the legacy JSON index: %s", reason)
+
+
 def count_index_hits(
     index_path: Path,
     query: str,
@@ -561,6 +587,7 @@ def _load_index_from_v2(index_path: Path, deleted: set[str]) -> Optional[dict]:
     titles annotated) or ``None`` when v2 is unavailable/unreadable.
     """
     if not _v2_enabled():
+        _serving_legacy("LORE_USE_V2 is off")
         return None
     try:
         from lore.storage import v2_is_available
@@ -569,6 +596,10 @@ def _load_index_from_v2(index_path: Path, deleted: set[str]) -> Optional[dict]:
         # Staleness check: if a JSON index exists and is newer than the v2
         # store, the v2 store is stale — fall back to JSON (#36).
         if not v2_is_available(index_dir, compare_to=index_path):
+            _serving_legacy(
+                "no usable v2 store (missing, stale or unreadable); see the warning above",
+                level=logging.WARNING,
+            )
             return None
         v2_db = index_dir / "index_v2.sqlite"
         stat = v2_db.stat()
@@ -736,7 +767,12 @@ def search_index(
             # error) is treated as stale and skipped — otherwise the legacy
             # JSON has 793 sessions and v2 has 0 and search silently returns
             # nothing.
-            if v2_is_available(index_dir, compare_to=index_path):
+            if not v2_is_available(index_dir, compare_to=index_path):
+                _serving_legacy(
+                    "search: no usable v2 store (missing, stale or unreadable)",
+                    level=logging.WARNING,
+                )
+            else:
                 # Paging is applied after the ranking step: fusion rewrites the
                 # order and has no offset of its own, so the pipeline fetches
                 # `offset + limit` hits, ranks them (keyword, or fused with the
@@ -788,6 +824,10 @@ def search_index(
                     return apply_deleted_filter_to_results(results, deleted)
                 # v2 returned nothing — fall through to legacy. Better to
                 # double-check than to silently lie. Legacy may still have it.
+                _serving_legacy(
+                    "search: the v2 store returned no hits; checking the legacy index",
+                    level=logging.DEBUG,
+                )
         except ValueError:
             # Invalid scope — surface to the caller, do not fall back.
             raise
@@ -796,6 +836,8 @@ def search_index(
 
     # Legacy SearchEngine has no per-message rows; validate scope but treat
     # any non-"all" value as a no-op (return the unfiltered legacy result).
+    if not _v2_enabled():
+        _serving_legacy("search: LORE_USE_V2 is off")
     from lore.storage.search import SEARCH_SCOPES
 
     if (scope or "all").strip().lower() not in SEARCH_SCOPES:

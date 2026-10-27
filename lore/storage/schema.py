@@ -555,6 +555,21 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
             ON bundle_imports(bundle_sha256);
         """,
     ),
+    (
+        27,
+        "pruned (ignored) session ids in the v2 store (#48)",
+        # Prune kept its id set only in ignored.json, so a store built on another
+        # machine (or rebuilt from scratch) could not tell which sessions were
+        # hidden. Append-only like deleted_sessions: an id is only ever added and
+        # re-adding it is a no-op. ignored.json stays as a compatibility mirror.
+        """
+        CREATE TABLE IF NOT EXISTS ignored_sessions (
+            session_id TEXT PRIMARY KEY,
+            ignored_at TEXT NOT NULL,
+            reason     TEXT
+        );
+        """,
+    ),
 ]
 
 

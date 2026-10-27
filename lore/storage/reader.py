@@ -14,6 +14,7 @@ source behind a feature flag with the JSON path as a fallback, and lets PR
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import sys
 from datetime import datetime
@@ -23,8 +24,11 @@ from typing import Any, Dict, List, Optional
 from lore.core.models import AUTOMATED_ORIGINS
 
 from .envelope import load_envelope_value, normalise_status
+from .freshness import CONTENT_HASH_KEY, GENERATED_AT_KEY, compute_content_hash
 from .schema import current_version, open_connection
 from .writer import v2_db_path
+
+logger = logging.getLogger(__name__)
 
 # A v2 DB is only usable once the denormalised display columns exist (v6).
 _MIN_USABLE_VERSION = 6
@@ -66,11 +70,7 @@ _MIN_STALENESS_VERSION = 9
 
 def _read_generated_at(conn: sqlite3.Connection) -> Optional[str]:
     """Return the v2 store's generated_at stamp, or None if absent."""
-    try:
-        row = conn.execute("SELECT value FROM store_meta WHERE key = 'generated_at'").fetchone()
-    except sqlite3.Error:
-        return None
-    return row[0] if row else None
+    return _read_meta_value(conn, GENERATED_AT_KEY)
 
 
 def v2_is_available(output_dir: Path, compare_to: Optional[Path] = None) -> bool:
@@ -85,36 +85,61 @@ def v2_is_available(output_dir: Path, compare_to: Optional[Path] = None) -> bool
     db = v2_db_path(output_dir)
     if not db.exists():
         return False
+    reason: Optional[str] = None
     try:
         conn = open_connection(db)
         try:
             version = current_version(conn)
             if version < _MIN_USABLE_VERSION:
-                return False
-            # Staleness check needs the generated_at stamp (migration 9+).
-            if compare_to is not None and compare_to.exists():
-                if version < _MIN_STALENESS_VERSION:
-                    return False
-                generated_at = _read_generated_at(conn)
-                if not generated_at:
-                    return False
-                try:
-                    v2_time = datetime.fromisoformat(generated_at)
-                except ValueError:
-                    return False
-                # Compare both as POSIX timestamps so the v2 stamp (stored
-                # UTC) and the file mtime (POSIX, tz-independent) line up
-                # regardless of the local timezone. A 2 s grace window
-                # absorbs the sub-second ordering of the JSON-then-v2 write.
-                v2_ts = v2_time.timestamp()
-                ref_ts = compare_to.stat().st_mtime
-                if v2_ts < ref_ts - 2.0:
-                    return False
-            return True
+                reason = f"store schema version {version} is older than {_MIN_USABLE_VERSION}"
+            elif compare_to is not None and compare_to.exists():
+                reason = _staleness_reason(conn, compare_to, version)
+            if reason is None:
+                # A store whose rows changed without a rewrite of its stamp was
+                # not written by the index build (#48): serving it would mix two
+                # generations of rows under one generated_at.
+                stored = _read_meta_value(conn, CONTENT_HASH_KEY)
+                if stored and stored != compute_content_hash(conn):
+                    reason = (
+                        "content hash does not match the stored sessions "
+                        "(rows were written outside the index build)"
+                    )
         finally:
             conn.close()
+    except sqlite3.Error as exc:
+        reason = f"store unreadable: {exc}"
+    if reason is not None:
+        # Never reject the store silently: callers fall back to JSON, and the
+        # log line is the only evidence of why (#48).
+        logger.warning("ignoring the v2 store at %s: %s", db, reason)
+    return reason is None
+
+
+def _staleness_reason(conn: sqlite3.Connection, compare_to: Path, version: int) -> Optional[str]:
+    """Why the store is older than ``compare_to``, or None when it is not."""
+    if version < _MIN_STALENESS_VERSION:
+        return f"store schema version {version} cannot be checked for staleness"
+    generated_at = _read_generated_at(conn)
+    if not generated_at:
+        return "store has no generated_at stamp"
+    try:
+        v2_time = datetime.fromisoformat(generated_at)
+    except ValueError:
+        return f"generated_at is not an ISO timestamp: {generated_at!r}"
+    # Compare both as POSIX timestamps so the v2 stamp (stored UTC) and the file
+    # mtime (POSIX, tz-independent) line up regardless of the local timezone. A
+    # 2 s grace window absorbs the sub-second ordering of the JSON-then-v2 write.
+    if v2_time.timestamp() < compare_to.stat().st_mtime - 2.0:
+        return f"store was generated at {generated_at}, before {compare_to.name} was written"
+    return None
+
+
+def _read_meta_value(conn: sqlite3.Connection, key: str) -> Optional[str]:
+    try:
+        row = conn.execute("SELECT value FROM store_meta WHERE key = ?", (key,)).fetchone()
     except sqlite3.Error:
-        return False
+        return None
+    return row[0] if row else None
 
 
 def session_contract_select(conn: sqlite3.Connection, alias: str = "") -> str:
@@ -235,12 +260,23 @@ def _parse_ignored_session_ids(data: Any) -> tuple[set[str], Optional[str], Opti
 
 
 def load_ignored_session_ids(output_dir: Path) -> set[str]:
-    """Session ids listed in ``ignored.json`` (pruned); rows stay in SQLite.
+    """Session ids hidden from the default views (pruned); rows stay in SQLite.
 
-    Accepts a JSON list or ``{"session_ids": [...]}``. Any read, decode or shape
-    failure returns an empty set and warns once per process (never raises), so
-    the caller does not crash; non-string entries are skipped with the same warning.
+    The v2 ``ignored_sessions`` table is the source of truth (#48) and
+    ``ignored.json`` is a compatibility mirror, so both are unioned: a store
+    without the mirror, or a mirror that predates the store, still hides every
+    pruned session. The mirror accepts a JSON list or ``{"session_ids": [...]}``;
+    any read, decode or shape failure contributes nothing and warns once per
+    process (never raises), so the caller does not crash. Non-string entries are
+    skipped with the same warning.
     """
+    ignored = _load_ignored_from_json(output_dir)
+    ignored |= _load_ignored_from_store(output_dir)
+    return ignored
+
+
+def _load_ignored_from_json(output_dir: Path) -> set[str]:
+    """The compatibility mirror: ``ignored.json`` (empty set if unreadable)."""
     ignore_path = output_dir / "ignored.json"
     try:
         if not ignore_path.exists():
@@ -258,6 +294,13 @@ def load_ignored_session_ids(output_dir: Path) -> set[str]:
     return ids
 
 
+def _load_ignored_from_store(output_dir: Path) -> set[str]:
+    """The pruned ids recorded in the v2 store (empty set when there is none)."""
+    from .retention import load_ignored
+
+    return set(load_ignored(output_dir))
+
+
 def load_ignored_session_ids_strict(output_dir: Path) -> set[str]:
     """Like :func:`load_ignored_session_ids`, but raises ``ValueError``.
 
@@ -266,20 +309,22 @@ def load_ignored_session_ids_strict(output_dir: Path) -> set[str]:
     stored ignore id on the next write. A missing file is valid and yields an
     empty set; decode failures and shape errors raise instead. Non-string list
     entries are skipped with the usual warning (ids stay usable, not fatal).
+    Ids recorded in the v2 store are always included, because a rewrite must
+    never drop state the store still holds (#48).
     """
     ignore_path = output_dir / "ignored.json"
-    if not ignore_path.exists():
-        return set()
-    try:
-        data = json.loads(ignore_path.read_text(encoding="utf-8"))
-    except (UnicodeDecodeError, ValueError, OSError) as exc:
-        raise ValueError(f"could not read ignored.json: {exc}") from exc
-    ids, error, warning = _parse_ignored_session_ids(data)
-    if error is not None:
-        raise ValueError(f"invalid ignored.json: {error}")
-    if warning is not None:
-        _warn_ignored_json_once(warning)
-    return ids
+    ids: set[str] = set()
+    if ignore_path.exists():
+        try:
+            data = json.loads(ignore_path.read_text(encoding="utf-8"))
+        except (UnicodeDecodeError, ValueError, OSError) as exc:
+            raise ValueError(f"could not read ignored.json: {exc}") from exc
+        ids, error, warning = _parse_ignored_session_ids(data)
+        if error is not None:
+            raise ValueError(f"invalid ignored.json: {error}")
+        if warning is not None:
+            _warn_ignored_json_once(warning)
+    return ids | _load_ignored_from_store(output_dir)
 
 
 def ignored_json_stat(output_dir: Path) -> tuple[int, int]:
