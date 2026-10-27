@@ -23,7 +23,7 @@ jobs:
 
       - name: Install dependencies
         # pytest-cov is required: pyproject [tool.pytest] addopts injects --cov
-        run: pip install -e . pytest pytest-cov
+        run: pip install -e . pytest pytest-cov pyyaml
 
       - name: Run tests
         run: python -m pytest tests/ --tb=short

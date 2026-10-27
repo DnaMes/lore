@@ -60,6 +60,8 @@ dev = [
     "mypy>=1.8",
     "pre-commit>=3,<5",
     "bandit[toml]>=1.7",
+    # PyYAML parses the skill frontmatter in tests/test_skill_lore_memory.py.
+    "PyYAML>=6",
     "fastembed>=0.3",
     "sqlite-vec>=0.1.9",
 ]
