@@ -16,7 +16,7 @@ from lore.services.summarize_chunks import (
     chunk_coverage,
     sample_chunks,
 )
-from lore.services.summary_input import CompressedBlock
+from lore.services.summary_input import CompressedBlock, SummaryMessage, compress, split_chunks
 
 
 def _block(seq: int, *, user: bool = False) -> CompressedBlock:
@@ -151,3 +151,14 @@ def test_a_decisive_late_message_is_inside_a_covered_range():
     assert all(
         not (gap["from_seq"] <= 60 <= gap["to_seq"]) for gap in coverage["omitted_seq_ranges"]
     )
+def test_chunk_coverage_ignores_quoted_seq_markers():
+    # A user message quoting a marker from a log must not widen the reported span.
+    messages = [
+        SummaryMessage(seq=1, role="user", content="the log said: [seq=99999] retrying"),
+        SummaryMessage(seq=2, role="assistant", content="ack, retry scheduled"),
+    ]
+    transcript = compress(messages)
+    chunks = split_chunks(transcript, 1_000_000)
+    assert chunks
+    coverage = chunk_coverage(chunks, list(range(len(chunks))))
+    assert coverage["seq_range"] == [1, 2]

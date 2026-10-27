@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import stat
+import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
@@ -320,6 +321,64 @@ def test_base_url_scheme_policy(monkeypatch: pytest.MonkeyPatch, lore_key: str) 
         LLMConfig(provider="openrouter", model="m:free", cache_enabled=False)
     ).generate("p2")
     assert calls[-1]["url"] == "https://openrouter.ai/api/v1/chat/completions"
+
+
+def test_openrouter_cache_request_metadata_uses_resolved_values(
+    monkeypatch: pytest.MonkeyPatch, lore_key: str, tmp_path: Path
+) -> None:
+    def handler(_calls: List[Dict[str, Any]]):
+        return _FakeHTTPResponse(_completion_body("cached"))
+
+    calls = _install_urlopen(monkeypatch, handler)
+    cache_dir = tmp_path / "or-cache-resolved-meta"
+    provider = OpenRouterProvider(
+        LLMConfig(
+            provider="openrouter",
+            model="example/model:free",
+            cache_enabled=True,
+            cache_dir=str(cache_dir),
+            max_tokens=4096,
+            temperature=0.7,
+        )
+    )
+    provider.generate("cache-me", max_tokens=100, temperature=0.1)
+    assert len(calls) == 1
+    assert calls[0]["body"]["model"] == "example/model:free"
+    assert calls[0]["body"]["max_tokens"] == 100
+    assert calls[0]["body"]["temperature"] == 0.1
+
+    cache_files = list(cache_dir.glob("*.json"))
+    assert len(cache_files) == 1
+    stored = json.loads(cache_files[0].read_text(encoding="utf-8"))
+    request = stored["request"]
+    assert request["model"] == "example/model:free"
+    assert request["params"]["max_tokens"] == 100
+    assert request["params"]["temperature"] == 0.1
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
+def test_openrouter_cache_write_is_atomic_0600(
+    monkeypatch: pytest.MonkeyPatch, lore_key: str, tmp_path: Path
+) -> None:
+    def handler(_calls: List[Dict[str, Any]]):
+        return _FakeHTTPResponse(_completion_body("cached-body"))
+
+    _install_urlopen(monkeypatch, handler)
+    cache_dir = tmp_path / "or-cache-atomic"
+    provider = OpenRouterProvider(
+        LLMConfig(
+            provider="openrouter",
+            model="m:free",
+            cache_enabled=True,
+            cache_dir=str(cache_dir),
+        )
+    )
+    provider.generate("cache-me")
+    tmp_left = list(cache_dir.glob(".*.tmp"))
+    assert tmp_left == []
+    cache_files = list(cache_dir.glob("*.json"))
+    assert len(cache_files) == 1
+    assert stat.S_IMODE(cache_files[0].stat().st_mode) == 0o600
 
 
 def test_cache_file_created_with_mode_0600(

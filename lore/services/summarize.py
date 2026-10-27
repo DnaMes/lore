@@ -1078,6 +1078,27 @@ def _process_chunked(
         and stats.reused_chunks == len(selected)
         and has_current_summary(output_dir, session_id, merge_fp)
     ):
+        # Pre-#178 cache rows lack coverage; fill it from this chunk plan (no model call).
+        row = get_summary(output_dir, "session", session_scope)
+        if row is not None and "coverage" not in row["payload"]:
+            coverage = chunk_coverage(raw_groups, sampled_indices)
+            coverage["revision"] = hashlib.sha256(
+                "\x00".join(b.text for b in transcript.blocks).encode("utf-8")
+            ).hexdigest()
+            coverage["truncated"] = truncated
+            save_summary(
+                output_dir,
+                level="session",
+                scope_key=session_scope,
+                session_id=session_id,
+                fingerprint=row["fingerprint"],
+                model=row["model"],
+                prompt_version=row["prompt_version"],
+                compressor_version=row["compressor_version"],
+                payload={**row["payload"], "coverage": coverage},
+                input_tokens=row["input_tokens"],
+                output_tokens=row["output_tokens"],
+            )
         return "unchanged", redactions, input_tokens, output_tokens
 
     union_seqs: set[int] = set()

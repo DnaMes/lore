@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 
@@ -16,6 +18,37 @@ def _isolated_home(tmp_path_factory, monkeypatch):
     ``HOME`` themselves; that runs after this fixture and wins.
     """
     monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("home")))
+
+
+@pytest.fixture(autouse=True)
+def _isolated_web_archive(request, tmp_path, monkeypatch):
+    """Point the web modules' import-time archive paths at a per-test tmp dir.
+
+    ``lore.interfaces.web`` and ``lore.interfaces.web_data`` bind
+    ``OUTPUT_DIR``/``INDEX_PATH``/``DELETED_SESSIONS_PATH`` at import time from
+    the importing user's real ``~/.lore``, so any test that builds the Flask
+    client would otherwise read (and potentially rewrite) the owner's archive.
+    Applied to every test whose module imports ``lore.interfaces``. Tests that
+    deliberately set their own ``OUTPUT_DIR`` via their own ``monkeypatch``
+    still win: their fixture instantiates and tears down inside this one.
+    """
+    try:
+        module_source = inspect.getsource(request.module)
+    except (OSError, TypeError):
+        module_source = ""
+    if "lore.interfaces" not in module_source:
+        yield
+        return
+
+    from lore.interfaces import web, web_data
+
+    for module in (web, web_data):
+        monkeypatch.setattr(module, "OUTPUT_DIR", tmp_path, raising=False)
+        monkeypatch.setattr(module, "INDEX_PATH", tmp_path / "index.json", raising=False)
+        monkeypatch.setattr(
+            module, "DELETED_SESSIONS_PATH", tmp_path / "deleted_sessions.json", raising=False
+        )
+    yield
 
 
 @pytest.fixture(autouse=True)

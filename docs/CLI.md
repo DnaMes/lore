@@ -1135,9 +1135,12 @@ The CLI returns three codes:
   without `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; nothing is sent and nothing
   is written. `lore-session switch` and `lore-session continue` also exit with
   `2` when the target tool is `gemini` or `codex` without the opt-in.
+  The value `2` is not unique to this refusal: argparse usage errors (an unknown
+  option, or a missing argument) also exit with code `2`.
 
-Automation can therefore treat any non-zero code as failure and distinguish the
-refused cloud opt-in from other errors by the value `2`.
+Automation can therefore treat any non-zero code as failure. Because argparse
+usage errors share the code `2`, confirm the refusal by its stderr message
+before treating `2` as a rejected cloud opt-in.
 
 The other entry points have their own codes. `lore-web-probe` returns `2` when
 `--user` is given without a usable password and `3` when the probe matrix was

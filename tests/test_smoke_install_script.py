@@ -49,6 +49,35 @@ def test_isolated_env_points_every_root_into_home(tmp_path):
     assert base["HOME"] == "/x"  # the base mapping is not mutated
 
 
+def test_isolated_env_strips_every_cloud_credential_prefix(tmp_path):
+    base = {
+        "PATH": "/bin",
+        "HOME": "/x",
+        "GOOGLE_API_KEY": "g",
+        "GEMINI_API_KEY": "gem",
+        "OPENAI_API_KEY": "o",
+        "ANTHROPIC_API_KEY": "a",
+        "OPENROUTER_API_KEY": "or",
+        "AZURE_OPENAI_API_KEY": "az",
+        "MISTRAL_API_KEY": "m",
+        "DEEPSEEK_API_KEY": "d",
+        "MINIMAX_API_KEY": "mm",
+        "COHERE_API_KEY": "c",
+        "LORE_ALLOW_CLOUD": "1",
+        "HF_TOKEN": "hf",
+        "AWS_SECRET_ACCESS_KEY": "aws",
+    }
+    env = smoke.isolated_env(tmp_path, base)
+    for key in base:
+        if key not in ("PATH", "HOME"):
+            assert key not in env, key
+    assert env["PATH"] == "/bin"
+    assert env["HOME"] == str(tmp_path)
+    assert not smoke.is_cloud_credential("PATH")
+    assert smoke.is_cloud_credential("GOOGLE_APPLICATION_CREDENTIALS")
+    assert smoke.is_cloud_credential("HF_TOKEN")
+
+
 def test_isolated_env_defaults_to_process_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
     env = smoke.isolated_env(tmp_path)

@@ -71,4 +71,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/api/health', timeout=3)"
 
 CMD ["gunicorn", "--workers", "1", "--threads", "8", "--bind", "0.0.0.0:5000", \
-     "--access-logfile", "-", "--error-logfile", "-", "lore.interfaces.web:app"]
+     "--no-control-socket", "--access-logfile", "-", "--error-logfile", "-", \
+     "lore.interfaces.web:app"]

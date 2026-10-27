@@ -53,6 +53,21 @@ FOREIGN_ENV = frozenset(
         "OLLAMA_HOST",
     }
 )
+# Any cloud credential variable: matched by prefix below, never wanted in a smoke run.
+CLOUD_CREDENTIAL_PREFIXES = (
+    "GOOGLE_",
+    "GEMINI_",
+    "OPENAI_",
+    "ANTHROPIC_",
+    "OPENROUTER_",
+    "AZURE_OPENAI_",
+    "MISTRAL_",
+    "DEEPSEEK_",
+    "MINIMAX_",
+    "COHERE_",
+)
+# Credential variables that do not share a cloud provider prefix.
+CLOUD_CREDENTIAL_NAMES = frozenset({"LORE_ALLOW_CLOUD", "HF_TOKEN", "AWS_SECRET_ACCESS_KEY"})
 WEB_WAIT = 90  # seconds for lore-web to answer /api/health (a cold macOS runner is slow)
 PROXY_URL = "http://127.0.0.1:9"  # nothing listens here: a send would fail loudly
 PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
@@ -114,17 +129,25 @@ class Ctx:
 # ---------------------------------------------------------------- pure helpers
 
 
+def is_cloud_credential(name: str) -> bool:
+    """True when ``name`` is a cloud provider credential (by prefix or exact name)."""
+    return name.startswith(CLOUD_CREDENTIAL_PREFIXES) or name in CLOUD_CREDENTIAL_NAMES
+
+
 def isolated_env(home: Path, base: Mapping[str, str] | None = None) -> dict[str, str]:
     """Environment that points every user-level root into ``home``.
 
-    LORE_* and PYTHONPATH are dropped so developer overrides cannot reach the real
-    ~/.lore or import the source tree.
+    LORE_*, cloud credentials, and PYTHONPATH are dropped so developer overrides cannot
+    reach the real ~/.lore, pay for a cloud call, or import the source tree.
     """
     source = os.environ if base is None else base
     env = {
         k: v
         for k, v in source.items()
-        if not k.startswith("LORE_") and k != "PYTHONPATH" and k not in FOREIGN_ENV
+        if not k.startswith("LORE_")
+        and k != "PYTHONPATH"
+        and k not in FOREIGN_ENV
+        and not is_cloud_credential(k)
     }
     roots = {
         "HOME": home,
