@@ -451,6 +451,11 @@ Cached non-transcript responses help:
 - Speed up repeated queries
 - Enable offline access to previous results
 
+An entry is written to a hidden `.<key>.<random>.tmp` file and renamed into place, so a
+reader never sees half a JSON document; `lore/llm/cache_io.py` removes such temp files
+when they are older than an hour, because a `SIGKILL` between the write and the rename
+would otherwise strand one forever.
+
 ## Session titles
 
 `lore generate-titles` sends a transcript excerpt (first six messages, capped) to the selected

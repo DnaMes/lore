@@ -20,6 +20,7 @@ from urllib.request import Request, urlopen
 
 from ..utils.paths import lore_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
+from .cache_io import sweep_temp_files
 from .gate import ensure_cloud_allowed
 
 logger = logging.getLogger(__name__)
@@ -105,7 +106,10 @@ class OpenRouterProvider(LLMProvider):
         if not self.config.cache_enabled:
             return None
         if self._cache_dir is None:
-            self._cache_dir = secure_dir(self._cache_dir_path)
+            cache_dir = secure_dir(self._cache_dir_path)
+            # Temp files a hard kill left behind would otherwise live here forever.
+            sweep_temp_files(cache_dir)
+            self._cache_dir = cache_dir
         return self._cache_dir
 
     def _api_key(self) -> Optional[str]:

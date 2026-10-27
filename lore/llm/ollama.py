@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from ..utils.paths import lore_home, restrict_file
 from .base import LLMConfig, LLMProvider, LLMResponse
+from .cache_io import sweep_temp_files
 from .gate import ensure_cloud_allowed
 
 logger = logging.getLogger(__name__)
@@ -47,8 +48,11 @@ class OllamaProvider(LLMProvider):
         if not self.config.cache_enabled:
             return None
         if self._cache_dir is None:
-            self._cache_dir = self._cache_dir_path
-            self._cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_dir = self._cache_dir_path
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            # Temp files a hard kill left behind would otherwise live here forever.
+            sweep_temp_files(cache_dir)
+            self._cache_dir = cache_dir
         return self._cache_dir
 
     def _chat_options(
