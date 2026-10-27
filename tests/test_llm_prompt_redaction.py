@@ -15,6 +15,7 @@ prompt is still the complete one; without opt-in the cloud gate refuses first an
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -137,6 +138,85 @@ def test_gemini_cli_title_without_optin_zero_subprocess_calls(
         gen.generate(_session(project_path=f"/work/{TOKEN}/repo"), force=True)
 
     assert calls == []
+
+
+# --- 1b. retired standalone Gemini CLI (IneligibleTierError) ---------------------
+
+
+_INELIGIBLE_MSG = (
+    "The Gemini CLI no longer supports individual accounts (see docs/CLI.md); "
+    "use --provider ollama or codex"
+)
+
+
+def _ineligible_run(monkeypatch: pytest.MonkeyPatch, out: str = "", err: str = "") -> List[Any]:
+    seen: List[Any] = []
+
+    def fake_run(cmd: Any, **kwargs: Any) -> SimpleNamespace:
+        seen.append((cmd, kwargs))
+        return SimpleNamespace(returncode=1, stdout=out, stderr=err)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+    return seen
+
+
+@pytest.fixture
+def _fresh_gemini_flag(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("lore.titles.generator._GEMINI_INELIGIBLE_WARNED", False)
+
+
+def test_gemini_cli_ineligible_tier_warns_once_and_returns_none(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog, _fresh_gemini_flag
+) -> None:
+    stdout_msg = (
+        "IneligibleTierError: This client is no longer supported for Gemini Code "
+        "Assist for individuals"
+    )
+    calls = _ineligible_run(monkeypatch, out=stdout_msg)
+    gen = _title_generator(
+        tmp_path, monkeypatch, strategy=TitleStrategy.SMART, provider="gemini-cli", allow_cloud=True
+    )
+
+    with caplog.at_level(logging.WARNING, logger="lore.titles.generator"):
+        assert gen._generate_llm_gemini(_session()) is None
+        assert gen._generate_llm_gemini(_session()) is None
+
+    assert len(calls) == 2
+    warnings = [rec.message for rec in caplog.records if rec.levelno == logging.WARNING]
+    assert warnings == [_INELIGIBLE_MSG]
+
+
+def test_gemini_cli_ineligible_tier_detected_in_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog, _fresh_gemini_flag
+) -> None:
+    stderr_msg = (
+        "IneligibleTierError: This client is no longer supported for Gemini Code "
+        "Assist for individuals"
+    )
+    _ineligible_run(monkeypatch, err=stderr_msg)
+    gen = _title_generator(
+        tmp_path, monkeypatch, strategy=TitleStrategy.SMART, provider="gemini-cli", allow_cloud=True
+    )
+
+    with caplog.at_level(logging.WARNING, logger="lore.titles.generator"):
+        assert gen._generate_llm_gemini(_session()) is None
+
+    assert _INELIGIBLE_MSG in caplog.text
+
+
+def test_gemini_cli_other_nonzero_exit_no_ineligible_warning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog, _fresh_gemini_flag
+) -> None:
+    calls = _ineligible_run(monkeypatch, out="boom")
+    gen = _title_generator(
+        tmp_path, monkeypatch, strategy=TitleStrategy.SMART, provider="gemini-cli", allow_cloud=True
+    )
+
+    with caplog.at_level(logging.WARNING, logger="lore.titles.generator"):
+        assert gen._generate_llm_gemini(_session()) is None
+
+    assert len(calls) == 1
+    assert caplog.records == []
 
 
 # --- 2. remote Ollama title path ----------------------------------------------

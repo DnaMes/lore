@@ -279,3 +279,61 @@ def test_mcp_passes_allow_cloud_when_granted(monkeypatch, isolated_home):
     assert cmd[0] == "lore-session" and cmd[1] == "switch" and cmd[2] == "gemini"
     assert "--allow-cloud" in cmd
     assert "context body" in result
+
+
+# --- retired standalone Gemini CLI (IneligibleTierError) -------------------------
+
+
+def test_gemini_nonzero_exit_reports_and_returns_false(monkeypatch, isolated_home, capsys):
+    def fake_run(cmd, **kwargs) -> subprocess.CompletedProcess:
+        return subprocess.CompletedProcess(cmd, 1)
+
+    monkeypatch.setattr(lore_session_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(lore_session_cli, "get_safe_executable", lambda tool: "/fake/bin/gemini")
+
+    assert lore_session_cli.switch_to_tool("gemini", CONTEXT, allow_cloud=True) is False
+    stderr = capsys.readouterr().err
+    assert (
+        "gemini exited with code 1. If it reported IneligibleTierError, Google retired "
+        "the Gemini CLI for individual accounts (see docs/CLI.md)."
+    ) in stderr
+
+
+def test_gemini_nonzero_exit_does_not_capture_interactive_output(monkeypatch, isolated_home):
+    kwargs_seen: list[dict] = []
+
+    def fake_run(cmd, **kwargs) -> subprocess.CompletedProcess:
+        kwargs_seen.append(kwargs)
+        return subprocess.CompletedProcess(cmd, 2)
+
+    monkeypatch.setattr(lore_session_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(lore_session_cli, "get_safe_executable", lambda tool: "/fake/bin/gemini")
+
+    assert lore_session_cli.switch_to_tool("gemini", CONTEXT, allow_cloud=True) is False
+    assert kwargs_seen[0].get("capture_output") is not True
+    assert "stdout" not in kwargs_seen[0] and "stderr" not in kwargs_seen[0]
+
+
+def test_gemini_zero_exit_still_succeeds(monkeypatch, isolated_home):
+    monkeypatch.setattr(
+        lore_session_cli.subprocess,
+        "run",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 0),
+    )
+    monkeypatch.setattr(lore_session_cli, "get_safe_executable", lambda tool: "/fake/bin/gemini")
+
+    assert lore_session_cli.switch_to_tool("gemini", CONTEXT, allow_cloud=True) is True
+
+
+def test_codex_nonzero_exit_does_not_print_gemini_message(monkeypatch, isolated_home, capsys):
+    monkeypatch.setattr(
+        lore_session_cli.subprocess,
+        "run",
+        lambda cmd, **kwargs: subprocess.CompletedProcess(cmd, 1),
+    )
+    monkeypatch.setattr(lore_session_cli, "get_safe_executable", lambda tool: "/fake/bin/codex")
+
+    # Codex exit handling is out of scope here; only the gemini message must not appear.
+    lore_session_cli.switch_to_tool("codex", CONTEXT, allow_cloud=True)
+    stderr = capsys.readouterr().err
+    assert "IneligibleTierError" not in stderr

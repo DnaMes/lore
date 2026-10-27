@@ -205,7 +205,9 @@ def switch_to_tool(tool: str, context: str, allow_cloud: bool = False):
             return False
 
         # Run the command printed above, with the resolved executable in front.
-        subprocess.run([executable, *cmd[1:]], shell=False, timeout=3600)
+        # stdin/stdout stay attached to the terminal (interactive session); we
+        # only look at the exit code.
+        result = subprocess.run([executable, *cmd[1:]], shell=False, timeout=3600)
     except FileNotFoundError:
         print(f"❌ {tool} not found. Install it first.")
         return False
@@ -223,6 +225,15 @@ def switch_to_tool(tool: str, context: str, allow_cloud: bool = False):
                 _remove_if_empty(context_path.parent)
             except OSError:
                 pass
+
+    if switch_tool == "gemini" and result.returncode != 0:
+        print(
+            f"gemini exited with code {result.returncode}. If it reported "
+            "IneligibleTierError, Google retired the Gemini CLI for individual "
+            "accounts (see docs/CLI.md).",
+            file=sys.stderr,
+        )
+        return False
 
     return True
 

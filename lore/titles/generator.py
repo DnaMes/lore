@@ -40,6 +40,22 @@ logger = logging.getLogger(__name__)
 
 GEMINI_CLI_AVAILABLE = shutil.which("gemini") is not None
 
+# One warning per process when the standalone Gemini CLI reports the retired
+# individual-account tier (IneligibleTierError, docs/CLI.md).
+_GEMINI_INELIGIBLE_WARNED = False
+
+
+def _warn_gemini_ineligible() -> None:
+    global _GEMINI_INELIGIBLE_WARNED
+    if _GEMINI_INELIGIBLE_WARNED:
+        return
+    _GEMINI_INELIGIBLE_WARNED = True
+    logger.warning(
+        "The Gemini CLI no longer supports individual accounts (see docs/CLI.md); "
+        "use --provider ollama or codex"
+    )
+
+
 # Providers a title request may be routed to (#185). Titles send a transcript
 # excerpt, so the default is the local one: the Gemini CLI is cloud and must be
 # selected explicitly, never picked because its binary happens to exist.
@@ -304,6 +320,11 @@ Conversation:
                 text=True,
                 timeout=10,
             )
+
+            if result.returncode != 0 and "IneligibleTierError" in (
+                (result.stdout or "") + (result.stderr or "")
+            ):
+                _warn_gemini_ineligible()
 
             if result.returncode == 0:
                 title = result.stdout.strip()
