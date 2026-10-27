@@ -266,6 +266,13 @@ class ZedExtractor(BaseExtractor):
             try:
                 zstd = importlib.import_module("zstandard")
             except ImportError:
+                # One warning per run: the per-run counter resets in extract_sessions().
+                if not self.discovery.get("skipped_missing_zstd"):
+                    logger.warning(
+                        "Skipping zstd-compressed Zed thread rows: the 'zstandard' package is "
+                        "not installed. Install it with: pip install 'lore[zstd]' "
+                        "(or: pipx inject lore zstandard)"
+                    )
                 self._count("skipped_missing_zstd")
                 return None
             decoded = _decompress_zstd(raw, zstd)

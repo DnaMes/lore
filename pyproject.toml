@@ -44,6 +44,10 @@ semantic = ["fastembed>=0.3", "sqlite-vec>=0.1.9"]
 # stays free of a ~150 MB browser download. Run `playwright install chromium`
 # after installing this extra.
 browser = ["playwright>=1.40"]
+# Decompression for zstd-compressed sources: Codex archived rollouts (.jsonl.zst)
+# and Zed thread rows with data_type "zstd". Without it those sources are skipped
+# with a warning.
+zstd = ["zstandard>=0.22"]
 
 # Everything needed to run the test suite, lint, and type-check locally.
 # Mirrors what CI installs; fastembed + sqlite-vec are included so the semantic

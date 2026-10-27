@@ -101,6 +101,7 @@ Lore has two optional extras, both defined in `pyproject.toml`. The former `watc
 | Extra | Adds | Without it |
 | --- | --- | --- |
 | `semantic` | `fastembed>=0.3`, `sqlite-vec>=0.1.9` | Keyword-only search. When installed, enables semantic vector search and KNN similarity queries over session embeddings (`bge-small-en-v1.5`), fusing vector scores with FTS5 BM25 keyword matches via Reciprocal Rank Fusion (RRF). Without this extra, `sqlite_vec_available()` returns false and search falls back strictly to FTS5 keyword search. |
+| `zstd` | `zstandard>=0.22` | Decompression of zstd-compressed sources: Codex archived rollouts (`.jsonl.zst`) and Zed thread rows stored with zstd. Without it those sources are skipped and a warning naming this extra is logged once per run. Install with `pip install 'lore[zstd]'` or `pipx inject lore zstandard`. |
 | `dev` | `pytest>=8,<10`, `pytest-cov>=5`, `coverage>=7`, `ruff>=0.6`, `mypy>=1.8`, `pre-commit>=3,<5`, `bandit[toml]>=1.7`, `fastembed>=0.3`, `sqlite-vec>=0.1.9` | Development and testing dependencies: test suites, coverage reports, linting, type checking, pre-commit hooks and bandit security scanning; `fastembed` and `sqlite-vec` are included so the semantic tests run for real instead of being skipped. Only required for contributors. |
 
 ### Installing Extras

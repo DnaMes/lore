@@ -40,6 +40,10 @@ _AGENTS_HEADER = re.compile(r"^# AGENTS\.md instructions for \S")
 _CANCELLED_EVENT_TYPES = frozenset({"turn_aborted", "task_aborted", "turn_cancelled"})
 
 
+class _ZstdUnavailable(ValueError):
+    """A ``.jsonl.zst`` rollout was skipped because ``zstandard`` is not installed."""
+
+
 def _tool_event_status(status: str) -> str:
     if status == "cancelled":
         return "cancelled"
@@ -320,6 +324,9 @@ class CodexExtractor(BaseExtractor):
                 if self.should_import_session(session):
                     seen_ids.add(session.session_id)
                     yield session
+            except _ZstdUnavailable:
+                # Reported once per run by _open_rollout_lines, not once per file.
+                continue
             except (
                 OSError,
                 ValueError,
@@ -341,6 +348,13 @@ class CodexExtractor(BaseExtractor):
             try:
                 zstd = importlib.import_module("zstandard")
             except ImportError:
+                # One warning per run: the per-run counter resets in extract_sessions().
+                if not self.discovery.get("skipped_compressed"):
+                    logger.warning(
+                        "Skipping zstd-compressed Codex rollouts: the 'zstandard' package is "
+                        "not installed. Install it with: pip install 'lore[zstd]' "
+                        "(or: pipx inject lore zstandard)"
+                    )
                 self._count("skipped_compressed")
                 return None
             return self._iter_zst_lines(path, zstd)
@@ -539,6 +553,8 @@ class CodexExtractor(BaseExtractor):
 
         rollout_lines = self._open_rollout_lines(path)
         if rollout_lines is None:
+            if path.name.endswith(".jsonl.zst"):
+                raise _ZstdUnavailable("zstandard not installed")
             raise ValueError("unreadable rollout")
 
         for raw_line in rollout_lines:
