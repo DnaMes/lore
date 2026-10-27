@@ -851,3 +851,72 @@ what "the same session grew" means after #155.
   exits 1 before iterating when the provider is unavailable). The AI-independent
   rendering path is verified through `SessionFormatter`/`include_summary=False`,
   not through the command.
+---
+
+## Resume lane — analysis jobs (#179) and message retrieval (#190)
+
+Narrow follow-up to the jobs lane. #179 is shipped; #190 is still open and has
+no retrieval code, no evaluation harness and no docs yet. Migration 25
+(`message_embedding_meta`) is appended and inert — it is bookkeeping only and
+does not claim any part of #190.
+
+### #179 — CLOSED (durable, resumable analysis jobs)
+
+Migration 24 adds `analysis_jobs` (kind, `request_json` with provider/model/
+prompt version/cancellation intent, `session_id`, `source_revision`, state,
+`progress_json`, error, timestamps) and `analysis_job_chunks` with
+`PRIMARY KEY(job_id, chunk_key)`. `lore/services/analysis_jobs.py` implements
+create/load/list, an atomic next-pending-chunk claim (attempt counter), an
+idempotent chunk-result recorder (first complete result wins; a failed chunk
+may still be completed by a retry), resume (complete chunks skipped, interrupted
+`running` and `failed` chunks requeued, completed/cancelled jobs never
+reopened), cancellation, and merged progress updates. A new run is always a new
+job row, so earlier results are neither deleted nor overwritten.
+
+`lore jobs [--json] [--kind K] [--state S] [--limit N]` lists persisted jobs and
+`lore jobs resume <job_id>` requeues unfinished chunks and prints what is left
+(it does not execute work; the worker does).
+
+Observed:
+
+```
+$ .venv/bin/python -m pytest tests/test_analysis_jobs.py tests/test_cli_dispatch.py -o addopts="" -q
+19 passed in 1.84s
+
+$ ruff check lore/ lore_cli.py tests/test_analysis_jobs.py tests/test_cli_dispatch.py
+All checks passed!
+$ ruff format --check lore/storage/schema.py lore/services/analysis_jobs.py lore_cli.py tests/test_analysis_jobs.py
+4 files already formatted
+
+$ lore --output-dir <tmp> jobs
+Analysis jobs (newest first)
+session_summary-...  session_summary  running  0% pending_chunks=1  2026-10-27T00:03:01Z
+
+$ lore --output-dir <tmp> jobs resume session_summary-...
+Job session_summary-... (session_summary) is running.
+Chunks: 3 total, 2 pending, 1 complete.
+Pending: c2, c3
+```
+
+Tests cover create/claim/complete/resume (an interrupted run resumes only the
+unfinished chunks), idempotent completion, a second run preserving the first
+run's rows, cancellation, timeout/provider-failure state distinction, and
+migration-24 rerun idempotency (version list stays 1..latest, rows survive).
+
+**Not verified / deliberately deferred**
+
+- `lore/interfaces/web_jobs.py` is not wired to the service. The in-process
+  dict remains cache-only and nothing persists web reload/audit/summary job
+  progress yet. Wiring was skipped in this narrow pass because the existing web
+  job tests exercise the dict directly and a DB fallback changes their
+  prune/TTL expectations; it needs its own reviewed change.
+- No job runner consumes persisted chunks: `lore jobs resume` requeues rows and
+  reports them, but the caller must supply the worker.
+
+### #190 — OPEN (message-level semantic retrieval)
+
+Not started in this pass: no `ensure_message_vec_table` helper, no message
+embedding pass, no retrieval function, no multilingual evaluation fixtures, no
+`docs/LLM_INTEGRATION.md` retrieval section. Migration 25 only creates
+`message_embedding_meta(message_key, session_id, seq, model, created)`; nothing
+reads or writes it yet.

@@ -1750,6 +1750,86 @@ def cmd_digest(args):
     print(format_digest(digest, fmt=fmt))
 
 
+def _format_job_line(job) -> str:
+    progress = job.progress or {}
+    percent = progress.get("percent")
+    shown = f"{percent:>3}%" if isinstance(percent, int) else "   -"
+    pending = int(progress.get("pending") or 0)
+    return (
+        f"{job.id:<32} {job.kind:<16} {job.state:<10} {shown} "
+        f"pending_chunks={pending}  {job.updated}" + (f"  error={job.error}" if job.error else "")
+    )
+
+
+def cmd_jobs(args):
+    """List persisted analysis jobs, or requeue one to resume its chunks (#179).
+
+    The store is the source of truth; the web UI's in-process dict is only a
+    cache. ``resume`` requeues unfinished chunks (complete ones are skipped) and
+    prints what is left — it does not run the work itself.
+    """
+    output_dir = Path(args.output_dir).expanduser()
+    db_path = output_dir / "index_v2.sqlite"
+    if not db_path.exists():
+        print("No archive store found. Run 'lore export --all' or 'lore sync' first.")
+        return 1
+
+    from lore.services.analysis_jobs import (
+        JOB_STATES,
+        AnalysisJobError,
+        list_jobs,
+        resume_job,
+    )
+    from lore.storage.schema import open_v2_connection
+
+    action = getattr(args, "jobs_action", None)
+    as_json = bool(getattr(args, "json", False))
+    conn = open_v2_connection(db_path)
+    try:
+        if action == "resume":
+            job = resume_job(conn, args.job_id)
+            if as_json:
+                print(json.dumps(job.to_dict(), ensure_ascii=False, indent=2))
+                return 0
+            pending = [chunk.chunk_key for chunk in job.chunks if chunk.status == "pending"]
+            print(f"Job {job.id} ({job.kind}) is {job.state}.")
+            if job.chunks:
+                complete = sum(1 for chunk in job.chunks if chunk.status == "complete")
+                print(
+                    f"Chunks: {len(job.chunks)} total, {len(pending)} pending, {complete} complete."
+                )
+                if pending:
+                    print("Pending: " + ", ".join(pending))
+            else:
+                print("No chunks recorded; the job is requeued for its worker.")
+            return 0
+
+        jobs = list_jobs(
+            conn,
+            kind=getattr(args, "kind", None),
+            state=getattr(args, "state", None),
+            limit=int(getattr(args, "limit", 50)),
+        )
+    except AnalysisJobError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        conn.close()
+
+    if as_json:
+        print(json.dumps([job.to_dict() for job in jobs], ensure_ascii=False, indent=2))
+        return 0
+    if not jobs:
+        print("No analysis jobs recorded.")
+        return 0
+    print("Analysis jobs (newest first)")
+    print("-" * 40)
+    for job in jobs:
+        print(_format_job_line(job))
+    print(f"States: {', '.join(JOB_STATES)}")
+    return 0
+
+
 def cmd_sources(args):
     """Report per-source archive health: captured, filtered, unsupported, failed (#162)."""
     output_dir = Path(args.output_dir).expanduser()
@@ -2628,6 +2708,7 @@ COMMANDS = {
     "stats": cmd_stats,
     "digest": cmd_digest,
     "sources": cmd_sources,
+    "jobs": cmd_jobs,
     "memory": cmd_memory,
     "watch": cmd_watch,
     "check": cmd_check,
@@ -2943,6 +3024,27 @@ Examples:
         "--limit", type=int, default=200, help="Maximum per-source rows to print (default: 200)"
     )
     sources_parser.add_argument("--json", action="store_true", help="Machine-readable output")
+
+    # jobs command — persisted analysis jobs (#179)
+    from lore.services.analysis_jobs import JOB_STATES
+
+    jobs_parser = subparsers.add_parser(
+        "jobs", help="List or resume durable analysis jobs (the DB is the source of truth)"
+    )
+    jobs_parser.add_argument("--json", action="store_true", help="Machine-readable output")
+    jobs_parser.add_argument("--kind", help="Only show jobs of this kind")
+    jobs_parser.add_argument(
+        "--state", choices=list(JOB_STATES), help="Only show jobs in this state"
+    )
+    jobs_parser.add_argument(
+        "--limit", type=int, default=50, help="Maximum jobs to print (default: 50)"
+    )
+    jobs_sub = jobs_parser.add_subparsers(dest="jobs_action")
+    jobs_resume = jobs_sub.add_parser(
+        "resume", help="Requeue unfinished chunks of an interrupted job"
+    )
+    jobs_resume.add_argument("job_id", help="Job id (e.g. reload-abc123 or summary-abc123)")
+    jobs_resume.add_argument("--json", action="store_true", help="Machine-readable output")
 
     # threads command
     _add_automated_flag(subparsers.add_parser("threads", help="List threads"))

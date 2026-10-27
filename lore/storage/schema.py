@@ -471,6 +471,67 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         CREATE INDEX IF NOT EXISTS idx_source_health_tool ON source_health(tool);
         """,
     ),
+    (
+        24,
+        "durable, resumable analysis jobs (#179)",
+        # A job row persists request identity (provider/model/prompt version +
+        # any cancellation intent), the source revision it read and its state.
+        # Chunk results live in their own table keyed by (job_id, chunk_key), so
+        # one run can never overwrite another run's rows: a re-run gets a new
+        # job id. The UNIQUE(job_id, chunk_key) constraint makes recording the
+        # same chunk result twice a no-op at the storage layer.
+        """
+        CREATE TABLE IF NOT EXISTS analysis_jobs (
+            id              TEXT PRIMARY KEY,
+            kind            TEXT NOT NULL,
+            request_json    TEXT NOT NULL,
+            session_id      TEXT,
+            source_revision TEXT,
+            state           TEXT NOT NULL,
+            progress_json   TEXT,
+            error           TEXT,
+            created         TEXT NOT NULL,
+            updated         TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_analysis_jobs_kind    ON analysis_jobs(kind);
+        CREATE INDEX IF NOT EXISTS idx_analysis_jobs_state   ON analysis_jobs(state);
+        CREATE INDEX IF NOT EXISTS idx_analysis_jobs_session ON analysis_jobs(session_id);
+
+        CREATE TABLE IF NOT EXISTS analysis_job_chunks (
+            job_id      TEXT    NOT NULL REFERENCES analysis_jobs(id) ON DELETE CASCADE,
+            chunk_key   TEXT    NOT NULL,
+            status      TEXT    NOT NULL,
+            attempt     INTEGER NOT NULL DEFAULT 0,
+            result_json TEXT,
+            error       TEXT,
+            updated     TEXT    NOT NULL,
+            PRIMARY KEY (job_id, chunk_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_analysis_job_chunks_status
+            ON analysis_job_chunks(job_id, status);
+        """,
+    ),
+    (
+        25,
+        "message-level embedding bookkeeping (#190)",
+        # Sidecar for the lazily created ``message_embeddings`` vec0 table
+        # (never in this list — see ``ensure_message_vec_table``). One row per
+        # embedded message, keyed by the stable identity ``<session>#m<seq>``
+        # that the permalink uses, so a reindex does not orphan the vector.
+        # ``model`` records which embedding model produced it, so a model change
+        # can be detected and the vector recomputed.
+        """
+        CREATE TABLE IF NOT EXISTS message_embedding_meta (
+            message_key TEXT PRIMARY KEY,
+            session_id  TEXT NOT NULL,
+            seq         INTEGER NOT NULL,
+            model       TEXT NOT NULL,
+            created     TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_message_embedding_meta_session
+            ON message_embedding_meta(session_id, seq);
+        """,
+    ),
 ]
 
 
