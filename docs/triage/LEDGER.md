@@ -604,6 +604,7 @@ behaviour (the atomic-replace ordering is exercised only by the refusal tests);
 and the restored store's semantic/vector search, which needs the `semantic`
 extra on the restoring host.
 
+D
 ## Round 11 — extractor message envelopes (#157, #156)
 
 The Group 1 rows above (`157 | STILL-VALID`, `156 | STILL-VALID`) are superseded by
@@ -1014,3 +1015,30 @@ rc=2
 - **A timed-out cancellation leaves no cleanup guarantee for threadpool work**
   (`asyncio.to_thread` inside a tool handler keeps running); no test covers that
   background remainder.
+
+## #119 — web.py split into route blueprints — CLOSED
+
+`lore/interfaces/web.py` went from **3004** to **793** lines (`wc -l`) by moving
+every view into `lore/interfaces/routes/` (api_v1, memory, jobs, tags, search,
+sessions). `web.py` keeps the `app` object, request hooks, `render`, and
+`create_app()`, and re-exports every moved view and seam so
+`lore.interfaces.web.<name>` remains a valid patch target. Route modules reach
+shared seams through the `web` module at call time; see "Web module layout" in
+`docs/WEB-UI.md`.
+
+Commits (branch `sweep/webpy`): `99727de` api_v1, `49c09a4` memory,
+`6785c2c` jobs (amended), `2854564` tags, and one combined search+sessions
+commit — search and sessions share web.py's single registration/re-export block,
+so they could not be split into two bisectable commits.
+
+Evidence: `pytest tests/test_render_smoke.py tests/test_api_and_mcp.py
+tests/test_api_contract.py tests/test_web_helpers_and_jobs.py
+tests/test_session_detail_markup.py tests/test_template_render_snapshots.py
+tests/test_a11y_reading_contract.py -o addopts="" -q` → **130 passed**;
+`ruff check .` and `ruff format --check .` clean. All 50 original URL rules are
+still registered (`app.url_map` diff against the pre-split module: none missing).
+
+Known pre-existing failures, unrelated to the split (reproduced with the
+refactor stashed): `tests/test_web_titles.py::test_api_rate_limit_enforced_when_enabled`
+and `::test_metrics_endpoint_returns_counters` — the per-path rate limiter does
+not reject the third request against the configured 2/window budget.

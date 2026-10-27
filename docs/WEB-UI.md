@@ -248,3 +248,37 @@ The tests are marked `browser` and skip (never fail) when Playwright or its
 Chromium build is missing, so the default suite stays green without the
 optional extra. Record the Chromium version, the command, and the observed
 result in the release checklist for every release.
+
+
+## Web module layout
+
+`lore/interfaces/web.py` is the app factory: it builds `app`, installs the
+request hooks (CSP nonce, host allowlist, rate limit, security headers, metrics)
+and exposes `create_app()`. Every route handler lives in
+`lore/interfaces/routes/`, one Flask `Blueprint` per group:
+
+| Module | Owns |
+| --- | --- |
+| `routes/api_v1.py` | `/api/v1/*` — versioned, read-only JSON API and the bounded message window it shares with the permalink page |
+| `routes/memory.py` | `/memory`, `/noise-rules` and their JSON endpoints |
+| `routes/jobs.py` | reload/audit job endpoints, the incremental index reload, and the operational status endpoints (`/api/health`, `/api/ready`, `/api/metrics`, `/api/build-info`) |
+| `routes/tags.py` | session tag/bookmark endpoints and bulk-tag |
+| `routes/search.py` | `/api/search` and the shared tag/date search filters |
+| `routes/sessions.py` | session list, peek, detail, message fragments, permalinks, projects, stats, export, delete/bulk actions, threads |
+
+`routes/__init__.register_blueprints()` imports and registers them; `web.py`
+calls it at import time and again from `create_app()` (idempotent).
+
+### Patch-target compatibility rule
+
+The test suite patches `lore.interfaces.web.<name>` (~55 call sites), including
+helpers such as `load_index`, `load_sessions_for_tool`, `OUTPUT_DIR`,
+`sessions_list_now` and `resolve_export_path`. A route module must therefore
+**never bind a shared seam at import time**. Instead it imports the module
+(`from lore.interfaces import web as _web`) and calls `_web.<name>` at request
+time, so a patch on `lore.interfaces.web` is observed by the handler. `web.py`
+re-exports every moved view and every moved seam under its old module-level
+name, so both `web.<name>` and `_web.<name>` keep resolving.
+
+Leaf helpers that nothing patches (formatting, storage readers, payload
+serializers) are imported directly from their home modules.

@@ -226,7 +226,7 @@ def sessions():
     filtered = _filtered_sorted_sessions(tool, tag, start, end)
     total = len(filtered)
     pages = max(1, math.ceil(total / _web.SESSIONS_PER_PAGE))
-    first_page = filtered[:_web.SESSIONS_PER_PAGE]
+    first_page = filtered[: _web.SESSIONS_PER_PAGE]
     day_groups, last_day = _sessions_day_groups(first_page, group, "")
     summary_lines = session_summary_lines(
         _web.OUTPUT_DIR,
