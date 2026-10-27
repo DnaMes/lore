@@ -201,3 +201,10 @@ MCP clients reach the same store through three tools:
 
 See `./MCP.md` for the setup and payloads, and `./API_REFERENCE.md` for the full tool
 schemas.
+
+## The skill
+
+`skills/lore-memory/SKILL.md` is the agent-facing form of this page: when to recall, how
+to record one fact per memory, the review queue and the MCP tools. It ships in the sdist
+(`graft skills` in `MANIFEST.in`), so an install carries the same instructions this
+repository documents — point an agent harness at it instead of restating the rules.

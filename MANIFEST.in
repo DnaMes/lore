@@ -16,6 +16,7 @@ graft tests
 graft docs
 graft tools
 graft scripts
+graft skills
 
 # Maintainer working notes live in the tree while a backlog sweep runs; never ship them.
 prune docs/triage
