@@ -208,3 +208,29 @@ schemas.
 to record one fact per memory, the review queue and the MCP tools. It ships in the sdist
 (`graft skills` in `MANIFEST.in`), so an install carries the same instructions this
 repository documents — point an agent harness at it instead of restating the rules.
+
+### Install it into a tool
+
+A skill is one directory with the `SKILL.md` inside it. Copy the file where the tool
+looks for user-level skills, then start a new session; no restart of Lore is involved.
+
+```bash
+# Claude Code — verified: ~/.claude/skills exists on this host
+mkdir -p ~/.claude/skills/lore-memory
+cp skills/lore-memory/SKILL.md ~/.claude/skills/lore-memory/
+
+# Codex — verified: ~/.codex/skills exists on this host
+mkdir -p ~/.codex/skills/lore-memory
+cp skills/lore-memory/SKILL.md ~/.codex/skills/lore-memory/
+
+# Cursor — project level, next to the code the agent works on
+mkdir -p .cursor/skills/lore-memory
+cp skills/lore-memory/SKILL.md .cursor/skills/lore-memory/
+```
+
+Installed from PyPI or a wheel instead of a clone, `pip show -f lore` lists the path
+under `skills/lore-memory/`; copy from there.
+
+NOT VERIFIED for Cursor and for a pip/pipx install: no Cursor skills directory exists on
+this host, and the wheel path was not exercised — only the two user-level directories
+above were confirmed to exist. Cursor's own skill discovery is undocumented here.

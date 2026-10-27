@@ -165,6 +165,11 @@ Agents read a budgeted block with
 
 Kinds, statuses, ranking and the import rules: [docs/MEMORY.md](docs/MEMORY.md).
 
+Agents that should follow the rules on their own load
+[`skills/lore-memory/SKILL.md`](skills/lore-memory/SKILL.md), which is the same
+material as a skill package; [docs/MEMORY.md](docs/MEMORY.md#install-it-into-a-tool)
+shows the copy step for Claude Code, Codex and Cursor.
+
 ## Privacy
 
 Everything stays on this machine by default: archive, search, web UI, memory and
