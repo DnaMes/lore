@@ -25,6 +25,7 @@ def _block(seq: int, *, user: bool = False) -> CompressedBlock:
         last_seq=seq,
         text=f"[seq={seq}] message body {seq}",
         is_user_turn=user,
+        seqs=frozenset([seq]),
     )
 
 
@@ -200,3 +201,23 @@ def test_the_message_counters_ignore_quoted_seq_markers():
     assert coverage["omitted_seq_ranges"] == [{"from_seq": 1, "to_seq": 1}]
     omitted = coverage["omitted_seq_ranges"]
     assert all(99999 not in (gap["from_seq"], gap["to_seq"]) for gap in omitted)
+
+
+def test_coverage_counts_only_existing_sequences_after_injected_context_is_removed():
+    # A dropped injected_context message must not be counted as a present
+    # message, and it must not appear in any reported omitted range.
+    messages = [
+        SummaryMessage(seq=1, role="user", content="first user prompt"),
+        SummaryMessage(seq=2, role="user", content="injected context", kind="injected_context"),
+        SummaryMessage(seq=3, role="assistant", content="first assistant reply"),
+        SummaryMessage(seq=4, role="assistant", content="second assistant reply"),
+    ]
+    transcript = compress(messages)
+    chunks = split_chunks(transcript, 1_000_000)
+    coverage = chunk_coverage(chunks, list(range(len(chunks))))
+    assert coverage["messages_total"] == 3
+    assert coverage["messages_covered"] == 3
+    assert coverage["messages_omitted"] == 0
+    assert coverage["omitted_seq_ranges"] == []
+    for gap in coverage["omitted_seq_ranges"]:
+        assert not (gap["from_seq"] <= 2 <= gap["to_seq"])

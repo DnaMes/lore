@@ -128,13 +128,14 @@ def _anchor_seqs(blocks: tuple[CompressedBlock, ...]) -> set[int]:
     The text is never scanned: a quoted ``[seq=N]`` marker inside a message (e.g.
     a user pasting a log line) is not a message of its own, so counting markers
     would invent messages and invent omissions for them.
+
+    ``first_seq``/``last_seq`` only describe the span; the actual message numbers
+    are stored in ``CompressedBlock.seqs`` so removed messages (such as
+    ``injected_context`` dropped by the compressor) are not counted as present.
     """
     seqs: set[int] = set()
     for b in blocks:
-        if b.last_seq < b.first_seq:
-            seqs.add(b.first_seq)
-            continue
-        seqs.update(range(b.first_seq, b.last_seq + 1))
+        seqs.update(b.seqs)
     return seqs
 
 

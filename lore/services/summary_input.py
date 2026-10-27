@@ -6,7 +6,7 @@ import bisect
 import itertools
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Sequence
 
 from ..core.models import Role, UnifiedMessage
@@ -71,6 +71,7 @@ class CompressedBlock:
     last_seq: int
     text: str
     is_user_turn: bool
+    seqs: frozenset[int]
 
 
 @dataclass(frozen=True)
@@ -305,7 +306,7 @@ def _tool_name_from_line(line: str) -> str:
 
 def _collapse_tool_run(
     run: list[SummaryMessage],
-) -> tuple[str, frozenset[int]]:
+) -> tuple[str, frozenset[int], frozenset[int]]:
     counts: Counter[str] = Counter()
     for msg in run:
         if msg.role == "assistant":
@@ -316,10 +317,10 @@ def _collapse_tool_run(
             counts["result"] += 1
     parts = [f"{name} x{c}" for name, c in sorted(counts.items())]
     summary = f"[{len(run)} tool calls: {', '.join(parts)}]"
-    elided = frozenset(m.seq for m in run)
+    run_seqs = frozenset(m.seq for m in run)
     first = run[0].seq
     line = f"[seq={first} assistant] {summary}"
-    return line, elided
+    return line, run_seqs, run_seqs
 
 
 @dataclass
@@ -329,6 +330,7 @@ class _Formatted:
     line: str
     elided: bool
     native: bool = False
+    seqs: frozenset[int] = field(default_factory=frozenset)
 
 
 def _format_message(msg: SummaryMessage) -> _Formatted | None:
@@ -360,7 +362,7 @@ def _format_message(msg: SummaryMessage) -> _Formatted | None:
             body, elided = _head_tail_elide(body, _ASST_CAP, _ASST_HEAD, _ASST_TAIL)
 
     line = f"[seq={msg.seq} {role}] {body}"
-    return _Formatted(msg.seq, role, line, elided)
+    return _Formatted(msg.seq, role, line, elided, seqs=frozenset([msg.seq]))
 
 
 def _is_run_member(msg: SummaryMessage) -> bool:
@@ -396,7 +398,7 @@ def compress(
             fm = _format_message(msg)
             if fm:
                 formatted.append(fm)
-                cited_seqs.add(fm.seq)
+                cited_seqs.update(fm.seqs)
                 if fm.elided:
                     elided.add(fm.seq)
                 if fm.native:
@@ -408,16 +410,16 @@ def compress(
             i += 1
         run = valid[run_start:i]
         if len(run) > _TOOL_RUN_COLLAPSE:
-            line, run_elided = _collapse_tool_run(run)
-            formatted.append(_Formatted(run[0].seq, "assistant", line, True))
+            line, run_elided, run_seqs = _collapse_tool_run(run)
+            formatted.append(_Formatted(run[0].seq, "assistant", line, True, seqs=run_seqs))
             elided.update(run_elided)
-            cited_seqs.update(m.seq for m in run)
+            cited_seqs.update(run_seqs)
         else:
             for rm in run:
                 fm = _format_message(rm)
                 if fm:
                     formatted.append(fm)
-                    cited_seqs.add(fm.seq)
+                    cited_seqs.update(fm.seqs)
                     if fm.elided:
                         elided.add(fm.seq)
         continue
@@ -428,11 +430,12 @@ def compress(
     current_lines: list[str] = []
     current_first = 0
     current_last = 0
+    current_seqs: set[int] = set()
     is_user_turn = False
     saw_user = False
 
     def flush_block() -> None:
-        nonlocal current_lines, current_first, current_last, is_user_turn
+        nonlocal current_lines, current_first, current_last, current_seqs, is_user_turn
         if not current_lines:
             return
         blocks.append(
@@ -441,9 +444,11 @@ def compress(
                 last_seq=current_last,
                 text="\n".join(current_lines),
                 is_user_turn=is_user_turn,
+                seqs=frozenset(current_seqs),
             )
         )
         current_lines = []
+        current_seqs = set()
 
     for fm in formatted:
         if fm.role == "user":
@@ -452,11 +457,15 @@ def compress(
             is_user_turn = True
             current_first = fm.seq
             current_last = fm.seq
+            current_seqs = set(fm.seqs)
             current_lines = [fm.line]
         else:
             if not current_lines:
                 current_first = fm.seq
+                current_seqs = set(fm.seqs)
                 is_user_turn = False if not saw_user else is_user_turn
+            else:
+                current_seqs.update(fm.seqs)
             current_last = fm.seq
             current_lines.append(fm.line)
     flush_block()

@@ -284,6 +284,7 @@ def _transcript_with_blocks(*texts: str) -> CompressedTranscript:
             last_seq=i + 1,
             text=t,
             is_user_turn=(i % 2 == 0),
+            seqs=frozenset([i + 1]),
         )
         for i, t in enumerate(texts)
     )
