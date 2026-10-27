@@ -179,6 +179,43 @@ def test_third_divergent_copy_gets_the_next_suffix(tmp_path):
     assert all(row["copy_of_session_id"] == "abc" for row in rows[1:])
 
 
+def test_unchanged_divergent_copy_is_reused_instead_of_a_new_suffix(tmp_path):
+    _write_ns(tmp_path, "a", _session(text="v1"))
+    conn = _write_ns(tmp_path, "b", _session(text="v2"))
+
+    assert [row["id"] for row in _rows(conn)] == ["abc", "claude-code:b:abc#2"]
+
+    # The same record with the same content again: the copy is reused, no new
+    # row and no second copy of an unchanged history.
+    conn = _write_ns(tmp_path, "b", _session(text="v2"))
+    rows = _rows(conn)
+    assert len(rows) == 2
+    assert [row["id"] for row in rows] == ["abc", "claude-code:b:abc#2"]
+    assert rows[1]["content_sha256"] == canonical_content_hash(_session(text="v2"))
+
+    # Genuinely different content: exactly one new copy.
+    conn = _write_ns(tmp_path, "b", _session(text="v3"))
+    rows = _rows(conn)
+    assert len(rows) == 3
+    assert [row["id"] for row in rows] == [
+        "abc",
+        "claude-code:b:abc#2",
+        "claude-code:b:abc#3",
+    ]
+    assert rows[2]["copy_of_session_id"] == "abc"
+    assert rows[2]["content_sha256"] != rows[1]["content_sha256"]
+
+    # Repeating that change is stable: the same copy is refreshed, not forked.
+    conn = _write_ns(tmp_path, "b", _session(text="v3"))
+    rows = _rows(conn)
+    assert len(rows) == 3
+    assert rows[2]["id"] == "claude-code:b:abc#3"
+    assert [m.content for m in load_session_messages_v2(tmp_path, "claude-code:b:abc#3")] == [
+        "v3",
+        "reply",
+    ]
+
+
 def test_copies_of_lists_the_divergent_histories(tmp_path):
     _write_ns(tmp_path, "a", _session(text="v1"))
     conn = _write_ns(tmp_path, "b", _session(text="v2"))

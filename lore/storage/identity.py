@@ -163,6 +163,32 @@ def _existing_row(conn, session_id: str) -> Optional[dict]:
     return {key: row[key] for key in row.keys()} if row is not None else None
 
 
+def _existing_copy_with_content(
+    conn,
+    *,
+    tool: str,
+    scope: str,
+    record_id: str,
+    content_sha256: str,
+) -> Optional[str]:
+    """The divergent copy of ``record_id`` that already holds this content.
+
+    The copy id encodes the namespace (``<tool>:<scope>:<record>#<n>``), so only
+    copies of the *same* namespace qualify: an identical history under another
+    namespace is a different session (spec rule 3), not a copy to reuse.
+    """
+    prefix = f"{tool}:{scope}:{record_id}{COPY_SEPARATOR}"
+    rows = conn.execute(
+        "SELECT id, content_sha256 FROM sessions "
+        "WHERE copy_of_session_id = ? OR source_record_id = ? ORDER BY id",
+        (record_id, record_id),
+    ).fetchall()
+    for row in rows:
+        if row["id"].startswith(prefix) and row["content_sha256"] == content_sha256:
+            return row["id"]
+    return None
+
+
 def resolve_store_identity(
     conn,
     *,
@@ -184,7 +210,9 @@ def resolve_store_identity(
       not a second history (the earlier raw bytes stay in ``source_revisions``);
     - a stored row from a *different* namespace with different content → the
       qualified copy id and the id of the row it is a divergent copy of. The
-      earlier row is never replaced.
+      earlier row is never replaced. A copy of the same namespace that already
+      holds this content is reused instead of a fresh ``#<n>``: the record was
+      re-imported unchanged, not forked again.
 
     Rule 3 of the spec (different namespace, same record id, unqualified id
     taken) is handled by the same branch: the newcomer is the copy.
@@ -200,6 +228,16 @@ def resolve_store_identity(
         # same session, not a divergent copy.
         return record_id, existing["copy_of_session_id"]
     scope = namespace.split(":", 1)[-1]
+    twin = _existing_copy_with_content(
+        conn,
+        tool=tool,
+        scope=scope,
+        record_id=record_id,
+        content_sha256=content_sha256,
+    )
+    if twin is not None:
+        # Same namespace, same record, same content: the copy already exists.
+        return twin, record_id
     index = 2
     while True:
         candidate = _copy_id(tool, scope, record_id, index)
