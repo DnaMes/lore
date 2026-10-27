@@ -753,6 +753,7 @@ tests/test_cli_dispatch.py -o addopts="" -q` -> 92 passed;
 - **`lore rules export` without `--recommendations`** exits 1 with a hint rather
   than guessing at another export format; no other format exists today.
 
+D
 ## Round 12 — hydrated bodies (#177) and budget-aware chunk coverage (#178)
 
 | Item | Status | Commit | Evidence |
@@ -920,3 +921,96 @@ embedding pass, no retrieval function, no multilingual evaluation fixtures, no
 `docs/LLM_INTEGRATION.md` retrieval section. Migration 25 only creates
 `message_embedding_meta(message_key, session_id, seq, model, created)`; nothing
 reads or writes it yet.
+---
+
+## Round 12 — MCP-over-HTTP transport (#29) — CLOSED
+
+The Group 5 row `29 | STILL-VALID` and both `### #29` deferred-roadmap entries
+above are superseded by this round. The search surface the earlier deferral
+waited on was frozen by #174/#175, so the transport could finally land.
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #29 MCP-over-HTTP (streamable-http) | CLOSED | `68295d2` | `lore/interfaces/mcp_http.py`, `lore/cli/mcp.py`, `tests/test_mcp_http_transport.py`; `pytest tests/test_mcp_http_transport.py tests/test_cli_entry_points.py -o addopts="" -q` -> 20 passed |
+
+What exists now, and what it does not:
+
+- One shared server factory, two transports. `lore-mcp` calls `create_server()`
+  once; without flags it feeds the result to `MCPServer.run()` (stdio, byte for
+  byte the old behaviour — a subprocess test sends `initialize` on stdin and
+  reads the same JSON on stdout), with `--http` it hands the result to
+  `run_http_server()` in `lore/interfaces/mcp_http.py`. No tool handler moved
+  and none is duplicated.
+- Protocol shape: `POST <path>` (default `/mcp`) with a JSON-RPC 2.0 body,
+  answered `application/json`. Stateless — no `Mcp-Session-Id`, so
+  `initialize`, `tools/list` and `tools/call` may use separate connections; a
+  notification gets `202` with an empty body; `GET` gets `405` (`Allow: POST`)
+  because no standalone SSE stream is offered.
+- Security, enforced rather than documented: loopback bind by default; a
+  non-loopback bind refuses to start (exit `2`, stderr) without
+  `LORE_MCP_HTTP_TOKEN`/`--token-file`, and an unreadable or empty token file is
+  also a refusal; `Host` uses `web_utils.host_header_allowed` (foreign -> `400`);
+  a present `Origin` must be the server's own origin or a configured public
+  origin (cross-origin -> `403`); bodies cap at 1 MiB (`413`); 4 in-flight
+  requests, excess -> `503` + `Retry-After: 1`; every request has the
+  `--timeout` deadline, after which the tool coroutine is cancelled and the
+  client gets JSON-RPC error `-32000`; the bearer token is compared with
+  `hmac.compare_digest` and is never logged (a test asserts it never reaches the
+  log records).
+- One implementation of the origin policy now: `web_utils.request_is_cross_origin()`
+  is called by both `lore-web`'s `_check_local_origin` and the new transport.
+  `web_utils.is_loopback_host()` likewise replaced `lore-web`'s private copy.
+- Docs: `docs/MCP.md` gained `## Streamable HTTP transport` (flags, env vars,
+  curl example, Cursor `url` + `headers` config, the security rules),
+  `docs/CLI.md` replaced the "no `--help` output" line for `lore-mcp` with the
+  usage block and the exit-`2` refusal, `CHANGELOG.md` has the Unreleased entry.
+
+Verified together:
+
+```
+$ pytest tests/test_mcp_http_transport.py -o addopts="" -q
+15 passed in 12.00s
+
+$ pytest tests/test_mcp_http_transport.py tests/test_cli_entry_points.py -o addopts="" -q
+20 passed in 9.00s
+
+$ pytest tests/test_origin_policy.py tests/test_proxy_origin.py \
+    tests/test_web_host_allowlist.py tests/test_cli_entry_points.py \
+    tests/test_api_and_mcp.py tests/test_cli_import_without_unix_modules.py \
+    -o addopts="" -q
+275 passed in 176.99s          # the origin-policy refactor left lore-web untouched
+
+$ ruff format --check <changed files> && ruff check <changed files>
+6 files already formatted / All checks passed!
+
+$ python -c "from lore.cli.mcp import main; raise SystemExit(main(['--http','--host','0.0.0.0','--port','0']))"
+lore-mcp: refusing to bind the MCP HTTP transport to non-loopback host '0.0.0.0' without an auth token:
+set LORE_MCP_HTTP_TOKEN or pass --token-file (the archive is private)
+rc=2
+```
+
+### NOT VERIFIED
+
+- **No third-party MCP SDK is involved.** The project has no `mcp` dependency:
+  `lore/interfaces/server.py` is a hand-written stdio JSON-RPC implementation, so
+  the HTTP transport is hand-written too and the tests drive it with
+  `http.client` over a real ephemeral-port socket instead of an SDK test client.
+  There is no SDK HTTP support to skip on.
+- **No real MCP client was pointed at `--http`.** The Cursor `url` + `headers`
+  example follows the streamable-HTTP client convention but was not added to
+  `~/.cursor/mcp.json` or restarted; Claude Code/Codex were exercised over stdio
+  only. Whether a specific client tolerates the stateless shape (no
+  `Mcp-Session-Id` echoed back) is therefore unverified.
+- **Client disconnect does not cancel a running tool.** The deadline cancels a
+  call, but a client that drops the connection mid-call leaves the handler
+  running to completion (its result is discarded). Werkzeug's threaded server
+  gives the app no disconnect signal.
+- **No SSE response mode.** Every response is `application/json`; a client that
+  sends `Accept: text/event-stream` only still gets JSON. The spec permits
+  either, and no client was observed to insist on SSE, but that path is untested.
+- **No TLS and no reverse-proxy deployment was run.** The listener is Werkzeug's
+  threaded server (what `lore-web` uses locally); `LORE_PUBLIC_ORIGINS` +
+  `TRUSTED_PROXY=1` behind a proxy is described, not exercised.
+- **A timed-out cancellation leaves no cleanup guarantee for threadpool work**
+  (`asyncio.to_thread` inside a tool handler keeps running); no test covers that
+  background remainder.
