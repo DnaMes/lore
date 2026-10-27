@@ -315,6 +315,9 @@ class NativeCliAdapter(LLMProvider):
 
     def run(self, prompt: str, system_prompt: Optional[str] = None) -> AdapterResult:
         """Run one bounded, cancellable CLI call and parse its answer."""
+        # The opt-in gate sits before the probe: nothing (not even ``--version``)
+        # may run without it, and every path through ``run()`` is a cloud send.
+        ensure_cloud_allowed(self.PROVIDER, self.allow_cloud)
         probe = self.probe()
         if not probe.available:
             raise AdapterUnavailable(self.PROVIDER, probe.reason, version=probe.version)
