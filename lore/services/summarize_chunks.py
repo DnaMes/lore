@@ -14,6 +14,12 @@ MAX_CHUNKS = 8
 MAX_SESSION_TOKENS = 150_000
 OUTPUT_TOKENS_PER_CALL_ESTIMATE = 600
 
+# A merge call pays for its instructions plus one chunk summary per input chunk.
+# Both numbers are prompt-token estimates, generous on purpose: the budget must
+# never under-count the merge and silently drop chunks it could have covered (#178).
+MERGE_PROMPT_BASE_TOKENS = 3_000
+MERGE_TOKENS_PER_CHUNK = 400
+
 _OPEN_THREADS_MAX = 400
 _SEQ_RE = re.compile(r"\[seq=(\d+)")
 
@@ -56,6 +62,19 @@ def _user_density(blocks: tuple[CompressedBlock, ...]) -> int:
     return sum(1 for b in blocks if b.is_user_turn)
 
 
+def chunk_call_budget(max_session_tokens: int, per_chunk_tokens: int) -> int:
+    """How many chunk calls one session's token budget can pay for (#178).
+
+    The per-call prompt size stays bounded by :data:`CHUNK_TARGET_TOKENS`; what
+    grows with the budget is the *number* of ordered calls. ``MAX_CHUNKS`` is the
+    guaranteed floor, so a tiny budget still gets the head/middle/tail sample
+    instead of one oversized call or no summary at all.
+    """
+    per_call = max(per_chunk_tokens, 1) + MERGE_TOKENS_PER_CHUNK
+    paid = (max_session_tokens - MERGE_PROMPT_BASE_TOKENS) // per_call
+    return max(MAX_CHUNKS, paid)
+
+
 def sample_chunks(
     chunks: list[tuple[CompressedBlock, ...]],
     *,
@@ -85,6 +104,17 @@ def _seq_bounds(blocks: tuple[CompressedBlock, ...]) -> tuple[Optional[int], Opt
     return min(seqs), max(seqs)
 
 
+def _seq_ranges(seqs: list[int]) -> list[dict[str, int]]:
+    """Merge sorted seq numbers into contiguous ``{from_seq, to_seq}`` ranges."""
+    ranges: list[dict[str, int]] = []
+    for seq in seqs:
+        if ranges and seq == ranges[-1]["to_seq"] + 1:
+            ranges[-1]["to_seq"] = seq
+        else:
+            ranges.append({"from_seq": seq, "to_seq": seq})
+    return ranges
+
+
 def chunk_coverage(
     chunks: list[tuple[CompressedBlock, ...]], selected_indices: list[int]
 ) -> dict[str, Any]:
@@ -93,8 +123,9 @@ def chunk_coverage(
     A sampled run used to look identical to a complete one apart from a boolean.
     This describes the coverage precisely: how many chunks exist versus how many
     were summarised, which contiguous runs were skipped, the message range the
-    whole session spans, and how many user turns fell into the gaps — so a reader
-    can tell a full summary from a partial one and know what is missing.
+    whole session spans, which message seqs were omitted (as exact ranges), and
+    how many user turns fell into the gaps — so a reader can tell a full summary
+    from a partial one and know what is missing.
     """
     total = len(chunks)
     used = len(selected_indices)
@@ -115,21 +146,32 @@ def chunk_coverage(
     first_seq: Optional[int] = None
     last_seq: Optional[int] = None
     user_turns_omitted = 0
+    all_seqs: set[int] = set()
+    covered_seqs: set[int] = set()
     for index, blocks in enumerate(chunks):
         start, end = _seq_bounds(blocks)
         if start is not None:
             first_seq = start if first_seq is None else min(first_seq, start)
         if end is not None:
             last_seq = end if last_seq is None else max(last_seq, end)
-        if index not in selected:
+        seqs = {int(m.group(1)) for b in blocks for m in _SEQ_RE.finditer(b.text)}
+        all_seqs.update(seqs)
+        if index in selected:
+            covered_seqs.update(seqs)
+        else:
             user_turns_omitted += sum(1 for b in blocks if b.is_user_turn)
 
+    omitted_seqs = sorted(all_seqs - covered_seqs)
     return {
         "chunks_total": total,
         "chunks_used": used,
-        "complete": used == total,
+        "complete": used == total and not omitted_seqs,
         "omitted_chunks": omitted,
         "seq_range": [first_seq, last_seq],
+        "messages_total": len(all_seqs),
+        "messages_covered": len(covered_seqs),
+        "messages_omitted": len(omitted_seqs),
+        "omitted_seq_ranges": _seq_ranges(omitted_seqs),
         "user_turns_omitted": user_turns_omitted,
     }
 

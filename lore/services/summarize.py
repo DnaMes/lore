@@ -31,6 +31,7 @@ from .summarize_chunks import (
     blocks_to_transcript,
     build_merge_user_prompt,
     build_open_threads,
+    chunk_call_budget,
     chunk_coverage,
     chunk_fingerprint,
     chunk_max_chars,
@@ -466,25 +467,20 @@ def _expected_session_fingerprint(
     artifacts, _ = _artifacts_payload(messages)
     artifacts_blob = json.dumps(artifacts, sort_keys=True, ensure_ascii=False)
     if estimate_tokens(transcript.char_count) > SINGLE_PASS_MAX_TOKENS:
-        raw_groups = split_chunks(transcript, chunk_max_chars())
-        selected, _, _ = sample_chunks(raw_groups)
-        chunk_fps: list[str] = []
-        prev_threads: Optional[str] = None
-        for idx, blocks in enumerate(selected):
-            tr = blocks_to_transcript(blocks)
-            _, user = build_prompt(
-                tr,
-                False,
-                prior_summary=prior_summary if idx == 0 else None,
-                open_threads=prev_threads,
-            )
-            user, _ = prepare_prompt(user)
-            chunk_fps.append(_chunk_row_fingerprint(user, model_label))
-            scope = chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq)
-            row = get_summary(output_dir, "chunk", scope)
-            if row and row.get("payload"):
-                prev_threads = build_open_threads(row["payload"])
-        return merge_fingerprint(chunk_fps, model_label, SUMMARY_PROMPT_VERSION, artifacts_blob)
+        # Same plan as the run, so a stored summary's fingerprint is compared with
+        # the merge fingerprint the run would write now (#178).
+        plan = _chunk_plan(
+            output_dir,
+            session_id,
+            transcript,
+            model_label=model_label,
+            prior_summary=prior_summary,
+            native_seq=native_seq,
+            artifacts_blob=artifacts_blob,
+            force=False,
+            max_session_tokens=MAX_SESSION_TOKENS,
+        )
+        return plan.merge_fingerprint
     _, user = build_prompt(
         transcript,
         bool(transcript.native_summary_seqs),
@@ -672,78 +668,228 @@ def _repair_once(
     return validated, verrs2, out_tok, repair_tokens
 
 
-def _estimate_chunked_calls(
-    output_dir: Path,
-    session_id: str,
-    chunk_groups: list[tuple[CompressedBlock, ...]],
-    *,
-    model_label: str,
-    prior_summary: Optional[str],
-    open_threads_seed: Optional[str],
-    artifacts_blob: str = "",
-) -> tuple[int, int]:
-    """Return (provider calls still needed, estimated input tokens for them)."""
-    calls = 0
-    tokens = 0
-    prev_threads = open_threads_seed
-    chunk_fps: list[str] = []
-    for idx, blocks in enumerate(chunk_groups):
-        tr = blocks_to_transcript(blocks)
-        _, user = build_prompt(
-            tr,
-            False,
-            prior_summary=prior_summary if idx == 0 else None,
-            open_threads=prev_threads,
-        )
-        user, _ = prepare_prompt(user)
-        fp = _chunk_row_fingerprint(user, model_label)
-        chunk_fps.append(fp)
-        scope = chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq)
-        row = get_summary(output_dir, "chunk", scope)
-        if row is None or row.get("fingerprint") != fp:
-            calls += 1
-            tokens += estimate_tokens(len(user) + len(_INSTRUCTIONS))
-        elif row.get("payload"):
-            prev_threads = build_open_threads(row["payload"])
-    merge_fp = merge_fingerprint(chunk_fps, model_label, SUMMARY_PROMPT_VERSION, artifacts_blob)
-    if not has_current_summary(output_dir, session_id, merge_fp):
-        calls += 1
-        tokens += estimate_tokens(_MERGE_PROMPT_CHARS_ESTIMATE)
-    return calls, tokens
+def _chunk_groups(
+    transcript: CompressedTranscript, *, max_session_tokens: int
+) -> tuple[
+    list[tuple[CompressedBlock, ...]],
+    list[tuple[CompressedBlock, ...]],
+    bool,
+    list[int],
+]:
+    """Ordered chunk groups, packing as many as the budget pays for (#178).
+
+    Natural chunk boundaries are kept, so growth only changes the tail; the
+    *number* of calls is budget-derived, and ``sample_chunks`` is the last resort
+    when the session is larger than the budget can cover. Returns
+    ``(all groups, selected groups, truncated, selected indices)``.
+    """
+    groups = split_chunks(transcript, chunk_max_chars())
+    if not groups:
+        return [], [], False, []
+    per_chunk = max(
+        estimate_tokens(len(block.text) + len(_INSTRUCTIONS)) for group in groups for block in group
+    )
+    limit = chunk_call_budget(max_session_tokens, per_chunk)
+    selected, truncated, indices = sample_chunks(groups, max_chunks=limit)
+    return groups, selected, truncated, indices
 
 
-def _cached_halves(
+@dataclass(frozen=True)
+class _ChunkCall:
+    """One chunk prompt and its cache decision (#178).
+
+    Built by :func:`_chunk_call` for both the run and the dry-run plan, so the
+    fingerprint a stored row is matched against and the fingerprint appended to
+    the merge can never be computed from different inputs.
+    """
+
+    blocks: tuple[CompressedBlock, ...]
+    scope_key: str
+    system: str
+    user: str
+    allowed_seqs: frozenset[int]
+    fingerprint: str
+    # () when the chunk must run; one payload/fingerprint for a full-range row and
+    # two when the smaller-chunk retry wrote both halves.
+    cached: tuple[tuple[dict[str, Any], str], ...]
+    redactions: int
+    tokens: int
+
+    @property
+    def reused(self) -> bool:
+        return bool(self.cached)
+
+
+def _reuse_rows(
     output_dir: Path,
     session_id: str,
     blocks: tuple[CompressedBlock, ...],
+    *,
     open_threads: Optional[str],
     model_label: str,
-    system_unused: str = "",
-) -> Optional[list[tuple[dict[str, Any], str]]]:
-    """Return stored (payload, fingerprint) for both halves of ``blocks`` when all are current.
+    fingerprint: str,
+) -> tuple[tuple[dict[str, Any], str], ...]:
+    """Stored (payload, fingerprint) rows that already cover ``blocks``.
 
-    A chunk that needed the smaller-chunk retry is stored as two half ranges, so the full
-    range never has a row; without this lookup it would be re-summarised on every run.
+    One full-range row, or the two half-range rows written by the smaller-chunk
+    retry. Called by the run and by the dry-run plan, so a chunk that exists is
+    never reported as missing (#178).
     """
+    row = get_summary(
+        output_dir, "chunk", chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq)
+    )
+    payload = row.get("payload") if row is not None else None
+    if row is not None and row.get("fingerprint") == fingerprint and isinstance(payload, dict):
+        clean = {k: payload[k] for k in _SUMMARY_KEYS if k in payload}
+        return ((clean, fingerprint),)
+
     half = halve_chunk_blocks(blocks, chunk_max_chars())
     if half is None:
-        return None
+        return ()
     parts: list[tuple[dict[str, Any], str]] = []
     threads = open_threads
     for part in half:
         _, part_user = build_prompt(blocks_to_transcript(part), False, open_threads=threads)
         part_user, _ = prepare_prompt(part_user)
-        fp = _chunk_row_fingerprint(part_user, model_label)
-        row = get_summary(
-            output_dir, "chunk", chunk_scope_key(session_id, part[0].first_seq, part[-1].last_seq)
+        part_fp = _chunk_row_fingerprint(part_user, model_label)
+        part_row = get_summary(
+            output_dir,
+            "chunk",
+            chunk_scope_key(session_id, part[0].first_seq, part[-1].last_seq),
         )
-        payload = row.get("payload") if row else None
-        if row is None or row.get("fingerprint") != fp or not isinstance(payload, dict):
-            return None
-        clean = {k: payload[k] for k in _SUMMARY_KEYS if k in payload}
-        parts.append((clean, fp))
+        part_payload = part_row.get("payload") if part_row is not None else None
+        if (
+            part_row is None
+            or part_row.get("fingerprint") != part_fp
+            or not isinstance(part_payload, dict)
+        ):
+            return ()
+        clean = {k: part_payload[k] for k in _SUMMARY_KEYS if k in part_payload}
+        parts.append((clean, part_fp))
         threads = build_open_threads(clean)
-    return parts
+    return tuple(parts)
+
+
+def _chunk_call(
+    output_dir: Path,
+    session_id: str,
+    blocks: tuple[CompressedBlock, ...],
+    *,
+    model_label: str,
+    prior_summary: Optional[str],
+    open_threads: Optional[str],
+    native_seq: Optional[int],
+    force: bool,
+) -> _ChunkCall:
+    """Build the one chunk prompt used by the run and the dry-run plan (#178)."""
+    transcript = blocks_to_transcript(blocks)
+    allowed_seqs = transcript.seqs
+    if native_seq is not None:
+        allowed_seqs = frozenset(set(allowed_seqs) | {native_seq})
+    system, user = build_prompt(
+        transcript,
+        False,
+        prior_summary=prior_summary,
+        open_threads=open_threads,
+    )
+    user, redactions = prepare_prompt(user)
+    fingerprint = _chunk_row_fingerprint(user, model_label)
+    cached = (
+        ()
+        if force
+        else _reuse_rows(
+            output_dir,
+            session_id,
+            blocks,
+            open_threads=open_threads,
+            model_label=model_label,
+            fingerprint=fingerprint,
+        )
+    )
+    return _ChunkCall(
+        blocks=blocks,
+        scope_key=chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq),
+        system=system,
+        user=user,
+        allowed_seqs=allowed_seqs,
+        fingerprint=fingerprint,
+        cached=cached,
+        redactions=redactions,
+        tokens=estimate_tokens(len(user) + len(system)),
+    )
+
+
+@dataclass(frozen=True)
+class _ChunkPlan:
+    """Budget-derived chunk selection and the work it still needs (#178)."""
+
+    groups: list[tuple[CompressedBlock, ...]]
+    selected: list[tuple[CompressedBlock, ...]]
+    indices: list[int]
+    truncated: bool
+    merge_fingerprint: str
+    expected_calls: int
+    input_tokens: int
+
+
+def _chunk_plan(
+    output_dir: Path,
+    session_id: str,
+    transcript: CompressedTranscript,
+    *,
+    model_label: str,
+    prior_summary: Optional[str],
+    native_seq: Optional[int],
+    artifacts_blob: str,
+    force: bool,
+    max_session_tokens: int,
+) -> _ChunkPlan:
+    """The single chunk plan: selection, fingerprints and remaining calls (#178).
+
+    Threads come from the stored payloads, which is exactly what the run uses when
+    a chunk is reused; when a chunk still has to run, its summary is unknowable, so
+    ``expected_calls`` is the plan's honest lower bound and the run is reported as
+    "chunked" either way.
+    """
+    groups, selected, truncated, indices = _chunk_groups(
+        transcript, max_session_tokens=max_session_tokens
+    )
+    chunk_fps: list[str] = []
+    prev_threads: Optional[str] = None
+    expected_calls = 0
+    input_tokens = 0
+    for idx, blocks in enumerate(selected):
+        call = _chunk_call(
+            output_dir,
+            session_id,
+            blocks,
+            model_label=model_label,
+            prior_summary=prior_summary if idx == 0 else None,
+            open_threads=prev_threads,
+            native_seq=native_seq,
+            force=force,
+        )
+        if call.reused:
+            for payload, fp in call.cached:
+                chunk_fps.append(fp)
+            prev_threads = build_open_threads(call.cached[-1][0])
+        else:
+            chunk_fps.append(call.fingerprint)
+            expected_calls += 1
+            input_tokens += call.tokens
+    merge_fp = merge_fingerprint(chunk_fps, model_label, SUMMARY_PROMPT_VERSION, artifacts_blob)
+    if force or not has_current_summary(output_dir, session_id, merge_fp):
+        expected_calls += 1
+        input_tokens += estimate_tokens(_MERGE_PROMPT_CHARS_ESTIMATE)
+    return _ChunkPlan(
+        groups=groups,
+        selected=selected,
+        indices=indices,
+        truncated=truncated,
+        merge_fingerprint=merge_fp,
+        expected_calls=expected_calls,
+        input_tokens=input_tokens,
+    )
 
 
 def _process_chunked(
@@ -763,8 +909,9 @@ def _process_chunked(
     stats: _SessionRunStats,
     sleep: Callable[[float], None] = time.sleep,
 ) -> tuple[str, int, int, int]:
-    raw_groups = split_chunks(transcript, chunk_max_chars())
-    selected, truncated, sampled_indices = sample_chunks(raw_groups)
+    raw_groups, selected, truncated, sampled_indices = _chunk_groups(
+        transcript, max_session_tokens=max_session_tokens
+    )
     stats.truncated = truncated
     worst_calls = len(selected) + 1
     if worst_calls * estimate_tokens(2000) > max_session_tokens:
@@ -782,44 +929,28 @@ def _process_chunked(
     forbidden = prior_summary
 
     for idx, blocks in enumerate(selected):
-        tr = blocks_to_transcript(blocks)
-        allowed = tr.seqs
-        if native_seq is not None:
-            allowed = frozenset(set(allowed) | {native_seq})
-        system, user = build_prompt(
-            tr,
-            False,
+        call = _chunk_call(
+            output_dir,
+            session_id,
+            blocks,
+            model_label=model_label,
             prior_summary=prior_summary if idx == 0 else None,
             open_threads=prev_threads,
+            native_seq=native_seq,
+            force=force,
         )
-        user, chunk_red = prepare_prompt(user)
-        redactions += chunk_red
-        fp = _chunk_row_fingerprint(user, model_label)
-        scope = chunk_scope_key(session_id, blocks[0].first_seq, blocks[-1].last_seq)
-        row = get_summary(output_dir, "chunk", scope)
-        row_payload = row.get("payload") if row is not None else None
-        if (
-            not force
-            and row is not None
-            and row.get("fingerprint") == fp
-            and isinstance(row_payload, dict)
-        ):
+        redactions += call.redactions
+        if call.reused:
             stats.reused_chunks += 1
-            chunk_summaries.append({k: row_payload[k] for k in _SUMMARY_KEYS if k in row_payload})
-            chunk_fps.append(fp)
-            prev_threads = build_open_threads(chunk_summaries[-1])
+            for part_payload, part_fp in call.cached:
+                chunk_summaries.append(part_payload)
+                chunk_fps.append(part_fp)
+            prev_threads = build_open_threads(call.cached[-1][0])
             continue
-        if not force:
-            cached = _cached_halves(output_dir, session_id, blocks, prev_threads, model_label)
-            if cached is not None:
-                stats.reused_chunks += 1
-                for part_payload, part_fp in cached:
-                    chunk_summaries.append(part_payload)
-                    chunk_fps.append(part_fp)
-                prev_threads = build_open_threads(cached[-1][0])
-                continue
 
-        call_tokens = estimate_tokens(len(user) + len(system))
+        allowed = call.allowed_seqs
+        system, user, fp, scope = call.system, call.user, call.fingerprint, call.scope_key
+        call_tokens = call.tokens
         if budget.would_exceed(call_tokens):
             return "failed", redactions, input_tokens, output_tokens
         if not budget.charge(call_tokens):
@@ -1192,6 +1323,22 @@ def summarize_session(
     return outcome
 
 
+@dataclass(frozen=True)
+class _SessionPlan:
+    """What the next run of one session needs (#178).
+
+    The dry-run and the run both read this one plan; nothing recomputes chunk
+    fingerprints from a different input.
+    """
+
+    status: str
+    compressed_tokens: int = 0
+    chunks: int = 0
+    expected_calls: int = 0
+    input_tokens: int = 0
+    truncated: bool = False
+
+
 def _session_plan(
     output_dir: Path,
     session_id: str,
@@ -1200,67 +1347,77 @@ def _session_plan(
     model_label: str,
     force: bool,
     max_session_tokens: int = MAX_SESSION_TOKENS,
-) -> tuple[str, int]:
-    """Return (status, estimated_input_tokens for next work). status is unchanged|skipped_*|over_budget|..."""
+) -> _SessionPlan:
+    """Return the one plan for ``session_id``: status, chunks and remaining calls."""
     if session_id in deleted:
-        return "deleted", 0
+        return _SessionPlan("deleted")
     messages = load_session_messages_v2(output_dir, session_id)
     if not messages:
-        return "no_messages", 0
+        return _SessionPlan("no_messages")
     native_seq, prior_summary = _last_native_compaction(messages)
     summary_msgs = from_unified(messages)
     if native_seq is not None:
         summary_msgs = [m for m in summary_msgs if m.seq > native_seq]
     transcript = compress(summary_msgs)
+    compressed_tokens = estimate_tokens(transcript.char_count)
     if transcript.char_count < MIN_COMPRESSED_CHARS:
-        return "skipped_small", 0
-    if estimate_tokens(transcript.char_count) > SINGLE_PASS_MAX_TOKENS:
-        raw_groups = split_chunks(transcript, chunk_max_chars())
-        selected, _, _ = sample_chunks(raw_groups)
-        calls, est = _estimate_chunked_calls(
+        return _SessionPlan("skipped_small", compressed_tokens)
+    artifacts, _ = _artifacts_payload(messages)
+    artifacts_blob = json.dumps(artifacts, sort_keys=True, ensure_ascii=False)
+    if compressed_tokens > SINGLE_PASS_MAX_TOKENS:
+        chunk_plan = _chunk_plan(
             output_dir,
             session_id,
-            selected,
+            transcript,
             model_label=model_label,
             prior_summary=prior_summary,
-            open_threads_seed=None,
-            artifacts_blob=json.dumps(
-                _artifacts_payload(messages)[0], sort_keys=True, ensure_ascii=False
-            ),
+            native_seq=native_seq,
+            artifacts_blob=artifacts_blob,
+            force=force,
+            max_session_tokens=max_session_tokens,
         )
-        if est > max_session_tokens:
-            return "over_budget", est
-        if not force and calls == 0:
-            return "unchanged", 0
-        return "chunked", est
+        if chunk_plan.input_tokens > max_session_tokens:
+            return _SessionPlan(
+                "over_budget",
+                compressed_tokens,
+                len(chunk_plan.selected),
+                chunk_plan.expected_calls,
+                chunk_plan.input_tokens,
+                chunk_plan.truncated,
+            )
+        if not force and chunk_plan.expected_calls == 0:
+            return _SessionPlan(
+                "unchanged",
+                compressed_tokens,
+                len(chunk_plan.selected),
+                0,
+                0,
+                chunk_plan.truncated,
+            )
+        return _SessionPlan(
+            "chunked",
+            compressed_tokens,
+            len(chunk_plan.selected),
+            chunk_plan.expected_calls,
+            chunk_plan.input_tokens,
+            chunk_plan.truncated,
+        )
     system, user = build_prompt(
         transcript,
         bool(transcript.native_summary_seqs),
         prior_summary=prior_summary,
     )
     user, _ = prepare_prompt(user)
-    artifacts, _ = _artifacts_payload(messages)
     fingerprint = _fingerprint(user, artifacts, model_label)
     if not force and has_current_summary(output_dir, session_id, fingerprint):
-        return "unchanged", 0
-    return "single", estimate_tokens(len(user) + len(system))
-
-
-def _provider_send_plan(
-    output_dir: Path,
-    session_id: str,
-    deleted: set[str],
-    *,
-    model_label: str,
-    force: bool,
-) -> tuple[bool, Optional[int]]:
-    """Return (will_call_provider, estimated_input_tokens)."""
-    status, est = _session_plan(
-        output_dir, session_id, deleted, model_label=model_label, force=force
+        return _SessionPlan("unchanged", compressed_tokens)
+    return _SessionPlan(
+        "single",
+        compressed_tokens,
+        chunks=1,
+        expected_calls=1,
+        input_tokens=estimate_tokens(len(user) + len(system)),
     )
-    if status in ("unchanged", "skipped_small", "deleted", "no_messages", "over_budget"):
-        return False, None if status == "unchanged" else est
-    return True, est
 
 
 def estimate_run(
@@ -1277,7 +1434,7 @@ def estimate_run(
     for session_id in session_ids:
         if max_sessions is not None and len(out) >= max_sessions:
             break
-        status, est_in = _session_plan(
+        plan = _session_plan(
             output_dir,
             session_id,
             deleted,
@@ -1285,59 +1442,18 @@ def estimate_run(
             force=False,
             max_session_tokens=max_session_tokens,
         )
-        messages = load_session_messages_v2(output_dir, session_id)
-        native_seq, prior_for_estimate = (
-            _last_native_compaction(messages) if messages else (None, None)
-        )
-        summary_msgs = from_unified(messages) if messages else []
-        if native_seq is not None:
-            summary_msgs = [m for m in summary_msgs if m.seq > native_seq]
-        transcript = compress(summary_msgs) if summary_msgs else None
-        compressed_tokens = estimate_tokens(transcript.char_count) if transcript else 0
-        chunks = 0
-        expected_calls = 0
-        chunk_tokens = 0
-        if status == "chunked" and transcript is not None:
-            raw_groups = split_chunks(transcript, chunk_max_chars())
-            selected, _, _ = sample_chunks(raw_groups)
-            chunks = len(selected)
-            expected_calls, chunk_tokens = _estimate_chunked_calls(
-                output_dir,
-                session_id,
-                selected,
-                model_label=model_label,
-                prior_summary=prior_for_estimate,
-                open_threads_seed=None,
-                artifacts_blob=json.dumps(
-                    _artifacts_payload(messages or [])[0], sort_keys=True, ensure_ascii=False
-                ),
-            )
-        elif status == "single":
-            chunks = 1
-            expected_calls = 1
-        elif status == "unchanged":
-            expected_calls = 0
-        input_tokens = chunk_tokens if status == "chunked" and expected_calls else est_in
-        output_tokens = expected_calls * OUTPUT_TOKENS_PER_CALL_ESTIMATE
-        if status == "skipped_small":
-            mapped = "skipped_small"
-        elif status == "deleted":
-            mapped = "deleted"
-        elif status == "no_messages":
-            mapped = "no_messages"
-        elif status == "over_budget":
-            mapped = "over_budget"
-        else:
-            mapped = status
+        # An over-budget session buys no calls, but the estimate shows why it is over.
+        expected_calls = 0 if plan.status in ("unchanged", "over_budget") else plan.expected_calls
+        input_tokens = 0 if plan.status == "unchanged" else plan.input_tokens
         out.append(
             SessionEstimate(
                 session_id=session_id,
-                compressed_tokens=compressed_tokens,
-                chunks=chunks,
+                compressed_tokens=plan.compressed_tokens,
+                chunks=plan.chunks,
                 expected_calls=expected_calls,
                 input_tokens=input_tokens,
-                output_tokens=output_tokens,
-                status=mapped,
+                output_tokens=expected_calls * OUTPUT_TOKENS_PER_CALL_ESTIMATE,
+                status=plan.status,
             )
         )
     return out
@@ -1365,10 +1481,7 @@ def run_summaries(
     for session_id in session_ids:
         if max_sessions is not None and attempted >= max_sessions:
             break
-        will_send, est = _provider_send_plan(
-            output_dir, session_id, deleted, model_label=model_label, force=force
-        )
-        plan_status, _ = _session_plan(
+        plan = _session_plan(
             output_dir,
             session_id,
             deleted,
@@ -1376,16 +1489,14 @@ def run_summaries(
             force=force,
             max_session_tokens=max_session_tokens,
         )
-        if plan_status == "over_budget":
+        if plan.status == "over_budget":
             report.over_budget += 1
             continue
         if (
-            will_send
-            and not force
-            and plan_status == "single"
-            and est is not None
+            not force
+            and plan.status == "single"
             and max_input_tokens is not None
-            and input_budget + est > max_input_tokens
+            and input_budget + plan.input_tokens > max_input_tokens
         ):
             break
         run_stats = _SessionRunStats()

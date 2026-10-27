@@ -752,3 +752,102 @@ tests/test_cli_dispatch.py -o addopts="" -q` -> 92 passed;
   review→apply step remains manual and unverified by this round.
 - **`lore rules export` without `--recommendations`** exits 1 with a hint rather
   than guessing at another export format; no other format exists today.
+
+## Round 12 — hydrated bodies (#177) and budget-aware chunk coverage (#178)
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #177 hydrate archived transcripts before AI analysis | CLOSED | `9dbd8a4` | `lore/services/hydration.py` (`HydratedBody`, `HydrationError` with `no-v2-store` / `session-not-archived` / `messages-not-synced` / `empty-transcript`), `hydrate_session` wired into `run_extraction` and `lore format`, `FAILURE_NO_MESSAGES` in the knowledge task, full-body formatter summary + `summary_status`/`source_revision`, title guard; `tests/test_hydration.py` (14 tests), `tests/test_session_knowledge.py` extended; `pytest tests/test_hydration.py tests/test_session_knowledge.py -o addopts="" -q` -> 42 passed |
+| #178 budget-aware chunk packing and explicit omissions | CLOSED | (this commit) | `lore/services/summarize.py` (`_chunk_call`, `_chunk_plan`, `_SessionPlan`, `_chunk_groups`), `lore/services/summarize_chunks.py` (`chunk_call_budget`, coverage message ranges), `tests/test_summary_chunk_coverage.py` (10 tests), `tests/test_summarize_chunking.py` (packing + plan/halves tests); `pytest tests/test_summary_chunk_coverage.py tests/test_summarize_chunking.py -o addopts="" -q` -> 34 passed |
+
+### #177 — what was decided
+
+One canonical body, one failure vocabulary. `lore.services.hydration` replaces
+whatever a caller passed (an index entry with `messages=[]`, or a lossy live
+excerpt) with every message row of the v2 store, ordered by store `seq`, full
+content, plus a sha256 `revision` over `role\x1fkind\x1fcontent` and the covered
+`seq_range`. `HydrationError.reason` is a closed set, and every consumer reports
+it rather than prompting: `run_extraction` counts
+`ExtractionReport.hydration_reasons` (still also `skipped_no_messages`, so #199's
+summary line is unchanged) and `lore knowledge` prints the breakdown; `lore
+format` hydrates per session, prints `Skipped <id>: <reason>` to stderr, and exits
+1 when nothing could be hydrated. The knowledge task refuses an empty conversation
+before any provider call (`no-messages`), the formatter summarises the compressed
+whole body (24k-char head+tail elision with a stated gap) instead of `[:10]`
+messages of 300 chars, and both persist the revision they read. Titles never ask a
+provider to name an empty conversation. With AI disabled the formatted page still
+renders the complete body, so formatting/export stay provider-independent.
+
+### #178 — root cause and what was decided
+
+The blocker was real and reproduced before the fix: after a smaller-chunk retry
+wrote two half-range chunk rows, `_estimate_chunked_calls` looked only for a
+full-range row, so the dry-run plan reported the chunk as missing and computed a
+different merge fingerprint — `estimate_run` said `chunked` (`expected_calls=2`)
+for a session the run considered done. The fix is one source: `_chunk_call`
+builds the prompt, fingerprint and cache decision (full row **or** both halves,
+via `_reuse_rows`) for the run and the plan alike; `_chunk_plan` produces the
+merge fingerprint and remaining calls; `_SessionPlan` is consumed by
+`estimate_run`, `run_summaries` and `is_summary_stale`
+(`_expected_session_fingerprint`). `run_summaries` now computes one plan per session instead of three
+recomputations, and `open_threads_seed` (always `None`) is gone.
+
+Packing keeps the per-call size bounded by `CHUNK_TARGET_TOKENS` and makes the
+*call count* budget-derived: `chunk_call_budget(max_session_tokens,
+per_chunk_tokens)` = `max(MAX_CHUNKS, (max_session_tokens - 3000) // (per_chunk
++ 400))`. Natural, tail-stable chunk boundaries are kept (so growth still reuses
+earlier chunks), `MAX_CHUNKS` becomes the guaranteed floor, and sampling is only
+the last resort. Coverage now reports `messages_total` / `messages_covered` /
+`messages_omitted` and exact `omitted_seq_ranges` next to `omitted_chunks`, and
+`complete` is false whenever any seq was omitted, so a partial summary can never
+read as complete.
+
+```
+$ pytest tests/test_summarize_chunking.py tests/test_summary_chunk_coverage.py -o addopts="" -q
+34 passed
+# includes: test_plan_matches_the_half_chunks_the_run_wrote (the blocker),
+# test_default_budget_covers_every_chunk (30/30 chunks, messages 60/60 complete),
+# test_small_budget_truncates_and_reports_the_omitted_ranges
+#   (chunks 8/30, omitted_seq_ranges [{from_seq: 11, to_seq: 54}], complete False)
+
+$ pytest tests/test_hydration.py tests/test_session_knowledge.py -o addopts="" -q
+42 passed
+
+$ pytest tests/test_summarize_pipeline.py tests/test_summarize_chunking.py \
+    tests/test_summary_chunk_coverage.py tests/test_hydration.py \
+    tests/test_session_knowledge.py -o addopts="" -q
+109 passed
+
+$ ruff check <changed files>   -> All checks passed!
+$ ruff format --check <changed files> -> 14 files already formatted
+```
+
+Two pre-existing test failures were collateral damage from the identity change
+(#155), not from this round: a second `write_sessions` with a *different* body is
+now stored as a divergent copy under a qualified id, so
+`test_growth_reruns_last_chunk_and_merge`, `test_changed_content_resummarizes`,
+`test_changed_session_is_reextracted` and
+`test_knowledge_base_json_is_complete_after_partial_run` were mutating a copy and
+never saw the new body. Those tests now change the existing row's message rows
+directly (`_replace_messages` / `_append_messages`), which is
+what "the same session grew" means after #155.
+
+### NOT VERIFIED
+
+- **Per-message prompt caps are unchanged.** The knowledge prompt still sends at
+  most 20 messages of 500 chars each
+  (`tests/test_knowledge_extraction.py::test_conversation_text_caps_messages_and_chars`
+  pins it) and the title prompt a 6-message excerpt. #177 fixes the *body* a task starts from; a budgeted
+  per-message window for those two prompts is a separate, documented budget.
+  `get_session_summary`/`lore summarize` use the chunked path above and are not
+  capped that way.
+- **`is_summary_stale` plans with the default `MAX_SESSION_TOKENS`.** A summary
+  written with a custom `--max-session-tokens` can therefore be called stale; the
+  run path itself always uses the budget it was given.
+- **No real archive run was performed in this round** — no provider call, no
+  ingest, no `lore summarize` against `~/.lore`. All numbers above come from
+  fixtures; the token-budget constants are estimates, not measured provider usage.
+- **`lore format` still requires an available provider at the CLI level** (it
+  exits 1 before iterating when the provider is unavailable). The AI-independent
+  rendering path is verified through `SessionFormatter`/`include_summary=False`,
+  not through the command.

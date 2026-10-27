@@ -16,8 +16,10 @@ from lore.services.summarize import (
     summarize_session,
     validate_summary,
 )
+from lore.services.summarize_chunks import MAX_CHUNKS
+from lore.storage.schema import open_connection
 from lore.storage.summaries import get_summary, list_summaries
-from lore.storage.writer import v2_db_path, write_sessions
+from lore.storage.writer import v2_db_path
 from tests.test_summarize_pipeline import (
     FAKE_KEY,
     MODEL,
@@ -61,6 +63,36 @@ def _long_session(sid: str, n_users: int = 40, pad: int = 60) -> Any:
     return _session(sid, *parts)
 
 
+def _append_messages(out: Path, session: Any, messages: list) -> None:
+    """Append message rows to an existing session in place.
+
+    Since #155 a second write with a different body becomes a divergent copy
+    under a qualified id, so "the same session grew" must append rows directly.
+    """
+    conn = open_connection(v2_db_path(out))
+    try:
+        row = conn.execute(
+            "SELECT MAX(seq) FROM messages WHERE session_id = ?", (session.session_id,)
+        ).fetchone()
+        start = 0 if row is None or row[0] is None else int(row[0]) + 1
+        conn.executemany(
+            "INSERT INTO messages (session_id, seq, role, content, timestamp) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [
+                (
+                    session.session_id,
+                    start + offset,
+                    message.role.value,
+                    message.content,
+                    message.timestamp.isoformat(),
+                )
+                for offset, message in enumerate(messages)
+            ],
+        )
+    finally:
+        conn.close()
+
+
 @pytest.fixture
 def chunk_limits(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
@@ -97,14 +129,12 @@ def test_growth_reruns_last_chunk_and_merge(tmp_path: Path, chunk_limits: None):
     summarize_session(first_provider, out, "grow", model_label=MODEL)
     first_calls = len(first_provider.prompts)
     chunks_before = {r["scope_key"]: r["fingerprint"] for r in list_summaries(out, level="chunk")}
-    sess.messages.extend(
-        [
-            _msg(Role.USER, "extra user " + ("z " * 80)),
-            _msg(Role.ASSISTANT, "extra assistant " + ("a " * 40)),
-        ]
-        * 3
-    )
-    write_sessions(v2_db_path(out), [sess])
+    grown = [
+        _msg(Role.USER, "extra user " + ("z " * 80)),
+        _msg(Role.ASSISTANT, "extra assistant " + ("a " * 40)),
+    ] * 3
+    sess.messages.extend(grown)
+    _append_messages(out, sess, grown)
     provider = AutoProvider()
     summarize_session(provider, out, "grow", model_label=MODEL)
     assert len(provider.prompts) < first_calls
@@ -115,16 +145,56 @@ def test_growth_reruns_last_chunk_and_merge(tmp_path: Path, chunk_limits: None):
     assert reused >= len(chunks_before) - 1
 
 
-def test_more_than_eight_chunks_truncated(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_default_budget_covers_every_chunk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """A session the budget can pay for is summarised whole, not sampled (#178)."""
     monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 50)
     monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 30)
     out = tmp_path / "out"
     _build_store(out, _long_session("many", n_users=30, pad=80))
     summarize_session(AutoProvider(), out, "many", model_label=MODEL)
+
     row = get_summary(out, "session", "session:many")
     assert row is not None
-    assert row["payload"]["truncated"] is True
-    assert len(list_summaries(out, level="chunk", session_ids=["many"])) == 8
+    coverage = row["payload"]["coverage"]
+    assert row["payload"]["truncated"] is False
+    assert coverage["complete"] is True
+    assert (
+        coverage["chunks_total"]
+        == coverage["chunks_used"]
+        == len(list_summaries(out, level="chunk", session_ids=["many"]))
+    )
+    assert coverage["messages_total"] == coverage["messages_covered"] == 60
+    assert coverage["messages_omitted"] == 0
+    assert coverage["omitted_seq_ranges"] == []
+    assert coverage["seq_range"] == [1, 60]
+
+
+def test_small_budget_truncates_and_reports_the_omitted_ranges(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 50)
+    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 30)
+    out = tmp_path / "out"
+    _build_store(out, _long_session("many", n_users=30, pad=80))
+    summarize_session(AutoProvider(), out, "many", model_label=MODEL, max_session_tokens=8_000)
+
+    row = get_summary(out, "session", "session:many")
+    assert row is not None
+    payload = row["payload"]
+    coverage = payload["coverage"]
+    # 30 one-block chunks, an 8-call floor: head 2, 3 densest middle, tail 3.
+    assert payload["truncated"] is True
+    assert coverage["complete"] is False
+    assert coverage["chunks_total"] == 30
+    assert coverage["chunks_used"] == MAX_CHUNKS
+    assert coverage["omitted_chunks"] == [{"from_chunk": 5, "to_chunk": 26}]
+    assert coverage["omitted_seq_ranges"] == [{"from_seq": 11, "to_seq": 54}]
+    assert coverage["messages_total"] == 60
+    assert coverage["messages_covered"] == 16
+    assert coverage["messages_omitted"] == 44
+    # The decisive last message is inside a covered chunk, not in the gap.
+    assert coverage["seq_range"] == [1, 60]
+    assert all(gap["to_chunk"] < 27 for gap in coverage["omitted_chunks"])
 
 
 def test_merged_cite_not_in_chunks_rejected(tmp_path: Path, chunk_limits: None):
@@ -368,3 +438,25 @@ def test_transient_error_detection_is_not_a_substring_match():
     assert transient(RuntimeError("request timed out"))
     assert not transient(RuntimeError("could not generate a response"))
     assert not transient(RuntimeError("accurate migration failed"))
+
+
+def test_plan_matches_the_half_chunks_the_run_wrote(tmp_path: Path, monkeypatch):
+    """The dry-run plan reads the halves the run wrote (#178).
+
+    `_session_plan` used to fingerprint only full-range rows, so after a
+    smaller-chunk retry the plan believed a chunk was missing and reported
+    "chunked" forever while the run considered the session done.
+    """
+    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
+    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
+    out = tmp_path / "out"
+    _build_store(out, _long_session("halves", n_users=12))
+    bad = json.dumps({**_valid_summary(), "one_liner": "x" * 200})
+    assert summarize_session(
+        AutoProvider([bad, bad]), out, "halves", model_label=MODEL, sleep=lambda _s: None
+    ) == ("written")
+
+    estimate = estimate_run(out, ["halves"], model_label=MODEL)
+
+    assert estimate[0].status == "unchanged"
+    assert estimate[0].expected_calls == 0

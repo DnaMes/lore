@@ -30,6 +30,7 @@ from lore.storage.knowledge import (
 )
 from lore.storage.schema import MIGRATIONS
 from lore.storage.writer import v2_db_path
+from tests.test_summarize_pipeline import _replace_messages
 
 
 def _payload(topic: str) -> str:
@@ -95,34 +96,6 @@ def _session(sid: str, *contents: str) -> UnifiedSession:
 
 def _build(output_dir: Path, *sessions: UnifiedSession) -> None:
     IndexBuilder(output_dir).build_index(list(sessions), {})
-
-
-def _replace_messages(output_dir: Path, session: UnifiedSession) -> None:
-    """Rewrite one session's message rows in place.
-
-    Since #155 a second write with a different body is stored as a divergent
-    copy under a qualified id, so a test that wants "the same session, new
-    content" must change the rows of its existing id directly.
-    """
-    conn = open_connection(v2_db_path(output_dir))
-    try:
-        conn.execute("DELETE FROM messages WHERE session_id = ?", (session.session_id,))
-        conn.executemany(
-            "INSERT INTO messages (session_id, seq, role, content, timestamp) "
-            "VALUES (?, ?, ?, ?, ?)",
-            [
-                (
-                    session.session_id,
-                    seq,
-                    message.role.value,
-                    message.content,
-                    message.timestamp.isoformat(),
-                )
-                for seq, message in enumerate(session.messages)
-            ],
-        )
-    finally:
-        conn.close()
 
 
 def _extractor(output_dir: Path, provider: FakeProvider) -> KnowledgeExtractor:
@@ -564,9 +537,9 @@ def test_cmd_knowledge_error_names_the_failure_cause(tmp_path, use_provider, cap
 def test_save_session_knowledge_brackets_an_explicit_transaction(tmp_path, monkeypatch):
     """The upsert must not lean on autocommit: it brackets itself (#199)."""
     from lore.storage import knowledge as knowledge_mod
-    from lore.storage.writer import v2_db_path as _v2_path
+    from lore.storage.writer import v2_db_path
 
-    initialise(_v2_path(tmp_path))  # schema is current, so nothing else emits BEGIN
+    initialise(v2_db_path(tmp_path))  # schema is current, so nothing else emits BEGIN
     statements: List[str] = []
     real_open = knowledge_mod.open_v2_connection
 

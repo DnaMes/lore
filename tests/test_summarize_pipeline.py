@@ -20,6 +20,7 @@ from lore.services.summarize import (
 from lore.services.summary_input import extract_artifacts, from_unified
 from lore.storage import initialise
 from lore.storage.reader import load_session_messages_v2
+from lore.storage.schema import open_connection
 from lore.storage.summaries import get_summary
 from lore.storage.writer import v2_db_path, write_sessions
 
@@ -52,6 +53,34 @@ def _build_store(output_dir: Path, *sessions: UnifiedSession) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     initialise(v2_db_path(output_dir))
     write_sessions(v2_db_path(output_dir), sessions)
+
+
+def _replace_messages(output_dir: Path, session: UnifiedSession) -> None:
+    """Rewrite one session's message rows in place.
+
+    Since #155 a second write with a different body is stored as a divergent copy
+    under a qualified id, so "the same session, new content" has to change the
+    rows of its existing id directly.
+    """
+    conn = open_connection(v2_db_path(output_dir))
+    try:
+        conn.execute("DELETE FROM messages WHERE session_id = ?", (session.session_id,))
+        conn.executemany(
+            "INSERT INTO messages (session_id, seq, role, content, timestamp) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [
+                (
+                    session.session_id,
+                    seq,
+                    message.role.value,
+                    message.content,
+                    message.timestamp.isoformat(),
+                )
+                for seq, message in enumerate(session.messages)
+            ],
+        )
+    finally:
+        conn.close()
 
 
 def _valid_summary(cite: int = 1, **extra: Any) -> dict:
@@ -153,7 +182,7 @@ def test_changed_content_resummarizes(store: Path):
     summarize_session(FakeProvider(), store, "rich", model_label=MODEL)
     updated = _rich_session("rich")
     updated.messages[0] = _msg(Role.USER, "completely new goal " + ("z" * 200))
-    write_sessions(v2_db_path(store), [updated])
+    _replace_messages(store, updated)
     provider = FakeProvider()
     assert summarize_session(provider, store, "rich", model_label=MODEL) == "written"
     assert provider.prompts
