@@ -1208,6 +1208,7 @@ clean on every file this round touched.
   no command to review the kept-local/scanned-away difference yet.
 - **`--replace` edge cases** (an existing store with `-wal`/`-shm` sidecars) are
   inherited from `restore --force` and covered there, not re-tested here.
+D
 ## Round 11 — capture and identity spine (#151, #154, #155, #156, #157, #158, #160, #162)
 
 Worked in the order the archived plan prescribes: the written contract first
@@ -1240,3 +1241,131 @@ Full suite and lint for this round: see the closing report of the same session
   inline base64 payloads.
 - Per-source `filtered` counts are exact per tool; per-file attribution waits for
   an extractor that names the source file when it skips it.
+
+---
+
+## Message-level semantic retrieval and multilingual evaluation (#190) — CLOSED
+
+Migration 25 (`message_embedding_meta`) was already appended and inert; this
+round built the retrieval on top of it and left the migration list untouched
+(27 is not started, nothing renumbered).
+
+**What shipped**
+
+- `lore.storage.embeddings.ensure_message_vec_table(conn)` — the vec0
+  `message_embeddings` table, keyed by the stable `<session_id>#m<seq>` identity
+  (the permalink identity, not the renumbered `messages` rowid). Lazily created,
+  never in `MIGRATIONS`, no-op returning `False` without sqlite-vec.
+- `lore.storage.message_vectors` — `embed_messages(conn)` is store-driven and
+  incremental by `(session_id, seq, model)`: it selects the messages that lack a
+  current-model vector, so a budget stop resumes on the next call. Bodies are
+  capped at the existing 20 000-char `_MAX_EMBED_CHARS`; vec0 updates are
+  DELETE + INSERT; `message_embedding_meta` records model + created. Returns 0
+  (no crash) without fastembed/sqlite-vec.
+- `lore.storage.message_search.search_messages(output_dir, query, limit=...)` →
+  `MessageSearchResult(path, hits)`. A hit is
+  `{session_id, seq, role, score, excerpt, excerpt_truncated, evidence,
+  permalink, source}` with `evidence` from `lore.storage.evidence`
+  (`message_sha256` included) and `/session/<id>/m/<seq>` as the permalink.
+  `vector` path: KNN over `message_embeddings`, neighbours farther than
+  `LORE_MESSAGE_SEMANTIC_MAX_DISTANCE` dropped. `fts` path: the session FTS
+  index picks bounded candidate sessions, their messages are copied into a
+  throwaway in-memory FTS5 index and ranked by bm25. Limit clamped to 100.
+- CLI: `lore search QUERY --messages [--limit N]` (read-only; prints the path,
+  the excerpt with a `…` truncation marker and the permalink) and
+  `lore embed-messages [--budget SECONDS]` (the resumable vector backfill; exits
+  1 with a clear message when the `semantic` extra is missing).
+- Versioned evaluation set `tools/calibration/message-retrieval-eval.json`
+  (German, English, mixed DE/EN, code-heavy, two decoy sessions; four
+  hand-labelled late passages + three negative queries) and
+  `tools/calibration/calibrate_message_cutoff.py`.
+
+**Threshold calibration (issue criterion "configurable, not a magic constant")**
+
+```
+$ .venv/bin/python tools/calibration/calibrate_message_cutoff.py
+model: BAAI/bge-small-en-v1.5   metric: L2 (vec0 default)   related 4   unrelated 169
+related   min=0.556  median=0.575  p95=0.617  max=0.617
+unrelated min=0.747  p05=0.817  median=0.992  max=1.145
+recommended cutoff: 0.717 (midpoint of related p95 / unrelated p05); sweep picks 0.617 at balanced accuracy 1.000
+note: the groups are separated (related max 0.617 < unrelated min 0.747)
+```
+
+`DEFAULT_MESSAGE_SEMANTIC_MAX_DISTANCE = 0.72` is that midpoint, overridable
+with `LORE_MESSAGE_SEMANTIC_MAX_DISTANCE` (`0` disables the cutoff, an
+unparsable value falls back to the default). The same set's negative queries
+have a nearest message at 0.844, so they return no vector neighbour at all. The
+parser is shared with the session cutoff (`lore.storage.search._distance_cutoff`),
+so both env vars accept exactly the same values.
+
+**Tests and observed results**
+
+```
+$ .venv/bin/python -m pytest tests/test_message_retrieval_eval.py tests/test_storage_message_vectors.py tests/test_cli_dispatch.py -o addopts="" -q
+37 passed in 6.76s
+
+$ .venv/bin/python -m pytest tests -k "hybrid or search or vector" -o addopts="" -q
+269 passed, 1 skipped, 3430 deselected in 190.42s (0:03:10)
+
+$ ruff check lore/storage/ lore_cli.py tests/test_message_retrieval_eval.py tests/test_storage_message_vectors.py tools/calibration/calibrate_message_cutoff.py
+All checks passed!
+$ ruff format --check <same files>
+27 files already formatted
+```
+
+The evaluation assertions are measurements, not smoke tests: recall@5 of the
+labelled passages is 1.0, cross-session false positives are 0, all three
+negative queries return `[]`, every labelled hit carries `message_sha256` and its
+permalink, and the identity survives a second `write_sessions` (delete +
+re-insert of every message row). Ranking has its own case (a concise passage
+outranks a verbose one matching the same terms). The vector-path tests replace
+the model with a deterministic unit-vector embedder, so no test downloads a
+model; a separate test turns `sqlite_vec_available`/`embeddings_available` off
+and asserts the FTS path still answers and reports `path == "fts"`.
+
+Observed CLI (temporary store, two messages, vectors populated):
+
+```
+$ lore --output-dir /tmp/tmp.YvMCx7m0KL search "migration fehlschlägt backup" --messages
+Found 1 message result for 'migration fehlschlägt backup' (search path: vector):
+
+#1 (assistant) score 0.550 /session/demo-de/m/1
+  Wenn die Migration fehlschlägt, spiele das Backup zurück und prüfe die Zeilenzahlen der Tabelle sessions.
+
+$ lore --output-dir /tmp/tmp.YvMCx7m0KL search "wie stelle ich den alten stand wieder her" --messages
+No message matches for 'wie stelle ich den alten stand wieder her' (search path: fts).
+
+$ lore --output-dir /tmp/tmp.YvMCx7m0KL search "wettervorhersage regen" --messages
+No message matches for 'wettervorhersage regen' (search path: fts).
+
+$ lore --output-dir /tmp/tmp.YvMCx7m0KL embed-messages
+Embedded 0 message vectors.
+Nothing pending: every message already has a current vector, or the budget stopped early.
+```
+
+### NOT VERIFIED
+
+- **No hybrid fusion of message and session results.** `search_messages` runs
+  one path per call (vector when it yields hits, FTS otherwise); message hits do
+  not enter the RRF ranking of `search_index`, and the web UI/MCP expose no
+  message-retrieval endpoint. The issue's session-level hybrid tests are
+  unchanged and green.
+- **The writer does not populate message vectors during a sync.** Embedding every
+  message of a rebuilt archive is minutes of CPU, so the pass stays an explicit,
+  budgeted `lore embed-messages` step. Until it runs, `--messages` reports the
+  `fts` path.
+- **No vector cleanup on delete.** Vectors of deleted messages/sessions stay in
+  the vec0 table; retrieval joins the live `messages` row so stale content can
+  never surface, but a KNN window can be partly consumed by them. No test
+  covers a delete-then-search sequence.
+- **A vector is keyed by `(session, seq, model)`, not by content.** A reindex
+  that rewrites a message at the same `seq` keeps the old vector until the model
+  changes; the meta table (migration 25) has no content hash to detect it.
+- **Threshold data is small and English-model.** Four related pairs against 169
+  unrelated passages, all embedded with the English bge-small model; the German
+  and mixed passages are handled by that model only as far as it generalises.
+  Re-run the calibration script after a model or evaluation-set change.
+- **The `vector` path was not exercised end-to-end against a real archive.**
+  Vector tests use a deterministic fake embedder; the real-model run is the
+  calibration script plus the small CLI demo above (2 messages), not a
+  full-archive measurement.

@@ -1667,6 +1667,26 @@ def cmd_run(args):
     cmd_sync(sync_args)
 
 
+def _print_message_search(output_dir, args):
+    """Message-level retrieval: the passage, its evidence and its permalink (#190)."""
+    from lore.storage import search_messages
+
+    result = search_messages(output_dir, args.query, limit=getattr(args, "limit", 10) or 10)
+    if not result.hits:
+        print(f"No message matches for '{args.query}' (search path: {result.path}).")
+        return
+    noun = "result" if len(result.hits) == 1 else "results"
+    print(
+        f"Found {len(result.hits)} message {noun} for '{args.query}' (search path: {result.path}):"
+    )
+    print()
+    for hit in result.hits:
+        marker = "…" if hit["excerpt_truncated"] else ""
+        print(f"#{hit['seq']} ({hit['role']}) score {hit['score']:.3f} {hit['permalink']}")
+        print(f"  {hit['excerpt']}{marker}")
+        print()
+
+
 def cmd_search(args):
     """Search across sessions."""
     output_dir = Path(args.output_dir).expanduser()
@@ -1680,6 +1700,9 @@ def cmd_search(args):
     index_path = output_dir / "index.json"
     if not index_path.exists() and not v2_db_path(output_dir).exists():
         print("No index found. Run 'lore export --all' first.")
+        return
+    if getattr(args, "messages", False):
+        _print_message_search(output_dir, args)
         return
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
     page = getattr(args, "page", 1) or 1
@@ -1740,6 +1763,42 @@ def cmd_search(args):
         if session.get("export_path"):
             print(f"  File: {session['export_path']}")
         print()
+
+
+def cmd_embed_messages(args):
+    """Populate the optional per-message embedding vectors used by message search (#190).
+
+    Incremental: only messages without a vector from the current model are
+    embedded, so re-running after a budget stop continues where it stopped.
+    """
+    from lore.storage import embed_messages, v2_db_path
+    from lore.storage.embeddings import embeddings_available, sqlite_vec_available
+    from lore.storage.schema import open_connection
+
+    output_dir = Path(args.output_dir).expanduser()
+    db = v2_db_path(output_dir)
+    if not db.exists():
+        print("No index found. Run 'lore export --all' first.")
+        return 1
+    if not (embeddings_available() and sqlite_vec_available()):
+        print(
+            "Message vectors need the optional 'semantic' extra "
+            "(pipx inject lore fastembed sqlite-vec). Message search stays on FTS.",
+            file=sys.stderr,
+        )
+        return 1
+    budget = getattr(args, "budget", None)
+    conn = open_connection(db)
+    try:
+        written = embed_messages(conn, budget_seconds=None if budget is None else float(budget))
+    finally:
+        conn.close()
+    noun = "vector" if written == 1 else "vectors"
+    print(f"Embedded {written} message {noun}.")
+    if written == 0:
+        print(
+            "Nothing pending: every message already has a current vector, or the budget stopped early."
+        )
 
 
 def cmd_stats(args):
@@ -2831,6 +2890,7 @@ COMMANDS = {
     "run": cmd_run,
     "generate-titles": cmd_generate_titles,
     "reindex": cmd_reindex,
+    "embed-messages": cmd_embed_messages,
     "analyze": cmd_analyze,
     "knowledge": cmd_knowledge,
     "improve": cmd_improve,
@@ -2927,6 +2987,14 @@ Examples:
     search_parser.add_argument("--tool", help="Search only specific tool")
     search_parser.add_argument("--project", help="Search only specific project")
     search_parser.add_argument("--tag", help="Search only sessions with this saved tag/bookmark")
+    search_parser.add_argument(
+        "--messages",
+        action="store_true",
+        help="Return matching messages (passage, evidence, permalink) instead of sessions",
+    )
+    search_parser.add_argument(
+        "--limit", type=int, default=10, help="Max message hits with --messages (default: 10)"
+    )
     search_parser.add_argument(
         "--page", type=int, default=1, help="Page of results (20 per page; default 1)"
     )
@@ -3324,6 +3392,17 @@ Examples:
     subparsers.add_parser(
         "reindex",
         help="Rebuild index from all sources on disk (fixes missing sessions after sync)",
+    )
+
+    embed_parser = subparsers.add_parser(
+        "embed-messages",
+        help="Populate optional per-message embedding vectors for message search",
+    )
+    embed_parser.add_argument(
+        "--budget",
+        type=float,
+        default=None,
+        help="Seconds of embedding work (0 = unlimited, default: LORE_EMBED_BUDGET_SECONDS or 60)",
     )
 
     # analyze command - LLM-powered statistics

@@ -182,3 +182,35 @@ def load_vec_extension(conn: sqlite3.Connection) -> bool:
         logger.warning("sqlite-vec unavailable, vector search disabled: %s", exc)
         _vec_failed = True
         return False
+
+
+def ensure_message_vec_table(conn: sqlite3.Connection) -> bool:
+    """Create the ``message_embeddings`` vec0 table if sqlite-vec is loaded.
+
+    Mirrors :func:`lore.storage.schema.ensure_session_vec_table`: returns True
+    when the table exists (or was just created) and False when the extension
+    cannot be loaded — callers then skip message vector writes/search and rely
+    on the FTS path. Idempotent: ``CREATE VIRTUAL TABLE IF NOT EXISTS`` is a
+    no-op once the table exists.
+
+    The key is the stable ``<session_id>#m<seq>`` identity the message
+    permalink uses (not the ``messages`` rowid, which a reindex renumbers),
+    so a rebuilt session does not orphan its vectors. The bookkeeping table
+    ``message_embedding_meta`` *is* migration 25; this vec0 table stays out of
+    ``MIGRATIONS`` because a ``vec0`` CREATE raises 'no such module: vec0'
+    where the extension is missing, which would wedge the migration runner.
+    """
+    if not load_vec_extension(conn):
+        return False
+    try:
+        conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS message_embeddings USING vec0("
+            "message_key TEXT PRIMARY KEY, "
+            "model TEXT, "
+            f"embedding float[{EMBEDDING_DIM}]"
+            ")"
+        )
+        return True
+    except sqlite3.Error as exc:
+        logger.warning("message_embeddings vec0 table unavailable: %s", exc)
+        return False

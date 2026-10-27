@@ -568,24 +568,34 @@ SEMANTIC_MAX_DISTANCE_ENV = "LORE_SEMANTIC_MAX_DISTANCE"
 DEFAULT_SEMANTIC_MAX_DISTANCE = 0.88
 
 
-def semantic_max_distance() -> Optional[float]:
-    """Vec distance above which a neighbour is dropped; ``None`` means no cutoff.
+def _distance_cutoff(env_name: str, default: float) -> Optional[float]:
+    """Parse a distance cutoff from ``env_name``; ``None`` means no cutoff.
 
-    Env ``LORE_SEMANTIC_MAX_DISTANCE`` overrides the calibrated default; a value
-    of ``0`` (or negative) disables the cutoff entirely, an unparsable or NaN
-    value falls back to the default. Never raised on: a bad value must not
-    break search (#92).
+    Shared by the session-level (:func:`semantic_max_distance`) and
+    message-level (:func:`lore.storage.message_search.message_max_distance`)
+    cutoffs so both parse the same way: unset → ``default``, ``0`` (or
+    negative) → cutoff disabled, unparsable/NaN → ``default``. Never raises: a
+    bad value must not break search (#92).
     """
-    raw = os.environ.get(SEMANTIC_MAX_DISTANCE_ENV, "").strip()
+    raw = os.environ.get(env_name, "").strip()
     if not raw:
-        return DEFAULT_SEMANTIC_MAX_DISTANCE
+        return default
     try:
         value = float(raw)
     except ValueError:
-        return DEFAULT_SEMANTIC_MAX_DISTANCE
+        return default
     if math.isnan(value):
-        return DEFAULT_SEMANTIC_MAX_DISTANCE
+        return default
     return None if value <= 0 else value
+
+
+def semantic_max_distance() -> Optional[float]:
+    """Vec distance above which a session neighbour is dropped; ``None`` disables.
+
+    Env ``LORE_SEMANTIC_MAX_DISTANCE`` overrides the calibrated default; see
+    :func:`_distance_cutoff` for the parsing rules.
+    """
+    return _distance_cutoff(SEMANTIC_MAX_DISTANCE_ENV, DEFAULT_SEMANTIC_MAX_DISTANCE)
 
 
 def _knn_rows(

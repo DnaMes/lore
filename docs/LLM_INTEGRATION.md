@@ -148,6 +148,60 @@ carries a `coverage` object:
 a complete analysis. `lore summarize --dry-run` uses the same plan as the run, so its
 expected call count matches what the run actually sends.
 
+### 6. Message-level retrieval (#190)
+
+A session hit tells you *which* transcript; a long German/English session still
+hides *where* the answer is. `lore search QUERY --messages` (API:
+`lore.storage.search_messages`) returns the archived messages themselves, one
+dict per hit:
+
+```json
+{
+  "session_id": "claude-code:laptop:sess-1",
+  "seq": 41,
+  "role": "assistant",
+  "score": 0.55,
+  "excerpt": "Wenn die Migration fehlschlägt, spiele das Backup zurück …",
+  "excerpt_truncated": true,
+  "evidence": {"message_id": 812, "message_seq": 41, "message_native_id": "…",
+                "message_sha256": "…", "session_namespace": "claude-code:laptop",
+                "source_revision_id": "…"},
+  "permalink": "/session/claude-code:laptop:sess-1/m/41",
+  "source": "message"
+}
+```
+
+The identity is `(session_id, seq)` — not the SQLite rowid — so `permalink` and
+`evidence.message_sha256` survive a reindex, a prune/undo and a restore. An
+excerpt with `excerpt_truncated: true` is a window, never the full message.
+
+Two paths, and the result's `path` field names the one that ran:
+
+| `path` | When | What it means |
+|--------|------|---------------|
+| `vector` | the optional `semantic` extra is installed *and* `lore embed-messages` has populated `message_embeddings` | KNN over per-message vectors; finds a passage by meaning, also late in a session. Neighbours farther than `LORE_MESSAGE_SEMANTIC_MAX_DISTANCE` (default 0.72, calibrated on the labelled set in `tools/calibration/message-retrieval-eval.json`) are dropped, so an unrelated query returns nothing instead of a meaningless nearest neighbour (#92). Set the variable to `0` to disable the cutoff. |
+| `fts` | otherwise, or when the vector neighbourhood is empty | Keyword search over message *bodies*: the session FTS index picks bounded candidate sessions, their messages are copied into a throwaway in-memory FTS5 index and ranked there. It can miss a paraphrase, but it never invents a hit. |
+
+`score` is smaller-is-better on both paths but not comparable between them:
+L2 distance on `vector`, bm25 on `fts`. `lore search --messages` prints the path
+and the excerpt, so a fallback is visible rather than silent.
+
+Populating the vector path is a separate, bounded, resumable step —
+`lore embed-messages [--budget SECONDS]` — because embedding every message of
+an archive is far more work than indexing the sessions. It is incremental by
+`(session_id, seq, model)`: a message that already has a vector from the current
+model is skipped, a model change re-embeds it, and an interrupted run resumes on
+the next call. Message bodies longer than 20 000 characters are truncated for
+embedding (the same cap the session pass uses).
+
+`tools/calibration/calibrate_message_cutoff.py` re-measures the threshold against
+the versioned evaluation set (German, English, mixed-language, code-heavy and
+decoy sessions with hand-labelled late passages); unit tests never download a
+model, and `pytest tests/test_message_retrieval_eval.py` asserts recall of every
+labelled passage, zero cross-session false positives and zero hits for the
+negative queries.
+
+
 ## Setup
 
 ### Authentication Methods

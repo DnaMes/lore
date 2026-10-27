@@ -56,6 +56,8 @@ from .memory import (
     set_memory_status,
     supersede_memory,
 )
+from .message_search import MessageSearchResult, search_messages
+from .message_vectors import embed_messages
 from .portable import (
     ImportReport,
     PortableExport,
@@ -102,6 +104,7 @@ __all__ = [
     "PortableManifest",
     "PortableReport",
     "RestoreReport",
+    "MessageSearchResult",
     "add_memory",
     "add_session_tag",
     "all_tags_by_session",
@@ -110,6 +113,7 @@ __all__ = [
     "create_portable_bundle",
     "current_version",
     "delete_memory",
+    "embed_messages",
     "embed_text",
     "embeddings_available",
     "feedback_influence",
@@ -147,6 +151,7 @@ __all__ = [
     "count_session_hits",
     "message_evidence_for_sessions",
     "count_session_hits",
+    "search_messages",
     "search_sessions",
     "semantic_search_sessions",
     "set_memory_status",

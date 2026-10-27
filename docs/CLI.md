@@ -172,7 +172,8 @@ Prints `Found N result` (singular for one hit) with each score to three decimals
 
 ```text
 usage: lore search [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
-                   [--page PAGE] [--include-automated]
+                   [--page PAGE] [--messages] [--limit LIMIT]
+                   [--include-automated]
                    query
 
 positional arguments:
@@ -182,9 +183,22 @@ options:
   -h, --help           show this help message and exit
   --tool TOOL          Search only specific tool
   --project PROJECT    Search only specific project
+  --tag TAG            Search only sessions with this saved tag/bookmark
+  --page PAGE          Page of results (20 per page; default 1)
+  --messages           Return matching messages (passage, evidence, permalink)
+                       instead of sessions
+  --limit LIMIT        Max message hits with --messages (default: 10)
   --include-automated  Also include automated (exec/cron/subagent) sessions,
                        hidden by default
 ```
+
+`--messages` drills into the transcript: each hit is one archived message with
+its `seq`, an excerpt (`…` marks a shortened passage), the stable evidence
+identity, and the `/session/<id>/m/<seq>` permalink. The header names the path
+that produced the hits — `vector` when the optional `lore[semantic]` extra has
+populated message vectors, `fts` for the keyword fallback over message bodies.
+`lore embed-messages` populates the vector path; without it (or without the
+extra) message search still works, by keyword, and says so.
 
 ## stats
 
@@ -795,6 +809,27 @@ usage: lore reindex [-h]
 
 options:
   -h, --help  show this help message and exit
+```
+
+## embed-messages
+
+Populate the optional per-message embedding vectors that `lore search --messages`
+uses (#190). Incremental: only messages that have no vector from the current
+embedding model are embedded, so re-running after an interruption (or a budget
+stop) continues where it stopped. Without the optional `semantic` extra
+(`pipx inject lore fastembed sqlite-vec`) the command exits 1 and message search
+stays on the FTS path.
+
+Mode: writes `message_embeddings` + `message_embedding_meta` rows inside the
+existing v2 SQLite store.
+
+```text
+usage: lore embed-messages [-h] [--budget BUDGET]
+
+options:
+  -h, --help         show this help message and exit
+  --budget BUDGET    Seconds of embedding work (0 = unlimited, default:
+                     LORE_EMBED_BUDGET_SECONDS or 60)
 ```
 
 ## analyze

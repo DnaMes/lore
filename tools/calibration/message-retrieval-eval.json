@@ -1,0 +1,157 @@
+{
+  "version": 1,
+  "description": "Versioned message-retrieval evaluation set for #190. Six archived sessions (German, English, mixed-language, code-heavy, plus two topically unrelated decoys) and hand-labelled queries. Each non-negative query labels the one passage that answers it; every labelled passage sits late in its session (seq >= half the messages), which is the passage a session-level hit cannot point at. Negative queries label no passage: the honest answer is zero hits. The same labels calibrate LORE_MESSAGE_SEMANTIC_MAX_DISTANCE via tools/calibration/calibrate_message_cutoff.py, so retrieval and threshold are measured against one hand-checked set. Keep queries keyword-shaped where they are meant to exercise the FTS fallback: it matches terms, not paraphrases.",
+  "sessions": [
+    {
+      "id": "de-db-rollback",
+      "tool": "claude-code",
+      "title": "Migration auf die Produktionsdatenbank",
+      "project": "/home/u/lore",
+      "messages": [
+        {"role": "user", "content": "Wir müssen am Freitag die Migration auf die Produktionsdatenbank spielen. Wie sichern wir vorher ab?"},
+        {"role": "assistant", "content": "Vor dem Lauf ziehen wir ein Backup mit copy_sqlite_with_sidecars und prüfen die Zeilenzahlen der Tabellen, danach startet erst die Migration."},
+        {"role": "user", "content": "Was passiert, wenn die Migration fehlschlägt?"},
+        {"role": "assistant", "content": "Dann stoppen wir den Dienst, lesen das Log und entscheiden, ob ein zweiter Lauf überhaupt sinnvoll ist."},
+        {"role": "user", "content": "Und wie lange ist die Oberfläche dann schreibgeschützt?"},
+        {"role": "assistant", "content": "Etwa zwanzig Minuten. In dieser Zeit läuft nur der Lesepfad, Schreibversuche bekommen einen Hinweis."},
+        {"role": "user", "content": "Gut. Und wenn die Zahlen nach dem Lauf nicht stimmen?"},
+        {"role": "assistant", "content": "Dann ist der Lauf ungültig, und wir rollen ihn zurück."},
+        {"role": "assistant", "content": "Wenn die Migration fehlschlägt, spiele das Backup zurück: erst `sqlite3 index_v2.sqlite '.restore backup.sqlite'`, dann prüfe mit SELECT COUNT(*) die Zeilenzahlen der Tabelle sessions. Erst wenn die Zeilenzahlen stimmen, starte den Dienst wieder."},
+        {"role": "user", "content": "Danke, das notiere ich im Runbook."}
+      ]
+    },
+    {
+      "id": "en-pool-limits",
+      "tool": "codex",
+      "title": "Postgres connection limits under load",
+      "project": "/home/u/api",
+      "messages": [
+        {"role": "user", "content": "Under load the API pods exhaust postgres connections and requests start timing out."},
+        {"role": "assistant", "content": "First check how many clients each pod opens. The pool sits in front of postgres, so the database should never see more than the configured pool size."},
+        {"role": "user", "content": "Each pod opens fifty postgres connections at startup."},
+        {"role": "assistant", "content": "That is the problem: six pods times fifty connections is three hundred, well above what the database allows."},
+        {"role": "user", "content": "Can we just raise max_connections in postgres?"},
+        {"role": "assistant", "content": "That only moves the failure to memory pressure, every backend costs a few megabytes of shared buffers."},
+        {"role": "user", "content": "What is the fix then?"},
+        {"role": "assistant", "content": "Raise pgbouncer pool_size to 80 and default_pool_size to 20, then restart the sidecar. Clients reconnect automatically, so a rollout never exhausts the postgres connections."},
+        {"role": "user", "content": "And the rollout order?"},
+        {"role": "assistant", "content": "Sidecar first, then the pods, so the pool is always in front of the database."}
+      ]
+    },
+    {
+      "id": "mixed-deploy-env",
+      "tool": "claude-code",
+      "title": "Deployment pipeline Umgebungsvariablen",
+      "project": "/home/u/shop",
+      "messages": [
+        {"role": "user", "content": "Der neue Service startet im Staging mit Default-Werten, obwohl die Konfiguration im Vault liegt."},
+        {"role": "assistant", "content": "Dann fehlt der Export-Schritt: die Pipeline liest den Vault nur, wenn der Job ihn explizit anfordert."},
+        {"role": "user", "content": "Wo steht das?"},
+        {"role": "assistant", "content": "In der deployment.yaml, Abschnitt envFrom. Ohne den Abschnitt bekommt der Pod nur die eingebauten Defaults."},
+        {"role": "user", "content": "Und pro Umgebung?"},
+        {"role": "assistant", "content": "Jede Umgebung hat einen eigenen Pfad im Vault, staging und production dürfen sich niemals dieselben Werte teilen."},
+        {"role": "user", "content": "Was ist mit dem Secret?"},
+        {"role": "assistant", "content": "Das Secret wird beim Deploy injiziert, nicht im Image gebacken, sonst landet es in der Registry."},
+        {"role": "assistant", "content": "Setze die Umgebungsvariablen im Deployment: FLASK_SECRET_KEY aus dem Vault, DATABASE_URL pro Umgebung. Der pipeline step export-env liest beide vor dem rollout, sonst startet der Container wieder mit Defaults."},
+        {"role": "user", "content": "Alles klar, ich passe die deployment.yaml an."}
+      ]
+    },
+    {
+      "id": "code-pytest-fixture",
+      "tool": "cursor",
+      "title": "pytest fixture scopes for a shared sqlite connection",
+      "project": "/home/u/lore",
+      "messages": [
+        {"role": "user", "content": "Every test opens its own sqlite connection and the suite got slow."},
+        {"role": "assistant", "content": "Open one connection per test module instead of one per test, and close it in the finalizer."},
+        {"role": "user", "content": "The connection is not picklable, so a session-scoped fixture complains."},
+        {"role": "assistant", "content": "Right, pytest cannot share a live connection across processes, so keep it in the worker that created it."},
+        {"role": "user", "content": "How do I get a temporary directory for the database file?"},
+        {"role": "assistant", "content": "Use the factory fixture rather than the single-path one when the scope is wider than function."},
+        {"role": "user", "content": "Can you show the fixture?"},
+        {"role": "assistant", "content": "Sure:\n\n```python\n@pytest.fixture(scope=\"session\")\ndef db_conn(tmp_path_factory):\n    root = tmp_path_factory.mktemp(\"db\")\n    conn = sqlite3.connect(root / \"index.sqlite\")\n    yield conn\n    conn.close()\n```\n\nThe pytest fixture scope is session, so it is built once for the whole run. Use tmp_path_factory (not tmp_path) because a session-scoped fixture cannot depend on a function-scoped directory."},
+        {"role": "user", "content": "That explains the scope error I kept getting."}
+      ]
+    },
+    {
+      "id": "de-baking",
+      "tool": "gemini-cli",
+      "title": "Sauerteig Brot backen",
+      "project": "/home/u/kitchen",
+      "messages": [
+        {"role": "user", "content": "Mein Brot geht nicht richtig auf."},
+        {"role": "assistant", "content": "Prüfe zuerst den Sauerteig: er muss Bläschen werfen und deutlich nach Säure riechen, bevor du ihn verwendest."},
+        {"role": "user", "content": "Wie warm sollte der Ofen sein?"},
+        {"role": "assistant", "content": "Für ein dunkles Brot backe ich zwanzig Minuten bei 250 Grad mit Dampf, danach dreißig Minuten bei 200 Grad ohne."},
+        {"role": "user", "content": "Und das Mehl?"},
+        {"role": "assistant", "content": "Nimm Roggenmehl für den Sauerteig und Weizenmehl für den Teig, das gibt mehr Struktur."},
+        {"role": "user", "content": "Danke, dann versuche ich es am Wochenende."}
+      ]
+    },
+    {
+      "id": "en-bicycle",
+      "tool": "vscode",
+      "title": "Bicycle drivetrain maintenance",
+      "project": "/home/u/garage",
+      "messages": [
+        {"role": "user", "content": "The chain skips on the smallest cog."},
+        {"role": "assistant", "content": "Check the chain wear with a gauge first; anything past 0.75 percent means a new chain."},
+        {"role": "user", "content": "And the cassette?"},
+        {"role": "assistant", "content": "If a fresh chain still skips, replace the cassette, the teeth are worn in the same pattern."},
+        {"role": "user", "content": "How often should I clean it?"},
+        {"role": "assistant", "content": "Every few hundred kilometres, with a dry rag and a light oil, never with a high-pressure hose."}
+      ]
+    }
+  ],
+  "queries": [
+    {
+      "id": "de-late-rollback",
+      "language": "de",
+      "query": "migration fehlschlägt backup zurück zeilenzahlen",
+      "relevant": [{"session": "de-db-rollback", "seq": 8}],
+      "negative": false
+    },
+    {
+      "id": "en-late-pool",
+      "language": "en",
+      "query": "pgbouncer pool_size connections exhausted",
+      "relevant": [{"session": "en-pool-limits", "seq": 7}],
+      "negative": false
+    },
+    {
+      "id": "mixed-late-env",
+      "language": "de+en",
+      "query": "umgebungsvariablen deployment vault container",
+      "relevant": [{"session": "mixed-deploy-env", "seq": 8}],
+      "negative": false
+    },
+    {
+      "id": "code-late-fixture",
+      "language": "en+code",
+      "query": "pytest fixture scope tmp_path_factory",
+      "relevant": [{"session": "code-pytest-fixture", "seq": 7}],
+      "negative": false
+    },
+    {
+      "id": "de-negative-weather",
+      "language": "de",
+      "query": "wettervorhersage regen jacke",
+      "relevant": [],
+      "negative": true
+    },
+    {
+      "id": "en-negative-sourdough",
+      "language": "en",
+      "query": "sourdough starter hydration",
+      "relevant": [],
+      "negative": true
+    },
+    {
+      "id": "mixed-negative-cake",
+      "language": "de",
+      "query": "marmorkuchen backzeit",
+      "relevant": [],
+      "negative": true
+    }
+  ]
+}
