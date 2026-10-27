@@ -76,7 +76,12 @@ def test_concurrent_writes_do_not_raise_busy(tmp_path):
 
 
 def _inject_commit_during_hash(tmp_path, monkeypatch):
-    """Make the freshness check commit another write halfway through its reads."""
+    """Make the freshness check commit another write halfway through its reads.
+
+    The store runs in WAL mode (``open_connection`` sets it), so a writer may commit
+    while a reader holds its snapshot: the reader keeps seeing the older commit, and
+    that is exactly what the freshness check has to report as healthy.
+    """
     from lore.storage import freshness
     from lore.storage.writer import v2_db_path as _db_path
 

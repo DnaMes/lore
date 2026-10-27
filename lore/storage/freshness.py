@@ -118,13 +118,21 @@ def store_state(conn: sqlite3.Connection) -> tuple[Optional[str], Optional[str],
     left would be compared with the rows the next writer committed, and the caller
     would report a mismatch that never existed (#40, #48). A read transaction pins
     all three to the same committed state.
+
+    The connection comes from :func:`open_connection` (autocommit, WAL), so this
+    opens the read transaction itself; a caller that already has one open keeps
+    its own snapshot instead.
     """
-    conn.execute("BEGIN")
+    owns_transaction = not conn.in_transaction
+    if owns_transaction:
+        conn.execute("BEGIN")
     try:
         meta = _read_meta(conn)
         return meta[GENERATED_AT_KEY], meta[CONTENT_HASH_KEY], compute_content_hash(conn)
     finally:
-        conn.execute("COMMIT")
+        if owns_transaction:
+            # Read-only: nothing to persist, and ROLLBACK cannot fail on a failed read.
+            conn.execute("ROLLBACK")
 
 
 def _read_meta(conn: sqlite3.Connection) -> Dict[str, Optional[str]]:
