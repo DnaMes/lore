@@ -81,7 +81,7 @@ Windows PowerShell:
 
 ```powershell
 python -m venv $HOME\.venvs\lore
-$HOME\.venvs\lore\Scripts\python.exe -m pip install git+https://github.com/DnaMes/lore
+& "$HOME\.venvs\lore\Scripts\python.exe" -m pip install git+https://github.com/DnaMes/lore
 ```
 
 You can then add `$HOME\.venvs\lore\Scripts` to your `PATH` or invoke the binaries directly.
