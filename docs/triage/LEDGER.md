@@ -755,6 +755,7 @@ tests/test_cli_dispatch.py -o addopts="" -q` -> 92 passed;
   than guessing at another export format; no other format exists today.
 
 D
+D
 ## Round 12 — hydrated bodies (#177) and budget-aware chunk coverage (#178)
 
 | Item | Status | Commit | Evidence |
@@ -1042,3 +1043,168 @@ Known pre-existing failures, unrelated to the split (reproduced with the
 refactor stashed): `tests/test_web_titles.py::test_api_rate_limit_enforced_when_enabled`
 and `::test_metrics_endpoint_returns_counters` — the per-path rate limiter does
 not reject the third request against the configured 2/window budget.
+## Round 12 — portable archive bundles (#163)
+
+The Group 2 row above (`163 | STILL-VALID`) is superseded by this round.
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #163 portable bundle import with source provenance | CLOSED | `71cbd61` | `lore/storage/portable.py` (`create_portable_bundle`, `verify_portable_bundle`, `import_bundle`, `_Merger`), `lore bundle export|import` in `lore_cli.py`, migration 26 (`bundle_imports`) in `lore/storage/schema.py` (append-only log, `CREATE ... IF NOT EXISTS`), `identity.content_hash_from_rows`/`resolve_store_identity` in `lore/storage/identity.py`, `lore/storage/portable.py` docstring, `tests/test_bundle_import.py`, `docs/CLI.md#bundle`, `docs/CONFIGURATION.md`; `pytest tests/test_bundle_import.py -o addopts="" -q` -> 16 passed |
+
+### #163 — what was decided
+
+The issue asks for merge precedence and namespace rules before anything else, so
+they are written into the module docstring and enforced by tests:
+
+- **Bundle = backup snapshot + evidence contract.** One `db/index_v2.sqlite`
+  member, taken with SQLite's online-backup API, carrying sessions, messages,
+  annotations, memory *and* the raw `source_revisions`/`source_artifacts`. It is
+  one member on purpose: `sessions.source_revision_id` and
+  `memory_sources.source_revision_id` are joins, and two members could arrive
+  inconsistent. The manifest adds what a backup does not need: `provenance`
+  (namespace scope read from the store's own rows, machine scope, created_at,
+  Lore version) and `evidence` (`source_revisions`/`source_artifacts` counts plus
+  a sha256 over every captured `(source_identity, content_sha256)` pair), so
+  swapped raw bytes fail verification even if SQLite's own checksums pass.
+- **Merge precedence: local always wins.** Revisions dedupe on
+  `(source_identity, content_sha256)`; a changed file becomes the next
+  `revision_seq` for that identity (the archive's numbering is kept for sources
+  this store has never seen). Sessions reuse `resolve_store_identity`, the same
+  function the writer uses, so an identical copy is a no-op and a divergent copy
+  of a taken id lands under `<tool>:<scope>:<id>#<n>` with `copy_of_session_id`.
+  An archive row whose `content_sha256` is missing is rehashed from its stored
+  messages with `content_hash_from_rows`, so a legacy row is not mistaken for a
+  conflict. Annotations are `INSERT OR IGNORE` (a local tag, extraction or
+  summary is never replaced); memory dedupes on
+  `(kind, title, body, scope_project, scope_tool, created)`, and its tags,
+  ratings, supersede chain and evidence links follow the new memory id.
+- **Evidence links survive by identity, not by rowid.** `message_id` is a local
+  rowid, so it is resolved from `(session, message_seq)` or
+  `(session, message_native_id)` against the *imported* rows; the archive's own
+  rowid is discarded, and `source_revision_id` is remapped through the revision
+  map. This is the half of #160 that only matters across stores.
+- **Namespace rule.** Imported rows keep their original `source_namespace` (the
+  importer never re-derives it from `LORE_SOURCE_NAMESPACE`), and the report
+  groups added rows per origin. Origin keys use the `<tool>:<scope>` spelling a
+  session row carries, derived for a revision from its
+  `<tool>:<scope>:<path>` identity.
+- **Deletion and health are not transitive.** A tombstone from the archive is
+  skipped (and counted) when this store still holds that session — local content
+  is never deleted implicitly. Per-source health is inserted for unknown
+  identities; for a known one the newer `last_captured_at` may update the state,
+  but the local counters are never replaced by another host's counts.
+- **`--dry-run` writes nothing by construction**: it merges into a snapshot copy
+  of the live store, so the counts it prints are the counts a real import would
+  produce. `--replace` installs the archive as the live store (first import onto
+  an empty machine) and logs `mode=replace`.
+- **No credentials, ever.** Only the store is archived; the provider cache and
+  every environment value stay out, and nothing in the module reads the
+  environment for a secret. `test_bundle_carries_no_credentials` sets the
+  provider key variables and plants a `credentials.json` and
+  `llm_cache/providers.json` beside the store, and finds the secret in none of
+  the bundle's bytes.
+- **Migration numbering.** 24 and 25 belong to a parallel lane, so 26 is used.
+  That leaves a gap in the list on this branch, which broke the
+  `len(MIGRATIONS)` assumption in `schema.open_v2_connection`, `backup.py` and
+  three tests; the built schema version is now `schema.SCHEMA_VERSION =
+  MIGRATIONS[-1][0]` (the highest migration, not how many exist), and
+  `tests/test_storage_schema.py`'s expected-table set also gained the
+  `source_health` table #162 added.
+
+### Commands and observed results
+
+Throwaway `HOME`, store with 1 session (2 messages), 1 tag, 1 memory with tag,
+rating and evidence link, 1 captured revision, 1 knowledge row, 1 health row:
+
+```text
+$ lore bundle export $H/machine-a.zip
+Bundle written: /tmp/lore-bundle-demo-opFb/machine-a.zip
+  format:     lore-portable-bundle v1, created 2026-10-27T00:08:47+00:00
+  origin:     namespace=laptop machine=p15
+  lore:       2.4.0 (store schema 26, this Lore 26)
+  rows:       deleted_sessions=0 memory=1 memory_feedback=1 memory_sources=1 memory_tags=1
+              messages=2 search_index=2 session_embedding_meta=1 session_knowledge=1
+              session_summaries=0 session_tags=1 sessions=1
+  evidence:   source_revisions=1 source_artifacts=0 digest=4d3cdbb311a7339c…
+  member:     db/index_v2.sqlite sha256=c336fe424839ad46… 1941504 bytes
+rc=0
+
+$ lore --output-dir $H/laptop bundle import $H/machine-a.zip --dry-run
+Would import from /tmp/lore-bundle-demo-opFb/machine-a.zip (merge)
+  sessions:   1 added, 0 divergent copies, 0 identical, 0 refilled
+  messages:   2 added
+  revisions:  1 added, 0 deduplicated
+  artifacts:  0 added, 0 deduplicated, 0 kept local
+  annotations: tags=1 knowledge=1 summaries=0
+  memory:     1 added, 0 identical, tags=1 ratings=1 evidence_links=1
+  health:     1 added, 0 updated, 0 kept
+  origins:    claude-code:laptop: sessions=1 revisions=1
+Dry run: nothing was written.
+rc=0
+
+$ ls $H/laptop
+ls: cannot access '/tmp/lore-bundle-demo-opFb/laptop': No such file or directory
+
+$ lore --output-dir $H/laptop bundle import $H/machine-a.zip
+Imported from /tmp/lore-bundle-demo-opFb/machine-a.zip (merge)
+  ... (same counts as the dry run) ...
+rc=0
+
+$ lore --output-dir $H/laptop bundle import $H/machine-a.zip    # idempotent
+Imported from /tmp/lore-bundle-demo-opFb/machine-a.zip (merge)
+  sessions:   0 added, 0 divergent copies, 1 identical, 0 refilled
+  messages:   0 added
+  revisions:  0 added, 1 deduplicated
+  annotations: tags=0 knowledge=0 summaries=0
+  memory:     0 added, 1 identical, tags=0 ratings=0 evidence_links=0
+  health:     0 added, 0 updated, 1 kept
+rc=0
+
+$ lore --output-dir $H/laptop bundle import $H/machine-b.zip   # other machine, same session id
+Imported from /tmp/lore-bundle-demo-opFb/machine-b.zip (merge)
+  sessions:   0 added, 1 divergent copy, 0 identical, 0 refilled
+  messages:   2 added
+  revisions:  0 added, 1 deduplicated
+  annotations: tags=1 knowledge=1 summaries=0
+  memory:     1 added, 0 identical, tags=1 ratings=1 evidence_links=1
+  health:     0 added, 1 updated, 0 kept
+  origins:    claude-code:desktop: sessions=1 revisions=0
+rc=0
+
+$ python -c "select id, source_namespace, copy_of_session_id from sessions"
+('claude-code:desktop:sess-1#2', 'claude-code:desktop', 'sess-1')
+('sess-1', 'claude-code:laptop', None)
+
+$ lore --output-dir $H/laptop bundle import $H/tampered.zip
+Bundle import refused: … failed verification, nothing was imported:
+  db/index_v2.sqlite has sha256 110eb7f9…, the manifest says 551750e5…   (one flipped byte)
+rc=1
+```
+
+Focused suites: `pytest tests/test_bundle_import.py -o addopts="" -q` -> 16
+passed; `pytest tests/test_session_identity.py tests/test_source_revisions.py
+tests/test_source_health.py tests/test_bundle_import.py
+tests/test_backup_restore.py tests/test_storage_schema.py -o addopts="" -q` ->
+117 passed; `ruff check lore/ lore_cli.py tests/...` and `ruff format --check`
+clean on every file this round touched.
+
+### NOT VERIFIED
+
+- **Cross-version bundles were not exercised.** The format-version gate
+  (`format_version > 1`) and the schema gate ("newer than this Lore supports")
+  exist in `verify_portable_bundle`, but no test builds a bundle with a bumped
+  `format_version`; only the checksum and evidence-digest tamper paths are
+  pinned. The sibling `lore backup` path does cover its own newer-schema refusal.
+- **No concurrent writer during export.** The guarantee is the online-backup API
+  (`test_backup_restore.py::test_snapshot_includes_commits_still_in_the_wal`
+  covers the uncheckpointed-commit case), but no test exports while a second
+  process writes.
+- **Semantic search after an import needs a rebuild on the receiving host**:
+  `memory_embeddings` and the vec0 `session_embeddings` are deliberately not
+  imported (a vector belongs to the model that produced it), and no test asserts
+  the recall path after an import.
+- **Artifact divergence is reported, not resolved.** `artifacts_kept` counts a
+  same-key/different-bytes artifact; no test constructs that case, and there is
+  no command to review the kept-local/scanned-away difference yet.
+- **`--replace` edge cases** (an existing store with `-wal`/`-shm` sidecars) are
+  inherited from `restore --force` and covered there, not re-tested here.

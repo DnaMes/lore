@@ -101,6 +101,19 @@ the environment only (next section) and never written into the store, and a
 backup reads the store and nothing else — the provider cache under
 `~/.lore/llm_cache` is not part of a bundle.
 
+`lore bundle export <path>` writes the same snapshot as a *portable* archive — the
+form meant to travel between machines — with `format: "lore-portable-bundle"`, the
+source namespace scope and machine scope of the exporting store, a fingerprint over
+every captured source revision, and the same per-member checksums and row counts.
+`lore bundle import <path>` verifies all of that before it opens the store and then
+merges: revisions dedupe by `(source_identity, content_sha256)`, a divergent copy of
+a session id is stored beside the local row instead of replacing it, imported rows
+keep their original `source_namespace`, and no local annotation or health counter is
+overwritten ([CLI.md](./CLI.md#bundle)). What a portable bundle never contains is
+the same list as a backup: no credential, token, API key, environment value or
+provider cache — only the store, which means the transcripts and raw source bytes
+inside it travel with it. Treat a bundle as sensitive as `~/.lore` itself.
+
 ## Provider credentials (not LORE_ variables)
 
 These names are read from the environment. They are never stored in repo files. Do not write their values into documentation, prompts or commits.

@@ -19,13 +19,13 @@ Output of `.venv/bin/python lore_cli.py --help`:
 
 ```text
 usage: lore [-h] [-v] [--version] [--output-dir OUTPUT_DIR]
-            {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,backup,restore,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
+            {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,backup,restore,bundle,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
             ...
 
 Lore — local-first archive and shared agent memory for your AI coding sessions
 
 positional arguments:
-  {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,backup,restore,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
+  {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,backup,restore,bundle,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
                         Commands
     list                List all sessions
     export              Export sessions to Markdown
@@ -41,6 +41,7 @@ positional arguments:
     prune               Prune sessions by prompt count
     backup              Write a versioned, consistent backup bundle
     restore             Restore the v2 store from a backup bundle
+    bundle              Export or import a portable archive bundle
     sync                Sync sessions for a tool
     run                 Run a tool and sync after it exits
     generate-titles     Generate readable titles for sessions
@@ -650,6 +651,67 @@ positional arguments:
 options:
   -h, --help  show this help message and exit
   --force     Replace an existing store
+```
+
+## bundle
+
+Export a portable archive bundle, or merge one from another machine.
+
+Writes: one zip file per export. An import writes the v2 store (`<output-dir>/index_v2.sqlite`) and one append-only row in `bundle_imports`; `--dry-run` writes nothing at all.
+
+A portable bundle is the [backup](#backup) snapshot plus the provenance needed to
+merge it somewhere else. `manifest.json` records `format: "lore-portable-bundle"`,
+`format_version`, a `provenance` object (the source namespace scope the store's rows
+carry, the machine scope, the creation time and the Lore version), the store schema
+and every applied migration, one sha256 and size per member, the row count of every
+archived table, and an `evidence` fingerprint: how many `source_revisions` and
+`source_artifacts` rows the archive holds plus a digest over every captured
+`(source_identity, content_sha256)` pair. `db/index_v2.sqlite` is the same
+SQLite-consistent snapshot `lore backup` writes, taken with SQLite's online-backup
+API; it carries the raw evidence, so the join between a session and the bytes it was
+parsed from cannot come apart in transit.
+
+`lore bundle import` verifies the manifest, every member checksum, the evidence
+fingerprint, the snapshot's `PRAGMA integrity_check`, the row counts and the schema
+compatibility **before** the live store is opened, so a tampered archive writes
+nothing. It then merges:
+
+- revisions dedupe on `(source_identity, content_sha256)`; changed bytes become an
+  extra `revision_seq`, never an overwritten revision;
+- an identical session changes nothing; a divergent copy of the same provider id is
+  stored under a qualified id (`<tool>:<scope>:<id>#2`) with `copy_of_session_id`
+  naming the row it diverges from — a local row is never replaced;
+- imported rows keep their original `source_namespace`, and the command prints how
+  many sessions and revisions came from which origin;
+- tags, knowledge, summaries, memory (with its tags, ratings and evidence links),
+  deletion tombstones and per-source health are merged. Local annotation is never
+  overwritten, a tombstone for a session this store still holds is skipped with a
+  count, and another host's counters never replace a local health counter;
+- embeddings are not imported: a vector belongs to the model that computed it, so
+  the receiving host rebuilds it.
+
+`--merge` (the default) keeps everything local. `--replace` installs the archived
+store as the live one — the first import onto an empty machine — and `--dry-run`
+merges into a temporary copy, so it reports the exact counts of a real import while
+writing nothing. Neither form can import a credential: the bundle holds the store and
+nothing else (see [CONFIGURATION.md](./CONFIGURATION.md#data-directory-and-backups)).
+
+```text
+usage: lore bundle [-h] [--merge | --replace] [--dry-run] {export,import} path
+
+Write a portable bundle of the v2 store (snapshot plus source provenance), or
+merge one from another machine into this store without overwriting local
+content
+
+positional arguments:
+  {export,import}  write a bundle, or import one
+  path             destination for export, bundle file for import
+
+options:
+  -h, --help       show this help message and exit
+  --merge          Merge into the local store (default)
+  --replace        Replace the local store with the archive
+  --dry-run        Report what import would change and write nothing
 ```
 
 ## sync
