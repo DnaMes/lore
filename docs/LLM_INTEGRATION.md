@@ -101,6 +101,53 @@ lore format --session-id abc123
 lore format --tool claude-code --limit 20
 ```
 
+### 5. Archived body and analysis coverage (#177, #178)
+
+Every AI task above reads one canonical body: the archived message rows of the v2
+store, in store (`seq`) order, with the full content. `lore summarize`, `lore
+knowledge`, `lore format` and the improvement pipeline all go through
+`lore.services.hydration` — a session's index metadata or a lossy live excerpt is
+replaced, never analysed.
+
+Hydration is explicit about failure. `HydrationError.reason` is one of a closed set,
+and a task reports it instead of prompting with an empty conversation:
+
+| Reason | Meaning |
+|--------|---------|
+| `no-v2-store` | the output directory has no v2 SQLite store |
+| `session-not-archived` | the store has no row for that session id |
+| `messages-not-synced` | the row exists but its message rows were never written |
+| `empty-transcript` | the row is marked synced but has zero message rows |
+
+`lore knowledge` counts skips per reason (`hydration_reasons`, printed as e.g.
+`1 messages-not-synced, 1 session-not-archived`); `lore format` prints
+`Skipped <id>: <reason>` per session, summarises the rest, and exits 1 when nothing
+could be hydrated. The formatted page and the knowledge entry both record the
+archived revision (`source_revision`) they were produced from. With AI disabled,
+`SessionFormatter(..., include_summary=False)`/an unavailable provider still renders
+the complete body — formatting and export never depend on a provider.
+
+Long sessions are summarised in bounded, ordered chunks. The number of chunks is
+derived from the token budget (`--max-session-tokens`) instead of a hard cap: when
+the budget allows, every message is covered; when it does not, sampling is the last
+resort and the result says exactly what it skipped. The session summary payload
+carries a `coverage` object:
+
+```json
+{
+  "chunks_total": 12, "chunks_used": 12, "complete": true,
+  "omitted_chunks": [], "seq_range": [1, 240],
+  "messages_total": 240, "messages_covered": 240, "messages_omitted": 0,
+  "omitted_seq_ranges": [], "user_turns_omitted": 0,
+  "revision": "<sha256 of the compressed transcript>", "truncated": false
+}
+```
+
+`complete: false` (and `truncated: true`) always comes with non-empty
+`omitted_chunks` and `omitted_seq_ranges`, so a partial summary is never reported as
+a complete analysis. `lore summarize --dry-run` uses the same plan as the run, so its
+expected call count matches what the run actually sends.
+
 ## Setup
 
 ### Authentication Methods

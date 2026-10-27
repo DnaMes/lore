@@ -1244,6 +1244,12 @@ def cmd_knowledge(args):
             f"Redacted {report.redactions} secret-like strings before sending",
             file=sys.stderr,
         )
+    if report.hydration_reasons:
+        # A skipped session always carries why its archived body was unavailable (#177).
+        print(
+            f"Sessions without an archived body: {report.hydration_breakdown()}",
+            file=sys.stderr,
+        )
 
     if report.failed and not report.extracted:
         # Every attempted call failed (outage, quota, bad key): scripts must see it,
@@ -1333,16 +1339,43 @@ def cmd_format(args):
     output_path = Path(args.output_dir) if args.output_dir else output_dir / "formatted"
     formatter = SessionFormatter(provider, output_path)
 
+    # Index entries carry metadata only: the archived transcript is hydrated from
+    # the v2 store first so the formatter summarises what happened (#177).
+    from lore.services.hydration import HydrationError, hydrate_session
+
+    hydration_reasons: dict[str, int] = {}
+    formatted_count = 0
     for i, session in enumerate(sessions, 1):
+        try:
+            session, body = hydrate_session(output_dir, session)
+        except HydrationError as exc:
+            hydration_reasons[exc.reason] = hydration_reasons.get(exc.reason, 0) + 1
+            print(
+                f"  [{i}/{len(sessions)}] Skipped {session.session_id[:8]}: {exc.reason}",
+                file=sys.stderr,
+            )
+            continue
         print(f"  [{i}/{len(sessions)}] Formatting {session.session_id[:8]}...")
         try:
-            formatted = formatter.format_session(session)
+            formatted = formatter.format_session(session, source_revision=body.revision)
             path = formatter.save_formatted_session(formatted)
+            formatted_count += 1
             print(f"    Saved: {path}")
         except Exception as e:
             print(f"    Error: {e}")
 
+    if hydration_reasons:
+        breakdown = ", ".join(
+            f"{count} {reason}" for reason, count in sorted(hydration_reasons.items())
+        )
+        print(
+            f"\n{sum(hydration_reasons.values())} sessions could not be hydrated "
+            f"({breakdown}); nothing was sent for them.",
+            file=sys.stderr,
+        )
     print(f"\nFormatted sessions saved to: {output_path}")
+    if hydration_reasons and not formatted_count:
+        return 1
 
 
 def cmd_sync(args):

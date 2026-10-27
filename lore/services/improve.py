@@ -445,6 +445,7 @@ def _stage_extract(
         "extracted": report.extracted,
         "unchanged": report.unchanged,
         "skipped_no_messages": report.skipped_no_messages,
+        "hydration_reasons": getattr(report, "hydration_reasons", {}),
         "failed": report.failed,
         "redactions": report.redactions,
     }

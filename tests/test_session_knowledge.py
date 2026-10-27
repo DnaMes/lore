@@ -97,6 +97,34 @@ def _build(output_dir: Path, *sessions: UnifiedSession) -> None:
     IndexBuilder(output_dir).build_index(list(sessions), {})
 
 
+def _replace_messages(output_dir: Path, session: UnifiedSession) -> None:
+    """Rewrite one session's message rows in place.
+
+    Since #155 a second write with a different body is stored as a divergent
+    copy under a qualified id, so a test that wants "the same session, new
+    content" must change the rows of its existing id directly.
+    """
+    conn = open_connection(v2_db_path(output_dir))
+    try:
+        conn.execute("DELETE FROM messages WHERE session_id = ?", (session.session_id,))
+        conn.executemany(
+            "INSERT INTO messages (session_id, seq, role, content, timestamp) "
+            "VALUES (?, ?, ?, ?, ?)",
+            [
+                (
+                    session.session_id,
+                    seq,
+                    message.role.value,
+                    message.content,
+                    message.timestamp.isoformat(),
+                )
+                for seq, message in enumerate(session.messages)
+            ],
+        )
+    finally:
+        conn.close()
+
+
 def _extractor(output_dir: Path, provider: FakeProvider) -> KnowledgeExtractor:
     return KnowledgeExtractor(provider, output_dir / "knowledge")
 
@@ -227,6 +255,8 @@ def test_run_extraction_skips_unchanged(tmp_path):
     assert row is not None
     assert row["model"] == "fake-model"
     assert row["prompt_version"] == KNOWLEDGE_PROMPT_VERSION
+    # The entry names the archived revision it was extracted from (#177).
+    assert len(row["payload"]["source_revision"]) == 64
 
 
 def test_changed_session_is_reextracted(tmp_path):
@@ -234,7 +264,7 @@ def test_changed_session_is_reextracted(tmp_path):
     provider = FakeProvider()
     _run(tmp_path, provider, _session("s1"))
 
-    _build(tmp_path, _session("s1", "second version"))
+    _replace_messages(tmp_path, _session("s1", "second version"))
     report = _run(tmp_path, provider, _session("s1"))
 
     assert len(provider.prompts) == 2
@@ -283,6 +313,11 @@ def test_session_without_messages_is_skipped(tmp_path):
     report = _run(tmp_path, provider, _session("s1"), _session("unknown"))
 
     assert report.skipped_no_messages == 2
+    assert report.hydration_reasons == {
+        "messages-not-synced": 1,
+        "session-not-archived": 1,
+    }
+    assert report.hydration_breakdown() == "1 messages-not-synced, 1 session-not-archived"
     assert provider.prompts == []
 
 
@@ -294,7 +329,7 @@ def test_knowledge_base_json_is_complete_after_partial_run(tmp_path, use_provide
     use_provider(provider)
 
     assert lore_cli.cmd_knowledge(args) == 0
-    _build(tmp_path, a, _session("b", "beta talk changed"))
+    _replace_messages(tmp_path, _session("b", "beta talk changed"))
     provider.responses = [_payload("Beta2")]
     assert lore_cli.cmd_knowledge(args) == 0
 

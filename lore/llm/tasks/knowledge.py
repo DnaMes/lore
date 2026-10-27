@@ -16,6 +16,9 @@ from ..base import LLMProvider, prepare_prompt, transcript_safe
 FAILURE_PROVIDER_UNAVAILABLE = "provider-unavailable"
 FAILURE_PROVIDER_ERROR = "provider-error"
 FAILURE_UNPARSABLE = "unparsable"
+# The task was handed no conversation (#177). An empty reconstruction is a
+# failure with a reason, never a prompt: hydrate the archived body first.
+FAILURE_NO_MESSAGES = "no-messages"
 
 
 @dataclass
@@ -29,6 +32,8 @@ class KnowledgeEntry:
     project: Optional[str] = None
     timestamp: datetime = field(default_factory=datetime.now)
     redactions: int = 0
+    # Archived revision the entry describes (#177); empty when unknown.
+    source_revision: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -40,6 +45,7 @@ class KnowledgeEntry:
             "tools_used": self.tools_used,
             "project": self.project,
             "timestamp": self.timestamp.isoformat(),
+            "source_revision": self.source_revision,
         }
 
     @classmethod
@@ -63,6 +69,7 @@ class KnowledgeEntry:
             tools_used=_strings("tools_used"),
             project=data.get("project"),
             timestamp=timestamp,
+            source_revision=str(data.get("source_revision") or ""),
         )
 
 
@@ -127,8 +134,12 @@ Format as JSON:
 
         Returns ``(entry, None)`` on success and ``(None, FAILURE_*)`` otherwise,
         so the caller can count provider problems separately from answers that
-        arrived but could not be parsed.
+        arrived but could not be parsed. A session with no conversation is
+        refused before any call (:data:`FAILURE_NO_MESSAGES`): the archived body
+        must be hydrated first (#177).
         """
+        if not session.messages:
+            return None, FAILURE_NO_MESSAGES
         if not self.provider.is_available():
             return None, FAILURE_PROVIDER_UNAVAILABLE
 

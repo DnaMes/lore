@@ -6,8 +6,22 @@ from typing import TYPE_CHECKING, List, Optional
 if TYPE_CHECKING:
     from ...core.models import UnifiedSession
 
+from ...services.hydration import REASON_EMPTY
+from ...services.summary_input import compress, from_unified
 from ...utils.paths import lore_home
 from ..base import LLMProvider, prepare_prompt, transcript_safe
+
+# A formatted session's summary is one call: the compressed conversation is
+# bounded, and a session beyond this keeps its head and tail with a stated gap.
+_FORMAT_SUMMARY_MAX_CHARS = 24_000
+_FORMAT_SUMMARY_TAIL_CHARS = 6_000
+
+
+# Why the AI half of the formatted page is empty. "ok" means the summary ran;
+# any other value is a hydration reason (#177), or "provider-error" when the
+# archived body was there but the call failed.
+SUMMARY_OK = "ok"
+SUMMARY_PROVIDER_ERROR = "provider-error"
 
 
 @dataclass
@@ -16,6 +30,26 @@ class FormattedSession:
     formatted_content: str
     summary: str
     tags: List[str]
+    # The AI summary is optional; when it is missing this says why (#177).
+    summary_status: str = SUMMARY_OK
+    # Archived revision the summary was generated from, when it ran.
+    source_revision: str = ""
+
+
+def summary_transcript(messages: List) -> str:
+    """The archived conversation as one prompt block, bounded with a visible gap.
+
+    ``compress`` elides tool output and head/tail-elides very long messages; user
+    and assistant text stays readable, so a decision made near the end of a long
+    session is still in the summary prompt (#177).
+    """
+    text = compress(from_unified(messages)).text
+    if len(text) <= _FORMAT_SUMMARY_MAX_CHARS:
+        return text
+    keep_head = _FORMAT_SUMMARY_MAX_CHARS - _FORMAT_SUMMARY_TAIL_CHARS
+    head, tail = text[:keep_head], text[-_FORMAT_SUMMARY_TAIL_CHARS:]
+    omitted = len(text) - keep_head - _FORMAT_SUMMARY_TAIL_CHARS
+    return f"{head}\n[{omitted} characters omitted from the middle of the session]\n{tail}"
 
 
 class SessionFormatter:
@@ -30,7 +64,10 @@ class SessionFormatter:
         session: "UnifiedSession",
         max_messages: int = 30,
         include_summary: bool = True,
+        *,
+        source_revision: str = "",
     ) -> FormattedSession:
+        """Render one session; ``source_revision`` is the hydrated body it came from."""
         messages = session.messages[:max_messages]
 
         formatted_parts = []
@@ -56,15 +93,22 @@ class SessionFormatter:
 
         summary = ""
         tags = []
-
+        status = SUMMARY_OK
         if include_summary and self.provider.is_available():
-            summary, tags = self._generate_summary_and_tags(session, messages[:10])
+            if not session.messages:
+                # No archived body reached this task: say so instead of asking a
+                # provider to summarise an empty reconstruction (#177).
+                status = REASON_EMPTY
+            else:
+                summary, tags, status = self._generate_summary_and_tags(session)
 
         return FormattedSession(
             session_id=session.session_id,
             formatted_content=formatted_content,
             summary=summary,
             tags=tags,
+            summary_status=status,
+            source_revision=source_revision,
         )
 
     def _clean_content(self, content: str) -> str:
@@ -72,18 +116,13 @@ class SessionFormatter:
         content = re.sub(r"\n{3,}", "\n\n", content)
         return content.strip()
 
-    def _generate_summary_and_tags(
-        self,
-        session: "UnifiedSession",
-        messages: List,
-    ) -> tuple:
-        conversation = []
-        for msg in messages[:10]:
-            role = msg.role.value.upper()
-            content = (msg.content or "")[:300]
-            conversation.append(f"{role}: {content}")
+    def _generate_summary_and_tags(self, session: "UnifiedSession") -> tuple:
+        """Summarise the canonical conversation, head/tail elided when huge (#177).
 
-        conversation_text = "\n".join(conversation)
+        Returns ``(summary, tags, status)``. The whole archived body is used, not
+        the first few messages: a late correction is what the summary is for.
+        """
+        conversation_text = summary_transcript(session.messages)
 
         prompt = f"""Summarize this AI coding session and suggest tags.
 
@@ -118,10 +157,10 @@ Format as JSON:
             import json
 
             data = json.loads(content)
-            return data.get("summary", ""), data.get("tags", [])
+            return data.get("summary", ""), data.get("tags", []), SUMMARY_OK
 
         except Exception:
-            return "", []
+            return "", [], SUMMARY_PROVIDER_ERROR
 
     def save_formatted_session(
         self,
@@ -136,8 +175,16 @@ Format as JSON:
         content = formatted.formatted_content
         if formatted.summary:
             content += f"\n\n---\n\n## Summary\n{formatted.summary}\n"
+            if formatted.source_revision:
+                content += f"\n_Source revision: {formatted.source_revision[:12]}_\n"
         if formatted.tags:
             content += f"\n**Tags:** {', '.join(formatted.tags)}\n"
+        if formatted.summary_status != SUMMARY_OK:
+            # The AI half is optional; the page says why it is missing (#177).
+            content += (
+                f"\n_AI summary unavailable ({formatted.summary_status}); "
+                "the session body above is complete._\n"
+            )
 
         with open(output_path, "w") as f:
             f.write(content)

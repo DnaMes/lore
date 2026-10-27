@@ -147,6 +147,11 @@ class TitleGenerator:
             if title:
                 session.title_source = TitleSource.LLM
                 return title, self._llm_record(session, "llm")
+            failure_record = self._llm_record(
+                session, "llm-no-messages" if not session.messages else "llm-failed"
+            )
+        else:
+            failure_record = None
 
         if self.strategy == TitleStrategy.KEYWORD and self._yake:
             title = self._generate_keywords(session)
@@ -158,7 +163,12 @@ class TitleGenerator:
             title, record = self._generate_auto_recorded(session)
             return title, record
 
-        return self._generate_first_message(session), self._record("first_message")
+        title = self._generate_first_message(session)
+        record = self._record("first_message")
+        if failure_record:
+            # Why the AI stage produced nothing, recorded with the title it fell back to.
+            record["llm_failed"] = failure_record
+        return title, record
 
     def _generate_auto_recorded(self, session: "UnifiedSession") -> tuple[str, dict]:
         from ..core.models import TitleSource
@@ -240,6 +250,10 @@ class TitleGenerator:
 
     def _generate_llm(self, session: "UnifiedSession") -> Optional[str]:
         """Ask the *selected* provider only — never fall through to another one (#185)."""
+        if not session.messages:
+            # No archived body reached the title task: never ask a provider to
+            # title an empty conversation (#177).
+            return None
         if self.provider == "gemini-cli":
             return self._generate_llm_gemini(session)
         if self.provider == "local":

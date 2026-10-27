@@ -8,9 +8,9 @@ response, so a failed call is retried on the next run.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 from ..core.models import AUTOMATED_ORIGINS, Tool, UnifiedSession
 from ..llm.tasks.knowledge import (
@@ -22,6 +22,7 @@ from ..services.index import load_deleted_session_ids
 from ..storage.knowledge import get_session_knowledge, prompt_fingerprint, save_session_knowledge
 from ..storage.reader import load_session_messages_v2
 from ..utils.tooling import normalize_tool_name
+from .hydration import HydrationError, hydrate_session
 
 # Bump when the extraction prompt changes so stored rows are re-extracted.
 KNOWLEDGE_PROMPT_VERSION = 1
@@ -117,6 +118,9 @@ class ExtractionReport:
     provider_unavailable: int = 0
     provider_error: int = 0
     unparsable: int = 0
+    # Why the archived body was unavailable, per hydration reason (#177). A skip
+    # is only counted in ``skipped_no_messages`` and always has a reason here.
+    hydration_reasons: Dict[str, int] = field(default_factory=dict)
 
     @property
     def failed(self) -> int:
@@ -135,6 +139,17 @@ class ExtractionReport:
             self.provider_error += 1
         else:
             self.unparsable += 1
+
+    def note_unavailable(self, reason: str) -> None:
+        """Count one session whose archived body could not be hydrated (#177)."""
+        self.skipped_no_messages += 1
+        self.hydration_reasons[reason] = self.hydration_reasons.get(reason, 0) + 1
+
+    def hydration_breakdown(self) -> str:
+        """Non-zero hydration reasons, e.g. ``'2 messages-not-synced'``."""
+        return ", ".join(
+            f"{count} {reason}" for reason, count in sorted(self.hydration_reasons.items())
+        )
 
     def failure_breakdown(self) -> str:
         """Non-zero causes, e.g. ``'1 provider unavailable, 2 unparsable'``."""
@@ -156,17 +171,18 @@ def run_extraction(
 ) -> ExtractionReport:
     """Extract knowledge for ``sessions`` whose prompt input changed.
 
-    ``sessions`` may carry no messages (index entries); the conversation is
-    loaded from the v2 store under ``output_dir``. Sessions without synced
-    messages are never sent to the provider.
+    ``sessions`` may carry no messages (index entries); the canonical archived
+    conversation is hydrated from the v2 store under ``output_dir`` and replaces
+    whatever the caller passed. A session whose body cannot be hydrated is never
+    sent to the provider: it is counted with its typed reason (#177).
     """
     report = ExtractionReport()
     for session in sessions:
-        messages = load_session_messages_v2(output_dir, session.session_id)
-        if not messages:
-            report.skipped_no_messages += 1
+        try:
+            session, body = hydrate_session(output_dir, session)
+        except HydrationError as exc:
+            report.note_unavailable(exc.reason)
             continue
-        session.messages = messages
 
         # The whole prompt (tool, project, date, conversation) is the input a stored
         # result depends on, so a change to any of them re-extracts.
@@ -182,6 +198,7 @@ def run_extraction(
         if entry is None:
             report.count_failure(failure)
             continue
+        entry.source_revision = body.revision
         report.redactions += entry.redactions
         save_session_knowledge(
             output_dir,
