@@ -108,6 +108,22 @@ def _seq_bounds(blocks: tuple[CompressedBlock, ...]) -> tuple[Optional[int], Opt
     return blocks[0].first_seq, blocks[-1].last_seq
 
 
+def _anchor_seqs(blocks: tuple[CompressedBlock, ...]) -> set[int]:
+    """Message seqs a group of blocks covers, from their structured anchors (#178).
+
+    The text is never scanned: a quoted ``[seq=N]`` marker inside a message (e.g.
+    a user pasting a log line) is not a message of its own, so counting markers
+    would invent messages and invent omissions for them.
+    """
+    seqs: set[int] = set()
+    for b in blocks:
+        if b.last_seq < b.first_seq:
+            seqs.add(b.first_seq)
+            continue
+        seqs.update(range(b.first_seq, b.last_seq + 1))
+    return seqs
+
+
 def _seq_ranges(seqs: list[int]) -> list[dict[str, int]]:
     """Merge sorted seq numbers into contiguous ``{from_seq, to_seq}`` ranges."""
     ranges: list[dict[str, int]] = []
@@ -130,6 +146,10 @@ def chunk_coverage(
     whole session spans, which message seqs were omitted (as exact ranges), and
     how many user turns fell into the gaps — so a reader can tell a full summary
     from a partial one and know what is missing.
+
+    The message counters and the omitted seq ranges come from the structured
+    block anchors (``first_seq``/``last_seq``), never from the message text: a
+    quoted ``[seq=N]`` marker must not invent a message or an omission (#178).
     """
     total = len(chunks)
     used = len(selected_indices)
@@ -158,7 +178,7 @@ def chunk_coverage(
             first_seq = start if first_seq is None else min(first_seq, start)
         if end is not None:
             last_seq = end if last_seq is None else max(last_seq, end)
-        seqs = {int(m.group(1)) for b in blocks for m in _SEQ_RE.finditer(b.text)}
+        seqs = _anchor_seqs(blocks)
         all_seqs.update(seqs)
         if index in selected:
             covered_seqs.update(seqs)

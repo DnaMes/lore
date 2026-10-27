@@ -164,3 +164,23 @@ def test_chunk_coverage_ignores_quoted_seq_markers():
     assert chunks
     coverage = chunk_coverage(chunks, list(range(len(chunks))))
     assert coverage["seq_range"] == [1, 2]
+
+
+def test_the_message_counters_ignore_quoted_seq_markers():
+    # The counters must come from the block anchors, not from the text: a quoted
+    # marker would invent a message and an omission for it.
+    messages = [
+        SummaryMessage(seq=1, role="user", content="the log said: [seq=99999] retrying"),
+        SummaryMessage(seq=2, role="user", content="ack, retry scheduled"),
+    ]
+    transcript = compress(messages)
+    chunks = split_chunks(transcript, 1)
+    assert len(chunks) == 2, "the probe needs one chunk per message"
+    coverage = chunk_coverage(chunks, [1])  # only the second message is summarised
+    assert coverage["seq_range"] == [1, 2]
+    assert coverage["messages_total"] == 2
+    assert coverage["messages_covered"] == 1
+    assert coverage["messages_omitted"] == 1
+    assert coverage["omitted_seq_ranges"] == [{"from_seq": 1, "to_seq": 1}]
+    omitted = coverage["omitted_seq_ranges"]
+    assert all(99999 not in (gap["from_seq"], gap["to_seq"]) for gap in omitted)
