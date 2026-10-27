@@ -964,9 +964,33 @@ options:
 
 ## lore-mcp
 
-Stdio MCP server, so there is no `--help` output: it speaks JSON-RPC on
-stdin/stdout and is started by the MCP client. See [MCP.md](./MCP.md) for the
-tool list and client configuration.
+MCP server. Stdio is the default and has no `--help`-driven behaviour to speak of:
+started without flags it speaks JSON-RPC on stdin/stdout and is driven by the MCP
+client. `--http` serves the same tools over streamable HTTP instead. See
+[MCP.md](./MCP.md) for the tool list, both transports and client configuration.
+
+```text
+usage: lore-mcp [-h] [--http] [--host HOST] [--port PORT] [--path PATH]
+                [--token-file TOKEN_FILE] [--timeout TIMEOUT]
+```
+
+```text
+  --http                Serve the streamable-HTTP transport instead of stdio.
+  --host HOST           HTTP bind host (default 127.0.0.1, or $LORE_MCP_HTTP_HOST).
+                        A non-loopback host requires an auth token.
+  --port PORT           HTTP bind port (default 8787, or $LORE_MCP_HTTP_PORT).
+  --path PATH           HTTP endpoint path (default /mcp, or $LORE_MCP_HTTP_PATH).
+  --token-file TOKEN_FILE
+                        File holding the bearer token (or set
+                        $LORE_MCP_HTTP_TOKEN). Required for a non-loopback bind;
+                        the token is read from the file, never from argv.
+  --timeout TIMEOUT     Per-request deadline in seconds (default 60, or
+                        $LORE_MCP_HTTP_TIMEOUT).
+```
+
+A non-loopback `--host` without a token exits `2` with a message on stderr and
+never binds (`--http` also exits `2` for an unreadable or empty token file, or a
+malformed `--path`).
 
 Writes: the shared memory store through the `memory_write` and `memory_feedback`
 tools; the search, session and summary tools only read it.

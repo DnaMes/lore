@@ -1,12 +1,14 @@
 # MCP server
 
-`lore-mcp` exposes the local Lore archive and the shared cross-tool memory store to any Model Context Protocol client over stdio.
+`lore-mcp` exposes the local Lore archive and the shared cross-tool memory store to any Model Context Protocol client over stdio (the default) or streamable HTTP.
 
 ## What it is
 
 `lore-mcp` is the console entry point declared in `pyproject.toml` (`lore-mcp = "lore.cli.mcp:main_sync"`). It calls `create_server()` in `lore/interfaces/mcp.py`, which builds an `MCPServer` (transport in `lore/interfaces/server.py`) and registers the tool groups from `lore/interfaces/mcp_tools/`: `search.py`, `sessions.py`, `memory.py`, `summaries.py`.
 
 The server speaks JSON-RPC 2.0 over stdin/stdout. Requests are read line by line, or framed with `Content-Length` headers; responses go to stdout and the loop ends when stdin closes. It is a stdio server, so it waits for input and prints nothing on its own: do not run it by hand to "see what it does".
+
+The same server (`create_server()` in `lore/interfaces/mcp.py`, one tool set) can also be served over streamable HTTP with `lore-mcp --http`; see `## Streamable HTTP transport` below. Stdio stays the default and is unchanged.
 
 Read versus write:
 
@@ -116,6 +118,71 @@ Add to `~/.cursor/mcp.json`:
 
 NOT VERIFIED against the current Cursor version. The `mcpServers` object with a per-server `command` matches this machine's existing `~/.cursor/mcp.json`, but no Lore entry was added and Cursor was not restarted against it.
 
+## Streamable HTTP transport
+
+For hosts that cannot spawn a local process (Cursor over a remote session, a browser-based client, another machine on a private network) the same server can be reached over MCP streamable HTTP. The transport lives in `lore/interfaces/mcp_http.py`; the tool surface is the identical `create_server()` result, so both transports advertise the same tools.
+
+Start it instead of stdio:
+
+```bash
+lore-mcp --http                                  # http://127.0.0.1:8787/mcp
+lore-mcp --http --port 9137 --path /mcp          # loopback, different port
+token="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
+printf '%s\n' "$token" > ~/.lore/mcp-http-token && chmod 600 ~/.lore/mcp-http-token
+lore-mcp --http --host 192.168.1.10 --token-file ~/.lore/mcp-http-token
+```
+
+Flags (each also reads an environment variable):
+
+| flag | env | default | meaning |
+|------|-----|---------|---------|
+| `--http` | — | off (stdio) | serve the streamable-HTTP transport |
+| `--host` | `LORE_MCP_HTTP_HOST` | `127.0.0.1` | bind host; non-loopback needs a token |
+| `--port` | `LORE_MCP_HTTP_PORT` | `8787` | bind port (`0` picks an ephemeral one) |
+| `--path` | `LORE_MCP_HTTP_PATH` | `/mcp` | endpoint path |
+| `--token-file` | `LORE_MCP_HTTP_TOKEN_FILE` | — | file holding the bearer token |
+| `--timeout` | `LORE_MCP_HTTP_TIMEOUT` | `60` | per-request deadline in seconds |
+
+The bearer token can also come from `LORE_MCP_HTTP_TOKEN`; `--token-file` wins when both are set. The token is only ever read from the file or the environment, never from `argv`, and it is never logged.
+
+Protocol shape: `POST <path>` with a JSON-RPC 2.0 body and `Content-Type: application/json`, answered with `application/json`. The server is stateless (no `Mcp-Session-Id`), so `initialize`, `tools/list` and `tools/call` may travel on separate connections; a notification such as `notifications/initialized` is acknowledged with `202 Accepted` and an empty body. `GET` returns `405` because no standalone SSE stream is offered.
+
+```bash
+curl -s http://127.0.0.1:8787/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | \
+  python -c 'import json,sys; print([t["name"] for t in json.load(sys.stdin)["result"]["tools"]])'
+```
+
+### Cursor over HTTP
+
+```json
+{
+  "mcpServers": {
+    "lore": {
+      "url": "http://127.0.0.1:8787/mcp",
+      "headers": { "Authorization": "Bearer <token-if-one-is-configured>" }
+    }
+  }
+}
+```
+
+NOT VERIFIED against the current Cursor version: the `url` + `headers` form follows the MCP streamable-HTTP client convention, but no Lore entry was added and Cursor was not restarted against it. A loopback URL only works when Cursor runs on the same machine; a remote Cursor needs `--host` set to an address it can reach plus a token.
+
+### Security rules
+
+The archive is private, so the transport refuses the obvious accidents instead of documenting them:
+
+- **Loopback by default.** `127.0.0.1` / `localhost` / `::1` need no token. Any other bind host is an explicit opt-in and **refuses to start without a token** (`LORE_MCP_HTTP_TOKEN` or `--token-file`); an unreadable or empty token file is a refusal too, not an unauthenticated server. Exit code `2` and a message on stderr.
+- **Bearer auth.** With a token configured, every request needs `Authorization: Bearer <token>`; missing or wrong gets `401` with `WWW-Authenticate: Bearer` and JSON-RPC error `-32001`. The comparison is constant time.
+- **Host allowlist.** A `Host` header naming a foreign domain is rejected with `400`, using the same allowlist as `lore-web` (`lore/interfaces/web_utils.py`: loopback names, the bind host, `LORE_ALLOWED_HOSTS`, and the hosts of `LORE_PUBLIC_ORIGINS`).
+- **Origin policy.** When an `Origin` header is present it must name this server's own origin (or a `LORE_PUBLIC_ORIGINS` entry while `TRUSTED_PROXY` is set); anything else is `403`. MCP clients and `curl` send no `Origin` and are unaffected.
+- **Bounded requests.** Bodies are capped at 1 MiB (`413` above), 4 requests may be in flight at once (`503` with `Retry-After: 1` above), and every request has the `--timeout` deadline: a tool call still running then is cancelled and answered with JSON-RPC error `-32000` instead of hanging the client.
+- **No secrets in logs.** The token is never logged or echoed; the startup line names the origin and whether auth is required, not the token.
+
+The HTTP listener is Werkzeug's threaded server, the same one `lore-web` uses for local/dev use. For anything beyond a trusted network, terminate TLS in a reverse proxy and set `LORE_PUBLIC_ORIGINS` (with `TRUSTED_PROXY=1`) so the proxy's host and origin are the allowed ones.
+
 ## Troubleshooting
 
 - **Empty results from `search_history`, `list_sessions` or `list_projects`.** There is no index yet for the tool you are asking about. Build it first:
@@ -128,6 +195,7 @@ NOT VERIFIED against the current Cursor version. The `mcpServers` object with a 
   See `./CLI.md` for the full command set. `lore export --full` re-parses sources that look unchanged.
 - **Memory tools return nothing.** The shared memory store is empty; `memory_write` has to run before `memory_recall` or `memory_feedback` can return anything. See `./MEMORY.md`.
 - **The client shows no tools.** Check the command path with `command -v lore-mcp`, then use the absolute path in the client configuration. A stdio server started without a client that speaks JSON-RPC simply blocks on stdin.
+- **`--http` exits with code 2.** It refused to start: the bind host is not loopback and no token was configured, or the token file is missing/empty. Set `LORE_MCP_HTTP_TOKEN` or `--token-file`, or bind to `127.0.0.1`.
 - **Do not print to stdout.** Stdout carries protocol messages only; anything else corrupts the stream. This is why `lore/interfaces/server.py` and `lore/cli/mcp.py` contain no `print()` calls, and why logs go to stderr: the modules use `logging.getLogger(__name__)` without installing a stdout handler, so Python's default last-resort handler writes warnings and errors to stderr. Redirect or capture stderr separately when debugging.
 
 ## See also

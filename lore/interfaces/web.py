@@ -162,13 +162,10 @@ from .web_utils import (
     _record_job_outcome,
     _request_id,
     _should_rate_limit,
-    configured_public_origins,
     forwarded_header_error,
     host_header_allowed,
     load_noise_rules,
-    normalize_origin,
-    parse_origin,
-    request_origin,
+    request_is_cross_origin,
     save_noise_rules,
     trusted_proxy_enabled,
 )
@@ -289,18 +286,11 @@ def _check_local_origin() -> Optional[tuple]:
     Scheme *and* port are part of the comparison, so ``https://host:8443``
     never authorises ``http://host`` or ``https://host``. Malformed
     ``X-Forwarded-*`` headers are rejected in ``before_request`` first: a
-    request whose forwarded headers do not parse is not one a proxy sent.
+    request whose forwarded headers do not parse is not one a proxy sent. The
+    policy itself is :func:`lore.interfaces.web_utils.request_is_cross_origin`,
+    shared with the MCP HTTP transport.
     """
-    origin = request.headers.get("Origin")
-    if origin is None:
-        return None
-    parsed = parse_origin(origin)
-    if parsed is None:
-        return jsonify({"error": "Cross-origin request rejected"}), 403
-    normalized = normalize_origin(*parsed)
-    if normalized == request_origin():
-        return None
-    if trusted_proxy_enabled() and normalized in configured_public_origins():
+    if not request_is_cross_origin():
         return None
     return jsonify({"error": "Cross-origin request rejected"}), 403
 

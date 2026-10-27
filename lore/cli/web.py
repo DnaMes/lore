@@ -8,19 +8,15 @@ intended for local/dev use; in production the app is served by gunicorn
 from __future__ import annotations
 
 import argparse
-import ipaddress
 import os
 import sys
 
 
 def _is_loopback_bind(host: str) -> bool:
     """Whether a bind host only accepts connections from this machine."""
-    if host == "localhost":
-        return True
-    try:
-        return bool(ipaddress.ip_address(host).is_loopback)
-    except ValueError:
-        return False
+    from lore.interfaces.web_utils import is_loopback_host
+
+    return is_loopback_host(host)
 
 
 def warn_if_exposed_without_origin_config(host: str) -> None:

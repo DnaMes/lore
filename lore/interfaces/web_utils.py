@@ -83,6 +83,22 @@ LOOPBACK_HOSTS = ("localhost", "127.0.0.1", "::1")
 _DEFAULT_PORTS = {"http": 80, "https": 443}
 
 
+def is_loopback_host(host: str) -> bool:
+    """Whether ``host`` only accepts connections from this machine.
+
+    A name other than ``localhost`` is resolved by nobody here: anything that
+    is not an IP literal and not ``localhost`` counts as non-loopback, so a
+    hostname pointing at the loopback address still needs the explicit opt-in.
+    """
+    value = (host or "").strip().strip("[]")
+    if value.lower() == "localhost":
+        return True
+    try:
+        return bool(ipaddress.ip_address(value).is_loopback)
+    except ValueError:
+        return False
+
+
 def _parse_port(raw: str) -> Optional[int]:
     """Parse a TCP port as ``int`` in ``1..65535``; ``None`` when invalid.
 
@@ -253,6 +269,28 @@ def _split_host_checked(value: str) -> Optional[Tuple[str, Optional[int]]]:
     if parsed.hostname is None or parsed.path not in ("", "/") or parsed.query or parsed.fragment:
         return None
     return parsed.hostname, port
+
+
+def request_is_cross_origin() -> bool:
+    """Whether the current request carries an ``Origin`` that is not this app's.
+
+    The one origin policy shared by ``lore-web`` and the MCP HTTP transport
+    (#193): a missing ``Origin`` is not cross-origin (curl and MCP clients send
+    none), a malformed one is, the request's own origin is not, and an origin
+    listed in ``LORE_PUBLIC_ORIGINS`` is not while ``TRUSTED_PROXY`` is set.
+    Scheme and port are part of the comparison, so ``https://host:8443`` never
+    authorises ``http://host``.
+    """
+    origin = request.headers.get("Origin")
+    if origin is None:
+        return False
+    parsed = parse_origin(origin)
+    if parsed is None:
+        return True
+    normalized = normalize_origin(*parsed)
+    if normalized == request_origin():
+        return False
+    return not (trusted_proxy_enabled() and normalized in configured_public_origins())
 
 
 def request_origin() -> str:
