@@ -179,19 +179,25 @@ def resolve_store_identity(
 
     Returns ``(store_id, copy_of)``:
 
-    - no row yet, or the stored copy has identical content → the unqualified id;
-    - a stored row with different content → the qualified copy id and the id of
-      the row it is a divergent copy of. The earlier row is never replaced.
+    - no row yet, identical content, or the *same* namespace → the unqualified
+      id: the provider's own record grew or was re-parsed, which is a refresh,
+      not a second history (the earlier raw bytes stay in ``source_revisions``);
+    - a stored row from a *different* namespace with different content → the
+      qualified copy id and the id of the row it is a divergent copy of. The
+      earlier row is never replaced.
 
     Rule 3 of the spec (different namespace, same record id, unqualified id
-    taken) is handled by the same branch: the content differs, so the newcomer
-    is the copy.
+    taken) is handled by the same branch: the newcomer is the copy.
     """
     existing = _existing_row(conn, record_id)
     if existing is None:
         return record_id, None
     if existing["content_sha256"] in (None, content_sha256):
         # No hash recorded (legacy row) or identical content: refresh in place.
+        return record_id, existing["copy_of_session_id"]
+    if existing["source_namespace"] in (None, namespace):
+        # Same source (or a legacy row without a namespace): an update of the
+        # same session, not a divergent copy.
         return record_id, existing["copy_of_session_id"]
     scope = namespace.split(":", 1)[-1]
     index = 2

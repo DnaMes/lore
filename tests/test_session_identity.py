@@ -7,6 +7,8 @@ copy, and keep every legacy id resolvable.
 
 from __future__ import annotations
 
+import os
+from contextlib import contextmanager
 from datetime import datetime
 
 from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
@@ -42,6 +44,26 @@ def _session(
 
 def _write(tmp_path, *sessions):
     write_sessions(tmp_path / "index_v2.sqlite", list(sessions))
+    return initialise(tmp_path / "index_v2.sqlite")
+
+
+@contextmanager
+def _namespace(value):
+    """Run a write as if it came from another machine/home scope."""
+    previous = os.environ.get("LORE_SOURCE_NAMESPACE")
+    os.environ["LORE_SOURCE_NAMESPACE"] = value
+    try:
+        yield
+    finally:
+        if previous is None:
+            os.environ.pop("LORE_SOURCE_NAMESPACE", None)
+        else:
+            os.environ["LORE_SOURCE_NAMESPACE"] = previous
+
+
+def _write_ns(tmp_path, namespace, *sessions):
+    with _namespace(namespace):
+        write_sessions(tmp_path / "index_v2.sqlite", list(sessions))
     return initialise(tmp_path / "index_v2.sqlite")
 
 
@@ -92,15 +114,31 @@ def test_identical_copy_deduplicates_to_one_row(tmp_path):
     assert rows[0]["source_namespace"] == "claude-code:local"
 
 
-def test_divergent_copy_is_kept_and_linked_not_overwritten(tmp_path):
-    conn = _write(tmp_path, _session(text="original"), _session(text="rewritten"))
+def test_same_namespace_update_refreshes_in_place(tmp_path):
+    conn = _write(tmp_path, _session(text="original"))
+    with _namespace("local"):
+        write_sessions(tmp_path / "index_v2.sqlite", [_session(text="rewritten")])
+    conn = initialise(tmp_path / "index_v2.sqlite")
+
+    rows = _rows(conn)
+    assert len(rows) == 1
+    assert rows[0]["id"] == "abc"
+    assert [m.content for m in load_session_messages_v2(tmp_path, "abc")] == [
+        "rewritten",
+        "reply",
+    ]
+
+
+def test_divergent_copy_from_another_namespace_is_kept_and_linked(tmp_path):
+    _write_ns(tmp_path, "machine-a", _session(text="original"))
+    conn = _write_ns(tmp_path, "machine-b", _session(text="rewritten"))
 
     rows = _rows(conn)
     assert len(rows) == 2
     first, second = rows[0], rows[1]
     assert first["id"] == "abc"
     assert first["copy_of_session_id"] is None
-    assert second["id"].startswith("claude-code:local:abc#")
+    assert second["id"].startswith("claude-code:machine-b:abc#")
     assert second["copy_of_session_id"] == "abc"
     assert second["source_record_id"] == "abc"
     assert first["content_sha256"] != second["content_sha256"]
@@ -128,26 +166,26 @@ def test_two_tools_with_the_same_record_id_both_survive(tmp_path):
 
 
 def test_third_divergent_copy_gets_the_next_suffix(tmp_path):
-    conn = _write(
-        tmp_path,
-        _session(text="v1"),
-        _session(text="v2"),
-        _session(text="v3"),
-    )
+    _write_ns(tmp_path, "a", _session(text="v1"))
+    _write_ns(tmp_path, "b", _session(text="v2"))
+    conn = _write_ns(tmp_path, "c", _session(text="v3"))
 
     rows = _rows(conn)
     assert len(rows) == 3
-    suffixes = sorted(row["id"] for row in rows if row["id"].startswith("claude-code:local:abc#"))
-    assert suffixes == ["claude-code:local:abc#2", "claude-code:local:abc#3"]
+    suffixes = sorted(
+        row["id"] for row in rows if row["id"].startswith("claude-code:") and "#" in row["id"]
+    )
+    assert suffixes == ["claude-code:b:abc#2", "claude-code:c:abc#2"]
     assert all(row["copy_of_session_id"] == "abc" for row in rows[1:])
 
 
 def test_copies_of_lists_the_divergent_histories(tmp_path):
-    conn = _write(tmp_path, _session(text="v1"), _session(text="v2"))
+    _write_ns(tmp_path, "a", _session(text="v1"))
+    conn = _write_ns(tmp_path, "b", _session(text="v2"))
 
     copies = copies_of(conn, "abc")
     assert len(copies) == 1
-    assert copies[0]["id"].startswith("claude-code:local:abc#")
+    assert copies[0]["id"].startswith("claude-code:b:abc#")
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +194,8 @@ def test_copies_of_lists_the_divergent_histories(tmp_path):
 
 
 def test_resolver_maps_legacy_qualified_record_and_hash_ids(tmp_path):
-    conn = _write(tmp_path, _session(text="v1"), _session(text="v2"))
+    _write_ns(tmp_path, "a", _session(text="v1"))
+    conn = _write_ns(tmp_path, "b", _session(text="v2"))
     copy_id = _rows(conn)[1]["id"]
     digest = canonical_content_hash(_session(text="v2"))
 
@@ -165,7 +204,7 @@ def test_resolver_maps_legacy_qualified_record_and_hash_ids(tmp_path):
     assert resolve_session_id(conn, copy_id) == copy_id
     # An unknown suffix of a known base falls back to the base through the
     # record id — an export from another machine still opens the session.
-    assert resolve_session_id(conn, "claude-code:local:abc#99") == "abc"
+    assert resolve_session_id(conn, "claude-code:b:abc#99") == "abc"
     assert resolve_session_id(conn, "does-not-exist") is None
     assert resolve_session_id(conn, "") is None
     # A raw provider record id and a content hash both resolve.
@@ -174,7 +213,8 @@ def test_resolver_maps_legacy_qualified_record_and_hash_ids(tmp_path):
 
 
 def test_resolver_finds_a_copy_by_its_content_hash(tmp_path):
-    conn = _write(tmp_path, _session(text="v1"), _session(text="v2"))
+    _write_ns(tmp_path, "a", _session(text="v1"))
+    conn = _write_ns(tmp_path, "b", _session(text="v2"))
     copy_id = _rows(conn)[1]["id"]
     digest = canonical_content_hash(_session(text="v2"))
 
@@ -224,6 +264,7 @@ def test_migration_21_is_idempotent_and_keeps_existing_ids(tmp_path):
 
 
 def test_collision_with_different_content_is_detected_by_the_resolver(tmp_path):
-    conn = _write(tmp_path, _session(text="first"), _session(text="second"))
+    _write_ns(tmp_path, "a", _session(text="first"))
+    conn = _write_ns(tmp_path, "b", _session(text="second"))
     rows = _rows(conn)
     assert len({row["content_sha256"] for row in rows}) == 2

@@ -72,7 +72,7 @@ def home(monkeypatch, tmp_path):
 
 
 def test_parser_version_is_three():
-    assert CodexExtractor.PARSER_VERSION == 3
+    assert CodexExtractor.PARSER_VERSION == 4
 
 
 def test_origin_exec_from_source_exec(home):

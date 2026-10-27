@@ -53,7 +53,15 @@ def test_parse_usage_tokens_from_claude_usage():
         "cache_creation_input_tokens": 33087,
     }
     tokens = _parse_usage_tokens(usage)
-    assert tokens == {"input": 50910, "output": 431, "total": 51341}
+    assert tokens == {
+        "input": 50910,
+        "output": 431,
+        "total": 51341,
+        # Cache accounting is preserved for the canonical envelope (#157); it is
+        # not part of the headline total, which stays input+output.
+        "cache_creation": 33087,
+        "cache_read": 0,
+    }
 
     # No usable counts → None (so total_tokens stays None, not a phantom 0).
     assert _parse_usage_tokens({}) is None

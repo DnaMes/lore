@@ -1208,3 +1208,35 @@ clean on every file this round touched.
   no command to review the kept-local/scanned-away difference yet.
 - **`--replace` edge cases** (an existing store with `-wal`/`-shm` sidecars) are
   inherited from `restore --force` and covered there, not re-tested here.
+## Round 11 — capture and identity spine (#151, #154, #155, #156, #157, #158, #160, #162)
+
+Worked in the order the archived plan prescribes: the written contract first
+(`docs/superpowers/specs/2026-10-26-source-revision-and-identity-design.md`),
+then migrations 19-23 as separate, append-only steps.
+
+| Item | Status | Commit | Evidence |
+|------|--------|--------|----------|
+| #151 source revisions | CLOSED | `a376935` | `lore/storage/source_revisions.py`: append-only `source_revisions`/`source_artifacts` (zlib blobs, sha256 key, `revision_seq`, `decode_status`, credential-name exclusion), linked from `sessions.source_revision_id`; `pytest tests/test_source_revisions.py -o addopts="" -q` -> 31 passed |
+| #154 canonical envelope | CLOSED | `fd22bc7` | migration 20 + `lore/storage/envelope.py`: ordered content blocks, tool calls with args/results/errors, status, `extensions_json`, `envelope_version`; oversized values become labelled stubs with sha256 + length; legacy rows report version 0; `pytest tests/test_message_envelope.py tests/test_contract_fields.py tests/test_storage_schema.py -o addopts="" -q` -> 115 passed |
+| #155 namespaced identity | CLOSED | `b9f2b29` | migration 21 + `lore/storage/identity.py`: `source_namespace`, `source_record_id`, `content_sha256`, `copy_of_session_id`; divergent content is stored under a qualified copy id and linked instead of overwritten; `resolve_session_id()` resolves legacy, qualified, record and hash ids; `pytest tests/test_session_identity.py -o addopts="" -q` -> 12 passed |
+| #160 stable evidence | CLOSED | `b9f2b29` | migration 22 + `lore/storage/evidence.py`: links carry `message_seq`, `message_native_id`, `message_sha256`, `source_revision_id`, `session_namespace`; `resolve_evidence()` falls back rowid -> seq -> native id -> content hash; `repair_evidence_rowids()` re-points stale rowids without dropping unresolvable links; `pytest tests/test_evidence_references.py -o addopts="" -q` -> 9 passed |
+| #157 Claude envelope | CLOSED | `e3f0481` | `lore/extractors/claude.py`: native id, model, usage, ordered blocks (text/thinking/tool_use/tool_result/image/document/unknown), attachment descriptors (media type, sha256, length) and `extensions["claude"]`; `pytest tests/test_extractor_claude_enrichment.py tests/test_claude_extractor.py -o addopts="" -q` -> 107 passed (with Codex) |
+| #156 Codex envelope | CLOSED | `549dc22` | `lore/extractors/codex.py`: calls/results paired by native id, interleaved/failed/cancelled/unmatched events kept in order with roles and status, unknown event types in `extensions["codex"]`; same run |
+| #158 Antigravity artifacts | CLOSED | `cea7c64` | `source_artifacts()` contract + Antigravity implementation, `capture_source_artifacts()` wired into `lore sync` (unparsed revisions, `unsupported` health state, `artifacts_preserved` counter); `pytest tests/test_antigravity_artifacts.py tests/test_antigravity_extractor.py tests/test_extractor_antigravity_transcripts.py -o addopts="" -q` -> 69 passed |
+| #162 source health | CLOSED | `3091a6b` | migration 23 + `lore/storage/source_health.py`: one row per source with a closed state set (captured/parsed/filtered/unsupported/failed/unavailable/deleted) and per-state counts; `lore sources [--state] [--json]`, a summary line in `lore check`, skip tallies recorded after `lore sync`; `pytest tests/test_source_health.py tests/test_cli_dispatch.py -o addopts="" -q` -> 18 passed |
+
+Full suite and lint for this round: see the closing report of the same session
+(the ledger only records what was executed, and the run is listed there).
+
+### Deliberate limits of this round
+
+- Capture happens at write time, not inside every extractor: the store stats the
+  file again and marks the row `stale` when the mtime moved, so it never claims
+  bytes it cannot vouch for. The trade-off is written down in the design spec.
+- `sessions.id` keeps its unqualified value (existing tags, memories, exports and
+  bookmarks keep resolving); the namespace qualifiers are columns plus a resolver,
+  which is why a divergent copy gets a qualified id instead of a re-keyed table.
+- Attachments are stored as descriptors (media type, sha256, byte length), not as
+  inline base64 payloads.
+- Per-source `filtered` counts are exact per tool; per-file attribution waits for
+  an extractor that names the source file when it skips it.

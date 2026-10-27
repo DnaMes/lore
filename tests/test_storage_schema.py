@@ -128,6 +128,9 @@ def test_expected_tables_exist(tmp_path):
         "source_artifacts",
         "source_health",
         "bundle_imports",
+        "analysis_jobs",
+        "analysis_job_chunks",
+        "message_embedding_meta",
     }
     tables = _tables(conn)
     # The vec0 session_embeddings table only exists when sqlite-vec loaded;
