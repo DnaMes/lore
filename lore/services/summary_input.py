@@ -347,7 +347,7 @@ def _format_message(msg: SummaryMessage) -> _Formatted | None:
             body, elided = _head_tail_elide(body, _NATIVE_CAP, _NATIVE_CAP - 500, 500)
         body = f"[NATIVE-SUMMARY seq={msg.seq}]\n{body}"
         line = f"[seq={msg.seq} {role}] {body}"
-        return _Formatted(msg.seq, role, line, elided, native=True)
+        return _Formatted(msg.seq, role, line, elided, native=True, seqs=frozenset([msg.seq]))
 
     if role == "user":
         body, elided = _head_tail_elide(body, _USER_CAP, _USER_HEAD, _USER_TAIL)
