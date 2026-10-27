@@ -20,6 +20,9 @@ from pathlib import Path
 #: Prefix and suffix of the temp files the providers create (see ``_save_to_cache``).
 TEMP_PREFIX = "."
 
+#: Suffix of the temp files the providers create.
+TEMP_SUFFIX = ".tmp"
+
 #: A temp file younger than this may belong to a write still in flight; leave it alone.
 SWEEP_AGE_SECONDS = 3600.0
 
@@ -32,9 +35,10 @@ def sweep_temp_files(
 ) -> int:
     """Delete leftover provider-cache temp files; return how many were removed.
 
-    Only top-level, hidden ``*.tmp`` files older than ``max_age_seconds`` go: a
-    fresh temp file is somebody's write in progress, and a subdirectory is not
-    something this code ever creates.
+    Only top-level files shaped like one of our temp files (``.<key>.<random>.tmp``,
+    left by ``tempfile.mkstemp(prefix=".<key>.", suffix=".tmp")``) and older than
+    ``max_age_seconds`` go: a fresh temp file is somebody's write in progress, and a
+    file the providers did not create is not ours to delete.
     """
     cutoff = (time.time() if now is None else now) - max_age_seconds
     removed = 0
@@ -45,9 +49,13 @@ def sweep_temp_files(
         return 0
     for entry in entries:
         name = entry.name
-        if not (name.startswith(TEMP_PREFIX) and name.endswith(".tmp")):
+        if not (name.startswith(TEMP_PREFIX) and name.endswith(TEMP_SUFFIX)):
+            continue
+        if name.count(".") < 3:  # ``.<key>.<random>.tmp``, not a user's ``.notes.tmp``
             continue
         try:
+            if not entry.is_file(follow_symlinks=False):
+                continue
             if entry.stat(follow_symlinks=False).st_mtime > cutoff:
                 continue
             os.unlink(entry.path)

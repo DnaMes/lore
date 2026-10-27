@@ -70,6 +70,26 @@ def test_sweep_never_touches_cache_entries_or_other_files(cache_dir: Path):
     assert entry.exists() and other.exists() and subdir.is_dir()
 
 
+def test_sweep_keeps_a_temp_file_the_providers_did_not_write(cache_dir: Path):
+    """``.notes.tmp`` is the user's, not an interrupted cache write."""
+    foreign = cache_dir / ".notes.tmp"
+    foreign.write_text("kept", encoding="utf-8")
+    os.utime(foreign, (0, 0))
+
+    assert sweep_temp_files(cache_dir) == 0
+    assert foreign.exists()
+
+
+def test_sweep_never_tries_to_unlink_a_directory(cache_dir: Path):
+    """A directory that happens to carry the temp-file shape is not a temp file."""
+    directory = cache_dir / ".abc.def.tmp"
+    directory.mkdir()
+    os.utime(directory, (0, 0))
+
+    assert sweep_temp_files(cache_dir) == 0
+    assert directory.is_dir()
+
+
 def test_sweep_is_quiet_when_the_directory_is_missing(tmp_path: Path):
     assert sweep_temp_files(tmp_path / "does-not-exist") == 0
 
