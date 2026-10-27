@@ -124,7 +124,7 @@ summaries are derived values: the export labels their source (`title_source`) an
 "not transcript content" instead of letting them stand in for the transcript. No export step
 calls a model, so it works with every provider unavailable.
 
-After the run, stderr reports how many sessions were skipped and why (for example, sessions below the prompt floor). Archive preservation drops nothing automatically: an index entry is kept even when both its source file and its exported Markdown file are gone. Only `lore prune` removes entries, and it writes the pruned ids to `ignored.json`. This is deliberate: an unreadable, unmounted or temporarily missing source must never cost an index row, so the index can contain rows whose source no longer exists — that is the archive.
+After the run, stderr reports how many sessions were skipped and why (for example, sessions below the prompt floor). Archive preservation drops nothing automatically: an index entry is kept even when both its source file and its exported Markdown file are gone. Only `lore prune` removes entries, and it records the pruned ids in the v2 store (`ignored_sessions`, migration 27) and mirrors them to `ignored.json`. This is deliberate: an unreadable, unmounted or temporarily missing source must never cost an index row, so the index can contain rows whose source no longer exists — that is the archive.
 
 ```text
 usage: lore export [-h] [--all] [--tool TOOL] [--project PROJECT] [--full]
@@ -585,7 +585,7 @@ Writes: marks sessions as ignored in `ignored.json` and deletes their exports (`
 
 Deletion is confined to the output directory. `lore prune` deletes only regular `.md` export files under the archive root, and refuses: symlinks (including link chains whose target leaves the root), files directly in the top level of the archive, and control or store files (whose names start with `index`, `ignored`, `deleted_sessions`, `title_cache`, `memory`, `memories`, `opencode_state` or `rules`, or end with `-wal` or `-shm`). Each refusal is reported to stderr. The index is then rebuilt from the sources, preserving every entry that was not re-observed, so entries whose source still exists elsewhere are not lost.
 
-Pruned ids go to `ignored.json` and are hidden from the v2 store views (`lore search`, stats and the web UI) without deleting the SQLite rows; the file's mtime and size are part of the v2 index cache key, so a rewrite of `ignored.json` takes effect at once. If `ignored.json` is damaged (bad UTF-8, invalid JSON, or the wrong shape), a process warns once on stderr, and pruned sessions may become visible again in those views until the file is removed or fixed.
+Pruned ids are recorded in the store's `ignored_sessions` table, which is the source of truth, and mirrored to `ignored.json` for builds that predate the table; both are read, so an id in either place stays hidden. They are hidden from the v2 store views (`lore search`, stats and the web UI) without deleting the SQLite rows, and the store file's (and its `-wal` sidecar's) stats are part of the v2 index cache key, so a prune takes effect at once. If `ignored.json` is damaged (bad UTF-8, invalid JSON, or the wrong shape), a process warns once on stderr; ids already in the store stay hidden, so a damaged mirror can no longer make pruned sessions visible again.
 
 Archive preservation (see [export](#export)) no longer drops entries on its own: only `lore prune` removes index entries, so the index can contain rows whose source file no longer exists. That is the archive — use `lore prune` to retire such sessions.
 

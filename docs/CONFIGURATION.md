@@ -14,7 +14,7 @@ Defaults below are taken from the code. Where a default depends on the call site
 | LORE_HOME_SCAN_TIME_BUDGET_SECONDS | 10.0 | Wall-time budget in seconds for one home-marker discovery. Values below 1.0 are clamped to 1.0. | lore/utils/home_discovery.py |
 | LORE_EXPORT_FALLBACK_SCAN | off (unset) | Enables the fallback scan used by export when set to `true`. | lore/interfaces/web.py |
 | LORE_CLEAR_OPENCODE_CACHE | off (unset) | Clears the OpenCode cache when set to `true`. | lore/interfaces/web.py, lore/interfaces/web_data.py |
-| LORE_USE_V2 | 1 (on) | Reads sessions from the v2 SQLite store. Set to `0`, `false`, `no` or `off` to use the legacy index.json reader. | lore/services/index.py |
+| LORE_USE_V2 | 1 (on) | Reads sessions and search results from the v2 SQLite store. Set to `0`, `false`, `no` or `off` to use the legacy index.json reader; that fallback is logged (`serving the legacy JSON index: …`), as is every fallback caused by a missing, stale or unreadable store. | lore/services/index.py |
 | LORE_IMPORT_PROFILE | relaxed | Import thresholds. `strict` requires 3 messages, 2048 content characters and 5 user prompts. Any other value uses the relaxed thresholds. | lore/extractors/base.py |
 | LORE_MIN_USER_PROMPTS | 3 (relaxed); 5 (strict) | Overrides the minimum number of user prompts per imported session. Invalid values are ignored with a warning. | lore/extractors/base.py |
 

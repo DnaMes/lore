@@ -1209,6 +1209,7 @@ clean on every file this round touched.
 - **`--replace` edge cases** (an existing store with `-wal`/`-shm` sidecars) are
   inherited from `restore --force` and covered there, not re-tested here.
 D
+D
 ## Round 11 — capture and identity spine (#151, #154, #155, #156, #157, #158, #160, #162)
 
 Worked in the order the archived plan prescribes: the written contract first
@@ -1369,3 +1370,103 @@ Nothing pending: every message already has a current vector, or the budget stopp
   Vector tests use a deterministic fake embedder; the real-model run is the
   calibration script plus the small CLI demo above (2 messages), not a
   full-archive measurement.
+
+---
+
+## #48 — JSON-retirement exit criteria: **PARTIAL**
+
+Branch `sweep/json-retire`, four of the five exit criteria executed in order.
+
+**1. Tombstones and ignored ids into the v2 store — done.** Every delete
+(`services.index.remember_deleted_session_id` → `save_deleted_session_ids`) now
+also writes the id to `deleted_sessions`; `lore prune` records its ids in the new
+`ignored_sessions` table (migration 27). Both use `INSERT OR IGNORE`, so
+re-recording is a no-op and a reindex keeps the state. The JSON files remain a
+compatibility mirror: the readers union file and store, so neither a store built
+before this change nor a missing mirror loses an id, and recording an id never
+materialises a store that did not exist. `tests/test_retention_store.py` (9
+tests) pins write, idempotency, survival across a reindex and survival with the
+JSON mirror deleted.
+
+**2. Search from v2 with an explicit legacy fallback — done.** `search_sessions`
+was already the default path; what was missing was the *explicitness*. The gate
+(`v2_is_available`) now logs the reason it rejects a store, and
+`services.index` logs `serving the legacy JSON index: <reason>` whenever a
+read or a search falls back (switched off, no usable store, stale, unreadable,
+or v2 returned no hits). Pinned by `tests/test_v2_store_freshness.py`.
+
+**3. `generated_at` + content hash + staleness assertion — done.**
+`generated_at` already existed (migration 9); every write path now also stamps
+`store_meta.content_hash` (sha256 over `id`, `updated`, `content_sha256`,
+`messages_count`, ordered by id). `v2_is_available` rejects a store whose rows no
+longer hash to its stamp (rows written outside the index build), the writer calls
+`assert_store_fresh` right after committing, and `assert_store_fresh` raises
+`StaleStoreError` listing every reason. The read path stays tolerant on purpose —
+one damaged store must not take the web UI down while the JSON fallback exists —
+but it is never silent: the rejection is logged at WARNING.
+
+**4. CI equivalence test — done.** `tests/test_v2_json_equivalence.py` builds a
+realistic archive (claude-code parent + subagent thread, cursor, gemini-cli,
+codex; multi-message sessions; user tags; a memory with a source link; a
+tombstone; a pruned id), reads it twice through `services.index.load_index` with
+`LORE_USE_V2=1` and `LORE_USE_V2=0`, and asserts equal session-id sets,
+order-insensitive per-session content fields and equal counts, before and after a
+reindex. Deterministic (fixed timestamps) and offline. It also asserts the served
+store reports a matching content hash. One asymmetry is asserted, not hidden: the
+legacy index applies a prune by rewriting the file while the store hides the id
+at read time, so the test applies the same hide to both sides.
+
+**5. `IndexBuilder` stops writing `index.json`/`index.sqlite` — NOT DONE, on
+purpose.** Two of the four conditions the step depends on cannot be met on this
+branch:
+
+- The JSON index is still a *producer* for consumers this lane did not convert:
+  `lore prune` reads and rewrites `index.json` (it refuses to run without it),
+  `SearchEngine` reads `index.sqlite` on the legacy fallback, and
+  `v2_is_available(compare_to=index.json)` uses its mtime as the staleness
+  reference. Flipping the default off would break prune and remove the fallback
+  the same change relies on.
+- The step is only allowed once the equivalence test passes *and* 1–4 are green,
+  and it needs the full suite to prove no other consumer reads those files. This
+  lane is instructed to run focused suites only, so stopping the writes cannot be
+  verified. The switch (`LORE_LEGACY_JSON=1` keeps them) is therefore not
+  introduced: a half-wired switch would read as done while nothing honours it.
+
+The remaining gap is exactly that: convert prune and the legacy search fallback
+to v2 (or delete them), make the staleness reference something other than
+`index.json`'s mtime, then add the switch and run the full suite.
+
+### Commands and observed results
+
+```text
+$ pytest tests/ -k "index or search or tombstone or delete or ignored or equivalence or freshness or retention or prune" -o addopts="" -q
+496 passed, 1 skipped, 3192 deselected in 146.72s (0:02:26)
+
+$ pytest tests/test_retention_store.py tests/test_v2_store_freshness.py tests/test_v2_json_equivalence.py tests/test_storage_schema.py -o addopts="" -q
+43 passed
+
+$ ruff format <touched files> && ruff check <touched files>
+3 files reformatted, 7 files left unchanged
+All checks passed!
+```
+
+`tests/test_storage_schema.py` was already red on this branch before the change:
+its expected-table set predated `analysis_jobs`, `analysis_job_chunks` and
+`message_embedding_meta`. The set now also carries `ignored_sessions`, and those
+three names were added so the test checks what the schema actually builds.
+
+### NOT VERIFIED
+
+- **No full-suite run** (lane rule). `lore prune`, the legacy `SearchEngine`
+  fallback and the web delete route were exercised only through their focused
+  tests, not end to end.
+- **Bundle round-trip of pruned ids.** `ignored_sessions` is inside the backup
+  snapshot, but `lore bundle import` merges tables explicitly and does not merge
+  it, so a pruned id does not travel in a portable bundle (it did not before
+  either — `ignored.json` never did).
+- **Concurrent writer during the hash check.** The self-check and the gate read
+  after the write transaction, so a second process writing between them is
+  reported as a hash mismatch; no test runs two writers at once.
+- **Pre-migration-27 stores** report `hash_matches: None` when they predate the
+  content hash; `assert_store_fresh` treats that as a note, not a failure, and no
+  test builds a store older than migration 27.
