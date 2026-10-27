@@ -688,20 +688,7 @@ def test_api_responses_include_request_id_header():
     assert request_id.startswith("req-")
 
 
-@pytest.fixture
-def empty_archive(tmp_path, monkeypatch):
-    """Point the web module at an empty archive: the module reads ~/.lore at import time."""
-    from lore.interfaces import web_data
-
-    for module in (web, web_data):
-        monkeypatch.setattr(module, "OUTPUT_DIR", tmp_path, raising=False)
-        monkeypatch.setattr(module, "INDEX_PATH", tmp_path / "index.json", raising=False)
-        monkeypatch.setattr(
-            module, "DELETED_SESSIONS_PATH", tmp_path / "deleted_sessions.json", raising=False
-        )
-
-
-def test_api_rate_limit_enforced_when_enabled(monkeypatch, empty_archive):
+def test_api_rate_limit_enforced_when_enabled(monkeypatch):
     monkeypatch.setenv("LORE_RATE_LIMIT_ENABLED", "true")
     monkeypatch.setenv("LORE_RATE_LIMIT_WINDOW_SECONDS", "60")
     monkeypatch.setenv("LORE_RATE_LIMIT_SEARCH_PER_WINDOW", "2")
@@ -766,7 +753,7 @@ def test_api_rate_limit_headers_present_on_api_responses(monkeypatch):
     assert reset >= 1
 
 
-def test_metrics_endpoint_returns_counters(monkeypatch, empty_archive):
+def test_metrics_endpoint_returns_counters(monkeypatch):
     monkeypatch.setenv("LORE_RATE_LIMIT_ENABLED", "false")
     web.RATE_LIMIT_STATE.clear()
     with web.METRICS_LOCK:
