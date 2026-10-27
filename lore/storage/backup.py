@@ -297,6 +297,12 @@ def restore_backup(bundle: Path, output_dir: Path, *, force: bool = False) -> Re
                 f"{DB_MEMBER} changed while it was extracted "
                 f"(sha256 {digest}, manifest says {member.sha256})"
             )
+        # Stamp the extracted snapshot *before* it replaces anything: a snapshot
+        # carries the stamp of the moment it was taken, and against a newer local
+        # index.json the reader would call the restored store stale and serve the
+        # archive this restore replaced. Stamping after the swap would also break
+        # the promise that a failed restore leaves the old store untouched (#48).
+        _stamp_snapshot(temp_path)
         if replaced:
             _discard_store(store)
         os.replace(temp_path, store)
@@ -305,15 +311,16 @@ def restore_backup(bundle: Path, output_dir: Path, *, force: bool = False) -> Re
         raise
 
     restrict_file(store)
-    conn = open_v2_connection(store)
+    return RestoreReport(bundle=bundle, store=store, replaced=replaced, manifest=manifest)
+
+
+def _stamp_snapshot(path: Path) -> None:
+    """Stamp an extracted store file as written now, closing it again."""
+    conn = open_v2_connection(path)
     try:
-        # A restored snapshot carries the stamp of the moment it was taken. Against
-        # a newer index.json the reader would call the restored store stale and serve
-        # the archive this restore just replaced, so stamp it as the write it is (#48).
         stamp_store(conn)
     finally:
         conn.close()
-    return RestoreReport(bundle=bundle, store=store, replaced=replaced, manifest=manifest)
 
 
 def _default_bundle_name() -> str:

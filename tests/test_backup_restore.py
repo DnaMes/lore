@@ -450,6 +450,27 @@ def test_restore_force_replaces_the_store(built_store: Path, tmp_path: Path):
     assert _row_counts(live)["session_tags"] == report.manifest.counts["session_tags"]
 
 
+def test_a_failed_stamp_leaves_the_existing_store_untouched(
+    built_store: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """The stamp runs on the extracted snapshot, before it replaces anything."""
+    bundle = create_backup(built_store, tmp_path / "bundle.zip").bundle
+    live = tmp_path / "live"
+    shutil.copytree(built_store, live)
+    add_session_tag(live, "s9", "live-only")
+
+    def refuse(conn):
+        raise RuntimeError("stamp failed")
+
+    monkeypatch.setattr("lore.storage.backup.stamp_store", refuse)
+
+    with pytest.raises(RuntimeError, match="stamp failed"):
+        restore_backup(bundle, live, force=True)
+
+    assert get_session_tags(live, "s9") == ["live-only"]
+    assert _row_counts(live)["session_tags"] == 2
+
+
 # ---------------------------------------------------------------------------
 # no credentials
 # ---------------------------------------------------------------------------
