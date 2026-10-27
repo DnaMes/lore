@@ -668,6 +668,18 @@ def _repair_once(
     return validated, verrs2, out_tok, repair_tokens
 
 
+def _chunk_prompt_tokens(blocks: tuple[CompressedBlock, ...]) -> int:
+    """Estimated prompt tokens of the chunk prompt exactly as the run builds it (#178).
+
+    Mirrors ``_chunk_call``'s prompt construction minus fingerprints and cache
+    lookups, so the budget is charged for the *whole* prompt (system + user),
+    never just the largest block of a chunk.
+    """
+    system, user = build_prompt(blocks_to_transcript(blocks), False)
+    user, _ = prepare_prompt(user)
+    return estimate_tokens(len(user) + len(system))
+
+
 def _chunk_groups(
     transcript: CompressedTranscript, *, max_session_tokens: int
 ) -> tuple[
@@ -686,9 +698,12 @@ def _chunk_groups(
     groups = split_chunks(transcript, chunk_max_chars())
     if not groups:
         return [], [], False, []
-    per_chunk = max(
-        estimate_tokens(len(block.text) + len(_INSTRUCTIONS)) for group in groups for block in group
-    )
+    # Estimate the FULL per-chunk prompt (system + user as actually built), not
+    # the largest single block: with many short messages each block sits far
+    # under its real share of the chunk, which made the selection overrun the
+    # token budget (#178). The largest group bounds every call, so the paid
+    # number of chunks always fits ``max_session_tokens``.
+    per_chunk = max(_chunk_prompt_tokens(group) for group in groups)
     limit = chunk_call_budget(max_session_tokens, per_chunk)
     selected, truncated, indices = sample_chunks(groups, max_chunks=limit)
     return groups, selected, truncated, indices

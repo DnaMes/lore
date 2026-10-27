@@ -16,7 +16,8 @@ from lore.services.summarize import (
     summarize_session,
     validate_summary,
 )
-from lore.services.summarize_chunks import MAX_CHUNKS
+from lore.services.summarize_chunks import MAX_CHUNKS, MAX_SESSION_TOKENS
+from lore.services.summary_input import estimate_tokens
 from lore.storage.schema import open_connection
 from lore.storage.summaries import get_summary, list_summaries, save_summary
 from lore.storage.writer import v2_db_path
@@ -195,6 +196,47 @@ def test_small_budget_truncates_and_reports_the_omitted_ranges(
     # The decisive last message is inside a covered chunk, not in the gap.
     assert coverage["seq_range"] == [1, 60]
     assert all(gap["to_chunk"] < 27 for gap in coverage["omitted_chunks"])
+
+
+def test_full_prompt_estimate_keeps_selection_within_budget(tmp_path: Path):
+    """Regression for the #178 probe: budget by the whole chunk prompt, not one block.
+
+    1000 blocks of ~1000 characters under the default 150000-token budget used
+    to be sized by the largest single block (~290 tokens), which selected all
+    22 chunks (~261k prompt tokens) and made ``_process_chunked`` return
+    "failed" after twelve successful calls with no session summary. Estimating
+    the full per-chunk prompt selects only the chunks the budget pays for,
+    marks the run truncated (with coverage) and still writes the summary.
+    """
+    parts = [f"Probe turn {i} " + "x" * 970 for i in range(1000)]
+    out = tmp_path / "out"
+    _build_store(out, _session("probe", *parts))
+    provider = AutoProvider()
+    assert summarize_session(provider, out, "probe", model_label=MODEL) == "written"
+
+    row = get_summary(out, "session", "session:probe")
+    assert row is not None
+    payload = row["payload"]
+    assert payload["truncated"] is True
+    coverage = payload["coverage"]
+    assert coverage["truncated"] is True
+    assert coverage["complete"] is False
+    assert coverage["chunks_total"] > coverage["chunks_used"]
+    assert len(payload["sampled_chunks"]) == coverage["chunks_used"]
+    # One merge call on top of every chunk call the provider actually ran.
+    assert len(provider.prompts) == coverage["chunks_used"] + 1
+
+    # The sum of the estimated prompt tokens of every chunk prompt the provider
+    # saw (sent user text + system, as built) stays within the session budget.
+    # The merge prompt is excluded: the budget reserves a fixed share for it.
+    chunk_pairs = [
+        (user, system or "")
+        for user, system in zip(provider.prompts, provider.system_prompts)
+        if "<chunk_summaries>" not in user
+    ]
+    assert len(chunk_pairs) == coverage["chunks_used"]
+    prompt_tokens = sum(estimate_tokens(len(user) + len(system)) for user, system in chunk_pairs)
+    assert prompt_tokens <= MAX_SESSION_TOKENS
 
 
 def test_merged_cite_not_in_chunks_rejected(tmp_path: Path, chunk_limits: None):
