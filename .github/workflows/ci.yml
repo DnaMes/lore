@@ -51,3 +51,38 @@ jobs:
 
       - name: bandit
         run: bandit -r lore/ -c pyproject.toml -ll
+
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: python -m pip install build twine
+
+      - name: Build sdist and wheel
+        run: python -m build
+
+      - name: Twine check
+        run: twine check dist/*
+
+      # Prove the sdist installs and ships scripts/ -- run entirely outside the checkout
+      # so nothing can accidentally import from the source tree.
+      - name: Install sdist in a fresh venv (outside the checkout)
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          tar -xzf dist/*.tar.gz -C "$workdir"
+          sdist_dir="$(find "$workdir" -maxdepth 1 -mindepth 1 -type d)"
+          python -m venv "$workdir/venv"
+          "$workdir/venv/bin/python" -m pip install "$PWD"/dist/*.tar.gz
+          cd "$sdist_dir"
+          "$workdir/venv/bin/lore" --version
+          "$workdir/venv/bin/lore-session" --help
+          "$workdir/venv/bin/python" scripts/smoke_install.py --help

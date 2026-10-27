@@ -460,6 +460,8 @@ def test_plan_matches_the_half_chunks_the_run_wrote(tmp_path: Path, monkeypatch)
 
     assert estimate[0].status == "unchanged"
     assert estimate[0].expected_calls == 0
+
+
 def test_chunked_cache_hit_without_coverage_is_not_fully_valid(tmp_path: Path, chunk_limits: None):
     out = tmp_path / "out"
     _build_store(out, _long_session("old"))
