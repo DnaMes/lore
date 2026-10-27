@@ -265,7 +265,7 @@ Writes: the memory store in the output directory (SQLite `index_v2.sqlite`); eac
 
 ```text
 usage: lore memory [-h]
-                   {add,list,search,dedupe,import-claude,show,context,rate}
+                   {add,list,search,dedupe,import-claude,show,context,review,repair-index,rate}
                    ...
 
 positional arguments:
@@ -279,6 +279,9 @@ positional arguments:
                         --apply)
     show                Show one memory in full
     context             Render a budgeted memory block for agent context
+    review              Review candidates: list them, or accept/reject by id
+    repair-index        Detect and rebuild missing memory search rows (dry run
+                        by default)
     rate                Rate a memory from 1 to 5
 
 options:
@@ -322,13 +325,17 @@ Mode: read-only
 ```text
 usage: lore memory list [-h] [--kind KIND] [--project PROJECT] [--all]
                         [--limit LIMIT]
+                        [--status {confirmed,candidate,rejected}] [--json]
 
 options:
-  -h, --help         show this help message and exit
-  --kind KIND        filter by kind
-  --project PROJECT  filter by project scope
-  --all              include superseded memories
-  --limit LIMIT      max results
+  -h, --help            show this help message and exit
+  --kind KIND           filter by kind
+  --project PROJECT     filter by project scope
+  --all                 include superseded memories
+  --limit LIMIT         max results
+  --status {confirmed,candidate,rejected}
+                        filter by review status (default: confirmed)
+  --json                full audit export: claim, evidence and sources
 ```
 
 ### search
@@ -432,6 +439,46 @@ options:
   --limit LIMIT         max memories to consider
 ```
 
+### review
+
+Review candidates: list them, or accept/reject by id.
+
+Without a target, lists the memory candidates waiting for review. With
+`accept` or `reject` and one or more ids, sets their status to `confirmed`
+or `rejected`; ids that are not candidates are reported as unchanged.
+
+Writes: memory status changes, only with `accept` or `reject` (listing is
+read-only).
+
+```text
+usage: lore memory review [-h] [--kind KIND] [--json]
+                          [{accept,reject}] [ids ...]
+
+positional arguments:
+  {accept,reject}  omit to list the candidates waiting for review
+  ids              candidate ids to accept or reject
+
+options:
+  -h, --help       show this help message and exit
+  --kind KIND      filter the listing by kind
+  --json           print the result as JSON
+```
+
+### repair-index
+
+Detect and rebuild missing memory search rows.
+
+Writes: search-index rows, only with `--apply` (dry run by default).
+
+```text
+usage: lore memory repair-index [-h] [--apply] [--json]
+
+options:
+  -h, --help  show this help message and exit
+  --apply     write the repair instead of only reporting it
+  --json      print the report as JSON
+```
+
 ### rate
 
 Rate a memory from 1 to 5.
@@ -478,6 +525,72 @@ options:
   -h, --help  show this help message and exit
   --deep      Run every available extractor (writes nothing) and report
               matched sources, sessions, skips and unknown records
+```
+
+## sources
+
+Report per-source archive health (captured, filtered, unsupported, failed).
+
+Every tracked source is shown with its state, tool and path, plus a summary
+per state; `--state` narrows the report to one state.
+
+Mode: read-only
+
+```text
+usage: lore sources [-h]
+                    [--state {captured,parsed,filtered,unsupported,failed,unavailable,deleted}]
+                    [--limit LIMIT] [--json]
+
+options:
+  -h, --help            show this help message and exit
+  --state {captured,parsed,filtered,unsupported,failed,unavailable,deleted}
+                        Only show sources in this state
+  --limit LIMIT         Maximum per-source rows to print (default: 200)
+  --json                Machine-readable output
+```
+
+## jobs
+
+List or resume durable analysis jobs (the DB is the source of truth).
+
+Mode: read-only; the `resume` subcommand requeues unfinished chunks of an
+interrupted job (complete ones are skipped) and reports what is left — it
+does not run the work itself.
+
+```text
+usage: lore jobs [-h] [--json] [--kind KIND]
+                 [--state {pending,running,completed,failed,timed_out,cancelled}]
+                 [--limit LIMIT]
+                 {resume} ...
+
+positional arguments:
+  {resume}
+    resume              Requeue unfinished chunks of an interrupted job
+
+options:
+  -h, --help            show this help message and exit
+  --json                Machine-readable output
+  --kind KIND           Only show jobs of this kind
+  --state {pending,running,completed,failed,timed_out,cancelled}
+                        Only show jobs in this state
+  --limit LIMIT         Maximum jobs to print (default: 50)
+```
+
+### resume
+
+Requeue unfinished chunks of an interrupted job.
+
+Writes: job and chunk states in the store (requeued chunks return to `pending`).
+
+```text
+usage: lore jobs resume [-h] [--json] job_id
+
+positional arguments:
+  job_id      Job id (e.g. reload-abc123 or summary-abc123)
+
+options:
+  -h, --help  show this help message and exit
+  --json      Machine-readable output
 ```
 
 ## threads
