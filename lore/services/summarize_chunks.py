@@ -66,13 +66,17 @@ def chunk_call_budget(max_session_tokens: int, per_chunk_tokens: int) -> int:
     """How many chunk calls one session's token budget can pay for (#178).
 
     The per-call prompt size stays bounded by :data:`CHUNK_TARGET_TOKENS`; what
-    grows with the budget is the *number* of ordered calls. ``MAX_CHUNKS`` is the
-    guaranteed floor, so a tiny budget still gets the head/middle/tail sample
-    instead of one oversized call or no summary at all.
+    grows with the budget is the *number* of ordered calls. The budget is a hard
+    limit: at most the number of chunks the budget can pay for — merge overhead
+    reserved first — is selected, the eight-chunk head/middle/tail minimum
+    applies only while the budget still pays for it, and the count never drops
+    below one chunk while even one fits. A budget that cannot pay a single chunk
+    call is not made to fit; the run fails at its budget gates as before instead
+    of silently overrunning.
     """
     per_call = max(per_chunk_tokens, 1) + MERGE_TOKENS_PER_CHUNK
     paid = (max_session_tokens - MERGE_PROMPT_BASE_TOKENS) // per_call
-    return max(MAX_CHUNKS, paid)
+    return max(1, paid)
 
 
 def sample_chunks(
@@ -80,11 +84,21 @@ def sample_chunks(
     *,
     max_chunks: int = MAX_CHUNKS,
 ) -> tuple[list[tuple[CompressedBlock, ...]], bool, list[int]]:
-    """Return (selected chunks, truncated, original indices of selected chunks)."""
+    """Return (selected chunks, truncated, original indices of selected chunks).
+
+    The head/middle/tail layout is tuned for the eight-chunk sample (#178).
+    Budgets below it sample proportionally fewer edge chunks (never zipped
+    together into duplicate indices), keeping at least one chunk while the
+    budget still pays for one.
+    """
     if len(chunks) <= max_chunks:
         return chunks, False, list(range(len(chunks)))
-    head = 2
-    tail = 3
+    if max_chunks >= 5:
+        head, tail = 2, 3
+    elif max_chunks >= 2:
+        head, tail = 1, 1
+    else:
+        head, tail = 1, 0
     middle_slots = max_chunks - head - tail
     middle_pool = list(range(head, len(chunks) - tail))
     ranked = sorted(

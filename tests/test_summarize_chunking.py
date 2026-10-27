@@ -11,13 +11,21 @@ import pytest
 
 from lore.core.models import Role
 from lore.services.summarize import (
+    _chunk_prompt_tokens,
     estimate_run,
     run_summaries,
     summarize_session,
     validate_summary,
 )
-from lore.services.summarize_chunks import MAX_CHUNKS, MAX_SESSION_TOKENS
-from lore.services.summary_input import estimate_tokens
+from lore.services.summarize_chunks import (
+    MAX_CHUNKS,
+    MAX_SESSION_TOKENS,
+    MERGE_PROMPT_BASE_TOKENS,
+    MERGE_TOKENS_PER_CHUNK,
+    chunk_max_chars,
+)
+from lore.services.summary_input import compress, estimate_tokens, from_unified, split_chunks
+from lore.storage.reader import load_session_messages_v2
 from lore.storage.schema import open_connection
 from lore.storage.summaries import get_summary, list_summaries, save_summary
 from lore.storage.writer import v2_db_path
@@ -177,13 +185,21 @@ def test_small_budget_truncates_and_reports_the_omitted_ranges(
     monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 30)
     out = tmp_path / "out"
     _build_store(out, _long_session("many", n_users=30, pad=80))
-    summarize_session(AutoProvider(), out, "many", model_label=MODEL, max_session_tokens=8_000)
+    # The eight-chunk sample is kept while the budget pays for it: budget for
+    # exactly eight chunk calls at this fixture's real per-call prompt size,
+    # plus the merge reserve (a budget below that samples fewer chunks instead
+    # of overrunning — see the review-probe regression below).
+    transcript = compress(from_unified(load_session_messages_v2(out, "many")))
+    groups = split_chunks(transcript, chunk_max_chars())
+    per_call = max(_chunk_prompt_tokens(g) for g in groups) + MERGE_TOKENS_PER_CHUNK
+    budget = MERGE_PROMPT_BASE_TOKENS + MAX_CHUNKS * per_call
+    summarize_session(AutoProvider(), out, "many", model_label=MODEL, max_session_tokens=budget)
 
     row = get_summary(out, "session", "session:many")
     assert row is not None
     payload = row["payload"]
     coverage = payload["coverage"]
-    # 30 one-block chunks, an 8-call floor: head 2, 3 densest middle, tail 3.
+    # Head 2, 3 densest middle, tail 3: the paid sample covers 8 of 30 chunks.
     assert payload["truncated"] is True
     assert coverage["complete"] is False
     assert coverage["chunks_total"] == 30
@@ -237,6 +253,63 @@ def test_full_prompt_estimate_keeps_selection_within_budget(tmp_path: Path):
     assert len(chunk_pairs) == coverage["chunks_used"]
     prompt_tokens = sum(estimate_tokens(len(user) + len(system)) for user, system in chunk_pairs)
     assert prompt_tokens <= MAX_SESSION_TOKENS
+
+
+def test_hard_budget_writes_the_summary_and_keeps_the_full_budget_probe(
+    tmp_path: Path,
+) -> None:
+    """Regression for the review probe: the token budget is a hard limit.
+
+    1000 ~970-char messages chunk into ~21 chunks of ~12k prompt tokens. The
+    eight-chunk minimum used to override the budget: at 50000 tokens the run
+    still selected chunks past what the budget paid for (four chunk calls,
+    ~48993 input tokens), then the merge was over budget and the outcome was
+    "failed" with no session summary. The budget now fills the sample only as
+    far as it pays for, reports truncated, and the summary is written. The
+    150000-token run is unchanged.
+    """
+    parts = [f"Probe turn {i} " + "x" * 970 for i in range(1000)]
+    out = tmp_path / "out"
+    _build_store(out, _session("probe50", *parts), _session("probe150", *parts))
+
+    provider50 = AutoProvider()
+    assert (
+        summarize_session(provider50, out, "probe50", model_label=MODEL, max_session_tokens=50_000)
+        == "written"
+    )
+    payload50 = get_summary(out, "session", "session:probe50")["payload"]
+    coverage50 = payload50["coverage"]
+    assert payload50["truncated"] is True
+    assert coverage50["truncated"] is True
+    assert not coverage50["complete"]
+    sampled = payload50["sampled_chunks"]
+    assert len(sampled) == coverage50["chunks_used"] < coverage50["chunks_total"]
+    assert len(set(sampled)) == len(sampled)  # no index sampled twice
+    # Every charged call, including the merge, stays within the session budget.
+    call_tokens = sum(
+        estimate_tokens(len(user) + len(system or ""))
+        for user, system in zip(provider50.prompts, provider50.system_prompts)
+    )
+    assert call_tokens <= 50_000
+    assert len(provider50.prompts) == coverage50["chunks_used"] + 1
+
+    provider150 = AutoProvider()
+    assert (
+        summarize_session(
+            provider150, out, "probe150", model_label=MODEL, max_session_tokens=150_000
+        )
+        == "written"
+    )
+    # Unchanged by the fix: 11 chunk calls at the measured ~12k per-call size
+    # ahead of the single merge call — 12 provider calls, one session summary.
+    coverage150 = get_summary(out, "session", "session:probe150")["payload"]["coverage"]
+    assert len(provider150.prompts) == 12
+    assert coverage150["chunks_used"] == len(provider150.prompts) - 1 == 11
+    call_tokens150 = sum(
+        estimate_tokens(len(user) + len(system or ""))
+        for user, system in zip(provider150.prompts, provider150.system_prompts)
+    )
+    assert call_tokens150 <= 150_000
 
 
 def test_merged_cite_not_in_chunks_rejected(tmp_path: Path, chunk_limits: None):

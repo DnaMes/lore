@@ -121,26 +121,42 @@ def test_the_budget_covers_every_chunk_when_it_can():
     assert coverage["omitted_seq_ranges"] == []
 
 
-def test_the_budget_never_sinks_below_the_floor():
-    assert chunk_call_budget(0, 3_000) == MAX_CHUNKS
-    assert chunk_call_budget(MERGE_PROMPT_BASE_TOKENS, 0) == MAX_CHUNKS
+def test_the_budget_never_sinks_below_one_chunk():
+    # The budget is a hard limit, floored at one chunk while even one fits its
+    # budget share — a tiny budget cannot pay the eight-chunk sample and must
+    # not silently overrun it.
+    assert chunk_call_budget(0, 3_000) == 1
+    assert chunk_call_budget(MERGE_PROMPT_BASE_TOKENS, 0) == 1
     paid = MERGE_PROMPT_BASE_TOKENS + 20 * (1_000 + MERGE_TOKENS_PER_CHUNK)
     assert chunk_call_budget(paid, 1_000) == 20
 
 
+def test_the_eight_chunk_minimum_applies_only_when_the_budget_pays():
+    chunks = _chunks(30)
+    # ~3000-token chunk prompts: the default budget pays for more than eight.
+    budget = chunk_call_budget(MAX_SESSION_TOKENS, 3_000)
+    assert budget >= MAX_CHUNKS
+    _, truncated, _indices = sample_chunks(chunks, max_chunks=budget)
+    assert truncated is False  # every chunk fits → none is sampled away
+
+
 def test_a_budget_too_small_omits_exact_seq_ranges():
     chunks = _chunks(30)
-    budget = chunk_call_budget(MAX_SESSION_TOKENS, 30_000)  # 30 oversized chunks
-    assert budget == MAX_CHUNKS
+    # 30000-token chunks: the budget pays for four chunk calls; the eight-chunk
+    # sample would select eight and overrun the budget, so the four that fit is
+    # the sample: head 1, two densest middle, tail 1.
+    budget = chunk_call_budget(MAX_SESSION_TOKENS, 30_000)  # 147000 // 30_400 == 4
+    assert budget == 4
     _selected, truncated, indices = sample_chunks(chunks, max_chunks=budget)
+    assert indices == [0, 1, 2, 29]
     coverage = chunk_coverage(chunks, indices)
     assert truncated is True
     assert coverage["complete"] is False
-    assert coverage["chunks_used"] == MAX_CHUNKS
+    assert coverage["chunks_used"] == 4
     assert coverage["messages_total"] == 60
-    assert coverage["messages_covered"] == 16
-    assert coverage["messages_omitted"] == 44
-    assert coverage["omitted_seq_ranges"] == [{"from_seq": 11, "to_seq": 54}]
+    assert coverage["messages_covered"] == 8
+    assert coverage["messages_omitted"] == 52
+    assert coverage["omitted_seq_ranges"] == [{"from_seq": 7, "to_seq": 58}]
 
 
 def test_a_decisive_late_message_is_inside_a_covered_range():
