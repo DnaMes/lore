@@ -1,10 +1,25 @@
 from lore.interfaces import web
-from lore.interfaces.web_formatting import format_message_content, format_tool_calls
+from lore.interfaces.web_formatting import (
+    _format_message_content_cached,
+    format_message_content,
+    format_tool_calls,
+)
 from lore.utils.text_processing import (
     format_duration_ms,
     format_tool_display,
     format_tool_result,
 )
+
+
+def test_format_message_content_cached_reports_cache_hit_on_repeat_input():
+    _format_message_content_cached.cache_clear()
+    raw = "Hello **world**"
+    first = _format_message_content_cached(raw)
+    second = _format_message_content_cached(raw)
+    assert first == second
+    info = _format_message_content_cached.cache_info()
+    assert info.hits == 1
+    assert info.misses == 1
 
 
 def test_format_tool_display_renders_command_and_raw_args():
