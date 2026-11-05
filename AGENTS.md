@@ -166,3 +166,20 @@ lore check
 docker compose logs -f app
 docker exec -it lore-app bash
 ```
+
+<!-- BEGIN obsidian-link (generated — do not edit inside this block) -->
+## Knowledge base
+
+Documentation for this project lives in the Obsidian vault — that is the
+place to look things up, and the place to write lasting notes:
+
+- **This project:** `~/ObsidianVault/2-Projects/ai-stack/lore/`
+- **Where does what live:** `~/ObsidianVault/Maps/BIBLIOTHEK.md`
+- **Start here (human):** `~/ObsidianVault/START.md`
+- **Homelab wiki:** https://wiki.home.erdlabs.com
+
+Session logs are filed automatically to `2-Projects/ai-stack/lore/Sessions/` via the
+`.obsidian-doc` marker in this directory — you do not need to write them.
+
+Conventions before editing the vault: skill `obsidian-keeper`.
+<!-- END obsidian-link -->
