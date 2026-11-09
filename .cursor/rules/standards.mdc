@@ -1,0 +1,19 @@
+---
+description: "Coding-Standards fuer dieses Projekt"
+globs: "*"
+alwaysApply: true
+---
+# Standards
+
+## Commits
+- Conventional Commits: feat:, fix:, chore:, docs:, refactor:
+- Branches: `<typ>/<issue-nr>-<topic>` — die Issue-Nummer ist Pflicht
+
+## Code
+- Tests fuer neuen Code
+- Bestehende Patterns befolgen
+- Keine Secrets in Code
+
+## Sprache
+- Code und Variablen: Englisch
+- Kommentare und Docs: Deutsch OK
