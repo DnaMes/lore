@@ -28,6 +28,7 @@ from lore.extractors.kimi import KimiExtractor
 from lore.extractors.opencode import OpenCodeExtractor
 from lore.extractors.pi import PiExtractor
 from lore.extractors.qwen import QwenExtractor
+from lore.extractors.visual_studio import VisualStudioCopilotExtractor
 from lore.extractors.vscode import VSCodeCopilotExtractor
 from lore.extractors.zed import ZedExtractor
 
@@ -57,6 +58,7 @@ ALL_EXTRACTOR_CLASSES = [
     PiExtractor,
     RooCodeExtractor,
     VSCodeCopilotExtractor,
+    VisualStudioCopilotExtractor,
 ]
 
 # Convenience IDs for pytest output

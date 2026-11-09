@@ -215,6 +215,7 @@ def validate_tool_name(tool: str) -> bool:
         "warp",
         "codex",
         "vscode-copilot",
+        "visual-studio-copilot",
         "copilot-cli",
         "opencode",
         "antigravity",
@@ -246,6 +247,9 @@ _ALPHANUM_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 _SUBAGENT_RE = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:[A-Za-z0-9_-]{1,64}$"
 )
+_VISUAL_STUDIO_RE = re.compile(
+    r"^visual-studio:[0-9a-f]{16}:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
 
 
 def validate_session_id(session_id: str, max_length: int = 256) -> bool:
@@ -262,6 +266,7 @@ def validate_session_id(session_id: str, max_length: int = 256) -> bool:
         _UUID_RE.match(session_id)
         or _ALPHANUM_RE.match(session_id)
         or _SUBAGENT_RE.match(session_id)
+        or _VISUAL_STUDIO_RE.fullmatch(session_id)
     )
 
 

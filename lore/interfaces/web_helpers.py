@@ -10,6 +10,7 @@ TOOL_STYLES = {
     "gemini-cli": {"color": "#60A5FA", "icon": "G", "name": "Gemini"},
     "codex": {"color": "#22C55E", "icon": "X", "name": "Codex"},
     "vscode-copilot": {"color": "#0ea5e9", "icon": "Co", "name": "VSCode Copilot"},
+    "visual-studio-copilot": {"color": "#A179DC", "icon": "VS", "name": "Visual Studio Copilot"},
     "copilot-cli": {"color": "#0284c7", "icon": "Gh", "name": "Copilot CLI"},
     "opencode": {"color": "#F97316", "icon": "O", "name": "OpenCode"},
     "antigravity": {"color": "#8B5CF6", "icon": "A", "name": "Antigravity"},

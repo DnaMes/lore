@@ -18,6 +18,7 @@ from .kimi import KimiExtractor
 from .opencode import OpenCodeExtractor
 from .pi import PiExtractor
 from .qwen import QwenExtractor
+from .visual_studio import VisualStudioCopilotExtractor
 from .vscode import VSCodeCopilotExtractor
 from .zed import ZedExtractor
 
@@ -29,6 +30,7 @@ def get_all_extractors() -> List[BaseExtractor]:
         CodexExtractor(),
         CursorExtractor(),
         VSCodeCopilotExtractor(),
+        VisualStudioCopilotExtractor(),
         CopilotCLIExtractor(),
         OpenCodeExtractor(),
         AntigravityExtractor(),

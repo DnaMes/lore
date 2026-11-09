@@ -7,6 +7,7 @@ CANONICAL_TOOLS = {
     "warp",  # legacy: rows ingested before the extractor was removed
     "cursor",
     "vscode-copilot",
+    "visual-studio-copilot",
     "copilot-cli",
     "opencode",
     "antigravity",
@@ -36,6 +37,9 @@ TOOL_ALIASES = {
     "cursor": "cursor",
     "vscode": "vscode-copilot",
     "vscode-copilot": "vscode-copilot",
+    "visual-studio-copilot": "visual-studio-copilot",
+    "visual-studio": "visual-studio-copilot",
+    "vs2022": "visual-studio-copilot",
     "copilot": "vscode-copilot",
     "copilot-cli": "copilot-cli",
     "opencode": "opencode",

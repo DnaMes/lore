@@ -76,6 +76,7 @@ class Tool(Enum):
     CLAUDE_CODE = "claude-code"
     CURSOR = "cursor"
     VSCODE_COPILOT = "vscode-copilot"
+    VISUAL_STUDIO_COPILOT = "visual-studio-copilot"
     COPILOT_CLI = "copilot-cli"
     GEMINI_CLI = "gemini-cli"
     WARP = "warp"  # legacy: no extractor; keeps already-ingested rows loadable
