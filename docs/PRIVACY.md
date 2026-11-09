@@ -39,6 +39,7 @@ JSON and JSONL sources are opened using standard Python read-only file streams. 
 | `codex` | `~/.codex/sessions/*/*/*/rollout-*.jsonl`, `~/.codex/archived_sessions/**/rollout-*.jsonl[.zst]`, scratch copy of `~/.codex/state_5.sqlite` |
 | `cursor` | Scratch copy of `~/.config/Cursor/User/globalStorage/state.vscdb` (`cursorDiskKV` rows `composerData:*` and sidebar chat data); `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` |
 | `vscode-copilot` | `~/.config/Code/User/workspaceStorage/*/chatSessions/*.json`, `~/.config/Code/User/workspaceStorage/*/chatSessions/*.jsonl` |
+| `visual-studio-copilot` | Read-only MessagePack files at `<project>/.vs/<solution>/copilot-chat/*/sessions/*`, discovered below `~/source/repos`, extra profiles, the current project and `LORE_VISUAL_STUDIO_PROJECT_PATHS` |
 | `copilot-cli` | `~/.copilot/session-state/*.jsonl` |
 | `opencode` | `~/.local/share/opencode/storage/session/**/ses_*.json`, `~/.opencode/storage/session/**/ses_*.json`, read-only `~/.local/share/opencode/opencode.db` and `~/.opencode/opencode.db` |
 | `antigravity` | `~/.gemini/antigravity{,-cli,-ide}/brain/*/.system_generated/logs/transcript_full.jsonl` (or `transcript.jsonl`); scratch copy of `conversation_summaries.db`; fallback `task.md` / `walkthrough.md` |

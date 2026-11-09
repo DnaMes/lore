@@ -88,6 +88,7 @@ Details: [docs/INSTALL.md](docs/INSTALL.md) (Platforms and verification).
 | `codex` | `~/.codex/sessions/`, `~/.codex/archived_sessions/`, scratch copy of `state_5.sqlite` | Archived rollouts may be zstd-compressed |
 | `cursor` | Scratch copy of `~/.config/Cursor/User/globalStorage/state.vscdb`; `~/.cursor/projects/*/agent-transcripts/` | Reads its own store, plus agent transcripts |
 | `vscode-copilot` | `~/.config/Code/User/workspaceStorage/*/chatSessions/` | JSON and JSONL chat session files |
+| `visual-studio-copilot` | `<project>/.vs/<solution>/copilot-chat/*/sessions/*` | Visual Studio 2022 MessagePack version 1 histories, including mounted Windows profiles |
 | `copilot-cli` | `~/.copilot/session-state/*.jsonl` | CLI session state files |
 | `opencode` | `~/.local/share/opencode/`, `~/.opencode/` | JSON storage and `opencode.db`, opened read-only |
 | `antigravity` | `~/.gemini/antigravity*/brain/*/.../transcript_full.jsonl`, scratch copy of `conversation_summaries.db` | Reads its own store; layout differs between releases |

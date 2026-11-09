@@ -17,6 +17,7 @@ Defaults below are taken from the code. Where a default depends on the call site
 | LORE_USE_V2 | 1 (on) | Reads sessions and search results from the v2 SQLite store. Set to `0`, `false`, `no` or `off` to use the legacy index.json reader; that fallback is logged (`serving the legacy JSON index: …`), as is every fallback caused by a missing, stale or unreadable store. | lore/services/index.py |
 | LORE_IMPORT_PROFILE | relaxed | Import thresholds. `strict` requires 3 messages, 2048 content characters and 5 user prompts. Any other value uses the relaxed thresholds. | lore/extractors/base.py |
 | LORE_MIN_USER_PROMPTS | 3 (relaxed); 5 (strict) | Overrides the minimum number of user prompts per imported session. Invalid values are ignored with a warning. | lore/extractors/base.py |
+| LORE_VISUAL_STUDIO_PROJECT_PATHS | empty (none) | Additional Visual Studio project directories or parent directories, separated by `os.pathsep`. Adds to default `source/repos` and current-project discovery. | lore/extractors/visual_studio.py |
 
 ## Web UI and security
 
