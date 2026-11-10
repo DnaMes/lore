@@ -1,10 +1,13 @@
 """Session reading, listing, export and page routes (#119)."""
 
+import hashlib
 import html
+import json
 import logging
 import math
 import os
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -602,10 +605,26 @@ def _enriched_session_cached(session_id: str, force_live: bool, _cache_key: str)
     return _enriched_session_for_detail_uncached(session_id, force_live=force_live)
 
 
+# The v2 stamp reads the store's generated_at, so it must not open the DB on
+# every request: memoised on the DB's and WAL's file signatures.
+_STORE_STAMP_MEMO: dict[str, tuple] = {}
+_STORE_STAMP_LOCK = threading.Lock()
+
+
+def _file_signature(path: Optional[Path]) -> tuple:
+    try:
+        st = path.stat() if path is not None else None
+    except OSError:
+        return (None,)
+    return (st.st_mtime_ns, st.st_size) if st else (None,)
+
+
 def _v2_store_stamp() -> str:
     """Cache key for the v2 store: its path and ``generated_at`` stamp, or "" without a store.
 
     Not the file mtime: closing the last WAL connection checkpoints, which touches it.
+    The stamp is memoised on the DB's and WAL's signatures, so an unchanged
+    store costs a stat instead of a SQLite connection per request.
     """
     from ...storage.reader import _read_generated_at
     from ...storage.schema import open_connection
@@ -614,6 +633,12 @@ def _v2_store_stamp() -> str:
     db = v2_db_path(_web.OUTPUT_DIR)
     if not db.exists():
         return ""
+    wal = db.with_name(db.name + "-wal")
+    before = (_file_signature(db), _file_signature(wal))
+    with _STORE_STAMP_LOCK:
+        memo = _STORE_STAMP_MEMO.get(str(db))
+    if memo is not None and memo[0] == before:
+        return memo[1]
     try:
         conn = open_connection(db)
         try:
@@ -622,7 +647,23 @@ def _v2_store_stamp() -> str:
             conn.close()
     except sqlite3.Error:
         return ""
-    return f"{db}:{generated_at}" if generated_at else ""
+    stamp = f"{db}:{generated_at}" if generated_at else ""
+    # Closing the connection may checkpoint the WAL and touch the files, so the
+    # memo is keyed on the signatures seen after the check.
+    after = (_file_signature(db), _file_signature(wal))
+    with _STORE_STAMP_LOCK:
+        _STORE_STAMP_MEMO[str(db)] = (after, stamp)
+    return stamp
+
+
+def _noise_rules_version() -> str:
+    """Version stamp for the noise rules, so a rules change re-renders cached sessions."""
+    try:
+        rules = _web.load_noise_rules()
+        payload = json.dumps(rules, sort_keys=True, default=str)
+    except Exception:  # unreadable rules must not break the session page
+        return ""
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
 def _build_session_from_v2(session_id: str, session_meta: dict):
@@ -654,8 +695,8 @@ def _build_session_from_v2(session_id: str, session_meta: dict):
 
 
 @threadsafe_lru_cache(maxsize=16)
-def _enriched_session_from_v2_cached(session_id: str, _store_stamp: str):
-    """v2-store build + enrich, cached on the store stamp (new sync, new stamp)."""
+def _enriched_session_from_v2_cached(session_id: str, _store_stamp: str, _noise_version: str):
+    """v2-store build + enrich, cached on the store stamp and the noise-rules version."""
     session_meta = _web._index_session_meta(session_id)
     if not session_meta:
         return None
@@ -699,7 +740,7 @@ def _enriched_session_for_detail(session_id: str, *, force_live: bool):
     if not force_live:
         stamp = _v2_store_stamp()
         if stamp:
-            from_store = _enriched_session_from_v2_cached(session_id, stamp)
+            from_store = _enriched_session_from_v2_cached(session_id, stamp, _noise_rules_version())
             if from_store:
                 return from_store
     export_path = None

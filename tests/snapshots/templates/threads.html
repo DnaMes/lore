@@ -1721,10 +1721,13 @@
                 // Tool output carries its own preview size; other code folds past 24 lines.
                 const previewLines = parseInt(pre.dataset.previewLines || '0', 10);
                 const shown = previewLines || 12;
-                if (previewLines || lines > 24) {
+                // Collapse only when the block has more lines than the preview shows,
+                // so the "N more lines" count can never turn negative.
+                const collapseLimit = previewLines || 24;
+                if (lines > collapseLimit) {
                     body.classList.add('is-collapsed');
                     body.style.setProperty('--preview-lines', String(shown));
-                    const more = lines - shown;
+                    const more = Math.max(1, lines - shown);
                     const expandBtn = document.createElement('button');
                     expandBtn.type = 'button';
                     expandBtn.className = 'code-card-expand';

@@ -469,7 +469,7 @@ TOOL_GROUP_MAX_ROWS = 12
 
 def _tool_group_row_html(label: str, target: str, state: str, exit_code, burst: int) -> str:
     """One ``Name  target  status`` row for the collapsed group summary (all text escaped)."""
-    name = html.escape(label) + (f" ×{burst}" if burst > 1 else "")
+    name = html.escape(str(label)) + (f" ×{burst}" if burst > 1 else "")
     status = ""
     if state == "failed":
         exit_bit = f" exit {exit_code}" if isinstance(exit_code, int) and exit_code else ""
@@ -483,9 +483,10 @@ def _tool_group_row_html(label: str, target: str, state: str, exit_code, burst: 
             '<span aria-hidden="true">✓</span></span>'
         )
     return (
-        f'<span class="tool-row" data-status="{state}">'
+        f'<span class="tool-row" data-status="{html.escape(str(state), quote=True)}">'
         f'<span class="tool-row-name">{name}</span>'
-        f'<span class="tool-row-target">{html.escape(target)}</span>'
+        f'<span class="tool-row-target">'
+        f"{html.escape(str(target) if target is not None else '', quote=True)}</span>"
         f"{status}</span>"
     )
 

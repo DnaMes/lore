@@ -442,7 +442,9 @@ def _flat_tool_call(message) -> Optional[Dict[str, Any]]:
     return {
         "tool": match.group(1).strip(),
         "input": body.split("<details>", 1)[0].strip(),
-        "output": "",
+        # None, not "": the export markdown has no output here — the result
+        # arrives in a later record and may still fill it.
+        "output": None,
         "status": status.group(1) if status else None,
     }
 
@@ -479,7 +481,9 @@ def _tool_only_calls(message) -> Optional[List[Dict[str, Any]]]:
 
 def _attach_result(calls: List[Dict[str, Any]], output: str) -> bool:
     """Give ``output`` to the first call still without one; False when all have output."""
-    target = next((call for call in calls if not call.get("output")), None)
+    # An empty output is a real output: only a missing/None one may be filled,
+    # or a later result would overwrite the first call's (empty) output.
+    target = next((call for call in calls if call.get("output") is None), None)
     if target is None:
         return False
     target["output"] = output
