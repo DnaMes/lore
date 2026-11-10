@@ -79,6 +79,7 @@ def _reset_embedding_singletons():
     yield
     embeddings._model = saved_model
     embeddings._model_failed = saved_failed
+    embeddings._embed_text_cached.cache_clear()
 
 
 @pytest.fixture(autouse=True)

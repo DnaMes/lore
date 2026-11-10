@@ -15,6 +15,7 @@ computed in Python — fine for the few hundred memory rows a user accrues.
 
 from __future__ import annotations
 
+import functools
 import logging
 import math
 import sqlite3
@@ -77,23 +78,39 @@ def _get_model():
 def embed_text(text: str) -> Optional[List[float]]:
     """Embed a single string. Returns the vector, or None if unavailable.
 
-    A None return is the signal for callers to fall back to FTS search.
+    A None return is the signal for callers to fall back to FTS search. Results are
+    memoised: typing a query re-embeds the same prefixes, and each embed costs a
+    model call. Callers get a fresh list, so the cached vector cannot be mutated.
     """
     text = (text or "").strip()
     if not text:
         return None
+    try:
+        return list(_embed_text_cached(text))
+    except _NoVector:
+        return None
+
+
+class _NoVector(Exception):
+    """Raised inside the cache so a failed embed is not memoised (lru_cache skips raises)."""
+
+
+# functools, not services.cache.threadsafe_lru_cache: lore.services imports lore.storage,
+# so importing it here would be circular. A rare double compute under a race is harmless.
+@functools.lru_cache(maxsize=256)
+def _embed_text_cached(text: str) -> tuple:
     model = _get_model()
     if model is None:
-        return None
+        raise _NoVector
     try:
         # fastembed yields numpy arrays; take the first (only) result.
         vectors = list(model.embed([text]))
-        if not vectors:
-            return None
-        return [float(x) for x in vectors[0]]
     except Exception as exc:  # noqa: BLE001
         logger.warning("Embedding failed for a text, skipping: %s", exc)
-        return None
+        raise _NoVector from exc
+    if not vectors:
+        raise _NoVector
+    return tuple(float(x) for x in vectors[0])
 
 
 def pack_vector(vector: Sequence[float]) -> bytes:

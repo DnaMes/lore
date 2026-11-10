@@ -17,6 +17,7 @@ import json
 import logging
 import sqlite3
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -73,6 +74,20 @@ def _read_generated_at(conn: sqlite3.Connection) -> Optional[str]:
     return _read_meta_value(conn, GENERATED_AT_KEY)
 
 
+def _file_signature(path: Optional[Path]) -> tuple:
+    try:
+        st = path.stat() if path is not None else None
+    except OSError:
+        return (None,)
+    return (st.st_mtime_ns, st.st_size) if st else (None,)
+
+
+# (db, compare_to) -> (file signatures, verdict). The check hashes every session row,
+# so it runs once per change of the store, its WAL or index.json, not once per search.
+_AVAILABILITY_MEMO: Dict[tuple, tuple] = {}
+_AVAILABILITY_LOCK = threading.Lock()
+
+
 def v2_is_available(output_dir: Path, compare_to: Optional[Path] = None) -> bool:
     """True if a v2 DB exists, is migrated far enough, and is not stale.
 
@@ -81,10 +96,29 @@ def v2_is_available(output_dir: Path, compare_to: Optional[Path] = None) -> bool
         compare_to: optional path (typically ``index.json``) — if the v2
             store's ``generated_at`` is older than this file's mtime, the v2
             store is considered stale and unusable, so callers fall back.
+
+    Memoised on the mtime and size of the store, its WAL file and ``compare_to``.
     """
     db = v2_db_path(output_dir)
     if not db.exists():
         return False
+    key = (str(db), str(compare_to) if compare_to is not None else None)
+    wal = db.with_name(db.name + "-wal")
+    before = (_file_signature(db), _file_signature(wal), _file_signature(compare_to))
+    with _AVAILABILITY_LOCK:
+        memo = _AVAILABILITY_MEMO.get(key)
+    if memo is not None and memo[0] == before:
+        return memo[1]
+    verdict = _v2_is_available_uncached(db, compare_to)
+    # Closing the check's connection may checkpoint the WAL and touch the files,
+    # so the memo is keyed on the signatures seen after the check.
+    after = (_file_signature(db), _file_signature(wal), _file_signature(compare_to))
+    with _AVAILABILITY_LOCK:
+        _AVAILABILITY_MEMO[key] = (after, verdict)
+    return verdict
+
+
+def _v2_is_available_uncached(db: Path, compare_to: Optional[Path]) -> bool:
     reason: Optional[str] = None
     try:
         conn = open_connection(db)
