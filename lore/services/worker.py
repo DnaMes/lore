@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -27,6 +29,7 @@ DEFAULT_INTERVAL = 300
 MIN_JOB_RETRY_SECONDS = 900
 DEFAULT_SUMMARY_CAP = 20
 LIBRARY_TIMEOUT = 1800
+HEARTBEAT_POLL_SECONDS = 15
 EMBED_TIMEOUT = 600
 SUMMARY_TIMEOUT = 1800
 
@@ -145,6 +148,8 @@ def _record_job(
         "skipped": bool(result.get("skipped")),
         "last_error": error or result.get("last_error"),
     }
+    if result.get("timed_out"):
+        entry["timed_out"] = True
     if "written" in result:
         entry["written"] = result["written"]
     if "embedded" in result:
@@ -201,15 +206,19 @@ def _run_job_with_timeout(
     output_dir: Optional[Path] = None,
 ) -> dict[str, Any]:
     tick = float(resolve_interval())
-    with ThreadPoolExecutor(max_workers=1) as pool:
+    pool = ThreadPoolExecutor(max_workers=1)
+    try:
         fut = pool.submit(fn)
         deadline = time.monotonic() + timeout
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
+                # A hung job must not block here: do not wait for it on exit.
+                pool.shutdown(wait=False, cancel_futures=True)
                 return {
                     "status": "error",
                     "skipped": False,
+                    "timed_out": True,
                     "last_error": f"timed out after {timeout}s",
                 }
             wait = min(tick, max(0.05, remaining))
@@ -220,6 +229,8 @@ def _run_job_with_timeout(
                     touch_heartbeat(output_dir)
             except Exception as exc:  # noqa: BLE001 — isolate per-job failures
                 return {"status": "error", "skipped": False, "last_error": str(exc)}
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
 
 
 def run_library_job(output_dir: Path) -> dict[str, Any]:
@@ -229,29 +240,46 @@ def run_library_job(output_dir: Path) -> dict[str, Any]:
         print("worker: skipping library (command not available)", file=sys.stderr)
         return {"status": "skipped", "skipped": True}
 
-    cli_path = Path(lore_cli.__file__).resolve()
-    cmd = [
-        sys.executable,
-        str(cli_path),
-        "library",
-        "--output-dir",
-        str(output_dir),
-    ]
-    try:
-        proc = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=LIBRARY_TIMEOUT,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        return {"status": "error", "skipped": False, "last_error": "library subprocess timed out"}
-    except OSError as exc:
-        return {"status": "error", "skipped": False, "last_error": str(exc)}
+    console = shutil.which("lore")
+    if console:
+        head = [console]
+    else:
+        head = [sys.executable, str(Path(lore_cli.__file__).resolve())]
+    cmd = [*head, "library", "--output-dir", str(output_dir)]
+
+    deadline = time.monotonic() + LIBRARY_TIMEOUT
+    with (
+        tempfile.TemporaryFile("w+", encoding="utf-8") as out_f,
+        tempfile.TemporaryFile("w+", encoding="utf-8") as err_f,
+    ):
+        try:
+            proc = subprocess.Popen(cmd, stdout=out_f, stderr=err_f, text=True)
+        except OSError as exc:
+            return {"status": "error", "skipped": False, "last_error": str(exc)}
+        # Poll instead of blocking so the heartbeat stays fresh during long builds.
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                proc.kill()
+                proc.wait()
+                return {
+                    "status": "error",
+                    "skipped": False,
+                    "timed_out": True,
+                    "last_error": "library subprocess timed out",
+                }
+            try:
+                proc.wait(timeout=min(HEARTBEAT_POLL_SECONDS, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                touch_heartbeat(output_dir)
+        out_f.seek(0)
+        err_f.seek(0)
+        stdout = out_f.read()
+        stderr = err_f.read()
 
     if proc.returncode != 0:
-        err = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
+        err = (stderr or stdout or "").strip() or f"exit {proc.returncode}"
         print(f"worker: library failed: {err}", file=sys.stderr)
         return {"status": "error", "skipped": False, "last_error": err}
     return {"status": "ok", "skipped": False}
@@ -300,7 +328,7 @@ def run_summaries_job(
     cap = daily_cap if daily_cap is not None else resolve_summary_cap()
     if remaining_cap is not None and remaining_cap <= 0:
         print("worker: skipping summaries (daily cap reached)", file=sys.stderr)
-        return {"status": "skipped", "skipped": True}
+        return {"status": "skipped", "skipped": True, "deferred_daily_cap": True}
 
     provider_name = os.environ.get("LORE_SUMMARY_PROVIDER", "ollama").strip().lower() or "ollama"
     if require_cloud_opt_in(provider_name, allow_cloud) == 2:
@@ -314,7 +342,7 @@ def run_summaries_job(
 
     limit = remaining_cap if remaining_cap is not None else cap
     if limit <= 0:
-        return {"status": "skipped", "skipped": True}
+        return {"status": "skipped", "skipped": True, "deferred_daily_cap": True}
 
     candidates = select_candidates(output_dir, min_idle_minutes=30, limit=limit)
     if not candidates:
@@ -415,7 +443,9 @@ def run_pass(
                 tz=timezone.utc,
             ).isoformat(timespec="seconds")
             entry["retry_after"] = retry_at
-        elif result.get("skipped") or result.get("status") == "ok":
+        elif result.get("status") == "ok" or (
+            result.get("skipped") and not result.get("deferred_daily_cap")
+        ):
             entry["ok_stamp"] = stamp
             entry.pop("retry_after", None)
 
@@ -440,19 +470,39 @@ def run_loop(
     def _handle_sig(_signum, _frame) -> None:
         stopping.set()
 
-    old_int = signal.signal(signal.SIGINT, _handle_sig)
-    old_term = signal.signal(signal.SIGTERM, _handle_sig)
+    # signal.signal only works on the main thread; elsewhere rely on the event.
+    on_main = threading.current_thread() is threading.main_thread()
+    old_int = old_term = None
+    if on_main:
+        old_int = signal.signal(signal.SIGINT, _handle_sig)
+        old_term = signal.signal(signal.SIGTERM, _handle_sig)
     try:
         while not stopping.is_set():
             touch_heartbeat(output_dir)
-            run_pass(output_dir)
+            try:
+                run_pass(output_dir)
+            except Exception as exc:  # noqa: BLE001 — one bad pass must not end the loop
+                _record_loop_error(output_dir, exc)
             if on_tick is not None:
                 on_tick(output_dir)
             if stopping.wait(pause):
                 break
     finally:
-        signal.signal(signal.SIGINT, old_int)
-        signal.signal(signal.SIGTERM, old_term)
+        if on_main:
+            signal.signal(signal.SIGINT, old_int)
+            signal.signal(signal.SIGTERM, old_term)
+
+
+def _record_loop_error(output_dir: Path, exc: Exception) -> None:
+    msg = str(exc) or type(exc).__name__
+    print(f"worker: pass failed: {msg}", file=sys.stderr)
+    try:
+        state_path = worker_dir(output_dir) / "state.json"
+        state = _load_state(state_path)
+        state["last_error"] = {"at": _now_iso(), "error": msg}
+        _save_state(state_path, state)
+    except OSError as save_exc:
+        print(f"worker: could not record error: {save_exc}", file=sys.stderr)
 
 
 def load_status(output_dir: Path) -> dict[str, Any]:

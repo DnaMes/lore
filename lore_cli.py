@@ -2696,7 +2696,7 @@ def cmd_worker(args):
         status_check,
     )
 
-    output_dir = Path(args.output_dir).expanduser()
+    output_dir = Path(getattr(args, "output_dir", None) or lore_home()).expanduser()
     action = getattr(args, "worker_action", None)
 
     if action == "status":
@@ -3683,12 +3683,18 @@ Examples:
         help="Output directory (default: ~/.lore/formatted)",
     )
 
+    worker_output_dir_kw = dict(
+        default=argparse.SUPPRESS,
+        help="Output directory (default: ~/.lore or global --output-dir)",
+    )
     worker_parser = subparsers.add_parser(
         "worker",
         help="Background jobs after each sync (library, embeddings, summaries)",
     )
+    worker_parser.add_argument("--output-dir", **worker_output_dir_kw)
     worker_sub = worker_parser.add_subparsers(dest="worker_action")
     worker_status = worker_sub.add_parser("status", help="Show worker state")
+    worker_status.add_argument("--output-dir", **worker_output_dir_kw)
     worker_status.add_argument(
         "--json", action="store_true", help="Machine-readable JSON on stdout"
     )
@@ -3697,7 +3703,8 @@ Examples:
         action="store_true",
         help="Exit non-zero when heartbeat is older than 3× the worker interval",
     )
-    worker_sub.add_parser("run-once", help="Run one worker pass and exit")
+    worker_run_once = worker_sub.add_parser("run-once", help="Run one worker pass and exit")
+    worker_run_once.add_argument("--output-dir", **worker_output_dir_kw)
 
     return parser
 

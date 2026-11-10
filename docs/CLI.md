@@ -1169,7 +1169,12 @@ updates in the archive (library export, embeddings, summaries).
 Running `lore worker` with no subcommand starts the loop until SIGINT/SIGTERM.
 SIGINT/SIGTERM set an internal stop event; the loop uses `event.wait(interval)` between
 passes so shutdown is noticed after the current wait or job, then prior signal handlers
-are restored. `LORE_WORKER_INTERVAL` sets the pause between passes (default `300`
+are restored. Signal handlers are only installed on the main thread; elsewhere the stop
+event alone ends the loop. An exception from one pass is logged to stderr, recorded as
+`last_error` (with `at` timestamp) in `state.json`, and the loop continues after the wait.
+The library job runs as a child process (`lore` console script when on `PATH`, else
+`lore_cli.py` under the current Python), polled every 15 s so the heartbeat stays fresh;
+a child still running at the 1800 s limit is killed and recorded as timed out. `LORE_WORKER_INTERVAL` sets the pause between passes (default `300`
 seconds). Failed jobs keep the previous `last_stamp` and are retried with per-job backoff
 of at least 15 minutes (or the interval, whichever is larger), recorded in `state.json`.
 `LORE_WORKER_SUMMARY_DAILY_CAP` limits summaries per UTC day (default `20`).
