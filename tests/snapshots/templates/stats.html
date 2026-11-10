@@ -1957,19 +1957,33 @@
             }[char] || char));
         }
         let debounce;
+        // Only the newest query may paint: a slow answer for an earlier prefix ("tr")
+        // used to arrive after the one for "traefik" and replace or clear its hits.
+        let searchSeq = 0;
+        let searchAbort = null;
         const searchInputEl = document.getElementById('searchInput');
         const searchResultsEl = document.getElementById('searchResults');
         if (searchInputEl && searchResultsEl) {
             searchInputEl.addEventListener('input', e => {
                 clearTimeout(debounce);
+                const seq = ++searchSeq;
+                if (searchAbort) { searchAbort.abort(); searchAbort = null; }
                 const q = e.target.value.trim();
-                if (q.length < 2) return;
+                if (q.length < 2) { searchResultsEl.innerHTML = ''; return; }
                 debounce = setTimeout(() => {
                     const apiUrl = new URL('/api/search', window.location.origin);
                     apiUrl.searchParams.set('q', q);
-                    fetch(apiUrl.toString(), { credentials: 'same-origin' }).then(r=>r.json()).then(data => {
+                    searchAbort = new AbortController();
+                    searchResultsEl.innerHTML = '<div class="p-3 text-xs text-slate-500">Searching…</div>';
+                    fetch(apiUrl.toString(), { credentials: 'same-origin', signal: searchAbort.signal }).then(r=>r.json()).then(data => {
+                        if (seq !== searchSeq) return;
                         if (!Array.isArray(data)) {
-                            searchResultsEl.innerHTML = '';
+                            const message = escapeHtml((data && data.error) || 'Search failed');
+                            searchResultsEl.innerHTML = `<div class="p-3 text-xs text-red-600">${message}</div>`;
+                            return;
+                        }
+                        if (!data.length) {
+                            searchResultsEl.innerHTML = '<div class="p-3 text-xs text-slate-500">No matches</div>';
                             return;
                         }
                         searchResultsEl.innerHTML = data.map(s => {
@@ -1980,10 +1994,11 @@
                             const snippet = s.snippet ? `<div class="text-xs text-slate-600 mt-1">${escapeHtml(s.snippet || '').replace(/«/g, '<mark>').replace(/»/g, '</mark>')}</div>` : '';
                             return `<a href="/session/${sid}" class="block p-3 rounded-lg hover:bg-slate-100 group"><div class="text-sm font-medium text-slate-900 group-hover:text-blue-600 transition-colors">${label}</div>${snippet}<div class="text-[10px] text-slate-500 mt-1">${tool} • ${date}</div></a>`;
                         }).join('');
-                    }).catch(() => {
-                        searchResultsEl.innerHTML = '';
+                    }).catch(err => {
+                        if (seq !== searchSeq || (err && err.name === 'AbortError')) return;
+                        searchResultsEl.innerHTML = '<div class="p-3 text-xs text-red-600">Search failed</div>';
                     });
-                }, 200);
+                }, 250);
             });
         }
         function copyCommand(cmd) {

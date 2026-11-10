@@ -243,6 +243,34 @@ def test_search_modal_navigates_to_session(page, lore_site):
     sync_api.expect(page.locator("h1")).to_be_visible()
 
 
+def test_search_modal_ignores_a_late_answer_for_an_older_query(page, lore_site):
+    """A slow answer for an earlier prefix must not replace the newest query's hits."""
+    sync_api = _playwright()
+    held = []
+
+    def hold_short_prefix(route):
+        if "q=br&" in route.request.url + "&":
+            held.append(route)  # answered only after the full query has painted
+        else:
+            route.continue_()
+
+    page.route("**/api/search?*", hold_short_prefix)
+    page.goto(lore_site + "/", wait_until="networkidle")
+    page.keyboard.press("Control+k")
+    search_input = page.locator("#searchInput")
+    search_input.fill("br")
+    page.wait_for_timeout(400)  # past the debounce, so the "br" request is in flight
+    search_input.fill(SEARCH_TERM)
+    results = page.locator("#searchResults a[href^='/session/']")
+    sync_api.expect(results.first).to_be_visible(timeout=10_000)
+    painted = results.count()
+    for route in held:
+        route.fulfill(status=200, content_type="application/json", body="[]")
+    page.wait_for_timeout(300)
+    assert held, "the short-prefix request was never sent"
+    assert results.count() == painted
+
+
 def test_copy_code_button_writes_clipboard(page, lore_site):
     sync_api = _playwright()
     page.goto(f"{lore_site}/session/browser-session-01", wait_until="networkidle")
