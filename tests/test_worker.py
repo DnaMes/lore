@@ -570,7 +570,13 @@ def test_library_job_prefers_lore_console_script(tmp_path: Path, monkeypatch):
 
     assert worker_mod.run_library_job(tmp_path)["status"] == "ok"
     assert seen[0][0] == "/usr/local/bin/lore"
-    assert seen[0][1:2] == ["library"]
+    # --output-dir is a global option: the real CLI parser must accept the argv as built
+    # (it rejected "library --output-dir X" inside the container).
+    import lore_cli
+
+    args = lore_cli.build_parser().parse_args(seen[0][1:])
+    assert args.command == "library"
+    assert Path(args.output_dir) == tmp_path
 
 
 def test_library_job_falls_back_to_absolute_cli_path(tmp_path: Path, monkeypatch):

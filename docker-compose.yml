@@ -70,7 +70,7 @@ services:
       retries: 3
       start_period: 120s
     cpus: "1.0"
-    mem_limit: 2g
+    mem_limit: 3g  # loop + library child share it; a full build peaked at ~1.8 GiB
     pids_limit: 256
     logging:
       driver: "json-file"

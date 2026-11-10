@@ -245,7 +245,8 @@ def run_library_job(output_dir: Path) -> dict[str, Any]:
         head = [console]
     else:
         head = [sys.executable, str(Path(lore_cli.__file__).resolve())]
-    cmd = [*head, "library", "--output-dir", str(output_dir)]
+    # --output-dir is a global option and must precede the subcommand.
+    cmd = [*head, "--output-dir", str(output_dir), "library"]
 
     deadline = time.monotonic() + LIBRARY_TIMEOUT
     with (
