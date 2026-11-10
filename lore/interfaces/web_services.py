@@ -2,6 +2,9 @@ import re
 from typing import Any, Dict, List, Optional
 
 from lore.formatting.turns import (
+    DEFAULT_NOISE_RULES,
+)
+from lore.formatting.turns import (
     attach_result_to_calls as _attach_result,
 )
 from lore.formatting.turns import (
@@ -31,41 +34,6 @@ FILE_UPDATE_PATTERNS = [
         flags=re.IGNORECASE,
     ),
 ]
-
-
-DEFAULT_NOISE_RULES: Dict[str, Dict[str, bool]] = {
-    "default": {
-        "strip_ansi_sequences": True,
-        "session_classify_injected_events": True,
-    },
-    "claude-code": {
-        "claude_strip_command_xml": True,
-        "claude_summarize_file_operations": True,
-    },
-    "cursor": {
-        "cursor_summarize_file_operations": True,
-    },
-    "gemini-cli": {
-        "gemini_summarize_file_operations": True,
-    },
-    "codex": {
-        "codex_summarize_file_operations": True,
-    },
-    "copilot-cli": {
-        "copilot_summarize_file_operations": True,
-    },
-    "vscode-copilot": {
-        "vscode_summarize_file_operations": True,
-    },
-    "opencode": {
-        "opencode_strip_user_caveat": True,
-        "opencode_summarize_file_operations": True,
-        "opencode_summarize_unset_env_vars": True,
-    },
-    "antigravity": {
-        "antigravity_summarize_file_operations": True,
-    },
-}
 
 
 def compute_top_tags(

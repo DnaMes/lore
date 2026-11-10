@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 
 from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
 from lore.exporters.markdown import MarkdownExporter
+from lore.formatting.turns import build_session_turns
 
 
 def _session(messages, **kwargs) -> UnifiedSession:
@@ -97,3 +99,57 @@ def test_html_in_prompt_is_escaped():
     md = _render(_session(messages))
     assert "<script>" not in md
     assert "&lt;script&gt;" in md
+
+
+def test_prompt_without_timestamp_exports_without_time():
+    messages = [
+        UnifiedMessage(role=Role.USER, content="no stamp", timestamp=None),
+        UnifiedMessage(
+            role=Role.ASSISTANT,
+            content="ok",
+            timestamp=datetime(2026, 11, 9, 10, 1, 0),
+        ),
+    ]
+    md = _render(_session(messages))
+    assert "### Prompt 1\n" in md or md.endswith("### Prompt 1")
+    assert "### Prompt 1 ·" not in md
+
+
+def test_tool_output_with_nested_fence_uses_matching_long_fence():
+    t0 = datetime(2026, 11, 9, 10, 0, 0)
+    nested = "```python\nx\n```"
+    messages = [
+        UnifiedMessage(role=Role.USER, content="go", timestamp=t0),
+        UnifiedMessage(
+            role=Role.ASSISTANT,
+            content="",
+            timestamp=t0,
+            tool_calls=[{"name": "Run", "input": {}, "output": nested, "status": "ok"}],
+        ),
+    ]
+    md = _render(_session(messages))
+    match = re.search(r"(`{4,})text\n.*?```python\nx\n```\n\1", md, re.DOTALL)
+    assert match is not None
+    assert len(match.group(1)) > 3
+
+
+def test_build_session_turns_does_not_mutate_messages():
+    t0 = datetime(2026, 11, 9, 10, 0, 0)
+    messages = [
+        UnifiedMessage(role=Role.USER, content="hi", timestamp=t0),
+        UnifiedMessage(
+            role=Role.USER,
+            content="[Tool Result]\nout",
+            timestamp=t0 + timedelta(minutes=1),
+        ),
+        UnifiedMessage(
+            role=Role.ASSISTANT,
+            content="done",
+            timestamp=t0 + timedelta(minutes=2),
+        ),
+    ]
+    session = _session(messages)
+    before = [dict(vars(m)) for m in messages]
+    build_session_turns(session)
+    after = [dict(vars(m)) for m in messages]
+    assert before == after

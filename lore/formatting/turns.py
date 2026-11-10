@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import html
 import re
 from dataclasses import dataclass, field
@@ -23,6 +24,40 @@ _EXPORT_TOOL_STATUS_RE = re.compile(r"<summary>Tool:[^<]*?\u2014\s*(\w+)\s*</sum
 MARKDOWN_OUTPUT_FOLD_LINES = 10
 
 _FENCE_RE = re.compile(r"^(```+|~~~+)")
+
+DEFAULT_NOISE_RULES: Dict[str, Dict[str, bool]] = {
+    "default": {
+        "strip_ansi_sequences": True,
+        "session_classify_injected_events": True,
+    },
+    "claude-code": {
+        "claude_strip_command_xml": True,
+        "claude_summarize_file_operations": True,
+    },
+    "cursor": {
+        "cursor_summarize_file_operations": True,
+    },
+    "gemini-cli": {
+        "gemini_summarize_file_operations": True,
+    },
+    "codex": {
+        "codex_summarize_file_operations": True,
+    },
+    "copilot-cli": {
+        "copilot_summarize_file_operations": True,
+    },
+    "vscode-copilot": {
+        "vscode_summarize_file_operations": True,
+    },
+    "opencode": {
+        "opencode_strip_user_caveat": True,
+        "opencode_summarize_file_operations": True,
+        "opencode_summarize_unset_env_vars": True,
+    },
+    "antigravity": {
+        "antigravity_summarize_file_operations": True,
+    },
+}
 
 
 def is_tool_result_record(message: Any) -> bool:
@@ -113,8 +148,6 @@ class SessionTurn:
 def _provider_rules(
     session: Any, noise_rules: Optional[Dict[str, Dict[str, bool]]]
 ) -> Dict[str, bool]:
-    from lore.interfaces.web_services import DEFAULT_NOISE_RULES
-
     tool = getattr(getattr(session, "tool", None), "value", "")
     configured = noise_rules or DEFAULT_NOISE_RULES
     shared = configured.get("default", {})
@@ -122,6 +155,26 @@ def _provider_rules(
     rules = dict(shared)
     rules.update(specific)
     return rules
+
+
+def _longest_backtick_run(text: str) -> int:
+    longest = 0
+    run = 0
+    for char in text:
+        if char == "`":
+            run += 1
+            longest = max(longest, run)
+        else:
+            run = 0
+    return longest
+
+
+def _fenced_codeblock_lines(info: str, content: str) -> List[str]:
+    """Fence lines whose backtick count exceeds nested runs inside ``content``."""
+    fence_len = max(3, _longest_backtick_run(content) + 1)
+    fence = "`" * fence_len
+    body = content.splitlines()
+    return [f"{fence}{info}", *body, fence]
 
 
 def _message_display_role(message: Any) -> str:
@@ -274,20 +327,20 @@ def build_session_turns(
 
     for message in session.messages:
         display_role = _message_display_role(message)
-        message.display_role = display_role
         original = getattr(message, "original_content", None) or message.content or ""
         injected = classify_injected_display(tool, message.role.value, original, provider_rules)
 
         if injected.kind == "event":
-            message.display_role = "event"
-            message.event_label = injected.label
+            view = copy.copy(message)
+            view.display_role = "event"
+            view.event_label = injected.label
             if current_turn is None:
                 current_turn = SessionTurn(
                     number=0,
                     timestamp=message.timestamp,
                     prompt_text="",
                 )
-            current_responses.append(message)
+            current_responses.append(view)
             continue
 
         if display_role == "user":
@@ -312,7 +365,9 @@ def build_session_turns(
                 timestamp=message.timestamp,
                 prompt_text="",
             )
-        current_responses.append(message)
+        view = copy.copy(message)
+        view.display_role = display_role
+        current_responses.append(view)
 
     _close_turn()
     return turns
@@ -400,15 +455,11 @@ def _render_tool_output(output: str) -> List[str]:
         lines.append("<details>")
         lines.append(f"<summary>Output ({len(text_lines)} lines)</summary>")
         lines.append("")
-        lines.append("```text")
-        lines.extend(text_lines)
-        lines.append("```")
+        lines.extend(_fenced_codeblock_lines("text", body))
         lines.append("</details>")
     else:
         lines.append("")
-        lines.append("```text")
-        lines.extend(text_lines)
-        lines.append("```")
+        lines.extend(_fenced_codeblock_lines("text", body))
     return lines
 
 
@@ -452,8 +503,11 @@ def render_turns_to_lines(turns: List[SessionTurn]) -> List[str]:
             lines.append(f"*{turn.day_label}*")
             lines.append("")
         if turn.number > 0:
-            stamp = turn.timestamp.strftime("%Y-%m-%d %H:%M")
-            lines.append(f"### Prompt {turn.number} · {stamp}")
+            if turn.timestamp is not None:
+                stamp = turn.timestamp.strftime("%Y-%m-%d %H:%M")
+                lines.append(f"### Prompt {turn.number} · {stamp}")
+            else:
+                lines.append(f"### Prompt {turn.number}")
             lines.append("")
             if turn.prompt_text:
                 lines.append(escape_markdown_outside_fences(turn.prompt_text))
