@@ -105,8 +105,10 @@ Recently in this project:
 - 2026-11-10 claude-code "Lore-Widget für Omarchy-Leiste": Added the widget, tests green https://lore.local.erdlabs.com/session/237eb581-…
 ```
 
-- The line shows the date, the tool, the title, then the stored one-line summary when one
-  exists, else the first prompt line cut to 120 characters, then the Lore web link.
+- The line shows the date, the tool, and the title when one exists. When a stored one-line
+  summary exists it is shown after the title. Without a title, the first prompt line (cut
+  to 120 characters) stands in instead; a title without a stored summary is left unadorned.
+  A Lore web link follows when configured.
 - The web base comes from `LORE_WEB_URL` (default `https://lore.local.erdlabs.com`). Set
   it to an empty value to drop the links.
 - Automated sessions (`exec`, `cron`, `subagent`), deleted or ignored sessions and the

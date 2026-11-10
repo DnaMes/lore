@@ -448,19 +448,18 @@ def recent_project_sessions(
     try:
         exclusion = automated_exclusion_sql(conn, "s")
         has_summaries = current_version(conn) >= _SUMMARY_TABLE_VERSION
-        summary_join = (
-            "LEFT JOIN session_summaries ss "
-            "ON ss.level = 'session' AND ss.scope_key = 'session:' || s.id"
+        summary_col = (
+            "(SELECT ss.payload_json FROM session_summaries ss "
+            "WHERE ss.level = 'session' AND ss.scope_key = 'session:' || s.id "
+            "ORDER BY ss.created DESC LIMIT 1)"
             if has_summaries
-            else ""
+            else "NULL"
         )
-        summary_col = "ss.payload_json" if has_summaries else "NULL"
         rows = conn.execute(
             f"""
             SELECT s.id, s.tool, s.title, s.updated, s.prompt_outline,
                    {summary_col} AS summary_json
             FROM sessions s
-            {summary_join}
             WHERE s.project = ?
               AND s.id NOT IN (SELECT value FROM json_each(?)){exclusion}
             ORDER BY s.updated DESC

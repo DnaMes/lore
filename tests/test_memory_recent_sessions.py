@@ -16,7 +16,8 @@ from lore.services.memory_context import (
     build_memory_context,
     select_recent_sessions,
 )
-from lore.storage import add_memory, initialise
+from lore.storage import add_memory, initialise, open_connection
+from lore.storage.reader import recent_project_sessions
 from lore.storage.summaries import save_summary
 from lore.storage.writer import v2_db_path, write_sessions
 
@@ -241,6 +242,77 @@ def test_cli_context_no_recent_flag(tmp_path, recent_env, capsys):
     assert capsys.readouterr().out == ""
     lore_cli.cmd_memory(_context_args(tmp_path))
     assert "Recently in this project:" in capsys.readouterr().out
+
+
+def test_recent_project_sessions_one_row_newest_summary(tmp_path, recent_env):
+    sid = "dedup-sum"
+    _store_session(tmp_path, sid, day=1, title="Dedup")
+    db = v2_db_path(tmp_path)
+    conn = open_connection(db)
+    try:
+        conn.executescript(
+            """
+            CREATE TABLE session_summaries_npk AS SELECT * FROM session_summaries WHERE 0;
+            INSERT INTO session_summaries_npk SELECT * FROM session_summaries;
+            DROP TABLE session_summaries;
+            ALTER TABLE session_summaries_npk RENAME TO session_summaries;
+            """
+        )
+
+        def _summary_row(created: str, one_liner: str) -> tuple:
+            return (
+                "session",
+                f"session:{sid}",
+                sid,
+                "fp",
+                "test/model",
+                1,
+                1,
+                json.dumps({"one_liner": one_liner}),
+                None,
+                None,
+                created,
+            )
+
+        conn.execute(
+            "INSERT INTO session_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            _summary_row("2026-01-01T00:00:00+00:00", "Older one-liner"),
+        )
+        conn.execute(
+            "INSERT INTO session_summaries VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            _summary_row("2026-03-01T00:00:00+00:00", "Newest one-liner"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    rows = recent_project_sessions(tmp_path, PROJECT, limit=5)
+    assert [r["id"] for r in rows] == [sid]
+    assert rows[0]["summary"] == "Newest one-liner"
+
+
+def test_mcp_list_recent_sessions_without_session_summaries_table(
+    tmp_path, recent_env, monkeypatch
+):
+    monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
+    monkeypatch.setenv("LORE_USE_V2", "1")
+    _store_session(tmp_path, "pre18", day=1, title="Before migration 18")
+    db = v2_db_path(tmp_path)
+    conn = open_connection(db)
+    try:
+        conn.execute("DROP TABLE session_summaries")
+        conn.commit()
+    finally:
+        conn.close()
+
+    server = mcp.create_server()
+    handler = server.tools["list_recent_sessions"]["handler"]
+    payload = json.loads(asyncio.run(handler({"limit": 10})))
+
+    assert payload["count"] == 1
+    session = payload["sessions"][0]
+    assert session["id"] == "pre18"
+    assert "summary" not in session
 
 
 def test_mcp_list_recent_sessions_includes_summary_when_present(tmp_path, recent_env, monkeypatch):

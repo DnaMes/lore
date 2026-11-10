@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import sqlite3
 import subprocess
 
 from ...services.index import (
@@ -153,19 +154,37 @@ def register(server, deps: MCPToolDeps) -> None:
         )
         page = [serialize_index_session_summary(session) for session in sessions[:limit]]
         if page:
+            from ...storage.reader import _SUMMARY_TABLE_VERSION
+            from ...storage.schema import current_version, open_connection
             from ...storage.summaries import list_summaries
+            from ...storage.writer import v2_db_path
 
-            stored = list_summaries(
-                deps.server.output_dir, level="session", session_ids=[r["id"] for r in page]
-            )
-            one_liners = {
-                row["session_id"]: row["payload"].get("one_liner")
-                for row in stored
-                if isinstance(row.get("payload"), dict)
-            }
-            for row in page:
-                if isinstance(one_liners.get(row["id"]), str):
-                    row["summary"] = one_liners[row["id"]]
+            db = v2_db_path(deps.server.output_dir)
+            has_summaries = False
+            if db.exists():
+                conn = open_connection(db)
+                try:
+                    has_summaries = current_version(conn) >= _SUMMARY_TABLE_VERSION
+                finally:
+                    conn.close()
+            if has_summaries:
+                try:
+                    stored = list_summaries(
+                        deps.server.output_dir,
+                        level="session",
+                        session_ids=[r["id"] for r in page],
+                    )
+                except sqlite3.OperationalError:
+                    stored = []
+                else:
+                    one_liners = {
+                        row["session_id"]: row["payload"].get("one_liner")
+                        for row in stored
+                        if isinstance(row.get("payload"), dict)
+                    }
+                    for row in page:
+                        if isinstance(one_liners.get(row["id"]), str):
+                            row["summary"] = one_liners[row["id"]]
         return deps.json_text({"count": min(len(sessions), limit), "sessions": page})
 
     server.register_tool(
