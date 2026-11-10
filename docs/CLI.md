@@ -1158,6 +1158,59 @@ options:
 
 Note: `format` has no `--no-llm` flag. Use `--provider ollama` (local) to keep text on this machine; any cloud provider needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`.
 
+## worker
+
+Run background jobs after the v2 store sync stamp changes: library export,
+message embeddings, and session summaries (local providers only; no cloud opt-in).
+
+Writes: `<output-dir>/worker/state.json`, `heartbeat`, and whatever each job
+updates in the archive (library export, embeddings, summaries).
+
+Running `lore worker` with no subcommand starts the loop until SIGINT/SIGTERM.
+`LORE_WORKER_INTERVAL` sets the pause between passes (default `300` seconds).
+`LORE_WORKER_SUMMARY_DAILY_CAP` limits summaries per UTC day (default `20`).
+
+```text
+usage: lore worker [-h] {status,run-once} ...
+
+positional arguments:
+  {status,run-once}
+    status           Show worker state
+    run-once         Run one worker pass and exit
+
+options:
+  -h, --help         show this help message and exit
+```
+
+### status
+
+Show the last worker state and per-job results.
+
+Mode: read-only unless `--check` is used (then exit code reflects heartbeat age).
+
+```text
+usage: lore worker status [-h] [--json] [--check]
+
+options:
+  -h, --help  show this help message and exit
+  --json      Machine-readable JSON on stdout
+  --check     Exit non-zero when heartbeat is older than 3× the worker
+              interval
+```
+
+### run-once
+
+Touch the heartbeat, run one worker pass when the store stamp changed, then exit.
+
+Writes: same as `worker` (state, heartbeat, and job side effects when the stamp is new).
+
+```text
+usage: lore worker run-once [-h]
+
+options:
+  -h, --help  show this help message and exit
+```
+
 ## lore-session
 
 Switch the active AI tool for the current project and continue where the last

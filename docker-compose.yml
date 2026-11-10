@@ -52,5 +52,31 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  worker:
+    build: .
+    container_name: lore-worker
+    restart: unless-stopped
+    command: ["lore", "worker"]
+    volumes:
+      - ${LORE_DATA_DIR:-lore-data}:/home/ai/.lore
+    environment:
+      - HOME=/home/ai
+      - LORE_WORKER_INTERVAL=${LORE_WORKER_INTERVAL:-}
+      - LORE_WORKER_SUMMARY_DAILY_CAP=${LORE_WORKER_SUMMARY_DAILY_CAP:-}
+    healthcheck:
+      test: ["CMD", "lore", "worker", "status", "--check"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    cpus: "1.0"
+    mem_limit: 2g
+    pids_limit: 256
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   lore-data:

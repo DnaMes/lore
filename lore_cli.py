@@ -2687,6 +2687,49 @@ def cmd_generate_titles(args):
     print(f"\n✅ Generated: {generated} | ⏭️ Skipped: {skipped}")
 
 
+def cmd_worker(args):
+    """Run background jobs after each store sync stamp (library, embeddings, summaries)."""
+    from lore.services.worker import (
+        load_status,
+        run_loop,
+        run_pass,
+        status_check,
+    )
+
+    output_dir = Path(args.output_dir).expanduser()
+    action = getattr(args, "worker_action", None)
+
+    if action == "status":
+        payload = load_status(output_dir)
+        if getattr(args, "check", False):
+            return status_check(output_dir)
+        if getattr(args, "json", False):
+            print(json.dumps(payload, indent=2, sort_keys=True))
+        else:
+            stamp = payload.get("last_stamp") or "(none)"
+            print(f"Worker state for {output_dir}")
+            print(f"  last_stamp: {stamp}")
+            print(f"  store_stamp: {payload.get('store_stamp') or '(none)'}")
+            jobs = payload.get("jobs") or {}
+            for name, info in sorted(jobs.items()):
+                print(f"  {name}: {info.get('status')} ({info.get('last_run')})")
+        return 0
+
+    if action == "run-once":
+        from lore.services.worker import touch_heartbeat
+
+        touch_heartbeat(output_dir)
+        run_pass(output_dir)
+        return 0
+
+    print(
+        f"Worker loop on {output_dir} (interval from LORE_WORKER_INTERVAL, Ctrl+C to stop)",
+        file=sys.stderr,
+    )
+    run_loop(output_dir)
+    return 0
+
+
 def cmd_watch(args):
     """Watch for new sessions and auto-export."""
     from lore.watcher import SessionWatcher
@@ -2930,6 +2973,7 @@ COMMANDS = {
     "summarize": cmd_summarize,
     "format": cmd_format,
     "library": cmd_library,
+    "worker": cmd_worker,
 }
 
 
@@ -3638,6 +3682,22 @@ Examples:
         "--output-dir",
         help="Output directory (default: ~/.lore/formatted)",
     )
+
+    worker_parser = subparsers.add_parser(
+        "worker",
+        help="Background jobs after each sync (library, embeddings, summaries)",
+    )
+    worker_sub = worker_parser.add_subparsers(dest="worker_action")
+    worker_status = worker_sub.add_parser("status", help="Show worker state")
+    worker_status.add_argument(
+        "--json", action="store_true", help="Machine-readable JSON on stdout"
+    )
+    worker_status.add_argument(
+        "--check",
+        action="store_true",
+        help="Exit non-zero when heartbeat is older than 3× the worker interval",
+    )
+    worker_sub.add_parser("run-once", help="Run one worker pass and exit")
 
     return parser
 

@@ -203,10 +203,41 @@ All settings are `LORE_*` environment variables, listed in
 and can be changed with `--output-dir`; the tool source directories are read-only.
 The cloud opt-in can also be set with `LORE_ALLOW_CLOUD=1` (see docs/CONFIGURATION.md).
 
+## Worker
+
+The background worker runs after each v2 store sync stamp (`store_meta.generated_at`
+changes). It writes state under `<output-dir>/worker/` (`state.json` and a
+`heartbeat` file).
+
+On each pass it runs three jobs in order:
+
+1. **library** — export/rebuild the archive (`lore library` when available).
+2. **embed_messages** — backfill message embeddings when the semantic extra is installed.
+3. **summaries** — generate session summaries for idle candidates (local provider
+   only; the worker never opts into cloud).
+
+Environment variables:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `LORE_WORKER_INTERVAL` | `300` | Seconds between loop iterations. |
+| `LORE_WORKER_SUMMARY_DAILY_CAP` | `20` | Max summaries written per UTC day. |
+
+```bash
+lore worker                    # loop until Ctrl+C or SIGTERM
+lore worker run-once           # one pass, then exit
+lore worker status             # human-readable job state
+lore worker status --json      # machine-readable state
+lore worker status --check     # exit 1 when heartbeat is older than 3× the interval
+```
+
+With Docker, `docker-compose.yml` also starts `lore-worker` (`lore worker`) sharing
+the same data volume as `lore-app`.
+
 ## Docker
 
 `docker-compose.yml` is self-contained: `docker compose up -d` builds the local
-`Dockerfile` and starts the `app` service as `lore-app`.
+`Dockerfile` and starts `lore-app` (web UI) and `lore-worker` (background jobs).
 
 - **Build:** the image build downloads the semantic embedding model from Hugging Face
   unless you pass `--build-arg PREFETCH_EMBEDDING_MODEL=off`.
