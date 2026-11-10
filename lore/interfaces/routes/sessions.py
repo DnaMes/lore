@@ -30,6 +30,7 @@ from ...services.cache import threadsafe_lru_cache
 from ...services.extraction import source_ruled_out
 from ...services.index import is_automated, session_by_id_map
 from ...services.summarize_cli import web_summarize_enabled
+from ..library_home import build_library_home_context
 from ..web_data import (
     _sanitize_next_url,
     _tool_from_value,
@@ -79,6 +80,11 @@ def dashboard():
         key=lambda s: s.get("updated") or s.get("created") or "",
         reverse=True,
     )[:10]
+    library = build_library_home_context(
+        idx,
+        _web.OUTPUT_DIR,
+        include_automated=_web._include_automated(),
+    )
     return _web.render(
         "dashboard",
         active="dashboard",
@@ -86,6 +92,7 @@ def dashboard():
         recent_sessions=recent,
         all_tools=list(TOOL_STYLES.keys()),
         title="Dashboard",
+        **library,
     )
 
 
@@ -369,10 +376,14 @@ def projects():
     tag = request.args.get("tag", "")
     start = request.args.get("start", "")
     end = request.args.get("end", "")
+    # One project (the dashboard's shelf links): its card lists every session.
+    project = request.args.get("project", "").strip()
 
     if tool and not validate_tool_name(tool):
         return "Invalid tool parameter", 400
     tool = normalize_tool_name(tool) or ""
+    if project and not validate_search_param(project):
+        return "Invalid project parameter", 400
 
     if tag and not validate_search_param(tag):
         return "Invalid tag parameter", 400
@@ -389,7 +400,9 @@ def projects():
     hidden: list = []
     filtered = _web._origin_scoped(filtered, tag, hidden)
 
-    projects = build_projects_payload(filtered, project_label)
+    if project:
+        filtered = [s for s in filtered if (s.get("project") or "") == project]
+    projects = build_projects_payload(filtered, project_label, recent_limit=None if project else 3)
     from ...storage import list_all_tags
 
     tags = compute_top_tags(
