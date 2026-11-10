@@ -575,6 +575,7 @@ def _default_noise_rules() -> dict:
     return {
         "default": {
             "strip_ansi_sequences": True,
+            "session_classify_injected_events": True,
         },
         "claude-code": {
             "claude_strip_command_xml": True,

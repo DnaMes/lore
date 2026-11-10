@@ -656,14 +656,30 @@ def _v2_store_stamp() -> str:
     return stamp
 
 
+_NOISE_RULES_VERSION_MEMO: dict[tuple[int, int], str] = {}
+
+
 def _noise_rules_version() -> str:
     """Version stamp for the noise rules, so a rules change re-renders cached sessions."""
+    from ..web_utils import NOISE_RULES_PATH
+
+    try:
+        stat = NOISE_RULES_PATH.stat() if NOISE_RULES_PATH.exists() else None
+        key = (int(stat.st_mtime_ns), int(stat.st_size)) if stat else (0, 0)
+    except OSError:
+        key = (0, 0)
+    cached = _NOISE_RULES_VERSION_MEMO.get(key)
+    if cached:
+        return cached
     try:
         rules = _web.load_noise_rules()
         payload = json.dumps(rules, sort_keys=True, default=str)
     except Exception:  # unreadable rules must not break the session page
         return ""
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    version = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+    _NOISE_RULES_VERSION_MEMO.clear()
+    _NOISE_RULES_VERSION_MEMO[key] = version
+    return version
 
 
 def _build_session_from_v2(session_id: str, session_meta: dict):

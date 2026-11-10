@@ -482,8 +482,9 @@ def _tool_group_row_html(label: str, target: str, state: str, exit_code, burst: 
             '<span class="tool-row-status tool-group-status-ok" title="ok">'
             '<span aria-hidden="true">✓</span></span>'
         )
+    status_attr = html.escape(str(state) if state is not None else "", quote=True)
     return (
-        f'<span class="tool-row" data-status="{html.escape(str(state), quote=True)}">'
+        f'<span class="tool-row" data-status="{status_attr}">'
         f'<span class="tool-row-name">{name}</span>'
         f'<span class="tool-row-target">'
         f"{html.escape(str(target) if target is not None else '', quote=True)}</span>"
@@ -522,6 +523,18 @@ def _wrap_tool_group(
         f"{_tool_group_rows_html(rows or [])}"
         "</summary>"
         f'<div class="tool-group-body">{inner_html}</div>'
+        "</details>"
+    )
+
+
+def format_session_event(label: str, original: str) -> str:
+    """One folded in-turn line that expands to the HTML-escaped original text."""
+    label_esc = html.escape(label or "Event")
+    body = html.escape(original or "")
+    return (
+        '<details class="action-block importance-minor">'
+        f'<summary><span class="truncate">{label_esc}</span></summary>'
+        f'<div class="action-content"><pre class="action-output">{body}</pre></div>'
         "</details>"
     )
 

@@ -136,9 +136,14 @@ def _store_client(monkeypatch, tmp_path):
 
 def test_noise_rule_change_invalidates_the_v2_cache(monkeypatch, tmp_path):
     """A noise-rules change must re-render the session, not serve the cached build."""
+    from lore.interfaces import web_utils
+
     rules_v1 = {"default": {"strip_ansi_sequences": True}}
     rules_v2 = {"default": {"strip_ansi_sequences": True}, "claude-code": {"strip_thinking": True}}
-    monkeypatch.setattr(web, "load_noise_rules", lambda: rules_v1)
+    noise_path = tmp_path / "noise_rules.json"
+    noise_path.write_text(json.dumps(rules_v1), encoding="utf-8")
+    monkeypatch.setattr(web_utils, "NOISE_RULES_PATH", noise_path)
+    sessions_routes._NOISE_RULES_VERSION_MEMO.clear()
     client = _store_client(monkeypatch, tmp_path)
 
     builds = []
@@ -154,7 +159,7 @@ def test_noise_rule_change_invalidates_the_v2_cache(monkeypatch, tmp_path):
     client.get(f"/session/{SID}")
     assert len(builds) == 1, "unchanged rules must keep serving the cached build"
 
-    monkeypatch.setattr(web, "load_noise_rules", lambda: rules_v2)
+    noise_path.write_text(json.dumps(rules_v2), encoding="utf-8")
     client.get(f"/session/{SID}")
     assert len(builds) == 2, "a noise-rules change must invalidate the v2 cache"
 
