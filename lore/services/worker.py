@@ -185,6 +185,14 @@ def _job_retry_due(state: dict[str, Any], name: str) -> bool:
     return time.time() >= due
 
 
+def _job_backing_off(state: dict[str, Any], name: str) -> bool:
+    entry = (state.get("jobs") or {}).get(name) or {}
+    if entry.get("status") != "error" or not entry.get("retry_after"):
+        return False
+    due = _parse_iso_ts(str(entry["retry_after"]))
+    return due is not None and time.time() < due
+
+
 def _job_done_for_stamp(state: dict[str, Any], name: str, stamp: str) -> bool:
     entry = (state.get("jobs") or {}).get(name) or {}
     if entry.get("ok_stamp") == stamp:
@@ -258,8 +266,8 @@ def _run_cli_child(
     cmd = [*_lore_command_head(), "--output-dir", str(output_dir), *args]
     deadline = time.monotonic() + timeout
     with (
-        tempfile.TemporaryFile("w+", encoding="utf-8") as out_f,
-        tempfile.TemporaryFile("w+", encoding="utf-8") as err_f,
+        tempfile.TemporaryFile("w+", encoding="utf-8", errors="replace") as out_f,
+        tempfile.TemporaryFile("w+", encoding="utf-8", errors="replace") as err_f,
     ):
         try:
             proc = subprocess.Popen(cmd, stdout=out_f, stderr=err_f, text=True)
@@ -428,6 +436,10 @@ def run_pass(
             continue
         if _job_done_for_stamp(state, name, stamp):
             continue
+        # last_stamp only advances once every job is done, so "changed" stays true while a
+        # job keeps failing; its backoff must still hold.
+        if _job_backing_off(state, name):
+            continue
         if stamp_changed or _job_retry_due(state, name):
             jobs_to_run.append(name)
 
@@ -469,6 +481,7 @@ def run_pass(
                 tz=timezone.utc,
             ).isoformat(timespec="seconds")
             entry["retry_after"] = retry_at
+            entry.pop("pending", None)  # a failure backs off, even after a pending run
         elif result.get("more"):
             # Work left for this stamp: run again next pass without waiting for a sync.
             entry["pending"] = True

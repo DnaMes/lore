@@ -679,3 +679,46 @@ def test_job_with_more_work_runs_again_next_pass_without_a_new_stamp(tmp_path, m
     worker_mod.run_pass(tmp_path, jobs=jobs)
     worker_mod.run_pass(tmp_path, jobs=jobs)
     assert calls == ["embed", "embed"]  # reruns while there is more, then stops
+
+
+def test_failed_pending_job_waits_for_its_backoff(tmp_path, monkeypatch):
+    """A pending job that then fails must back off instead of retrying every pass."""
+    from lore.services import worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "read_store_stamp", lambda _out: "stamp-1")
+    calls: list[str] = []
+
+    def embed(_out):
+        calls.append("embed")
+        if len(calls) == 1:
+            return {"status": "ok", "skipped": False, "embedded": 5, "more": True}
+        return {"status": "error", "skipped": False, "last_error": "boom"}
+
+    jobs = {
+        "library": lambda _o: {"status": "ok", "skipped": False},
+        "embed_messages": embed,
+        "summaries": lambda _o, **_k: {"status": "skipped", "skipped": True},
+    }
+    for _ in range(4):
+        worker_mod.run_pass(tmp_path, jobs=jobs)
+    assert calls == ["embed", "embed"]  # pending run, then failure, then backoff holds
+
+
+def test_child_output_with_invalid_utf8_does_not_crash(tmp_path, monkeypatch):
+    from lore.services import worker as worker_mod
+
+    class Proc:
+        returncode = 0
+
+        def __init__(self, cmd, stdout=None, **_kwargs):
+            stdout.buffer.write(b"Embedded 3 messages. \xff\xfe\n") if hasattr(
+                stdout, "buffer"
+            ) else None
+
+        def wait(self, timeout=None):
+            return 0
+
+    monkeypatch.setattr(worker_mod.subprocess, "Popen", Proc)
+    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/lore")
+    result, _out = worker_mod._run_cli_child(tmp_path, ["library"], 30, "library")
+    assert result["status"] == "ok"
