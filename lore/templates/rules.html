@@ -2,9 +2,11 @@
 {% extends "base.html" %}
 {% block content %}
 <div class="p-10 max-w-4xl mx-auto">
-    <h1 class="text-3xl font-bold text-slate-900 mb-6 tracking-tight">Rules</h1>
+    <h1 class="text-3xl font-bold text-slate-900 mb-6 tracking-tight">{{ heading or "Rules" }}</h1>
     <div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+        {% if not heading %}
         <p class="text-xs text-slate-500 mb-4">Rules are project-level instruction files and operating guidelines collected from your workspace (for example AGENTS.md / CLAUDE.md style docs).</p>
+        {% endif %}
         {% if rules %}
         <div class="prose max-w-none antialiased">{{ rules | safe }}</div>
         {% else %}

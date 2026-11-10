@@ -727,6 +727,7 @@ from .routes.sessions import (  # noqa: E402,F401  (re-exports)
     _enriched_session_cached,
     _enriched_session_for_detail,
     _enriched_session_for_detail_uncached,
+    _enriched_session_from_v2_cached,
     _filtered_automated_hidden,
     _filtered_sorted_session_ids,
     _filtered_sorted_sessions,

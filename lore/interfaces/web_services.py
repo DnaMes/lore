@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional
 
 from lore.utils.formatting import format_message as format_message_with_rules
 
-from .session_view_prep import render_message_body
+from .session_view_prep import fold_tool_bursts, render_message_body, strip_tool_blocks
 
 ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
 LOCAL_COMMAND_TAG_RE = re.compile(r"</?local-command-[^>]+>", flags=re.IGNORECASE)
@@ -409,6 +409,162 @@ def preview_normalize_message(
     )
 
 
+def _is_tool_result_record(message) -> bool:
+    """True for a user-role record whose text is a ``[Tool Result]`` block (Claude tool_result)."""
+    original = getattr(message, "original_content", None) or message.content or ""
+    return original.lstrip().startswith("[Tool Result]")
+
+
+def _as_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+_TOOL_ONLY_RE = re.compile(r"^\[Tool:\s*([^\]]+)\]\s*(.*)\Z", flags=re.DOTALL)
+_EXIT_CODE_RE = re.compile(r"^\s*Exit code (\d+)")
+_EXPORT_TOOL_STATUS_RE = re.compile(r"<summary>Tool:[^<]*?\u2014\s*(\w+)\s*</summary>")
+
+
+def _flat_tool_call(message) -> Optional[Dict[str, Any]]:
+    """Parse a record that is nothing but one flattened ``[Tool: X] args`` block.
+
+    The export-markdown path keeps tool calls only as text (no structured ``tool_calls``);
+    returns ``None`` for anything with prose or several calls.
+    """
+    raw = (getattr(message, "original_content", None) or message.content or "").strip()
+    match = _TOOL_ONLY_RE.match(raw)
+    if not match or "[Tool:" in match.group(2):
+        return None
+    body = match.group(2)
+    status = _EXPORT_TOOL_STATUS_RE.search(body)
+    return {
+        "tool": match.group(1).strip(),
+        "input": body.split("<details>", 1)[0].strip(),
+        "output": "",
+        "status": status.group(1) if status else None,
+    }
+
+
+def _tool_only_calls(message) -> Optional[List[Dict[str, Any]]]:
+    """Tool calls of an assistant record that has no prose or reasoning, else ``None``.
+
+    Structured ``tool_calls`` (v2 store, live) get their compact event's status; a
+    flattened ``[Tool: X]`` record (export markdown) is parsed from its text.
+    """
+    if message.display_role != "assistant" or message.reasoning:
+        return None
+    structured = getattr(message, "tool_calls", None)
+    if not structured:
+        flat = _flat_tool_call(message)
+        return [flat] if flat else None
+    if strip_tool_blocks(message.content or "").strip():
+        return None
+    events = getattr(message, "tool_events", None) or []
+    aligned = len(events) == len(structured)
+    calls = []
+    for index, raw in enumerate(structured):
+        call = dict(raw) if isinstance(raw, dict) else {"tool": str(raw), "input": {}}
+        event = events[index] if aligned and isinstance(events[index], dict) else None
+        if event:
+            if call.get("status") is None:
+                call["status"] = event.get("status")
+            if call.get("duration_ms") is None:
+                call["duration_ms"] = event.get("duration_ms")
+            call["is_error"] = bool(call.get("is_error") or event.get("is_error"))
+        calls.append(call)
+    return calls
+
+
+def _attach_result(calls: List[Dict[str, Any]], output: str) -> bool:
+    """Give ``output`` to the first call still without one; False when all have output."""
+    target = next((call for call in calls if not call.get("output")), None)
+    if target is None:
+        return False
+    target["output"] = output
+    exit_match = _EXIT_CODE_RE.match(output)
+    if exit_match:  # Claude prefixes a failed Bash result with "Exit code N"
+        target.update(status="failed", exit_code=int(exit_match.group(1)))
+    elif output.lstrip().startswith("<tool_use_error>"):
+        target["status"] = "failed"
+    return True
+
+
+def group_flat_tool_steps(pairs: List[Dict[str, Any]], format_tool_calls_fn) -> None:
+    """Fold runs of tool-only records and their result records into one tool group.
+
+    The first record of a run carries the group HTML; the rest get ``merged_into_group``
+    and render nothing, so find-in-session positions stay aligned with ``responses``.
+    A result record whose output a structured call already shows is hidden the same way.
+    """
+    for pair in pairs:
+        run: List[Any] = []
+        calls: List[Dict[str, Any]] = []
+        shown_outputs = False  # the previous record's cards already show their results
+
+        def _flush() -> None:
+            if calls:
+                run[0].formatted_content = format_tool_calls_fn(fold_tool_bursts(list(calls)))
+                for merged in run[1:]:
+                    merged.merged_into_group = True
+            run.clear()
+            calls.clear()
+
+        for resp in pair["responses"]:
+            if resp.display_role == "tool":  # a tool role row or a Claude "[Tool Result]" user row
+                original = getattr(resp, "original_content", None) or resp.content or ""
+                output = re.sub(r"^\s*\[Tool Result\]\s*", "", original)
+                if calls:
+                    if _attach_result(calls, output) or shown_outputs:
+                        run.append(resp)
+                        continue
+                elif shown_outputs:
+                    resp.merged_into_group = True
+                    continue
+                _flush()
+                continue
+            new_calls = _tool_only_calls(resp)
+            if new_calls:
+                run.append(resp)
+                calls.extend(new_calls)
+                shown_outputs = any(call.get("output") for call in new_calls)
+                continue
+            _flush()
+            shown_outputs = bool(getattr(resp, "tool_calls", None))
+        _flush()
+        pair["step_count"] = sum(
+            1 for resp in pair["responses"] if not getattr(resp, "merged_into_group", False)
+        )
+
+
+def annotate_turns(pairs: List[Dict[str, Any]]) -> None:
+    """Add per-turn display fields: ``day_label`` when the date changes, model and token sums.
+
+    Computed over the whole session so a lazily loaded page only shows a day separator
+    where the date really changes.
+    """
+    previous_day = None
+    for pair in pairs:
+        first = pair["user"] or (pair["responses"][0] if pair["responses"] else None)
+        stamp = getattr(first, "timestamp", None)
+        day = stamp.date() if stamp else None
+        pair["day_label"] = stamp.strftime("%A, %Y-%m-%d") if day and day != previous_day else ""
+        if day:
+            previous_day = day
+        tokens_in = tokens_out = 0
+        model = ""
+        for resp in pair["responses"]:
+            tokens = getattr(resp, "tokens", None)
+            if isinstance(tokens, dict):
+                tokens_in += _as_int(tokens.get("input"))
+                tokens_out += _as_int(tokens.get("output"))
+            model = model or (getattr(resp, "model", None) or "")
+        pair["tokens_in"] = tokens_in
+        pair["tokens_out"] = tokens_out
+        pair["model"] = model
+
+
 def enrich_session_for_detail(
     session,
     session_meta: Dict[str, Any],
@@ -449,7 +605,12 @@ def enrich_session_for_detail(
         message.formatted_reasoning = ""
         if message.reasoning:
             message.formatted_reasoning = format_thinking_fn(message.reasoning)
-        if message.role.value == "user":
+        # A user record that only carries a tool result belongs to the agent turn, not a prompt.
+        message.display_role = message.role.value
+        message.merged_into_group = False
+        if message.role.value == "user" and _is_tool_result_record(message):
+            message.display_role = "tool"
+        if message.display_role == "user":
             prompt_count += 1
             text = _toc_text(message.content)
             if text:
@@ -474,19 +635,27 @@ def enrich_session_for_detail(
             format_tool_calls_fn=format_tool_calls_fn,
         )
 
+        if message.display_role == "tool" and message.role.value == "user":
+            # Render the raw block so it becomes a folded "Tool result" card, not prose.
+            message.formatted_content = format_message_content_fn(
+                getattr(message, "original_content", None) or message.content
+            )
+
         if message.formatted_content:
             message.formatted_content = _clean_transcript_noise(message.formatted_content)
 
         if message.content or message.reasoning or message.formatted_content:
             visible_count += 1
             message.index = idx
-            if message.role.value != "user":
+            if message.display_role != "user":
                 if not current_pair:
                     current_pair = {"user": None, "responses": []}
                 current_pair["responses"].append(message)
 
     if current_pair:
         pairs.append(current_pair)
+    group_flat_tool_steps(pairs, format_tool_calls_fn)
+    annotate_turns(pairs)
 
     session.visible_count = visible_count
     session.prompt_count = prompt_count

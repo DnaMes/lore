@@ -330,6 +330,51 @@ def _safe_preview(value: str, limit: int = 140) -> str:
     return preview[: limit - 3] + "..."
 
 
+# Input keys that name what a tool call acted on, most specific first.
+_TOOL_TARGET_KEYS = (
+    "command",
+    "cmd",
+    "file_path",
+    "path",
+    "notebook_path",
+    "pattern",
+    "url",
+    "query",
+    "description",
+    "prompt",
+)
+_FENCE_LINE_RE = re.compile(r"^\s*(`{3,}|~{3,})[\w+-]*\s*$")
+
+
+def tool_call_target(args: Any, limit: int = 96) -> str:
+    """One-line target of a tool call (file path, command, pattern...), plain text, unescaped.
+
+    ``args`` is the raw input: a dict, or a string that may hold JSON or a fenced block
+    (the export-markdown path stores Bash input as a ```bash fence).
+    """
+    parsed = args
+    if isinstance(args, str):
+        stripped = args.strip()
+        parsed = stripped
+        if stripped.startswith("{"):
+            try:
+                parsed = json.loads(stripped)
+            except json.JSONDecodeError:
+                parsed = stripped
+    if isinstance(parsed, dict):
+        for key in _TOOL_TARGET_KEYS:
+            value = parsed.get(key)
+            if isinstance(value, str) and value.strip():
+                return _safe_preview(value, limit)
+        return ""
+    if not isinstance(parsed, str):
+        return ""
+    for line in parsed.splitlines():
+        if line.strip() and not _FENCE_LINE_RE.match(line):
+            return _safe_preview(line, limit)
+    return ""
+
+
 def _format_shell_command_for_display(command_text: str) -> str:
     command = (command_text or "").strip()
     if not command or "\n" in command or len(command) < 80:
@@ -378,6 +423,11 @@ def _render_kv_grid(tool_input) -> str:
     if not items:
         return ""
     return '<div class="action-kv-grid">' + "".join(items) + "</div>"
+
+
+# Tool output longer than FOLD_AFTER lines shows PREVIEW_LINES plus "show N more lines".
+TOOL_OUTPUT_FOLD_AFTER = 12
+TOOL_OUTPUT_PREVIEW_LINES = 10
 
 
 def format_tool_result(
@@ -446,6 +496,13 @@ def format_tool_result(
     if additions > 0 or deletions > 0:
         content_chips.append(f'<span class="action-meta">diff +{additions}/-{deletions}</span>')
 
+    # Long output opens as a preview; the client folds it (full text stays in the DOM for copy).
+    preview_attr = (
+        f' data-preview-lines="{TOOL_OUTPUT_PREVIEW_LINES}"'
+        if line_count > TOOL_OUTPUT_FOLD_AFTER
+        else ""
+    )
+
     importance = (
         "major"
         if status_word == "failed" or (parsed_exit is not None and parsed_exit != 0)
@@ -462,7 +519,7 @@ def format_tool_result(
         </summary>
         <div class="action-content">
             <div class="action-content-head">{"".join(content_chips)}</div>
-            <pre class="action-output"><code class="language-plaintext">{html.escape(text)}</code></pre>
+            <pre class="action-output"{preview_attr}><code class="language-plaintext">{html.escape(text)}</code></pre>
         </div>
     </details>
     """
@@ -482,7 +539,7 @@ def format_tool_display(
 
     raw_args = (args or "").strip()
     arg_display = raw_args or "(no arguments)"
-    preview = _safe_preview(arg_display, 88)
+    preview = tool_call_target(raw_args, 88) or _safe_preview(arg_display, 88)
 
     parsed_input = None
     if raw_args.startswith("{") or raw_args.startswith("["):

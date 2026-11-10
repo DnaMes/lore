@@ -16,7 +16,7 @@ Re-exports from ``lore.services`` keep the historical
 
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -310,6 +310,10 @@ def build_session_from_export_markdown(
         "Info": Role.INFO,
     }
 
+    # Headers carry only HH:MM:SS; a clock that runs backwards means the next day.
+    # ponytail: a silent gap of 24h+ between two records still lands on the earlier day.
+    day = created_at.date()
+    previous_time = ""
     for i, match in enumerate(matches):
         start = match.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(convo)
@@ -327,8 +331,11 @@ def build_session_from_export_markdown(
             continue
 
         time_part = match.group(2)
+        if previous_time and time_part < previous_time:
+            day += timedelta(days=1)
+        previous_time = time_part
         try:
-            msg_time = datetime.fromisoformat(f"{created_at.date().isoformat()}T{time_part}")
+            msg_time = datetime.fromisoformat(f"{day.isoformat()}T{time_part}")
         except ValueError:
             msg_time = created_at
 

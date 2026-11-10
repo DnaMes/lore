@@ -134,7 +134,7 @@
         .code-card-copy:hover { border-color: var(--primary); color: var(--primary); }
         .code-card-copy:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
         .code-card-body pre { margin: 0; overflow-x: auto; max-width: 100%; border: none; border-radius: 0; background: var(--code-bg) !important; }
-        .code-card-body.is-collapsed { max-height: calc(1.55em * 12 + 24px); overflow: hidden; }
+        .code-card-body.is-collapsed { max-height: calc(1.55em * var(--preview-lines, 12) + 24px); overflow: hidden; }
         .code-card-expand { display: block; width: 100%; border: 0; border-top: 1px solid var(--border); background: var(--bg-alt); color: var(--primary); padding: 8px 12px; font-size: 12px; cursor: pointer; text-align: center; }
         .code-card-expand:hover { background: color-mix(in srgb, var(--bg-alt) 80%, var(--primary) 20%); }
         .code-card-expand:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
@@ -963,7 +963,7 @@
         .diff-gap { padding: 2px 0; background: color-mix(in srgb, var(--card) 90%, var(--text) 6%); }
         .diff-gap-label { display: block; text-align: center; font-size: 11px; color: var(--muted); opacity: 0.7; }
         body.session-view .prose pre { border-radius: 10px; border-color: var(--border); background: color-mix(in srgb, var(--card) 86%, var(--text) 5%) !important; margin: 1.1em 0; }
-        body.session-view .prose pre code { padding: 14px 16px; font-size: 13px; line-height: 1.58; }
+        body.session-view .prose pre code { padding: 14px 16px; font-size: 13px; line-height: 1.58; white-space: pre; word-break: normal; }
         /* One frame only: the card draws the border, the pre inside it stays flat. */
         .prose .code-card .code-card-body pre, body.session-view .prose .code-card .code-card-body pre, html[data-theme] .prose .code-card .code-card-body pre { margin: 0 !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; }
         .prose .code-card .code-card-body pre code, body.session-view .prose .code-card .code-card-body pre code { display: block; padding: 12px 14px; font-size: 13px; line-height: 1.55; }
@@ -992,6 +992,33 @@
         .response-icon-tool, .response-icon-system, .response-icon-info { border-color: #cbd5e1; color: #334155; }
         .message-card[data-role="tool"] .prose, .message-card[data-role="system"] .prose, .message-card[data-role="info"] .prose { font-size: 13px; color: var(--text-muted); }
         .message-card[data-role="system"] .prose { font-style: italic; }
+        /* Session readability phase 1: one card per agent turn, steps split by a thin divider. */
+        .message-card.turn-card { padding: 2px 16px; }
+        .turn-step { padding: 12px 0; }
+        .turn-step + .turn-step { border-top: 1px solid color-mix(in srgb, var(--border) 65%, transparent); }
+        .turn-step + .turn-step[data-role="tool"] { border-top: 0; padding-top: 0; }
+        .turn-step-label { margin-bottom: 4px; }
+        body.session-view .message-card .prose > :last-child { margin-bottom: 0; }
+        /* The outline is a narrow map; the freed width goes to code and tool output. */
+        @media (min-width: 1024px) { body.session-view .session-toc-col { max-width: 400px; flex-basis: 400px; } }
+        .turn-step .action-block, .turn-step details.tool-group { margin: 4px 0; }
+        /* "unknown" carries no information in a collapsed pill; real states stay visible. */
+        body.session-view summary .tool-chip.status-unknown { display: none; }
+        .turn-steps { margin-left: 6px; font-size: 10px; letter-spacing: 0.04em; text-transform: none; font-weight: 500; color: var(--muted); }
+        .turn-step[data-role="tool"] .prose, .turn-step[data-role="system"] .prose, .turn-step[data-role="info"] .prose { font-size: 13px; color: var(--text-muted); }
+        .turn-step[data-role="system"] .prose { font-style: italic; }
+        .day-separator { display: flex; align-items: center; gap: 12px; margin: 28px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; color: var(--muted); font-family: "Source Code Pro", "SF Mono", Menlo, monospace; }
+        .day-separator::before, .day-separator::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
+        /* Collapsed tool group: one row per call with its target; the rows hide once opened. */
+        .tool-rows { display: flex; flex-direction: column; flex-basis: 100%; gap: 1px; min-width: 0; font-family: "Source Code Pro", "SF Mono", Menlo, monospace; font-size: 11.5px; }
+        details.tool-group[open] > summary .tool-rows { display: none; }
+        .tool-row { display: flex; align-items: baseline; gap: 12px; min-width: 0; line-height: 1.6; }
+        .tool-row-name { flex: 0 0 auto; min-width: 6.5em; font-weight: 600; color: var(--text); }
+        .tool-row-target { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+        .tool-row-status { flex: 0 0 auto; font-weight: 600; white-space: nowrap; }
+        .tool-row-more { color: var(--muted); font-style: italic; }
+        /* Prose reads in a ~75ch column; code, tool output and diffs keep the full width. */
+        body.session-view .message-card .prose > :not(pre):not(.code-card):not(details):not(table):not(.diff-block):not(.action-block):not(.tool-group) { max-width: min(75ch, 720px); }
         html.dark .toc-card { background: #0f172a; border-color: #334155; }
         html.dark .toc-card-head { border-bottom-color: #1e293b; color: #cbd5e1; }
         html.dark .toc-item-text { color: #cbd5e1; }
@@ -1730,9 +1757,13 @@
                 card.appendChild(body);
                 body.appendChild(pre);
 
-                if (lines > 24) {
+                // Tool output carries its own preview size; other code folds past 24 lines.
+                const previewLines = parseInt(pre.dataset.previewLines || '0', 10);
+                const shown = previewLines || 12;
+                if (previewLines || lines > 24) {
                     body.classList.add('is-collapsed');
-                    const more = lines - 12;
+                    body.style.setProperty('--preview-lines', String(shown));
+                    const more = lines - shown;
                     const expandBtn = document.createElement('button');
                     expandBtn.type = 'button';
                     expandBtn.className = 'code-card-expand';
@@ -2023,7 +2054,7 @@
                         if (seq !== searchSeq || (err && err.name === 'AbortError')) return;
                         searchResultsEl.innerHTML = '<div class="p-3 text-xs text-red-600">Search failed</div>';
                     });
-                }, 250);
+                }, 350);  // debounce: fewer superseded requests while typing
             });
         }
         function copyCommand(cmd) {

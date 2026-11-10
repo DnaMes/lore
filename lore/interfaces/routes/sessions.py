@@ -4,6 +4,7 @@ import html
 import logging
 import math
 import os
+import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -27,6 +28,7 @@ from ...services.index import is_automated, session_by_id_map
 from ...services.summarize_cli import web_summarize_enabled
 from ..web_data import (
     _sanitize_next_url,
+    _tool_from_value,
     build_session_from_export_markdown,
     clear_index_cache,
     load_export_lookup,
@@ -595,8 +597,90 @@ def _enriched_session_cached(session_id: str, force_live: bool, _cache_key: str)
     return _enriched_session_for_detail_uncached(session_id, force_live=force_live)
 
 
+def _v2_store_stamp() -> str:
+    """Cache key for the v2 store: its path and ``generated_at`` stamp, or "" without a store.
+
+    Not the file mtime: closing the last WAL connection checkpoints, which touches it.
+    """
+    from ...storage.reader import _read_generated_at
+    from ...storage.schema import open_connection
+    from ...storage.writer import v2_db_path
+
+    db = v2_db_path(_web.OUTPUT_DIR)
+    if not db.exists():
+        return ""
+    try:
+        conn = open_connection(db)
+        try:
+            generated_at = _read_generated_at(conn) or ""
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return ""
+    return f"{db}:{generated_at}" if generated_at else ""
+
+
+def _build_session_from_v2(session_id: str, session_meta: dict):
+    """Build a ``UnifiedSession`` from the v2 store's message rows, or None when not synced."""
+    from ...core.models import UnifiedSession
+    from ...storage import load_session_messages_v2
+
+    messages = load_session_messages_v2(_web.OUTPUT_DIR, session_id, include_reasoning=True)
+    if not messages:
+        return None
+
+    def _stamp(value, fallback):
+        try:
+            return datetime.fromisoformat(value) if value else fallback
+        except ValueError:
+            return fallback
+
+    created_at = _stamp(session_meta.get("created"), messages[0].timestamp)
+    return UnifiedSession(
+        tool=_tool_from_value(session_meta.get("tool")),
+        session_id=session_id,
+        created_at=created_at,
+        last_updated=_stamp(session_meta.get("updated"), created_at),
+        messages=messages,
+        project_path=session_meta.get("project"),
+        thread_id=session_meta.get("thread_id"),
+        title=session_meta.get("title"),
+    )
+
+
+@threadsafe_lru_cache(maxsize=16)
+def _enriched_session_from_v2_cached(session_id: str, _store_stamp: str):
+    """v2-store build + enrich, cached on the store stamp (new sync, new stamp)."""
+    session_meta = _web._index_session_meta(session_id)
+    if not session_meta:
+        return None
+    session_obj = _build_session_from_v2(session_id, session_meta)
+    if session_obj is None:
+        return None
+    return _enrich_for_detail(session_id, session_meta, session_obj)
+
+
+def _enrich_for_detail(session_id: str, session_meta: dict, session_obj, *, backfill=False):
+    if backfill:
+        # The export markdown drops per-message tokens; the v2 store keeps them (#62).
+        _backfill_v2_message_tokens(session_id, session_obj)
+    toc = enrich_session_for_detail(
+        session_obj,
+        session_meta,
+        format_message_content,
+        format_tool_calls,
+        format_thinking,
+        noise_rules=_web.load_noise_rules(),
+    )
+    return session_obj, toc
+
+
 def _enriched_session_for_detail(session_id: str, *, force_live: bool):
-    """Load + enrich a session by id, cached on the export file's stat.
+    """Load + enrich a session by id: v2 store first, then export markdown, then live.
+
+    The v2 store keeps roles, full timestamps and structured tool calls; the export
+    markdown is lossy (tool results as user turns, times without dates). ``?live=1``
+    is the only path that reads the tool's own files.
 
     A session-detail view pages through one session (page render + several
     "load more" fragment requests). Without caching, each request re-parses
@@ -607,6 +691,12 @@ def _enriched_session_for_detail(session_id: str, *, force_live: bool):
 
     Live sessions (no export file) are not cached — their data can change.
     """
+    if not force_live:
+        stamp = _v2_store_stamp()
+        if stamp:
+            from_store = _enriched_session_from_v2_cached(session_id, stamp)
+            if from_store:
+                return from_store
     export_path = None
     meta = _web._index_session_meta(session_id)
     if meta:
@@ -671,23 +761,9 @@ def _enriched_session_for_detail_uncached(session_id: str, *, force_live: bool):
     export_path = _web.resolve_export_path(session_meta.get("export_path"))
     if not export_path and _web._export_fallback_scan_enabled():
         export_path = load_export_lookup().get(session_id)
-    noise_rules = _web.load_noise_rules()
 
     def _enrich(session_obj):
-        # Backfill per-message tokens/model from the v2 store onto the served
-        # session, so chips _web.render without ?live=1 (#62). The export-_web.markdown
-        # path drops per-message tokens; the v2 store keeps them.
-        if not force_live:
-            _backfill_v2_message_tokens(session_id, session_obj)
-        toc = enrich_session_for_detail(
-            session_obj,
-            session_meta,
-            format_message_content,
-            format_tool_calls,
-            format_thinking,
-            noise_rules=noise_rules,
-        )
-        return session_obj, toc
+        return _enrich_for_detail(session_id, session_meta, session_obj, backfill=not force_live)
 
     def _load_preferred_live_session(allow_cross_tool_fallback: bool = False):
         if tool_filter:
@@ -737,10 +813,8 @@ def _enriched_session_for_detail_uncached(session_id: str, *, force_live: bool):
         live_session = _web.load_session_by_id(
             session_id, preferred_tool=tool_filter, allow_cross_tool_fallback=False
         )
-        if not live_session and force_live:
-            live_session = _web.load_session_by_id(
-                session_id, preferred_tool=tool_filter, allow_cross_tool_fallback=True
-            )
+        # The index knows the tool: scanning every other tool's sources for a session
+        # that is gone took minutes and never found it.
     elif force_live:
         live_session = _web.load_session_by_id(session_id, allow_cross_tool_fallback=True)
 
@@ -826,11 +900,11 @@ def session_detail(session_id):
             active="sessions",
             rules=html_content,
             title=clean_title,
+            heading=clean_title,
         )
 
     def _render_summary():
         summary = f"""
-<h2>{html.escape(clean_title)}</h2>
 <p><strong>Tool:</strong> {html.escape(str(session_meta.get("tool") or "n/a"))}</p>
 <p><strong>Created:</strong> {html.escape(str(session_meta.get("created") or "n/a"))}</p>
 <p><strong>Updated:</strong> {html.escape(str(session_meta.get("updated") or "n/a"))}</p>
@@ -845,6 +919,7 @@ def session_detail(session_id):
             active="sessions",
             rules=summary,
             title=clean_title,
+            heading=clean_title,
         )
 
     force_live = (request.args.get("live") or "").strip() == "1"

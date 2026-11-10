@@ -463,6 +463,41 @@ def _tool_group_status_html(
     )
 
 
+# Rows shown in a collapsed group before "+N more calls".
+TOOL_GROUP_MAX_ROWS = 12
+
+
+def _tool_group_row_html(label: str, target: str, state: str, exit_code, burst: int) -> str:
+    """One ``Name  target  status`` row for the collapsed group summary (all text escaped)."""
+    name = html.escape(label) + (f" ×{burst}" if burst > 1 else "")
+    status = ""
+    if state == "failed":
+        exit_bit = f" exit {exit_code}" if isinstance(exit_code, int) and exit_code else ""
+        status = (
+            '<span class="tool-row-status tool-group-status-fail">'
+            f'<span aria-hidden="true">✗</span>{exit_bit or " failed"}</span>'
+        )
+    elif state == "ok":
+        status = (
+            '<span class="tool-row-status tool-group-status-ok" title="ok">'
+            '<span aria-hidden="true">✓</span></span>'
+        )
+    return (
+        f'<span class="tool-row" data-status="{state}">'
+        f'<span class="tool-row-name">{name}</span>'
+        f'<span class="tool-row-target">{html.escape(target)}</span>'
+        f"{status}</span>"
+    )
+
+
+def _tool_group_rows_html(rows: list[str]) -> str:
+    shown = rows[:TOOL_GROUP_MAX_ROWS]
+    extra = len(rows) - len(shown)
+    if extra > 0:
+        shown.append(f'<span class="tool-row tool-row-more">+{extra} more calls</span>')
+    return f'<span class="tool-rows">{"".join(shown)}</span>'
+
+
 def _wrap_tool_group(
     inner_html: str,
     *,
@@ -471,6 +506,7 @@ def _wrap_tool_group(
     failed_count: int,
     duration_ms: int | None,
     all_confirmed_ok: bool = True,
+    rows: list[str] | None = None,
 ) -> str:
     open_attr = " open" if failed_count else ""
     default_open = ' data-default-open="1"' if failed_count else ""
@@ -482,6 +518,7 @@ def _wrap_tool_group(
         f'<span class="tool-group-count">{total_calls} tool calls</span>'
         f'<span class="tool-group-names"> · {names}</span>'
         f"{status}"
+        f"{_tool_group_rows_html(rows or [])}"
         "</summary>"
         f'<div class="tool-group-body">{inner_html}</div>'
         "</details>"
@@ -495,6 +532,7 @@ def format_tool_calls(tool_calls, tool_events=None):
         format_duration_ms,
         format_tool_display,
         format_tool_result,
+        tool_call_target,
     )
 
     if not tool_calls:
@@ -504,6 +542,7 @@ def format_tool_calls(tool_calls, tool_events=None):
     events = tool_events or []
     aligned = len(events) == len(tool_calls)
     rendered: list[str] = []
+    rows: list[str] = []
     name_entries: list[tuple[str, int]] = []
     total_calls = 0
     failed_count = 0
@@ -549,6 +588,17 @@ def format_tool_calls(tool_calls, tool_events=None):
         elif status_word == "ok":
             ok_count += burst
 
+        rows.append(
+            _tool_group_row_html(
+                # Keep a cased name (AskUserQuestion) as written; title-case lower-case ones.
+                label if tool_name.islower() else tool_name.split(" ×", 1)[0],
+                tool_call_target(tool_input),
+                status_word or "unknown",
+                exit_code,
+                burst,
+            )
+        )
+
         if duration_ms is None or format_duration_ms(duration_ms) is None:
             all_durations_known = False
         else:
@@ -587,6 +637,7 @@ def format_tool_calls(tool_calls, tool_events=None):
         failed_count=failed_count,
         duration_ms=group_duration if all_durations_known else None,
         all_confirmed_ok=ok_count >= total_calls,
+        rows=rows,
     )
 
 

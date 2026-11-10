@@ -1,6 +1,9 @@
 
 {% for pair in pairs %}
 {% set pair_anchor = pair.user.index if pair.user else (pair.responses[0].index if pair.responses else 0) %}
+{% if pair.day_label %}
+<div class="day-separator" role="separator" aria-label="{{ pair.day_label }}"><span>{{ pair.day_label }}</span></div>
+{% endif %}
 <div class="message-cluster">
     {% if pair.user %}
     <div id="msg-{{ pair.user.index }}" class="turn-row user group" data-role="user">
@@ -13,7 +16,7 @@
                     <span class="prompt-icon" title="You">You</span>
                     <span>Prompt</span>
                 </div>
-                <div class="text-[10px] text-slate-500 font-mono opacity-60">{{ pair.user.timestamp.strftime('%H:%M') }}</div>
+                <time class="message-time" datetime="{{ pair.user.timestamp.isoformat() }}">{{ pair.user.timestamp.strftime('%Y-%m-%d %H:%M') }}</time>
             </div>
             <div class="message-card user-card p-4">
                 <div class="prose max-w-none antialiased" data-find-index="{{ pair_anchor }}" data-find-message="0">
@@ -24,46 +27,59 @@
         </div>
     </div>
     {% endif %}
+    {% if pair.responses %}
+    {%- set first_resp = pair.responses[0] %}
+    {%- set last_resp = pair.responses[-1] %}
     <div class="assistant-stream">
-    {% for resp in pair.responses %}
+    {#- One card per agent turn: one header, then each record as a step (thin divider between). #}
     <div class="assistant-entry turn-row assistant group">
         <div class="turn-gutter">
             <span class="turn-index assistant">A</span>
         </div>
         <div class="turn-content assistant-content">
             <div class="flex items-center justify-between mb-2">
-                {%- set resp_role = resp.role.value if resp.role else 'assistant' %}
-                <div class="role-badge" data-role="{{ resp_role }}">
-                    {%- if resp_role == 'tool' %}
-                    <span class="response-icon response-icon-tool" title="Tool result">T</span>
-                    <span>Tool result</span>
-                    {%- elif resp_role == 'system' %}
-                    <span class="response-icon response-icon-system" title="System message">S</span>
-                    <span>System</span>
-                    {%- elif resp_role == 'info' %}
-                    <span class="response-icon response-icon-info" title="Info message">i</span>
-                    <span>Info</span>
-                    {%- else %}
+                <div class="role-badge" data-role="assistant">
                     <span class="response-icon" title="{{ style.name }}">AI</span>
                     <span>{{ style.name }}</span>
-                    {%- endif %}
-                    {% if resp.model %}<span class="model-chip" title="model">{{ resp.model }}</span>{% endif %}
-                    {% if resp.tokens %}
-                        {% if resp.tokens.get('input') %}<span class="token-chip" title="input tokens">↑{{ resp.tokens.get('input') }}</span>{% endif %}
-                        {% if resp.tokens.get('output') %}<span class="token-chip" title="output tokens">↓{{ resp.tokens.get('output') }}</span>{% endif %}
-                    {% endif %}
+                    {% if pair.model %}<span class="model-chip" title="model">{{ pair.model }}</span>{% endif %}
+                    {% if pair.tokens_in %}<span class="token-chip" title="input tokens">↑{{ pair.tokens_in }}</span>{% endif %}
+                    {% if pair.tokens_out %}<span class="token-chip" title="output tokens">↓{{ pair.tokens_out }}</span>{% endif %}
+                    {% if (pair.step_count or 0) > 1 %}<span class="turn-steps">{{ pair.step_count }} steps</span>{% endif %}
                 </div>
-                <div class="message-time">{{ resp.timestamp.strftime('%H:%M') }}</div>
+                <time class="message-time" datetime="{{ first_resp.timestamp.isoformat() }}" title="{{ first_resp.timestamp.strftime('%Y-%m-%d %H:%M') }} – {{ last_resp.timestamp.strftime('%Y-%m-%d %H:%M') }}">
+                    {{- first_resp.timestamp.strftime('%H:%M') }}{% if last_resp.timestamp.strftime('%H:%M') != first_resp.timestamp.strftime('%H:%M') %}–{{ last_resp.timestamp.strftime('%H:%M') }}{% endif -%}
+                </time>
             </div>
-            <div class="message-card assistant-card p-4" data-role="{{ resp_role }}">
-                <div class="prose max-w-none antialiased" data-find-index="{{ pair_anchor }}" data-find-message="{{ loop.index }}">
-                    {% if resp.formatted_reasoning %} {{ resp.formatted_reasoning | safe }} {% endif %}
-                    {{ resp.formatted_content | safe }}
+            <div class="message-card assistant-card turn-card" data-role="assistant">
+                {% for resp in pair.responses %}
+                {%- set resp_role = resp.display_role or (resp.role.value if resp.role else 'assistant') %}
+                {%- if not resp.merged_into_group %}
+                <div class="turn-step" data-role="{{ resp_role }}">
+                    {%- if resp_role in ('tool', 'system', 'info') and resp.role.value != 'user' %}
+                    <div class="turn-step-label role-badge" data-role="{{ resp_role }}">
+                        {%- if resp_role == 'tool' %}
+                        <span class="response-icon response-icon-tool" title="Tool result">T</span>
+                        <span>Tool result</span>
+                        {%- elif resp_role == 'system' %}
+                        <span class="response-icon response-icon-system" title="System message">S</span>
+                        <span>System</span>
+                        {%- else %}
+                        <span class="response-icon response-icon-info" title="Info message">i</span>
+                        <span>Info</span>
+                        {%- endif %}
+                    </div>
+                    {%- endif %}
+                    <div class="prose max-w-none antialiased" data-find-index="{{ pair_anchor }}" data-find-message="{{ loop.index }}">
+                        {% if resp.formatted_reasoning %} {{ resp.formatted_reasoning | safe }} {% endif %}
+                        {{ resp.formatted_content | safe }}
+                    </div>
                 </div>
+                {%- endif %}
+                {% endfor %}
             </div>
         </div>
     </div>
-    {% endfor %}
     </div>
+    {% endif %}
 </div>
 {% endfor %}

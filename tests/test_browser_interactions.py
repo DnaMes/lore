@@ -259,7 +259,7 @@ def test_search_modal_ignores_a_late_answer_for_an_older_query(page, lore_site):
     page.keyboard.press("Control+k")
     search_input = page.locator("#searchInput")
     search_input.fill("br")
-    page.wait_for_timeout(400)  # past the debounce, so the "br" request is in flight
+    page.wait_for_timeout(600)  # past the 350 ms debounce, so the "br" request is in flight
     search_input.fill(SEARCH_TERM)
     results = page.locator("#searchResults a[href^='/session/']")
     sync_api.expect(results.first).to_be_visible(timeout=10_000)

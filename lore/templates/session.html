@@ -111,7 +111,7 @@
 
 <section class="max-w-[90rem] mx-auto px-6 pb-24">
     <div class="flex flex-col lg:flex-row w-full">
-    <aside class="hidden lg:block lg:flex-grow lg:flex-shrink-[100] lg:basis-[550px] lg:min-w-[350px] lg:max-w-[550px] lg:pr-6">
+    <aside class="session-toc-col hidden lg:block lg:flex-grow lg:flex-shrink-[100] lg:basis-[550px] lg:min-w-[350px] lg:max-w-[550px] lg:pr-6">
         <div class="toc-card sticky top-24 h-[calc(100vh-12rem)]">
             <div class="toc-card-head">On this page</div>
             <nav aria-label="Table of contents">
@@ -330,6 +330,13 @@
             '[data-find-occurrence="' + match.occurrence + '"]';
         const target = stream.querySelector(sel);
         if (target) {
+            // Unfold whatever hides the hit: closed tool/thinking folds and output previews.
+            for (let d = target.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) {
+                d.open = true;
+            }
+            const preview = target.closest('.code-card-body.is-collapsed');
+            const expandBtn = preview && preview.parentElement.querySelector(':scope > .code-card-expand');
+            if (expandBtn) expandBtn.click();
             target.classList.add('find-hit-current');
             target.scrollIntoView({ block: 'center' });
         }
