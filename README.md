@@ -115,6 +115,7 @@ Lore reads what the tools already store on disk; it never writes into them.
 | --- | --- |
 | `lore list` | List the sessions found in the tool directories, filtered by tool, project or date |
 | `lore export` | Export sessions to Markdown and rebuild the index |
+| `lore library` | Build a browsable, Obsidian-compatible Markdown library from the archive |
 | `lore search` | Full-text search across archived sessions |
 | `lore stats` | Print counts and breakdowns from the existing index |
 | `lore digest` | Print an activity digest for a recent window, 7 days by default |
@@ -133,6 +134,14 @@ Full reference, flags and examples: [docs/CLI.md](docs/CLI.md).
 ## Web UI
 
 Start it with `lore-web`; it serves `http://127.0.0.1:5000` by default.
+
+The dashboard at `/` is the library home: it shows what to continue, the projects
+with their newest sessions, and the recent days. Every project on the dashboard
+links into the projects overview at `/projects?project=<path>`, which lists every
+session of that workspace. A session view renders the transcript as turn cards:
+one card per agent turn, with its steps and tool calls inside. The Markdown
+export (`lore library`) uses the same turn layout, so an exported session
+follows the same turn structure as the session view.
 
 The bind is loopback only and the UI has no login. Any other exposure needs a
 reverse proxy that enforces authentication and TLS. The Docker stack publishes the
@@ -211,10 +220,13 @@ changes). It writes state under `<output-dir>/worker/` (`state.json` and a
 
 On each pass it runs three jobs in order:
 
-1. **library** — export/rebuild the archive (`lore library` when available).
-2. **embed_messages** — backfill message embeddings when the semantic extra is installed.
+1. **library** — export the Markdown library (`lore library`, run as a child
+   process; skipped when the command is not available).
+2. **embed_messages** — backfill message embeddings when the semantic extra is
+   installed, in a budgeted child process (`lore embed-messages --budget N`).
 3. **summaries** — generate session summaries for idle candidates (local provider
-   only; the worker never opts into cloud).
+   only (ollama by default for the worker); non-local providers are skipped
+   without cloud opt-in).
 
 Environment variables:
 
@@ -223,6 +235,7 @@ Environment variables:
 | `LORE_WORKER_INTERVAL` | `300` | Seconds between loop iterations. |
 | `LORE_WORKER_SUMMARY_DAILY_CAP` | `20` | Max summaries written per UTC day. |
 | `LORE_WORKER_EMBED_BUDGET` | `120` | Seconds of message embedding per pass (child process); a pass that embedded something runs again on the next pass until the backlog is drained. |
+| `LORE_SUMMARY_PROVIDER` | ollama (worker; unset means ollama) | Default ollama for the worker (unset means ollama); the web UI needs it set to `ollama`. |
 
 ```bash
 lore worker                    # loop until Ctrl+C or SIGTERM
@@ -231,6 +244,10 @@ lore worker status             # human-readable job state
 lore worker status --json      # machine-readable state
 lore worker status --check     # exit 1 when heartbeat is older than 3× the interval
 ```
+
+Running `lore worker` without a subcommand starts the loop; `run-once` runs a
+single pass and exits. All of them accept `--output-dir` to work on a data
+directory other than the default `~/.lore`.
 
 `lore worker` installs SIGINT/SIGTERM handlers that set an internal stop event. The
 loop waits on that event between passes (`event.wait(interval)`), so stop is picked up

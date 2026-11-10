@@ -19,13 +19,13 @@ Output of `.venv/bin/python lore_cli.py --help`:
 
 ```text
 usage: lore [-h] [-v] [--version] [--output-dir OUTPUT_DIR]
-            {list,export,export-html,search,stats,digest,memory,watch,check,sources,jobs,threads,rules,metrics,prune,backup,restore,bundle,sync,run,generate-titles,reindex,embed-messages,analyze,knowledge,improve,summarize,library,format}
+            {list,export,export-html,search,stats,digest,memory,watch,check,sources,jobs,threads,rules,metrics,prune,backup,restore,bundle,sync,run,generate-titles,reindex,embed-messages,analyze,knowledge,improve,summarize,library,format,worker}
             ...
 
 Lore — local-first archive and shared agent memory for your AI coding sessions
 
 positional arguments:
-  {list,export,export-html,search,stats,digest,memory,watch,check,sources,jobs,threads,rules,metrics,prune,backup,restore,bundle,sync,run,generate-titles,reindex,embed-messages,analyze,knowledge,improve,summarize,library,format}
+  {list,export,export-html,search,stats,digest,memory,watch,check,sources,jobs,threads,rules,metrics,prune,backup,restore,bundle,sync,run,generate-titles,reindex,embed-messages,analyze,knowledge,improve,summarize,library,format,worker}
                         Commands
     list                List all sessions
     export              Export sessions to Markdown
@@ -62,6 +62,8 @@ positional arguments:
     summarize           Generate AI session summaries for archived sessions
     library             Build a browsable Markdown library from the v2 store
     format              Format sessions with AI-generated summaries and tags
+    worker              Background jobs after each sync (library, embeddings,
+                        summaries)
 
 options:
   -h, --help            show this help message and exit
@@ -110,6 +112,7 @@ options:
   --project PROJECT     Filter by project path
   --tag TAG             Filter by a saved tag/bookmark (session_tags) or an
                         index keyword
+  --since SINCE         Filter by date (e.g., 7d, 2w)
   --format {table,json}
   --limit LIMIT         Limit number of results
   --offset OFFSET       Offset for pagination
@@ -132,6 +135,13 @@ is written verbatim, so fenced code keeps its exact whitespace and line endings.
 summaries are derived values: the export labels their source (`title_source`) and marks them
 "not transcript content" instead of letting them stand in for the transcript. No export step
 calls a model, so it works with every provider unavailable.
+
+Layout: the Markdown export follows the same turn layout as the web UI, both built on
+`lore/formatting/turns.py`. The body sits under `## Conversation` and is grouped into
+prompt turns: a `### Prompt N · <timestamp>` heading per user prompt (with a day separator
+when the day changes), the prompt text, then the agent's answer marked `**Assistant**` once
+per turn, `**System:**` notes, `**Thinking**` and event blocks folded into `<details>`, and
+tool calls rendered as list items with long outputs folded into `<details>`.
 
 After the run, stderr reports how many sessions were skipped and why (for example, sessions below the prompt floor). Archive preservation drops nothing automatically: an index entry is kept even when both its source file and its exported Markdown file are gone. Only `lore prune` removes entries, and it records the pruned ids in the v2 store (`ignored_sessions`, migration 27) and mirrors them to `ignored.json`. This is deliberate: an unreadable, unmounted or temporarily missing source must never cost an index row, so the index can contain rows whose source no longer exists — that is the archive.
 
@@ -181,7 +191,7 @@ Prints `Found N result` (singular for one hit) with each score to three decimals
 
 ```text
 usage: lore search [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
-                   [--page PAGE] [--messages] [--limit LIMIT]
+                   [--messages] [--limit LIMIT] [--page PAGE]
                    [--include-automated]
                    query
 
@@ -193,10 +203,10 @@ options:
   --tool TOOL          Search only specific tool
   --project PROJECT    Search only specific project
   --tag TAG            Search only sessions with this saved tag/bookmark
-  --page PAGE          Page of results (20 per page; default 1)
   --messages           Return matching messages (passage, evidence, permalink)
                        instead of sessions
   --limit LIMIT        Max message hits with --messages (default: 10)
+  --page PAGE          Page of results (20 per page; default 1)
   --include-automated  Also include automated (exec/cron/subagent) sessions,
                        hidden by default
 ```
@@ -278,7 +288,7 @@ usage: lore memory [-h]
                    ...
 
 positional arguments:
-  {add,list,search,dedupe,import-claude,show,context,rate}
+  {add,list,search,dedupe,import-claude,show,context,review,repair-index,rate}
     add                 Record a new memory
     list                List recorded memories
     search              Search memories
@@ -433,10 +443,19 @@ Render a budgeted memory block for agent context.
 
 Mode: read-only
 
+The text output is the memory block, then a blank line, then the
+`Recently in this project:` block: the three most recent sessions of the
+scoped project (date, tool, title, summary or first prompt, and the web
+link). The recent block may use at most a quarter of the token budget; the
+memory items share the rest. Automated origins, deleted sessions and the
+running session (`CLAUDE_CODE_SESSION_ID`) are left out. With
+`--format json` the same records are returned as `recent_sessions` next to
+`entries` and `cut`. `--no-recent` omits the block entirely.
+
 ```text
 usage: lore memory context [-h] [--project PROJECT] [--budget BUDGET]
                            [--tool TOOL] [--format {text,json}]
-                           [--limit LIMIT]
+                           [--limit LIMIT] [--no-recent]
 
 options:
   -h, --help            show this help message and exit
@@ -446,6 +465,7 @@ options:
   --tool TOOL           optional tool scope filter
   --format {text,json}  output format (default: text)
   --limit LIMIT         max memories to consider
+  --no-recent           omit the "Recently in this project" block
 ```
 
 ### review
@@ -633,6 +653,14 @@ activates them, and even activation only flips a stored flag. See
 usage: lore rules [-h] [--limit LIMIT] [--include-automated]
                   {export,activate,evaluate,review} ...
 
+positional arguments:
+  {export,activate,evaluate,review}
+    export              Export evidence-backed harness recommendations
+                        (inactive by default)
+    activate            Activate one recommendation and record who/when
+    evaluate            Append an accepted/corrected/contradicted verdict
+    review              List stored recommendations (read-only)
+
 options:
   -h, --help           show this help message and exit
   --limit LIMIT        Max rules to extract
@@ -680,11 +708,16 @@ id.
 
 ```text
 usage: lore rules evaluate [-h] --verdict {accepted,corrected,contradicted}
-                           [--note NOTE] [--by BY] recommendation_id
+                           [--note NOTE] [--by BY]
+                           recommendation_id
+
+positional arguments:
+  recommendation_id     Recommendation id (rec-...)
 
 options:
   -h, --help            show this help message and exit
-  --verdict ...         Review verdict; appended to history, never replacing
+  --verdict {accepted,corrected,contradicted}
+                        Review verdict; appended to history, never replacing
                         earlier entries
   --note NOTE           Why (free text, stored with the entry)
   --by BY               Who reviewed it (default: $USER)
@@ -694,6 +727,9 @@ options:
 
 ```text
 usage: lore rules review [-h]
+
+options:
+  -h, --help  show this help message and exit
 ```
 
 Read-only listing: id, state, scope, generation request, evidence permalinks and
@@ -1103,17 +1139,23 @@ Build a browsable, Obsidian-compatible Markdown library from the v2 store.
 
 Writes: Markdown pages under the library output directory (default `<output-dir>/library`). Reads the v2 store only; it does not re-parse tool sources. Automated (exec/cron/subagent) sessions, subagent composite ids (`:agent-` in the session id or `relation: subagent`), and tombstoned or pruned ids are excluded — matching the default web session list, without `--include-automated`.
 
-Session and shelf titles use the same display-title pass as the web UI (native title when usable, otherwise the first real user prompt or command line; low-quality or skill-shaped titles are not shown raw). Project headings use a short label (`parent/dir` under the path, or the last segment). `Index.md` lists normal projects under **Projects** and groups `/tmp`, empty paths and other unscoped trees under **Scratch & unknown**. Counts on `Index.md` and project pages include only sessions that received a library page (published), not filtered-out rows.
+Session and shelf titles use the same display-title pass as the web UI (native title when usable, otherwise the first real user prompt or command line; low-quality or skill-shaped titles are not shown raw). Project headings use a short label (`parent/dir` under the path, or the last segment).
 
-On stdout the command prints JSON counts: `sessions_written`, `projects_written`, `days_written`, and `skipped`. Incremental runs compare each session fingerprint to `.lore-library.json` in the output directory and skip unchanged sessions unless `--full` is given; a changed session rebuilds its page and the affected project and day pages plus `Index.md`.
+`Index.md` is the entry page: a **Projects** shelf with one line per normal project, a separate **Scratch & unknown** shelf for sessions whose project path is empty, `_unknown`, or below `/tmp`, then the 14 most recent days and the 15 most common tags. Counts on `Index.md` and on the project pages include only sessions that received a library page (published), not the filtered-out rows.
+
+Project pages also carry a **Memory** section (the confirmed memories scoped to that project) and an **Open todos** section (confirmed todos scoped to that project), when there are any.
+
+On stdout the command prints JSON counts: `sessions_written`, `projects_written`, `days_written`, and `skipped`. Incremental runs compare each session fingerprint to the `.lore-library.json` manifest in the library directory and skip unchanged sessions unless `--full` is given; a changed session rebuilds its page and the affected project and day pages, and `Index.md` is rewritten on every run. Sessions that disappeared from the store (tombstoned or pruned) lose their page.
 
 Layout:
 
-- `Sessions/<project>/<date> <title>.md` — one session per file (Markdown export from the store)
-- `Projects/<project>.md` — sessions for that project, newest first, with wikilinks and short project label as the page title
-- `Days/<YYYY-MM-DD>.md` — sessions that day across projects
+- `Sessions/<project-slug>/<date> <title> <id-tail>.md` — one session per file (Markdown export from the store); the project slug is the project path with `/` replaced by `-`
+- `Projects/<project-slug>.md` — sessions for that project, newest first, each line a wikilink to its session page, with the short project label as the page title
+- `Days/<YYYY-MM-DD>.md` — sessions that day, grouped by project, each line a wikilink to its session page
 - `Index.md` — project shelves (plus **Scratch & unknown** when needed), recent days, and top tags
-- `.lore-library.json` — manifest of session fingerprints for incremental rebuilds
+- `.lore-library.json` — manifest of session fingerprints (plus page path, project slug, day and display title) for incremental rebuilds
+
+Session pages link back to their project and day pages: the frontmatter carries `project_page` and `day_page` as wikilinks, and the page ends with a `See also:` line.
 
 ```text
 usage: lore library [-h] [--output OUTPUT] [--full] [--project PROJECT]
@@ -1163,34 +1205,63 @@ Note: `format` has no `--no-llm` flag. Use `--provider ollama` (local) to keep t
 Run background jobs after the v2 store sync stamp changes: library export,
 message embeddings, and session summaries (local providers only; no cloud opt-in).
 
-Writes: `<output-dir>/worker/state.json`, `heartbeat`, and whatever each job
-updates in the archive (library export, embeddings, summaries).
+Writes: `<output-dir>/worker/state.json` and `<output-dir>/worker/heartbeat`,
+plus whatever each job updates in the archive (library export, embeddings,
+summaries). The worker state directory is `<output-dir>/worker/`.
 
-Running `lore worker` with no subcommand starts the loop until SIGINT/SIGTERM.
-SIGINT/SIGTERM set an internal stop event; the loop uses `event.wait(interval)` between
-passes so shutdown is noticed after the current wait or job, then prior signal handlers
-are restored. Signal handlers are only installed on the main thread; elsewhere the stop
-event alone ends the loop. An exception from one pass is logged to stderr, recorded as
-`last_error` (with `at` timestamp) in `state.json`, and the loop continues after the wait.
-The library job runs as a child process (`lore` console script when on `PATH`, else
-`lore_cli.py` under the current Python), polled every 15 s so the heartbeat stays fresh;
-a child still running at the 1800 s limit is killed and recorded as timed out. `LORE_WORKER_INTERVAL` sets the pause between passes (default `300`
-seconds). Failed jobs keep the previous `last_stamp` and are retried with per-job backoff
-of at least 15 minutes (or the interval, whichever is larger), recorded in `state.json`.
-`LORE_WORKER_SUMMARY_DAILY_CAP` limits summaries per UTC day (default `20`). Message embeddings run as a child `lore embed-messages --budget N` with `LORE_WORKER_EMBED_BUDGET` seconds per pass (default `120`); while a pass still embeds messages the job reruns on the next pass, so a backlog drains without holding memory in the loop process.
-Corrupt or unreadable `state.json` is treated as empty state (warning on stderr).
+Jobs run in the order `library`, `embed_messages`, `summaries`. A pass only
+runs jobs when the store stamp changed or a failed job is due for its retry.
+`last_stamp` advances only after every job finished the current stamp, so a
+failing job keeps the stamp pending and is retried.
+
+Environment variables:
+
+- `LORE_WORKER_INTERVAL` — seconds between passes (default `300`, minimum `1`)
+- `LORE_WORKER_SUMMARY_DAILY_CAP` — summaries per UTC day (default `20`)
+- `LORE_WORKER_EMBED_BUDGET` — seconds of message embedding per pass (default `120`, minimum `10`)
+
+The library job runs as a child process (`lore` console script when on `PATH`,
+else `lore_cli.py` under the current Python), polled every 15 s so the
+heartbeat stays fresh; a child still running at the 1800 s limit is killed and
+recorded as timed out. Message embeddings run as a budgeted child process:
+`lore embed-messages --budget N` with `LORE_WORKER_EMBED_BUDGET` seconds per
+pass. While a pass still embeds messages the job reruns on the next pass, so a
+backlog drains without holding memory in the loop process. The summaries job
+uses the local provider from `LORE_SUMMARY_PROVIDER` (default `ollama`) and
+never opts into a cloud provider by itself; a cloud provider is skipped.
+
+Failed jobs keep the previous `last_stamp` and are retried with per-job
+backoff of at least 15 minutes (or the interval, whichever is larger),
+recorded as `retry_after` in `state.json`. Corrupt or unreadable `state.json`
+is treated as empty state (warning on stderr).
 
 ```text
-usage: lore worker [-h] {status,run-once} ...
+usage: lore worker [-h] [--output-dir OUTPUT_DIR] {status,run-once} ...
 
 positional arguments:
   {status,run-once}
-    status           Show worker state
-    run-once         Run one worker pass and exit
+    status              Show worker state
+    run-once            Run one worker pass and exit
 
 options:
-  -h, --help         show this help message and exit
+  -h, --help            show this help message and exit
+  --output-dir OUTPUT_DIR
+                        Output directory (default: ~/.lore or global --output-
+                        dir)
 ```
+
+### loop (default mode)
+
+The loop is the default mode: `lore worker` without a subcommand runs it
+until SIGINT or SIGTERM. There is no separate `loop` subcommand —
+`lore worker loop` is rejected by the parser.
+
+SIGINT/SIGTERM set an internal stop event; the loop uses `event.wait(interval)`
+between passes so shutdown is noticed after the current wait or job, then
+prior signal handlers are restored. Signal handlers are only installed on the
+main thread; elsewhere the stop event alone ends the loop. An exception from
+one pass is logged to stderr, recorded as `last_error` (with `at` timestamp) in
+`state.json`, and the loop continues after the wait.
 
 ### status
 
@@ -1198,14 +1269,23 @@ Show the last worker state and per-job results.
 
 Mode: read-only unless `--check` is used (then exit code reflects heartbeat age).
 
+Without `--json` the command prints the output directory, `last_stamp`,
+`store_stamp` and one line per job with its status and last run. With `--json`
+it prints the raw state (including `heartbeat_mtime`, `interval_seconds` and
+`store_stamp`). `--check` exits non-zero when there is no heartbeat or when it
+is older than 3× the worker interval; it prints nothing.
+
 ```text
-usage: lore worker status [-h] [--json] [--check]
+usage: lore worker status [-h] [--output-dir OUTPUT_DIR] [--json] [--check]
 
 options:
-  -h, --help  show this help message and exit
-  --json      Machine-readable JSON on stdout
-  --check     Exit non-zero when heartbeat is older than 3× the worker
-              interval
+  -h, --help            show this help message and exit
+  --output-dir OUTPUT_DIR
+                        Output directory (default: ~/.lore or global --output-
+                        dir)
+  --json                Machine-readable JSON on stdout
+  --check               Exit non-zero when heartbeat is older than 3× the
+                        worker interval
 ```
 
 ### run-once
@@ -1215,10 +1295,13 @@ Touch the heartbeat, run one worker pass when the store stamp changed, then exit
 Writes: same as `worker` (state, heartbeat, and job side effects when the stamp is new).
 
 ```text
-usage: lore worker run-once [-h]
+usage: lore worker run-once [-h] [--output-dir OUTPUT_DIR]
 
 options:
-  -h, --help  show this help message and exit
+  -h, --help            show this help message and exit
+  --output-dir OUTPUT_DIR
+                        Output directory (default: ~/.lore or global --output-
+                        dir)
 ```
 
 ## lore-session

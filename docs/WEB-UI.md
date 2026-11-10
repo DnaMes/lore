@@ -49,7 +49,16 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
 
 ### Dashboard and Discovery
 
-- `/`: Main dashboard displaying recent sessions, high-level activity metrics, and search entry point.
+- `/`: The library home, the landing page of the web UI. The page shows the
+  library shelves: "Continue where you left off" (the six most recent sessions
+  with their one-line summary and relative activity time), the project shelves
+  (one card per workspace path, at most twelve, with the session count, the last
+  activity and the newest session), and the recent days (the last seven days,
+  each with its session count and its newest sessions). Every project shelf
+  links to the filtered project
+  view (`/projects?project=<path>`). Below the shelves the page shows the
+  archive statistics (sessions, messages, tools, projects), the recent activity
+  list and the tool list; the "New Session" button opens the search modal.
 - `/sessions`: Paginated session explorer with filtering by tool, project, tag, date range, and free-text search.
   Date filters (`start`, `end`) are interpreted in the host's local timezone, the same
   frame the archive stores. A date-only `end` value covers the whole selected day
@@ -64,6 +73,11 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
   immediately after it is set, and it survives a sync, a session rewrite and a
   reindex — the tags are keyed to the session id, not to the derived rows.
 - `/projects`: Overview grouping recorded sessions by workspace and repository path.
+  With `?project=<name>` the view is filtered to exactly that project path: the
+  selected project card then lists every session of that project instead of the
+  short preview used in the overview, and the other project cards stay in place.
+  The filter is an exact match on the stored project path and combines with the
+  `tool`, `tag`, `start` and `end` filters; an invalid value returns HTTP 400.
 - `/threads`: Cross-session threads overview for grouped multi-session conversations.
 - `/thread/<thread_id>`: Thread detail page presenting an interactive session timeline and message history.
 - `/stats`: Activity statistics over the last 30 days (sessions per day/tool/project, message and prompt counts).
@@ -77,6 +91,32 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
   `failed`, `cancelled`, `unmatched`, `unknown` — and each state has its own chip
   (`data-status`, icon and colour), which survives folding: a failed call inside a
   collapsed burst stays marked.
+
+  The page is read from the v2 store first, the export markdown second and the
+  tool's own files last, because the store keeps the roles, the full timestamps
+  and the structured tool calls while the exported markdown stores the tool
+  results as user turns and the times without a date.
+
+  The transcript is rendered as turn cards: one card per agent turn, with one
+  row per tool call showing its target and status. A tool output longer than
+  twelve lines is folded to a ten-line preview; the full text stays in the page
+  so it can be copied. The prompt of a turn carries its date and time
+  (YYYY-MM-DD HH:MM), the agent card shows the time range of its answers, and a
+  day separator is inserted wherever the date changes.
+
+  Injected events (skill bodies, hook feedback, task notifications and their
+  echoes, system reminders, local-command output and codex system prompts) are
+  folded into the current turn as one collapsed line instead of being listed as
+  user prompts, so they neither fill the outline nor count towards the prompt
+  count. A slash-command wrapper becomes the prompt `/name args`. The
+  classification is a display rule only (noise rule
+  `session_classify_injected_events`, on by default); storage and search are
+  untouched.
+
+  `?live=1` forces the live source: the page then reads the tool's own files
+  instead of the v2 store. When the source file is no longer on disk, the page
+  serves the stored copy and says that the source is missing, instead of
+  re-extracting a tool that cannot be read.
 - `/session/<session_id>/m/<seq>`: Message permalink. Renders that message plus a bounded
   neighbour window (21 messages) straight from the v2 message rows — never the whole
   transcript — so a link into a 20 000-message session stays cheap. The identity is
@@ -146,6 +186,31 @@ The application exposes JSON endpoints under `/api/`. Mutating requests (`POST`,
 | | `POST` | `/api/noise-rules` | Saves updated noise reduction rules. |
 | | `POST` | `/api/noise-rules/preview` | Previews noise filter normalization against sample message content. |
 
+## Search performance
+
+The search endpoints read the v2 store's full-text index, so a request does not
+scan the session corpus:
+
+- The query is an FTS5 `MATCH` against the shared `search_index` table joined to
+  `sessions` (`lore/storage/search.py`). The tool, project, tag and date
+  filters are part of the SQL statement, so they constrain the candidates inside
+  the indexed query instead of filtering a scanned result set afterwards.
+- Snippets and evidence are built only for the hits of the returned page
+  (`annotate_session_hits`), not for the whole candidate window. The ranked hits
+  are sliced afterwards, so the pages of one query tile.
+- The store availability check (`v2_is_available`) is memoised on the mtime and
+  the size of the store, its WAL file and `index.json`, so a request does not
+  hash every session row again.
+- Query embeddings are cached (`_embed_text_cached`, an LRU cache of 256
+  entries), so a repeated query in the hybrid keyword-plus-vector path is
+  embedded once.
+
+The web UI sends one request per debounced keystroke (350 ms), and every request
+carries a sequence number, so only the newest query paints its results.
+
+When the v2 store is missing or stale, the search falls back to the legacy
+`SearchEngine` (`lore/search/engine.py`) over `index.sqlite`.
+
 ## Health
 
 The web application exposes two dedicated endpoints for operational checks:
@@ -179,7 +244,7 @@ Both endpoints bypass rate limiting.
 The security model is based directly on the application implementation:
 
 - **No built-in login**: A search across interface modules (`grep -rn -i "login\|basic_auth\|authenticate\|password" lore/interfaces/web*.py`) yields only one match:
-  `lore/interfaces/web_utils.py:79: if parsed.username is not None or parsed.password is not None:`
+  `lore/interfaces/web_utils.py:152: if parsed.username is not None or parsed.password is not None:`
   This check ensures that configured origins reject embedded credentials. The web interface has no user authentication, login screens, or basic auth checks. See the [Security Policy](../SECURITY.md).
 - **Loopback binding by default**: The application binds strictly to `127.0.0.1` out of the box. Exposing the web UI outside the local machine requires placing it behind a reverse proxy (e.g. Caddy, Nginx, or Traefik) that enforces authentication (such as Basic Auth, OAuth2/OIDC, or mTLS) and handles TLS.
 - **Origin checks**: Every mutating request (`POST`, `PUT`, `PATCH`, `DELETE`) that carries an `Origin` header is validated before it reaches a route.
