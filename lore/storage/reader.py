@@ -19,7 +19,7 @@ import sqlite3
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 from lore.core.models import AUTOMATED_ORIGINS
 
@@ -389,6 +389,72 @@ def load_index_v2(output_dir: Path) -> Dict[str, Any]:
         "stats": _compute_stats(sessions),
         "sessions": sessions,
     }
+
+
+_SUMMARY_TABLE_VERSION = 18
+
+
+def recent_project_sessions(
+    output_dir: Path,
+    project: str,
+    *,
+    limit: int,
+    exclude_ids: Iterable[str] = (),
+) -> List[Dict[str, Any]]:
+    """Newest visible sessions of one exact project path, with their stored one-liner.
+
+    Automated origins, ignored sessions and ``exclude_ids`` are dropped before the LIMIT.
+    ``summary`` is the persisted session one-liner or None. Empty without a v2 store.
+    """
+    db = v2_db_path(output_dir)
+    if not db.exists():
+        return []
+    hidden = sorted(load_ignored_session_ids(output_dir) | {str(i) for i in exclude_ids if i})
+    conn = open_connection(db)
+    try:
+        exclusion = automated_exclusion_sql(conn, "s")
+        has_summaries = current_version(conn) >= _SUMMARY_TABLE_VERSION
+        summary_join = (
+            "LEFT JOIN session_summaries ss "
+            "ON ss.level = 'session' AND ss.scope_key = 'session:' || s.id"
+            if has_summaries
+            else ""
+        )
+        summary_col = "ss.payload_json" if has_summaries else "NULL"
+        rows = conn.execute(
+            f"""
+            SELECT s.id, s.tool, s.title, s.updated, s.prompt_outline,
+                   {summary_col} AS summary_json
+            FROM sessions s
+            {summary_join}
+            WHERE s.project = ?
+              AND s.id NOT IN (SELECT value FROM json_each(?)){exclusion}
+            ORDER BY s.updated DESC
+            LIMIT ?
+            """,
+            (project, json.dumps(hidden), max(1, limit)),
+        ).fetchall()
+    finally:
+        conn.close()
+    results: List[Dict[str, Any]] = []
+    for row in rows:
+        one_liner = None
+        if row["summary_json"]:
+            try:
+                one_liner = json.loads(row["summary_json"]).get("one_liner")
+            except (ValueError, TypeError, AttributeError):
+                one_liner = None
+        results.append(
+            {
+                "id": row["id"],
+                "tool": row["tool"],
+                "title": row["title"],
+                "updated": row["updated"],
+                "prompt_outline": row["prompt_outline"],
+                "summary": one_liner if isinstance(one_liner, str) else None,
+            }
+        )
+    return results
 
 
 def load_session_message_window(

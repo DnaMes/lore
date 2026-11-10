@@ -18,7 +18,9 @@ from pathlib import Path
 from typing import Any
 
 from lore.services.improve import normalize_scope_project
+from lore.services.index import load_deleted_session_ids
 from lore.storage.memory import MemoryEntry, list_memory
+from lore.storage.reader import recent_project_sessions
 from lore.utils.redact import redact
 
 _RETIRED_MARKER_RE = re.compile(r"\b(OBSOLETE|SUPERSEDED|RETIRED)\b", re.IGNORECASE)
@@ -294,10 +296,15 @@ def render_context_memories(
     return "\n".join([*lines, _more_line(cut)])
 
 
-def _render_json(entries: list[MemoryEntry], budget: int) -> str:
+def _render_json(
+    entries: list[MemoryEntry],
+    budget: int,
+    recent_sessions: list[dict[str, Any]] | None = None,
+) -> str:
     """Drop trailing entries until the serialized JSON fits the token budget."""
     capped = max(1, budget)
-    for count in range(len(entries), 0, -1):
+    recent = recent_sessions or []
+    for count in range(len(entries), -1, -1):
         payload = {
             "entries": [
                 {
@@ -308,11 +315,115 @@ def _render_json(entries: list[MemoryEntry], budget: int) -> str:
                 for rec in (_entry_record(e) for e in entries[:count])
             ],
             "cut": len(entries) - count,
+            "recent_sessions": recent,
         }
         raw = json.dumps(payload, indent=2, ensure_ascii=False)
         if _token_estimate(raw) <= capped:
             return raw
     return ""
+
+
+# The recent block gets at most a quarter of the budget; memory items get the rest.
+_RECENT_BUDGET_DIVISOR = 4
+_RECENT_LIMIT = 3
+_RECENT_PROMPT_MAX_LEN = 120
+_RECENT_HEADER = "Recently in this project:"
+_DEFAULT_WEB_URL = "https://lore.local.erdlabs.com"
+
+
+def _web_base_url() -> str | None:
+    """Lore web base from ``LORE_WEB_URL``; an empty value turns the links off."""
+    base = os.environ.get("LORE_WEB_URL", _DEFAULT_WEB_URL).strip().rstrip("/")
+    return base or None
+
+
+def _clean_inline(text: str) -> str:
+    return _sanitize_free_text(_normalize_one_line(text))
+
+
+def select_recent_sessions(
+    output_dir: Path,
+    *,
+    scope_project: str | Path | None = None,
+    limit: int = _RECENT_LIMIT,
+) -> list[dict[str, Any]]:
+    """Newest sessions of the scoped project as render records (sanitized, never raises).
+
+    Matches the project exactly after the same resolution memory scoping uses. Automated
+    origins, deleted sessions and the running session (``CLAUDE_CODE_SESSION_ID``) are left out.
+    """
+    try:
+        project = _resolve_project_path(scope_project)
+        if project is None:
+            return []
+        hidden = load_deleted_session_ids(output_dir / "deleted_sessions.json")
+        current = os.environ.get("CLAUDE_CODE_SESSION_ID", "").strip()
+        rows = recent_project_sessions(
+            output_dir,
+            str(project),
+            limit=limit,
+            exclude_ids=[*hidden, *([current] if current else [])],
+        )
+        base = _web_base_url()
+        records: list[dict[str, Any]] = []
+        for row in rows:
+            first_line = next(
+                (ln for ln in (row["prompt_outline"] or "").splitlines() if ln.strip()), ""
+            )
+            summary = _clean_inline(row["summary"] or "")
+            records.append(
+                {
+                    "id": row["id"],
+                    "tool": row["tool"],
+                    "date": (row["updated"] or "")[:10],
+                    "title": _clean_inline(row["title"] or ""),
+                    "summary": summary or None,
+                    "first_prompt": _cap_words(_clean_inline(first_line), _RECENT_PROMPT_MAX_LEN)
+                    or None,
+                    "url": f"{base}/session/{row['id']}" if base else None,
+                }
+            )
+        return records
+    except Exception as exc:  # noqa: BLE001 - a broken store must not block memory context
+        if os.environ.get("LORE_DEBUG", "").strip() == "1":
+            print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        return []
+
+
+def _recent_line(rec: dict[str, Any]) -> str:
+    line = f"- {rec['date']} {rec['tool']}"
+    if rec["title"]:
+        line += f' "{rec["title"]}"'
+    # The first prompt is often injected boilerplate; it only stands in for a missing title.
+    body = rec["summary"] or ("" if rec["title"] else rec["first_prompt"])
+    if body:
+        line += f": {body}"
+    if rec["url"]:
+        line += f" {rec['url']}"
+    return line
+
+
+def _render_recent_text(records: list[dict[str, Any]]) -> str:
+    if not records:
+        return ""
+    return "\n".join([_RECENT_HEADER, *(_recent_line(rec) for rec in records)])
+
+
+def _fit_recent(
+    records: list[dict[str, Any]], budget: int, output_format: str
+) -> list[dict[str, Any]]:
+    """Keep the newest records that fit the recent share; the rest are dropped whole."""
+    kept: list[dict[str, Any]] = []
+    for rec in records:
+        candidate = [*kept, rec]
+        if output_format == "json":
+            size = _token_estimate(json.dumps(candidate, indent=2, ensure_ascii=False))
+        else:
+            size = _token_estimate(_render_recent_text(candidate))
+        if size > budget:
+            break
+        kept = candidate
+    return kept
 
 
 def build_memory_context(
@@ -323,16 +434,37 @@ def build_memory_context(
     limit: int = 40,
     budget: int = 2000,
     output_format: str = "text",
+    include_recent: bool = True,
 ) -> str:
-    """Select and render memories; never raises (safe for session hooks)."""
+    """Select and render memories plus the recent project sessions; never raises.
+
+    Text: memory block, blank line, then "Recently in this project:" (at most a quarter of
+    ``budget``). JSON: one object with ``entries``, ``cut`` and ``recent_sessions``.
+    """
     try:
+        recent = (
+            select_recent_sessions(output_dir, scope_project=scope_project)
+            if include_recent
+            else []
+        )
+        kept = _fit_recent(recent, budget // _RECENT_BUDGET_DIVISOR, output_format)
         entries = select_context_memories(
             output_dir,
             scope_project=scope_project,
             scope_tool=scope_tool,
             limit=limit,
         )
-        return render_context_memories(entries, budget=budget, output_format=output_format)
+        if output_format == "json":
+            if not entries and not kept:
+                return ""
+            return _render_json(entries, budget, kept)
+        recent_text = _render_recent_text(kept)
+        # The "\n\n" separator and the recent block come out of the budget first.
+        memory_budget = budget - _token_estimate(recent_text) - 1 if recent_text else budget
+        memory_text = render_context_memories(
+            entries, budget=memory_budget, output_format=output_format
+        )
+        return "\n\n".join(part for part in (memory_text, recent_text) if part)
     except Exception as exc:  # noqa: BLE001 - hooks must not fail on missing or broken stores
         if os.environ.get("LORE_DEBUG", "").strip() == "1":
             print(f"{type(exc).__name__}: {exc}", file=sys.stderr)

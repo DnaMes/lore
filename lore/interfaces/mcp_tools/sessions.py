@@ -151,14 +151,22 @@ def register(server, deps: MCPToolDeps) -> None:
             key=lambda session: str(session.get("updated") or session.get("created") or ""),
             reverse=True,
         )
-        return deps.json_text(
-            {
-                "count": min(len(sessions), limit),
-                "sessions": [
-                    serialize_index_session_summary(session) for session in sessions[:limit]
-                ],
+        page = [serialize_index_session_summary(session) for session in sessions[:limit]]
+        if page:
+            from ...storage.summaries import list_summaries
+
+            stored = list_summaries(
+                deps.server.output_dir, level="session", session_ids=[r["id"] for r in page]
+            )
+            one_liners = {
+                row["session_id"]: row["payload"].get("one_liner")
+                for row in stored
+                if isinstance(row.get("payload"), dict)
             }
-        )
+            for row in page:
+                if isinstance(one_liners.get(row["id"]), str):
+                    row["summary"] = one_liners[row["id"]]
+        return deps.json_text({"count": min(len(sessions), limit), "sessions": page})
 
     server.register_tool(
         "list_recent_sessions",

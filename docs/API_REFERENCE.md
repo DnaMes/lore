@@ -172,7 +172,8 @@ Input:
 
 ### `list_recent_sessions`
 
-List recently updated sessions.
+List recently updated sessions. A session with a stored summary carries a `summary`
+field (the one-line summary); the field is absent otherwise.
 
 Input:
 

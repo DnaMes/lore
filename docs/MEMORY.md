@@ -85,6 +85,7 @@ lore memory context --project /path/to/repo --tool claude --format json
 - `--tool` optional tool scope filter
 - `--format` `text` or `json`, default `text`
 - `--limit` maximum number of memories to consider
+- `--no-recent` leave out the "Recently in this project" block (see below)
 
 Ranking is by scope tier: an exact project match first, then related scopes, then global
 memories. A related scope is a descendant of the project, or an ancestor that is specific
@@ -92,6 +93,28 @@ enough. Overly broad ancestor scopes are never treated as related: the filesyste
 the home directory, and any scope with fewer than four path components. Within a tier,
 feedback weight, update time and kind priority decide the order. The output is redacted
 and prints one line per memory.
+
+### Recently in this project
+
+After the memory block, the context lists the last three sessions of the same project
+(the scope is resolved exactly like the memory scope, and the match is on the exact
+project path):
+
+```text
+Recently in this project:
+- 2026-11-10 claude-code "Lore-Widget für Omarchy-Leiste": Added the widget, tests green https://lore.local.erdlabs.com/session/237eb581-…
+```
+
+- The line shows the date, the tool, the title, then the stored one-line summary when one
+  exists, else the first prompt line cut to 120 characters, then the Lore web link.
+- The web base comes from `LORE_WEB_URL` (default `https://lore.local.erdlabs.com`). Set
+  it to an empty value to drop the links.
+- Automated sessions (`exec`, `cron`, `subagent`), deleted or ignored sessions and the
+  running session (`CLAUDE_CODE_SESSION_ID`) are never listed.
+- The block takes at most a quarter of `--budget`; the memory block gets the rest, so
+  memories keep priority. Whole sessions are dropped when they do not fit.
+- `--format json` adds a `recent_sessions` array (`id`, `tool`, `date`, `title`,
+  `summary`, `first_prompt`, `url`); it is `[]` with `--no-recent`.
 
 ## Import from Claude Code
 

@@ -2066,6 +2066,7 @@ def cmd_memory(args):
             limit=args.limit,
             budget=args.budget,
             output_format=args.format,
+            include_recent=not getattr(args, "no_recent", False),
         )
         if text:
             print(text)
@@ -3132,6 +3133,11 @@ Examples:
         help="output format (default: text)",
     )
     mem_context.add_argument("--limit", type=int, default=40, help="max memories to consider")
+    mem_context.add_argument(
+        "--no-recent",
+        action="store_true",
+        help='omit the "Recently in this project" block',
+    )
 
     mem_review = memory_sub.add_parser(
         "review", help="Review candidates: list them, or accept/reject by id"
