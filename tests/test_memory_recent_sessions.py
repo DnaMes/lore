@@ -350,3 +350,25 @@ def test_text_line_uses_title_alone_when_no_summary():
     )
     rec["summary"] = "Added a download manager"
     assert _recent_line(rec).endswith(": Added a download manager")
+
+
+def test_mcp_list_recent_sessions_survives_an_unreadable_store(tmp_path, recent_env, monkeypatch):
+    """A store that cannot be opened for the summary check still lists the sessions."""
+    import sqlite3
+
+    from lore.storage import schema
+
+    monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
+    monkeypatch.setenv("LORE_USE_V2", "1")
+    _store_session(tmp_path, "s1", day=1)
+    server = mcp.create_server()
+    handler = server.tools["list_recent_sessions"]["handler"]
+    asyncio.run(handler({"limit": 10}))  # builds the index while the store is readable
+
+    def _broken(_conn):
+        raise sqlite3.DatabaseError("file is not a database")
+
+    monkeypatch.setattr(schema, "current_version", _broken)
+    payload = json.loads(asyncio.run(handler({"limit": 10})))
+    assert [s["id"] for s in payload["sessions"]] == ["s1"]
+    assert "summary" not in payload["sessions"][0]

@@ -162,11 +162,14 @@ def register(server, deps: MCPToolDeps) -> None:
             db = v2_db_path(deps.server.output_dir)
             has_summaries = False
             if db.exists():
-                conn = open_connection(db)
                 try:
-                    has_summaries = current_version(conn) >= _SUMMARY_TABLE_VERSION
-                finally:
-                    conn.close()
+                    conn = open_connection(db)
+                    try:
+                        has_summaries = current_version(conn) >= _SUMMARY_TABLE_VERSION
+                    finally:
+                        conn.close()
+                except sqlite3.Error:
+                    has_summaries = False  # an unreadable store still lists sessions
             if has_summaries:
                 try:
                     stored = list_summaries(
