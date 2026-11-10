@@ -816,18 +816,19 @@ def search_index(
                 # Always take this page's slice: a fused query fetched a wider
                 # window than it returns.
                 results = results[start_index : start_index + limit]
-                # Snippets and evidence cost per hit, so only this page gets them;
-                # semantic-only hits are not keyword matches and keep their own fields.
-                keyword_ids = {str(r["session"].get("id")) for r in keyword_hits}
-                annotate_session_hits(
-                    index_dir,
-                    [r for r in results if str(r["session"].get("id")) in keyword_ids],
-                    query,
-                    scope=scope,
-                )
                 if results:
                     results = filter_automated_results(results, include_automated)
-                    return apply_deleted_filter_to_results(results, deleted)
+                    results = apply_deleted_filter_to_results(results, deleted)
+                    # Snippets and evidence cost per hit, so only the hits this page
+                    # returns get them; semantic-only hits are not keyword matches.
+                    keyword_ids = {str(r["session"].get("id")) for r in keyword_hits}
+                    annotate_session_hits(
+                        index_dir,
+                        [r for r in results if str(r["session"].get("id")) in keyword_ids],
+                        query,
+                        scope=scope,
+                    )
+                    return results
                 # v2 returned nothing — fall through to legacy. Better to
                 # double-check than to silently lie. Legacy may still have it.
                 _serving_legacy(
