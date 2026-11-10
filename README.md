@@ -231,6 +231,12 @@ lore worker status --json      # machine-readable state
 lore worker status --check     # exit 1 when heartbeat is older than 3× the interval
 ```
 
+`lore worker` installs SIGINT/SIGTERM handlers that set an internal stop event. The
+loop waits on that event between passes (`event.wait(interval)`), so stop is picked up
+promptly after the current job or wait finishes; handlers are restored on exit.
+Failed jobs do not advance `last_stamp`; they are retried later with per-job backoff
+(`max(LORE_WORKER_INTERVAL, 15 minutes)`), tracked in `state.json`.
+
 With Docker, `docker-compose.yml` also starts `lore-worker` (`lore worker`) sharing
 the same data volume as `lore-app`.
 

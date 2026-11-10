@@ -1167,8 +1167,13 @@ Writes: `<output-dir>/worker/state.json`, `heartbeat`, and whatever each job
 updates in the archive (library export, embeddings, summaries).
 
 Running `lore worker` with no subcommand starts the loop until SIGINT/SIGTERM.
-`LORE_WORKER_INTERVAL` sets the pause between passes (default `300` seconds).
+SIGINT/SIGTERM set an internal stop event; the loop uses `event.wait(interval)` between
+passes so shutdown is noticed after the current wait or job, then prior signal handlers
+are restored. `LORE_WORKER_INTERVAL` sets the pause between passes (default `300`
+seconds). Failed jobs keep the previous `last_stamp` and are retried with per-job backoff
+of at least 15 minutes (or the interval, whichever is larger), recorded in `state.json`.
 `LORE_WORKER_SUMMARY_DAILY_CAP` limits summaries per UTC day (default `20`).
+Corrupt or unreadable `state.json` is treated as empty state (warning on stderr).
 
 ```text
 usage: lore worker [-h] {status,run-once} ...

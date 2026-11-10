@@ -8,6 +8,7 @@ import os
 import signal
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeoutError
@@ -23,6 +24,7 @@ from lore.storage.writer import v2_db_path
 logger = logging.getLogger(__name__)
 
 DEFAULT_INTERVAL = 300
+MIN_JOB_RETRY_SECONDS = 900
 DEFAULT_SUMMARY_CAP = 20
 LIBRARY_TIMEOUT = 1800
 EMBED_TIMEOUT = 600
@@ -62,16 +64,26 @@ def _load_state(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        print(f"worker: ignoring unreadable state {path}: {exc}", file=sys.stderr)
         return {}
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        print(f"worker: ignoring corrupt state {path}: {exc}", file=sys.stderr)
+        return {}
+    if not isinstance(data, dict):
+        print(f"worker: ignoring corrupt state {path}: expected object", file=sys.stderr)
+        return {}
+    return data
 
 
 def _save_state(path: Path, state: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    os.replace(tmp, path)
 
 
 def touch_heartbeat(output_dir: Path) -> None:
@@ -140,19 +152,74 @@ def _record_job(
     jobs[name] = entry
 
 
-def _run_job_with_timeout(fn: Callable[[], dict[str, Any]], timeout: int) -> dict[str, Any]:
+def _job_retry_interval() -> int:
+    return max(resolve_interval(), MIN_JOB_RETRY_SECONDS)
+
+
+def _parse_iso_ts(value: str) -> Optional[float]:
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+    except ValueError:
+        return None
+
+
+def _job_retry_due(state: dict[str, Any], name: str) -> bool:
+    entry = (state.get("jobs") or {}).get(name) or {}
+    if entry.get("status") != "error":
+        return False
+    retry_after = entry.get("retry_after")
+    if not retry_after:
+        return True
+    due = _parse_iso_ts(str(retry_after))
+    if due is None:
+        return True
+    return time.time() >= due
+
+
+def _job_done_for_stamp(state: dict[str, Any], name: str, stamp: str) -> bool:
+    entry = (state.get("jobs") or {}).get(name) or {}
+    if entry.get("ok_stamp") == stamp:
+        return True
+    if state.get("last_stamp") == stamp:
+        status = entry.get("status")
+        if status in ("ok", "skipped"):
+            return True
+    return False
+
+
+def _stamp_fully_processed(state: dict[str, Any], stamp: str, names: tuple[str, ...]) -> bool:
+    for name in names:
+        if not _job_done_for_stamp(state, name, stamp):
+            return False
+    return True
+
+
+def _run_job_with_timeout(
+    fn: Callable[[], dict[str, Any]],
+    timeout: int,
+    *,
+    output_dir: Optional[Path] = None,
+) -> dict[str, Any]:
+    tick = float(resolve_interval())
     with ThreadPoolExecutor(max_workers=1) as pool:
         fut = pool.submit(fn)
-        try:
-            return fut.result(timeout=timeout)
-        except FuturesTimeoutError:
-            return {
-                "status": "error",
-                "skipped": False,
-                "last_error": f"timed out after {timeout}s",
-            }
-        except Exception as exc:  # noqa: BLE001 — isolate per-job failures
-            return {"status": "error", "skipped": False, "last_error": str(exc)}
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return {
+                    "status": "error",
+                    "skipped": False,
+                    "last_error": f"timed out after {timeout}s",
+                }
+            wait = min(tick, max(0.05, remaining))
+            try:
+                return fut.result(timeout=wait)
+            except FuturesTimeoutError:
+                if output_dir is not None:
+                    touch_heartbeat(output_dir)
+            except Exception as exc:  # noqa: BLE001 — isolate per-job failures
+                return {"status": "error", "skipped": False, "last_error": str(exc)}
 
 
 def run_library_job(output_dir: Path) -> dict[str, Any]:
@@ -211,7 +278,7 @@ def run_embed_messages_job(output_dir: Path) -> dict[str, Any]:
             conn.close()
         return {"status": "ok", "skipped": False, "embedded": written}
 
-    return _run_job_with_timeout(_run, EMBED_TIMEOUT)
+    return _run_job_with_timeout(_run, EMBED_TIMEOUT, output_dir=output_dir)
 
 
 def run_summaries_job(
@@ -278,7 +345,7 @@ def run_summaries_job(
         )
         return {"status": "ok", "skipped": False, "written": report.written}
 
-    return _run_job_with_timeout(_run, SUMMARY_TIMEOUT)
+    return _run_job_with_timeout(_run, SUMMARY_TIMEOUT, output_dir=output_dir)
 
 
 def run_pass(
@@ -294,19 +361,31 @@ def run_pass(
 
     state_path = worker_dir(output_dir) / "state.json"
     state = _load_state(state_path)
-    if stamp == state.get("last_stamp"):
-        return False
-
     job_map = jobs or _default_jobs()
     cap = resolve_summary_cap()
     remaining = summary_remaining(state, cap)
     allow_cloud = False  # ponytail: worker never opts into cloud by itself
 
     order = ("library", "embed_messages", "summaries")
+    stamp_changed = stamp != state.get("last_stamp")
+    jobs_to_run: list[str] = []
     for name in order:
+        if job_map.get(name) is None:
+            continue
+        if _job_done_for_stamp(state, name, stamp):
+            continue
+        if stamp_changed or _job_retry_due(state, name):
+            jobs_to_run.append(name)
+
+    if not jobs_to_run:
+        return False
+
+    retry_pause = _job_retry_interval()
+    for name in jobs_to_run:
         fn = job_map.get(name)
         if fn is None:
             continue
+        touch_heartbeat(output_dir)
         try:
             if name == "summaries":
                 result = fn(
@@ -329,8 +408,19 @@ def run_pass(
             result = {"status": "error", "skipped": False, "last_error": str(exc)}
             print(f"worker: {name} failed: {exc}", file=sys.stderr)
         _record_job(state, name, result, error=result.get("last_error"))
+        entry = state.setdefault("jobs", {}).setdefault(name, {})
+        if result.get("status") == "error":
+            retry_at = datetime.fromtimestamp(
+                time.time() + retry_pause,
+                tz=timezone.utc,
+            ).isoformat(timespec="seconds")
+            entry["retry_after"] = retry_at
+        elif result.get("skipped") or result.get("status") == "ok":
+            entry["ok_stamp"] = stamp
+            entry.pop("retry_after", None)
 
-    state["last_stamp"] = stamp
+    if _stamp_fully_processed(state, stamp, order):
+        state["last_stamp"] = stamp
     state["last_pass_at"] = _now_iso()
     _save_state(state_path, state)
     return True
@@ -340,29 +430,26 @@ def run_loop(
     output_dir: Path,
     *,
     interval: Optional[float] = None,
-    stop_event: Optional[Any] = None,
+    stop_event: Optional[threading.Event] = None,
     on_tick: Optional[Callable[[Path], None]] = None,
 ) -> None:
     """Main worker loop until ``stop_event`` is set or SIGINT/SIGTERM."""
     pause = float(interval if interval is not None else resolve_interval())
-    stopping = stop_event
+    stopping = stop_event if stop_event is not None else threading.Event()
 
     def _handle_sig(_signum, _frame) -> None:
-        if stopping is not None:
-            stopping.set()
+        stopping.set()
 
     old_int = signal.signal(signal.SIGINT, _handle_sig)
     old_term = signal.signal(signal.SIGTERM, _handle_sig)
     try:
-        while stopping is None or not stopping.is_set():
+        while not stopping.is_set():
             touch_heartbeat(output_dir)
             run_pass(output_dir)
             if on_tick is not None:
                 on_tick(output_dir)
-            if stopping is not None and stopping.wait(pause):
+            if stopping.wait(pause):
                 break
-            if stopping is None:
-                time.sleep(pause)
     finally:
         signal.signal(signal.SIGINT, old_int)
         signal.signal(signal.SIGTERM, old_term)
