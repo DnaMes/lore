@@ -58,9 +58,22 @@ def is_low_quality_title(text: str) -> bool:
         "invalid api key",
         "api error",
         "generate a file named agents.md",
+        "base directory for this skill",
+        "references are relative to",
+        "skill name=",
+        "shared workflow",
     )
     if any(normalized.startswith(prefix) for prefix in low_quality_prefixes):
         return True
+
+    skill_echo = re.match(r"^([\w-]+)\s+(/\S+)", lowered)
+    if skill_echo:
+        word = skill_echo.group(1)
+        slash_part = skill_echo.group(2).lstrip("/").rstrip(".")
+        if word.lower().startswith(slash_part.lower()) or slash_part.lower().startswith(
+            word.lower().split("-", maxsplit=1)[0]
+        ):
+            return True
 
     low_quality_fragments = (
         "on-request workspace-write",

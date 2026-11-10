@@ -1765,6 +1765,38 @@ def cmd_search(args):
         print()
 
 
+def cmd_library(args):
+    """Build a browsable Markdown library from the v2 store."""
+    from lore.library.builder import build_library
+    from lore.storage.writer import v2_db_path
+
+    store_dir = Path(args.output_dir).expanduser()
+    library_dir = Path(args.output).expanduser() if args.output else store_dir / "library"
+    since = None
+    if args.since:
+        try:
+            since = datetime.now() - parse_duration(args.since)
+        except ValueError as exc:
+            print(f"Invalid --since value: {exc}", file=sys.stderr)
+            return 1
+    if not v2_db_path(store_dir).exists():
+        print("No v2 store found. Run 'lore export --all' first.", file=sys.stderr)
+        return 1
+    try:
+        stats = build_library(
+            store_dir,
+            library_dir,
+            full=bool(args.full),
+            project=args.project,
+            since=since,
+        )
+    except OSError as exc:
+        print(f"Error writing library: {exc}", file=sys.stderr)
+        return 1
+    print(json.dumps(stats.to_dict()))
+    return 0
+
+
 def cmd_embed_messages(args):
     """Populate the optional per-message embedding vectors used by message search (#190).
 
@@ -2897,6 +2929,7 @@ COMMANDS = {
     "improve": cmd_improve,
     "summarize": cmd_summarize,
     "format": cmd_format,
+    "library": cmd_library,
 }
 
 
@@ -3560,6 +3593,21 @@ Examples:
         help="Print machine-readable JSON on stdout",
     )
     _add_automated_flag(summarize_parser)
+
+    library_parser = subparsers.add_parser(
+        "library", help="Build a browsable Markdown library from the v2 store"
+    )
+    library_parser.add_argument(
+        "--output",
+        help="Library output directory (default: <output-dir>/library)",
+    )
+    library_parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Rebuild every session page (default: incremental)",
+    )
+    library_parser.add_argument("--project", help="Limit to sessions of this project path")
+    library_parser.add_argument("--since", help="Only sessions updated since (e.g., 7d, 2w)")
 
     # format command - Format sessions with LLM
     format_parser = subparsers.add_parser(

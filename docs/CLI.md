@@ -19,13 +19,13 @@ Output of `.venv/bin/python lore_cli.py --help`:
 
 ```text
 usage: lore [-h] [-v] [--version] [--output-dir OUTPUT_DIR]
-            {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,backup,restore,bundle,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
+            {list,export,export-html,search,stats,digest,memory,watch,check,sources,jobs,threads,rules,metrics,prune,backup,restore,bundle,sync,run,generate-titles,reindex,embed-messages,analyze,knowledge,improve,summarize,library,format}
             ...
 
 Lore — local-first archive and shared agent memory for your AI coding sessions
 
 positional arguments:
-  {list,export,export-html,search,stats,digest,memory,watch,check,threads,rules,prune,backup,restore,bundle,sync,run,generate-titles,reindex,analyze,knowledge,improve,summarize,format}
+  {list,export,export-html,search,stats,digest,memory,watch,check,sources,jobs,threads,rules,metrics,prune,backup,restore,bundle,sync,run,generate-titles,reindex,embed-messages,analyze,knowledge,improve,summarize,library,format}
                         Commands
     list                List all sessions
     export              Export sessions to Markdown
@@ -36,8 +36,14 @@ positional arguments:
     memory              Manage the shared cross-tool memory store
     watch               Watch for new sessions
     check               Check tool availability
+    sources             Report per-source archive health (captured, filtered,
+                        unsupported, failed)
+    jobs                List or resume durable analysis jobs (the DB is the
+                        source of truth)
     threads             List threads
-    rules               Generate derived rules
+    rules               Generate derived rules, or export/activate harness
+                        recommendations
+    metrics             Report workflow metrics with kind and coverage
     prune               Prune sessions by prompt count
     backup              Write a versioned, consistent backup bundle
     restore             Restore the v2 store from a backup bundle
@@ -47,11 +53,14 @@ positional arguments:
     generate-titles     Generate readable titles for sessions
     reindex             Rebuild index from all sources on disk (fixes missing
                         sessions after sync)
+    embed-messages      Populate optional per-message embedding vectors for
+                        message search
     analyze             Generate AI-powered statistics and insights
     knowledge           Extract knowledge from sessions using LLM
     improve             Backfill embeddings, extract knowledge, and propose
                         memory candidates
     summarize           Generate AI session summaries for archived sessions
+    library             Build a browsable Markdown library from the v2 store
     format              Format sessions with AI-generated summaries and tags
 
 options:
@@ -1087,6 +1096,36 @@ options:
 ```
 
 Note: Default provider is `ollama` (local). `gemini`, `openrouter` and `jev` need `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. `--dry-run` estimates tokens and calls without contacting a provider.
+
+## library
+
+Build a browsable, Obsidian-compatible Markdown library from the v2 store.
+
+Writes: Markdown pages under the library output directory (default `<output-dir>/library`). Reads the v2 store only; it does not re-parse tool sources. Automated (exec/cron/subagent) sessions, subagent composite ids (`:agent-` in the session id or `relation: subagent`), and tombstoned or pruned ids are excluded — matching the default web session list, without `--include-automated`.
+
+Session and shelf titles use the same display-title pass as the web UI (native title when usable, otherwise the first real user prompt or command line; low-quality or skill-shaped titles are not shown raw). Project headings use a short label (`parent/dir` under the path, or the last segment). `Index.md` lists normal projects under **Projects** and groups `/tmp`, empty paths and other unscoped trees under **Scratch & unknown**. Counts on `Index.md` and project pages include only sessions that received a library page (published), not filtered-out rows.
+
+On stdout the command prints JSON counts: `sessions_written`, `projects_written`, `days_written`, and `skipped`. Incremental runs compare each session fingerprint to `.lore-library.json` in the output directory and skip unchanged sessions unless `--full` is given; a changed session rebuilds its page and the affected project and day pages plus `Index.md`.
+
+Layout:
+
+- `Sessions/<project>/<date> <title>.md` — one session per file (Markdown export from the store)
+- `Projects/<project>.md` — sessions for that project, newest first, with wikilinks and short project label as the page title
+- `Days/<YYYY-MM-DD>.md` — sessions that day across projects
+- `Index.md` — project shelves (plus **Scratch & unknown** when needed), recent days, and top tags
+- `.lore-library.json` — manifest of session fingerprints for incremental rebuilds
+
+```text
+usage: lore library [-h] [--output OUTPUT] [--full] [--project PROJECT]
+                    [--since SINCE]
+
+options:
+  -h, --help         show this help message and exit
+  --output OUTPUT    Library output directory (default: <output-dir>/library)
+  --full             Rebuild every session page (default: incremental)
+  --project PROJECT  Limit to sessions of this project path
+  --since SINCE      Only sessions updated since (e.g., 7d, 2w)
+```
 
 ## format
 
