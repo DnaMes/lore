@@ -83,6 +83,19 @@ D
 ### Added
 - `lore backup <path>`, `lore backup verify <path>` and `lore restore <path> [--force]` (#161): a bundle is a zip with a format-version marker, a SQLite-consistent snapshot taken with the online-backup API (never a copy of a live WAL database) and a `manifest.json` carrying the schema and applied migration versions, the Lore version, the creation time, one sha256 per member and the row count of every archived table — sessions, messages, the shared FTS index, memory, tags and the other annotations. Verification checks the structure, every checksum, `PRAGMA integrity_check`, the row counts and schema compatibility without restoring; a restore verifies first, refuses an existing store without `--force`, and swaps the snapshot in from a sibling temp file so a failed restore leaves the live store untouched. Bundles carry no credentials: nothing outside the store is read, and provider credentials live in the environment.
 
+### Changed
+- Web search builds snippets and evidence only for the returned page and annotates only the hits that survive the result filters, instead of computing them for a 200-hit window that is thrown away; web search went from 7-15 s to 0.6-2 s with the same top hits.
+- The store check is memoised on the store files' size and mtime, so a search no longer re-hashes every session row on each request (154 ms on the real store), and query embeddings are cached (18 ms -> 0.004 ms for a repeated query).
+- The session page is built from the v2 store (the export second, the live source last) with readability phase 1: one card per agent turn, one row per tool call, tool output folded to ten lines, dates and day separators and a narrower prose column. The research note behind it is `docs/research/2026-11-10-session-view-readability.md`.
+- Session view review follow-ups: injected events (skill bodies, hook feedback, task notifications, system reminders and their echoes) are folded into the current turn instead of being listed as user prompts, an empty tool output is no longer overwritten by a later result, and the cached session build is keyed on the noise rules so a rules change re-renders.
+
+### Fixed
+- Host export paths resolve inside the container mount: the part of the path after the output directory is re-anchored under the mount, so export path resolution now succeeds for all 12694 of 12694 sessions in the owner's container (previously 0 of 12694) and the session pages render from the export instead of falling back to live extraction.
+- A stale search answer no longer replaces newer hits in the web UI: every request carries a sequence number and is aborted when a newer query starts, so only the newest query paints, an error shows a message instead of an empty list and an empty result says "No matches".
+- `?live=1` no longer re-extracts a tool when the source file is missing: it serves the stored copy with a notice that the source file is no longer on disk (112 s -> 0.10 s).
+- Memory context shows one summary per recent session (the newest summary wins instead of a session appearing several times) and guards against old stores that do not have the expected schema.
+- The MCP `list_recent_sessions` tool lists recent sessions when the store cannot be read instead of failing on it.
+
 ## [2.4.0] - 2026-10-26
 
 ### Added
