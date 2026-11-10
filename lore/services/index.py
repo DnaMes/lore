@@ -567,16 +567,10 @@ def _hybrid_search(
     if not vec_results:
         return fts_results
     fused = rrf_merge(fts_results, vec_results, limit=limit)
-    # (#175) Fusion rebuilds the entries; keep the message evidence the keyword
-    # pass found, so a fused hit still names the message behind it.
-    evidence_by_id = {
-        str(result["session"].get("id")): result.get("evidence")
-        for result in fts_results
-        if result.get("evidence")
-    }
+    # (#175) Every hit carries an evidence field; keyword hits keep theirs (or get it
+    # when the caller annotates the returned page), semantic-only hits have none.
     for entry in fused:
-        if "evidence" not in entry:
-            entry["evidence"] = evidence_by_id.get(str(entry["session"].get("id")))
+        entry.setdefault("evidence", None)
     return fused
 
 
@@ -761,6 +755,7 @@ def search_index(
     if _v2_enabled():
         try:
             from lore.storage import search_sessions, v2_is_available
+            from lore.storage.search import annotate_session_hits
 
             # Pass compare_to so a v2 store that is older than the JSON index
             # (e.g. a prune ran but the v2 dual-write failed with a constraint
@@ -798,7 +793,9 @@ def search_index(
                     limit=fetch_limit,
                     scope=scope,
                     include_automated=include_automated,
+                    annotate=False,
                 )
+                keyword_hits = results
                 # Hybrid: fuse keyword hits with semantic (vector) hits so a
                 # query that only matches by meaning still surfaces. Only when
                 # enabled, the vector backend is present, and no role scope is
@@ -819,6 +816,15 @@ def search_index(
                 # Always take this page's slice: a fused query fetched a wider
                 # window than it returns.
                 results = results[start_index : start_index + limit]
+                # Snippets and evidence cost per hit, so only this page gets them;
+                # semantic-only hits are not keyword matches and keep their own fields.
+                keyword_ids = {str(r["session"].get("id")) for r in keyword_hits}
+                annotate_session_hits(
+                    index_dir,
+                    [r for r in results if str(r["session"].get("id")) in keyword_ids],
+                    query,
+                    scope=scope,
+                )
                 if results:
                     results = filter_automated_results(results, include_automated)
                     return apply_deleted_filter_to_results(results, deleted)

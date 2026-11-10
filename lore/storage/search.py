@@ -171,6 +171,7 @@ def search_sessions(
     offset: int = 0,
     scope: Optional[str] = None,
     include_automated: bool = False,
+    annotate: bool = True,
 ) -> List[Dict[str, Any]]:
     """Full-text search sessions in the v2 store.
 
@@ -190,6 +191,9 @@ def search_sessions(
             requested role whose content matches every query term.
         include_automated: also return sessions whose origin is exec/cron/subagent
             (hidden by default).
+        annotate: build ``snippet`` and ``evidence`` for the hits. A caller that
+            ranks a wide window and keeps only a page passes ``False`` and calls
+            :func:`annotate_session_hits` on that page (both cost per hit).
 
     Returns:
         ``[{"session": <legacy session dict>, "score": <float>, "snippet":
@@ -239,8 +243,7 @@ def search_sessions(
                    s.messages_count, s.prompt_count, s.prompt_outline,
                    s.export_path, s.total_tokens,
                    {session_contract_select(conn, "s")},
-                   bm25(search_index) AS score,
-                   snippet(search_index, {SEARCH_INDEX_BODY_COLUMN}, ?, ?, '…', 24) AS snippet
+                   bm25(search_index) AS score
             FROM search_index
             JOIN sessions s ON s.id = search_index.entity_id
             WHERE search_index MATCH ?
@@ -249,8 +252,6 @@ def search_sessions(
             LIMIT ? OFFSET ?
             """,
             (
-                SNIPPET_OPEN,
-                SNIPPET_CLOSE,
                 fts_query,
                 *ignored_params,
                 *filter_params,
@@ -295,23 +296,58 @@ def search_sessions(
         if scoped_session_ids is not None and skipped < window_offset:
             skipped += 1
             continue
-        results.append(
-            {"session": session, "score": float(row["score"]), "snippet": row["snippet"] or None}
-        )
+        results.append({"session": session, "score": float(row["score"])})
         if len(results) >= limit:
             break
-    if results:
-        # (#175) Name the message a hit is based on, so a result is evidence
-        # rather than a claim. One connection, one throwaway index, one pass.
-        evidence = message_evidence_for_sessions(
-            output_dir,
-            [str(entry["session"].get("id")) for entry in results],
-            query,
-            roles=scope_roles,
-        )
-        for entry in results:
-            matches = evidence.get(str(entry["session"].get("id")), [])
-            entry["evidence"] = matches[0] if matches else None
+    if annotate:
+        annotate_session_hits(output_dir, results, query, scope=scope_value)
+    return results
+
+
+def annotate_session_hits(
+    output_dir: Path,
+    results: List[Dict[str, Any]],
+    query: str,
+    *,
+    scope: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Fill ``snippet`` and ``evidence`` of :func:`search_sessions` hits in place.
+
+    Both are computed only for the given hits: ``snippet()`` in the ranking query
+    ran for every matching session before the sort (2 900 bodies for a common
+    term), and evidence re-indexes each hit's messages. Hits the query does not
+    match keep ``None``. Returns ``results``.
+    """
+    if not results:
+        return results
+    scope_roles = SEARCH_SCOPES.get((scope or "all").strip().lower(), ())
+    ids = [str(entry["session"].get("id")) for entry in results]
+    snippets: Dict[str, Optional[str]] = {}
+    fts_query = build_fts_query(query)
+    db = v2_db_path(output_dir)
+    if fts_query is not None and db.exists():
+        conn = open_connection(db)
+        try:
+            placeholders = ",".join("?" for _ in ids)
+            for row in conn.execute(
+                f"SELECT entity_id, snippet(search_index, {SEARCH_INDEX_BODY_COLUMN}, "
+                "?, ?, '…', 24) AS snippet FROM search_index "
+                "WHERE search_index MATCH ? AND search_index.entity_type = 'session' "
+                f"AND search_index.entity_id IN ({placeholders})",
+                (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, *ids),
+            ):
+                snippets[str(row["entity_id"])] = row["snippet"] or None
+        except sqlite3.Error:
+            snippets = {}
+        finally:
+            conn.close()
+    # (#175) Name the message a hit is based on, so a result is evidence
+    # rather than a claim. One connection, one throwaway index, one pass.
+    evidence = message_evidence_for_sessions(output_dir, ids, query, roles=scope_roles)
+    for entry, session_id in zip(results, ids):
+        entry["snippet"] = snippets.get(session_id)
+        matches = evidence.get(session_id, [])
+        entry["evidence"] = matches[0] if matches else None
     return results
 
 

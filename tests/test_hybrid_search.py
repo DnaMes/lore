@@ -282,3 +282,27 @@ def test_semantic_search_sessions_applies_the_configured_cutoff(tmp_path, monkey
     monkeypatch.setenv("LORE_SEMANTIC_MAX_DISTANCE", "1.5")
     hits = semantic_search_sessions(tmp_path, "anything")
     assert {h["session"]["id"] for h in hits} == {"near", "far"}
+
+
+def test_hybrid_annotates_only_the_returned_page(tmp_path, monkeypatch):
+    """The fused window is wide (_HYBRID_WINDOW), but snippets and message evidence
+    are only built for the page that is returned: building them for the whole window
+    made a 10-hit web search take ~8 s on a real store."""
+    from lore.storage import search as storage_search
+
+    monkeypatch.setattr("lore.storage.semantic_search_sessions", lambda *a, **k: [])
+    seen = []
+    real = storage_search.message_evidence_for_sessions
+
+    def spy(output_dir, session_ids, query, **kwargs):
+        seen.append(list(session_ids))
+        return real(output_dir, session_ids, query, **kwargs)
+
+    monkeypatch.setattr(storage_search, "message_evidence_for_sessions", spy)
+    index_path = _build(tmp_path, [_session(f"s{i}", body=f"needle number {i}") for i in range(12)])
+    results = search_index(index_path, "needle", deleted=set(), limit=3)
+    assert len(results) == 3
+    assert sum(len(ids) for ids in seen) == 3
+    for hit in results:
+        assert hit["snippet"] and "needle" in hit["snippet"].lower()
+        assert hit["evidence"] and hit["evidence"]["seq"] == 0
