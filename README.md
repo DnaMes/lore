@@ -222,6 +222,7 @@ Environment variables:
 | --- | --- | --- |
 | `LORE_WORKER_INTERVAL` | `300` | Seconds between loop iterations. |
 | `LORE_WORKER_SUMMARY_DAILY_CAP` | `20` | Max summaries written per UTC day. |
+| `LORE_WORKER_EMBED_BUDGET` | `120` | Seconds of message embedding per pass (child process); a pass that embedded something runs again on the next pass until the backlog is drained. |
 
 ```bash
 lore worker                    # loop until Ctrl+C or SIGTERM

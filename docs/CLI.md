@@ -1177,7 +1177,7 @@ The library job runs as a child process (`lore` console script when on `PATH`, e
 a child still running at the 1800 s limit is killed and recorded as timed out. `LORE_WORKER_INTERVAL` sets the pause between passes (default `300`
 seconds). Failed jobs keep the previous `last_stamp` and are retried with per-job backoff
 of at least 15 minutes (or the interval, whichever is larger), recorded in `state.json`.
-`LORE_WORKER_SUMMARY_DAILY_CAP` limits summaries per UTC day (default `20`).
+`LORE_WORKER_SUMMARY_DAILY_CAP` limits summaries per UTC day (default `20`). Message embeddings run as a child `lore embed-messages --budget N` with `LORE_WORKER_EMBED_BUDGET` seconds per pass (default `120`); while a pass still embeds messages the job reruns on the next pass, so a backlog drains without holding memory in the loop process.
 Corrupt or unreadable `state.json` is treated as empty state (warning on stderr).
 
 ```text

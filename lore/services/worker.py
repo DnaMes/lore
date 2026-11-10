@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -30,7 +31,8 @@ MIN_JOB_RETRY_SECONDS = 900
 DEFAULT_SUMMARY_CAP = 20
 LIBRARY_TIMEOUT = 1800
 HEARTBEAT_POLL_SECONDS = 15
-EMBED_TIMEOUT = 600
+# Seconds of embedding per pass (child process); more passes drain a backlog.
+DEFAULT_EMBED_BUDGET = 120
 SUMMARY_TIMEOUT = 1800
 
 JobFn = Callable[..., dict[str, Any]]
@@ -170,6 +172,8 @@ def _parse_iso_ts(value: str) -> Optional[float]:
 
 def _job_retry_due(state: dict[str, Any], name: str) -> bool:
     entry = (state.get("jobs") or {}).get(name) or {}
+    if entry.get("pending"):
+        return True
     if entry.get("status") != "error":
         return False
     retry_after = entry.get("retry_after")
@@ -233,22 +237,26 @@ def _run_job_with_timeout(
         pool.shutdown(wait=False, cancel_futures=True)
 
 
-def run_library_job(output_dir: Path) -> dict[str, Any]:
+def _lore_command_head() -> list[str]:
     import lore_cli
-
-    if "library" not in lore_cli.COMMANDS:
-        print("worker: skipping library (command not available)", file=sys.stderr)
-        return {"status": "skipped", "skipped": True}
 
     console = shutil.which("lore")
     if console:
-        head = [console]
-    else:
-        head = [sys.executable, str(Path(lore_cli.__file__).resolve())]
-    # --output-dir is a global option and must precede the subcommand.
-    cmd = [*head, "--output-dir", str(output_dir), "library"]
+        return [console]
+    return [sys.executable, str(Path(lore_cli.__file__).resolve())]
 
-    deadline = time.monotonic() + LIBRARY_TIMEOUT
+
+def _run_cli_child(
+    output_dir: Path, args: list[str], timeout: float, label: str
+) -> tuple[dict[str, Any], str]:
+    """Run ``lore --output-dir <dir> <args>`` as a child, keeping the heartbeat fresh.
+
+    A child process returns its memory when it exits; the loop process stays small.
+    Returns the job result and the child's stdout.
+    """
+    # --output-dir is a global option and must precede the subcommand.
+    cmd = [*_lore_command_head(), "--output-dir", str(output_dir), *args]
+    deadline = time.monotonic() + timeout
     with (
         tempfile.TemporaryFile("w+", encoding="utf-8") as out_f,
         tempfile.TemporaryFile("w+", encoding="utf-8") as err_f,
@@ -256,8 +264,8 @@ def run_library_job(output_dir: Path) -> dict[str, Any]:
         try:
             proc = subprocess.Popen(cmd, stdout=out_f, stderr=err_f, text=True)
         except OSError as exc:
-            return {"status": "error", "skipped": False, "last_error": str(exc)}
-        # Poll instead of blocking so the heartbeat stays fresh during long builds.
+            return {"status": "error", "skipped": False, "last_error": str(exc)}, ""
+        # Poll instead of blocking so the heartbeat stays fresh during long runs.
         while True:
             remaining = deadline - time.monotonic()
             if remaining <= 0:
@@ -267,8 +275,8 @@ def run_library_job(output_dir: Path) -> dict[str, Any]:
                     "status": "error",
                     "skipped": False,
                     "timed_out": True,
-                    "last_error": "library subprocess timed out",
-                }
+                    "last_error": f"{label} subprocess timed out",
+                }, ""
             try:
                 proc.wait(timeout=min(HEARTBEAT_POLL_SECONDS, remaining))
                 break
@@ -281,14 +289,30 @@ def run_library_job(output_dir: Path) -> dict[str, Any]:
 
     if proc.returncode != 0:
         err = (stderr or stdout or "").strip() or f"exit {proc.returncode}"
-        print(f"worker: library failed: {err}", file=sys.stderr)
-        return {"status": "error", "skipped": False, "last_error": err}
-    return {"status": "ok", "skipped": False}
+        print(f"worker: {label} failed: {err}", file=sys.stderr)
+        return {"status": "error", "skipped": False, "last_error": err}, stdout
+    return {"status": "ok", "skipped": False}, stdout
+
+
+def run_library_job(output_dir: Path) -> dict[str, Any]:
+    import lore_cli
+
+    if "library" not in lore_cli.COMMANDS:
+        print("worker: skipping library (command not available)", file=sys.stderr)
+        return {"status": "skipped", "skipped": True}
+    result, _stdout = _run_cli_child(output_dir, ["library"], LIBRARY_TIMEOUT, "library")
+    return result
+
+
+def _embed_budget() -> int:
+    raw = os.environ.get("LORE_WORKER_EMBED_BUDGET", "").strip()
+    try:
+        return max(10, int(raw)) if raw else DEFAULT_EMBED_BUDGET
+    except ValueError:
+        return DEFAULT_EMBED_BUDGET
 
 
 def run_embed_messages_job(output_dir: Path) -> dict[str, Any]:
-    from lore.storage import embed_messages
-
     if not (embeddings_available() and sqlite_vec_available()):
         print(
             "worker: skipping embed-messages (semantic extra not installed)",
@@ -298,16 +322,17 @@ def run_embed_messages_job(output_dir: Path) -> dict[str, Any]:
     db = v2_db_path(output_dir)
     if not db.exists():
         return {"status": "skipped", "skipped": True, "last_error": "no v2 store"}
-
-    def _run() -> dict[str, Any]:
-        conn = open_connection(db)
-        try:
-            written = embed_messages(conn, budget_seconds=float(EMBED_TIMEOUT))
-        finally:
-            conn.close()
-        return {"status": "ok", "skipped": False, "embedded": written}
-
-    return _run_job_with_timeout(_run, EMBED_TIMEOUT, output_dir=output_dir)
+    budget = _embed_budget()
+    # embed-messages commits its progress, so a budgeted run continues next pass.
+    result, stdout = _run_cli_child(
+        output_dir, ["embed-messages", "--budget", str(budget)], budget + 120, "embed-messages"
+    )
+    if result.get("status") == "ok":
+        match = re.search(r"Embedded (\d+) message", stdout or "")
+        embedded = int(match.group(1)) if match else 0
+        result["embedded"] = embedded
+        result["more"] = embedded > 0  # a run that did work may have stopped on its budget
+    return result
 
 
 def run_summaries_job(
@@ -444,11 +469,16 @@ def run_pass(
                 tz=timezone.utc,
             ).isoformat(timespec="seconds")
             entry["retry_after"] = retry_at
+        elif result.get("more"):
+            # Work left for this stamp: run again next pass without waiting for a sync.
+            entry["pending"] = True
+            entry.pop("retry_after", None)
         elif result.get("status") == "ok" or (
             result.get("skipped") and not result.get("deferred_daily_cap")
         ):
             entry["ok_stamp"] = stamp
             entry.pop("retry_after", None)
+            entry.pop("pending", None)
 
     if _stamp_fully_processed(state, stamp, order):
         state["last_stamp"] = stamp

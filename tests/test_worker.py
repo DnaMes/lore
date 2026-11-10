@@ -620,3 +620,62 @@ def test_hung_job_timeout_does_not_block_on_executor_exit(tmp_path: Path, monkey
     assert result["timed_out"] is True
     assert "timed out" in result["last_error"]
     assert elapsed < 1.5
+
+
+def test_embed_job_runs_budgeted_child_process(tmp_path: Path, monkeypatch):
+    """Embeddings run as a child process with a small per-pass budget, so the loop
+    process does not keep the model and vectors in memory (it reached its 3 GiB cap)."""
+    from lore.services import worker as worker_mod
+
+    seen: list[list[str]] = []
+
+    class Proc:
+        returncode = 0
+
+        def __init__(self, cmd, stdout=None, **_kwargs):
+            seen.append(cmd)
+            stdout.write("Embedded 250 messages.\n")
+
+        def wait(self, timeout=None):
+            return 0
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(worker_mod, "embeddings_available", lambda: True)
+    monkeypatch.setattr(worker_mod, "sqlite_vec_available", lambda: True)
+    monkeypatch.setattr(worker_mod.subprocess, "Popen", Proc)
+    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/lore")
+    monkeypatch.setenv("LORE_WORKER_EMBED_BUDGET", "90")
+    (tmp_path / "index_v2.sqlite").write_text("", encoding="utf-8")
+    monkeypatch.setattr(worker_mod, "v2_db_path", lambda out: out / "index_v2.sqlite")
+
+    result = worker_mod.run_embed_messages_job(tmp_path)
+
+    import lore_cli
+
+    args = lore_cli.build_parser().parse_args(seen[0][1:])
+    assert args.command == "embed-messages" and float(args.budget) == 90
+    assert result["status"] == "ok" and result["embedded"] == 250
+    assert result["more"] is True  # a full budget's worth may leave work behind
+
+
+def test_job_with_more_work_runs_again_next_pass_without_a_new_stamp(tmp_path, monkeypatch):
+    from lore.services import worker as worker_mod
+
+    monkeypatch.setattr(worker_mod, "read_store_stamp", lambda _out: "stamp-1")
+    calls: list[str] = []
+
+    def embed(_out):
+        calls.append("embed")
+        return {"status": "ok", "skipped": False, "embedded": 10, "more": len(calls) < 2}
+
+    jobs = {
+        "library": lambda _o: {"status": "ok", "skipped": False},
+        "embed_messages": embed,
+        "summaries": lambda _o, **_k: {"status": "skipped", "skipped": True},
+    }
+    worker_mod.run_pass(tmp_path, jobs=jobs)
+    worker_mod.run_pass(tmp_path, jobs=jobs)
+    worker_mod.run_pass(tmp_path, jobs=jobs)
+    assert calls == ["embed", "embed"]  # reruns while there is more, then stops
