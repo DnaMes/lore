@@ -10,8 +10,10 @@ from pathlib import Path
 import pytest
 
 from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.library.builder import build_library
+from lore.library.builder import _fingerprint, build_library
 from lore.services.index import load_deleted_session_ids, save_deleted_session_ids
+from lore.storage import retention
+from lore.storage.reader import load_session_messages_v2
 from lore.storage.schema import initialise
 from lore.storage.summaries import save_summary, summary_fingerprint
 from lore.storage.tags import add_session_tag
@@ -19,6 +21,12 @@ from lore.storage.writer import v2_db_path, write_sessions
 
 T0 = datetime(2026, 11, 8, 10, 0, 0, tzinfo=timezone.utc)
 PROJECT = "/home/user/alpha"
+PROJECT_B = "/home/user/beta"
+
+
+def _id_tail(session_id: str) -> str:
+    """The id part of a library session file name (see builder._session_stem)."""
+    return re.sub(r"[^A-Za-z0-9]", "", session_id)[-12:]
 
 
 def _msg(role: Role, content: str, minutes: int = 0) -> UnifiedMessage:
@@ -152,17 +160,75 @@ def test_incremental_rewrites_only_touched_pages(store_and_library: tuple[Path, 
     assert any("human-interactive" in p.name or "Ship-library" in p.name for p in changed)
 
 
+def test_pruned_session_gets_no_library_page(store_and_library: tuple[Path, Path]) -> None:
+    store, library = store_and_library
+    sessions = [_session("keep-me", title="Visible"), _session("pruned-me", title="Pruned")]
+    write_sessions(v2_db_path(store), sessions)
+    retention.record_ignored(store, ["pruned-me"], reason="prune")
+    (store / "ignored.json").write_text('["pruned-me"]', encoding="utf-8")
+    build_library(store, library, full=True)
+    text = "\n".join(p.read_text(encoding="utf-8") for p in library.rglob("*.md"))
+    assert "pruned-me" not in text
+    assert "Pruned" not in text
+    assert not list((library / "Sessions").rglob("*pruned*"))
+    manifest = json.loads((library / ".lore-library.json").read_text(encoding="utf-8"))
+    assert "pruned-me" not in manifest.get("sessions", {})
+
+
+def test_project_scoped_build_preserves_other_project(
+    store_and_library: tuple[Path, Path],
+) -> None:
+    store, library = store_and_library
+    sessions = [
+        _session("alpha-one", title="Alpha one"),
+        _session("beta-one", title="Beta one", project=PROJECT_B),
+    ]
+    write_sessions(v2_db_path(store), sessions)
+    build_library(store, library, full=True)
+    beta_pages = list((library / "Sessions").rglob("*Beta-one*"))
+    assert beta_pages
+    manifest_before = json.loads((library / ".lore-library.json").read_text(encoding="utf-8"))
+    assert "beta-one" in manifest_before["sessions"]
+
+    build_library(store, library, full=False, project=PROJECT)
+    assert list((library / "Sessions").rglob("*Beta-one*"))
+    manifest_after = json.loads((library / ".lore-library.json").read_text(encoding="utf-8"))
+    assert manifest_after["sessions"]["beta-one"] == manifest_before["sessions"]["beta-one"]
+
+
+def test_project_scoped_build_removes_deleted_session_in_scope(
+    store_and_library: tuple[Path, Path],
+) -> None:
+    store, library = store_and_library
+    sessions = [
+        _session("alpha-drop", title="Alpha drop"),
+        _session("beta-keep", title="Beta keep", project=PROJECT_B),
+    ]
+    write_sessions(v2_db_path(store), sessions)
+    build_library(store, library, full=True)
+    assert list((library / "Sessions").rglob("*Alpha-drop*"))
+
+    deleted_path = store / "deleted_sessions.json"
+    save_deleted_session_ids({"alpha-drop"}, store, deleted_path)
+    build_library(store, library, full=False, project=PROJECT)
+    assert not list((library / "Sessions").rglob("*Alpha-drop*"))
+    assert list((library / "Sessions").rglob("*Beta-keep*"))
+    manifest = json.loads((library / ".lore-library.json").read_text(encoding="utf-8"))
+    assert "alpha-drop" not in manifest["sessions"]
+    assert "beta-keep" in manifest["sessions"]
+
+
 def test_removed_session_page_deleted(store_and_library: tuple[Path, Path]) -> None:
     store, library = store_and_library
     _seed_store(store)
     build_library(store, library, full=True)
-    paths_before = list((library / "Sessions").rglob("*human-se*.md"))
+    paths_before = list((library / "Sessions").rglob(f"*{_id_tail('human-second')}*.md"))
     assert paths_before
     deleted_path = store / "deleted_sessions.json"
     save_deleted_session_ids({"human-second"}, store, deleted_path)
     assert "human-second" in load_deleted_session_ids(deleted_path)
     stats = build_library(store, library, full=False)
-    assert not list((library / "Sessions").rglob("*human-se*.md"))
+    assert not list((library / "Sessions").rglob(f"*{_id_tail('human-second')}*.md"))
     assert stats.sessions_written == 0
 
 
@@ -170,7 +236,7 @@ def test_unsafe_titles_slugged_and_escaped(store_and_library: tuple[Path, Path])
     store, library = store_and_library
     _seed_store(store)
     build_library(store, library, full=True)
-    session_files = list((library / "Sessions").rglob("*unsafe-t*.md"))
+    session_files = list((library / "Sessions").rglob(f"*{_id_tail('unsafe-title')}*.md"))
     assert session_files
     name = session_files[0].name
     assert "/" not in name and ".." not in name
@@ -312,6 +378,115 @@ def test_counts_only_sessions_with_library_pages(
     assert not list((library / "Sessions").rglob("*no-body*"))
 
 
+def test_session_page_uses_display_title_not_raw_meta(
+    store_and_library: tuple[Path, Path],
+) -> None:
+    store, library = store_and_library
+    sessions = [
+        UnifiedSession(
+            tool=Tool.CLAUDE_CODE,
+            session_id="display-head01",
+            created_at=T0,
+            last_updated=T0 + timedelta(hours=1),
+            project_path=PROJECT,
+            title='<skill name="using-superpowers" path="...">',
+            origin="interactive",
+            messages=[
+                _msg(Role.USER, "Real topic for session page heading", 0),
+                _msg(Role.ASSISTANT, "ok", 1),
+            ],
+        ),
+    ]
+    write_sessions(v2_db_path(store), sessions)
+    build_library(store, library, full=True)
+    page = next(library.glob("Sessions/**/*.md"))
+    body = page.read_text(encoding="utf-8")
+    assert "# Real topic for session page heading" in body
+    assert "title: Real topic for session page heading" in body
+    assert '<skill name="using-superpowers"' not in body
+
+
+def test_stale_session_path_removed_when_title_or_project_changes(
+    store_and_library: tuple[Path, Path],
+) -> None:
+    store, library = store_and_library
+    sid = "rename-session"
+    write_sessions(
+        v2_db_path(store),
+        [_session(sid, title="First title", project=PROJECT)],
+    )
+    build_library(store, library, full=True)
+    old_pages = list((library / "Sessions").rglob(f"*{_id_tail(sid)}*.md"))
+    assert len(old_pages) == 1
+    old_path = old_pages[0]
+
+    write_sessions(
+        v2_db_path(store),
+        [_session(sid, title="Renamed title", project=PROJECT_B)],
+    )
+    build_library(store, library, full=False)
+    assert not old_path.is_file()
+    new_pages = list((library / "Sessions").rglob(f"*{_id_tail(sid)}*.md"))
+    assert len(new_pages) == 1
+    assert new_pages[0] != old_path
+
+
+def test_incremental_skips_message_load_for_unchanged_sessions(
+    store_and_library: tuple[Path, Path], monkeypatch
+) -> None:
+    store, library = store_and_library
+    _seed_store(store)
+    build_library(store, library, full=True)
+    calls: list[str] = []
+    real = load_session_messages_v2
+
+    def _track(output_dir: Path, session_id: str, **kwargs):  # type: ignore[no-untyped-def]
+        calls.append(session_id)
+        return real(output_dir, session_id, **kwargs)
+
+    monkeypatch.setattr("lore.library.builder.load_session_messages_v2", _track)
+    add_session_tag(store, "human-interactive", "another-tag")
+    calls.clear()
+    build_library(store, library, full=False)
+    assert "human-second" not in calls
+    assert "human-interactive" in calls
+
+
+def test_fingerprint_includes_title_and_prompt_outline(
+    store_and_library: tuple[Path, Path],
+) -> None:
+    base_meta = {
+        "id": "fp-sess",
+        "updated": "2026-11-08T10:00:00+00:00",
+        "messages": 2,
+        "title": "Alpha",
+        "prompt_outline": "outline a",
+    }
+    tags: list[str] = []
+    fp_a = _fingerprint(base_meta, tags, None)
+    fp_b = _fingerprint({**base_meta, "title": "Beta"}, tags, None)
+    fp_c = _fingerprint({**base_meta, "prompt_outline": "outline b"}, tags, None)
+    assert fp_a != fp_b
+    assert fp_a != fp_c
+
+    store, library = store_and_library
+    sid = "title-backfill"
+    sess = _session(sid, title="Stored title v1")
+    write_sessions(v2_db_path(store), [sess])
+    build_library(store, library, full=True)
+    old_page = next((library / "Sessions").rglob(f"*{_id_tail(sid)}*.md"))
+    assert "Stored title v1" in old_page.read_text(encoding="utf-8")
+
+    sess2 = _session(sid, title="Stored title v2")
+    sess2.last_updated = sess.last_updated
+    write_sessions(v2_db_path(store), [sess2])
+    stats = build_library(store, library, full=False)
+    assert stats.sessions_written == 1
+    assert not old_page.is_file()
+    new_page = next((library / "Sessions").rglob(f"*{_id_tail(sid)}*.md"))
+    assert "Stored title v2" in new_page.read_text(encoding="utf-8")
+
+
 def test_cli_library_prints_stats(
     store_and_library: tuple[Path, Path], monkeypatch, capsys
 ) -> None:
@@ -338,3 +513,14 @@ def test_cli_library_prints_stats(
     out = capsys.readouterr().out.strip()
     payload = json.loads(out)
     assert payload["sessions_written"] >= 3
+
+
+def test_session_paths_do_not_collide_on_a_shared_id_prefix():
+    """Time-ordered ids (OpenCode ``ses_…``, UUIDv7) share their first characters;
+    two such sessions with the same day and title must still get two pages."""
+    from lore.library.builder import _session_stem
+
+    base = {"title": "One word reply", "created": "2026-06-24T10:00:00", "project": "/p"}
+    _, first = _session_stem({**base, "id": "ses_1046bec12ffeYABmVqhiLqOC7l"})
+    _, second = _session_stem({**base, "id": "ses_1046da9ccffeDqIpViSo5fQXny"})
+    assert first != second

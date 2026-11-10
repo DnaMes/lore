@@ -18,7 +18,7 @@ from lore.interfaces.web_data import _tool_from_value
 from lore.services.index import annotate_display_titles, is_automated, load_deleted_session_ids
 from lore.services.memory_context import select_context_memories
 from lore.storage.memory import MemoryEntry, list_memory
-from lore.storage.reader import load_index_v2, load_session_messages_v2
+from lore.storage.reader import load_ignored_session_ids, load_index_v2, load_session_messages_v2
 from lore.storage.summaries import get_summary
 from lore.storage.tags import all_tags_by_session, list_all_tags
 from lore.storage.writer import v2_db_path
@@ -151,24 +151,49 @@ def _library_base_title(
     return f"Session {id8}"
 
 
+def _needs_messages_for_title(meta: Dict[str, Any], builder: IndexBuilder) -> bool:
+    native = (meta.get("title") or "").strip()
+    cleaned_native = builder._clean_title_text(native)
+    if _library_native_title_usable(cleaned_native):
+        return False
+    outline = (meta.get("prompt_outline") or "").strip()
+    if outline:
+        cleaned_outline = builder._clean_title_text(outline)
+        if cleaned_outline and not is_low_quality_title(cleaned_outline):
+            return False
+    return True
+
+
 def _attach_display_titles(
     output_dir: Path,
     entries: Dict[str, _SessionEntry],
+    old_sessions: Optional[Dict[str, Any]] = None,
 ) -> None:
     builder = IndexBuilder(output_dir)
+    prev_map = old_sessions or {}
     draft_rows: List[Dict[str, Any]] = []
+    pending_sids: List[str] = []
     for sid, entry in entries.items():
-        messages = (
-            load_session_messages_v2(output_dir, sid, include_reasoning=True)
-            if entry.has_body
-            else []
-        )
+        prev = prev_map.get(sid) or {}
+        stored_title = str(prev.get("display_title") or "")
+        if prev.get("fingerprint") == entry.fingerprint and stored_title:
+            entries[sid] = replace(entry, display_title=stored_title)
+            continue
+        messages: List[Any] = []
+        if entry.has_body and _needs_messages_for_title(entry.meta, builder):
+            loaded = load_session_messages_v2(output_dir, sid, include_reasoning=True)
+            messages = loaded or []
         row = dict(entry.meta)
         row["id"] = sid
         row["title"] = _library_base_title(entry.meta, messages, builder)
+        pending_sids.append(sid)
         draft_rows.append(row)
-    for row, annotated in zip(draft_rows, annotate_display_titles(draft_rows), strict=True):
-        sid = str(row.get("id") or "")
+    for sid, row, annotated in zip(
+        pending_sids,
+        draft_rows,
+        annotate_display_titles(draft_rows),
+        strict=True,
+    ):
         ent = entries.get(sid)
         if ent is None:
             continue
@@ -284,6 +309,8 @@ def _fingerprint(meta: Dict[str, Any], tags: List[str], summary: Optional[str]) 
         [
             str(meta.get("updated") or ""),
             str(meta.get("messages") or 0),
+            str(meta.get("title") or ""),
+            str(meta.get("prompt_outline") or ""),
             "|".join(sorted(tags)),
             summary or "",
         ]
@@ -296,8 +323,9 @@ def _session_stem(meta: Dict[str, Any], *, title: Optional[str] = None) -> Tuple
     title = title or meta.get("title") or meta.get("id") or "session"
     title_slug = _bounded_slug(str(title))
     sid = str(meta.get("id") or "")
-    id8 = _safe_component(sid[:8] or "unknown")
-    stem = _safe_component(f"{day} {title_slug} {id8}")
+    # The id's tail: time-ordered ids (UUIDv7, OpenCode ses_…) share their first characters.
+    tail = re.sub(r"[^A-Za-z0-9]", "", sid)[-12:] or "unknown"
+    stem = _safe_component(f"{day} {title_slug} {tail}")
     rel = f"{_SESSIONS}/{_project_slug(meta)}/{stem}"
     return stem, rel
 
@@ -358,12 +386,13 @@ def _render_session_page(
     session = _build_unified(output_dir, entry.meta)
     if session is None:
         return ""
-    if session.title:
-        session = replace(session, title=_escape_wikilink_display(session.title))
+    display_title = _entry_title(entry)
+    session = replace(session, title=_escape_wikilink_display(display_title))
     exporter = MarkdownExporter(library_dir)
     md = exporter._generate_markdown(session)
     tags_line = ", ".join(entry.tags)
     extra = {
+        "title": display_title,
         "tags": tags_line,
         "summary": entry.summary or "",
         "project_page": f"[[{_PROJECTS}/{entry.project_slug}]]",
@@ -371,6 +400,31 @@ def _render_session_page(
     }
     md = _inject_frontmatter(md, extra)
     return _append_see_also(md, entry.project_slug, entry.day)
+
+
+def _hidden_session_ids(output_dir: Path) -> Set[str]:
+    """Tombstoned and pruned ids — same union as the default web session list."""
+    deleted_path = output_dir / "deleted_sessions.json"
+    return load_deleted_session_ids(deleted_path) | load_ignored_session_ids(output_dir)
+
+
+def _meta_matches_library_scope(
+    meta: Dict[str, Any],
+    *,
+    project: Optional[str],
+    since: Optional[datetime],
+) -> bool:
+    if project is not None and meta.get("project") != project:
+        return False
+    if since is not None:
+        updated = _parse_iso(meta.get("updated"), datetime.min)
+        if make_naive(updated) < make_naive(since):
+            return False
+    return True
+
+
+def _library_scope_active(project: Optional[str], since: Optional[datetime]) -> bool:
+    return project is not None or since is not None
 
 
 def _eligible_sessions(
@@ -382,29 +436,62 @@ def _eligible_sessions(
     if not v2_db_path(output_dir).exists():
         return []
     payload = load_index_v2(output_dir)
-    deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
+    hidden = _hidden_session_ids(output_dir)
     rows: List[Dict[str, Any]] = []
     for meta in payload.get("sessions", []):
         sid = str(meta.get("id") or "")
-        if sid in deleted:
+        if sid in hidden:
             continue
         if _library_skip_session(meta):
             continue
-        if project and meta.get("project") != project:
+        if not _meta_matches_library_scope(meta, project=project, since=since):
             continue
-        if since is not None:
-            updated = _parse_iso(meta.get("updated"), datetime.min)
-            if make_naive(updated) < make_naive(since):
-                continue
         rows.append(meta)
     rows.sort(key=lambda m: str(m.get("updated") or ""), reverse=True)
     return rows
+
+
+def _manifest_entry_for(ent: _SessionEntry) -> Dict[str, Any]:
+    return {
+        "fingerprint": ent.fingerprint,
+        "path": f"{_SESSIONS}/{ent.project_slug}/{ent.stem}",
+        "project_slug": ent.project_slug,
+        "day": ent.day,
+        "display_title": ent.display_title,
+    }
+
+
+def _merge_manifest_sessions(
+    *,
+    scope_active: bool,
+    old_sessions: Dict[str, Any],
+    entries_map: Dict[str, _SessionEntry],
+    removed_ids: Set[str],
+) -> Dict[str, Any]:
+    if not scope_active:
+        return {
+            sid: _manifest_entry_for(ent)
+            for sid, ent in entries_map.items()
+            if ent.published and sid not in removed_ids
+        }
+    merged: Dict[str, Any] = {}
+    for sid, prev in old_sessions.items():
+        if sid in removed_ids:
+            continue
+        if sid not in entries_map:
+            merged[sid] = prev
+    for sid, ent in entries_map.items():
+        if not ent.published or sid in removed_ids:
+            continue
+        merged[sid] = _manifest_entry_for(ent)
+    return merged
 
 
 def _index_entries(
     output_dir: Path,
     metas: Iterable[Dict[str, Any]],
     tags_map: Dict[str, List[str]],
+    old_sessions: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, _SessionEntry]:
     out: Dict[str, _SessionEntry] = {}
     for meta in metas:
@@ -414,7 +501,7 @@ def _index_entries(
         fp = _fingerprint(meta, tags, summary)
         day = _session_day(meta)
         slug = _project_slug(meta)
-        has_body = bool(load_session_messages_v2(output_dir, sid))
+        has_body = int(meta.get("messages") or 0) > 0
         out[sid] = _SessionEntry(
             meta=meta,
             tags=tags,
@@ -426,7 +513,7 @@ def _index_entries(
             rel_link="",
             has_body=has_body,
         )
-    _attach_display_titles(output_dir, out)
+    _attach_display_titles(output_dir, out, old_sessions)
     for sid, entry in out.items():
         stem, rel = _session_stem(entry.meta, title=_entry_title(entry))
         out[sid] = replace(entry, stem=stem, rel_link=rel)
@@ -601,15 +688,30 @@ def build_library(
     library_dir.mkdir(parents=True, exist_ok=True)
     stats = LibraryStats()
 
-    metas = _eligible_sessions(output_dir, project=project, since=since)
-    tags_map = all_tags_by_session(output_dir)
-    entries_map = _index_entries(output_dir, metas, tags_map)
+    scope_active = _library_scope_active(project, since)
+    all_metas = _eligible_sessions(output_dir, project=None, since=None)
+    scoped_metas = _eligible_sessions(output_dir, project=project, since=since)
+    all_eligible_ids = {str(m.get("id") or "") for m in all_metas}
+    scoped_eligible_ids = {str(m.get("id") or "") for m in scoped_metas}
+    store_by_id = {str(m.get("id") or ""): m for m in load_index_v2(output_dir).get("sessions", [])}
+
     manifest = _load_manifest(library_dir)
     old_sessions: Dict[str, Any] = manifest.get("sessions") or {}
 
-    current_ids = set(entries_map)
+    tags_map = all_tags_by_session(output_dir)
+    entries_map = _index_entries(output_dir, scoped_metas, tags_map, old_sessions)
+
     old_ids = set(old_sessions)
-    removed_ids = old_ids - current_ids
+    if scope_active:
+        removed_ids = {
+            sid
+            for sid in old_ids
+            if (meta := store_by_id.get(sid)) is not None
+            and _meta_matches_library_scope(meta, project=project, since=since)
+            and sid not in all_eligible_ids
+        }
+    else:
+        removed_ids = old_ids - scoped_eligible_ids
 
     to_write: Set[str] = set()
     if full:
@@ -645,20 +747,55 @@ def build_library(
         content = _render_session_page(output_dir, library_dir, ent)
         if not content:
             continue
+        prev = old_sessions.get(sid) or {}
+        new_rel = f"{_SESSIONS}/{ent.project_slug}/{ent.stem}"
+        old_rel = str(prev.get("path") or "")
+        if old_rel and old_rel != new_rel:
+            stale = (library_dir / f"{old_rel}.md").resolve()
+            root = library_dir.resolve()
+            try:
+                if stale.is_relative_to(root) and stale.is_file():
+                    stale.unlink()
+            except ValueError:
+                pass
         path = _session_file_path(library_dir, ent)
         _atomic_write(path, content)
         stats.sessions_written += 1
         written_ids.add(sid)
 
     _mark_published_entries(library_dir, entries_map, old_sessions, written_ids)
-    entries = list(entries_map.values())
+
+    full_entries_map = _index_entries(output_dir, all_metas, tags_map, old_sessions)
+    manifest_sessions = _merge_manifest_sessions(
+        scope_active=scope_active,
+        old_sessions=old_sessions,
+        entries_map=entries_map,
+        removed_ids=removed_ids,
+    )
+    published_ids = set(manifest_sessions)
+
+    carried_ids = published_ids - set(entries_map)
+    for sid in carried_ids:
+        prev = old_sessions.get(sid) or {}
+        rel = prev.get("path")
+        if rel and (library_dir / f"{rel}.md").is_file():
+            ent = full_entries_map.get(sid)
+            if ent is not None:
+                full_entries_map[sid] = replace(ent, published=True)
+
+    for sid in published_ids:
+        ent = entries_map.get(sid)
+        if ent is not None:
+            full_entries_map[sid] = ent
+
+    entries = [full_entries_map[sid] for sid in published_ids if sid in full_entries_map]
 
     if full:
         affected_projects = {e.project_slug for e in entries}
         affected_days = {e.day for e in entries}
     else:
         for sid in to_write | removed_ids:
-            ent = entries_map.get(sid)
+            ent = full_entries_map.get(sid)
             if ent:
                 affected_projects.add(ent.project_slug)
                 affected_days.add(ent.day)
@@ -700,17 +837,5 @@ def build_library(
 
     _atomic_write(library_dir / "Index.md", _render_index(output_dir, entries))
 
-    new_manifest = {
-        "sessions": {
-            sid: {
-                "fingerprint": ent.fingerprint,
-                "path": f"{_SESSIONS}/{ent.project_slug}/{ent.stem}",
-                "project_slug": ent.project_slug,
-                "day": ent.day,
-            }
-            for sid, ent in entries_map.items()
-            if ent.published
-        }
-    }
-    _save_manifest(library_dir, new_manifest)
+    _save_manifest(library_dir, {"sessions": manifest_sessions})
     return stats
