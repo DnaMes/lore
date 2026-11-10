@@ -133,20 +133,19 @@ def test_unmatched_result_is_visible():
 
 def test_markdown_shows_every_field_of_a_call(structured_session):
     markdown = _markdown(structured_session)
-    assert "<summary>Tool: Bash — completed (1200 ms)</summary>" in markdown
-    assert "**Call id:** `call_ok`" in markdown
-    assert '"command": "ls -la"' in markdown
-    assert "**Result:**" in markdown
+    assert "**Bash**" in markdown and "`ls -la`" in markdown
+    assert " — ✓" in markdown
+    assert "**Read**" in markdown
     assert "total 0" in markdown
-    assert "**Error:** (truncated)" in markdown
-    assert "(not valid JSON)" in markdown
+    assert "ENOENT: no such file" in markdown
+    assert " — ✗" in markdown
 
 
 def test_markdown_and_html_agree_on_the_call_set(structured_session):
     markdown = _markdown(structured_session)
     page = render_session_html(structured_session)
     for name in ("Bash", "Read"):
-        assert f"Tool: {name}" in markdown or f"Tool: {name} —" in markdown
+        assert f"**{name}**" in markdown
         assert f"Tool: {name}" in page
     assert "orphan result without a pairing" in markdown
     assert "orphan result without a pairing" in page
@@ -174,10 +173,9 @@ def test_markdown_contains_every_message_in_order(structured_session):
     markdown = _markdown(structured_session)
     markers = [
         "list the files",
-        "Tool: Bash",
-        "Tool: Read",
+        "**Bash**",
+        "**Read**",
         "orphan result without a pairing",
-        "### System",
         "system note",
         "print('a')",
     ]

@@ -192,7 +192,8 @@ def test_exports_carry_the_original_role_names():
     from lore.exporters.markdown import MarkdownExporter
 
     markdown = MarkdownExporter(Path("."))._generate_markdown(_session())
-    assert "### User" in markdown
-    assert "### Assistant" in markdown
-    assert "### Tool" in markdown
-    assert "### System" in markdown
+    # Turn layout: the prompt heading is the user turn; the other roles are labelled.
+    assert "### Prompt 1" in markdown
+    assert "**Assistant**" in markdown
+    assert "**Tool result**" in markdown
+    assert "**System:** context compacted by the harness" in markdown

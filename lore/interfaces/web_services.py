@@ -1,10 +1,19 @@
 import re
 from typing import Any, Dict, List, Optional
 
+from lore.formatting.turns import (
+    attach_result_to_calls as _attach_result,
+)
+from lore.formatting.turns import (
+    is_tool_result_record as _is_tool_result_record,
+)
+from lore.formatting.turns import (
+    tool_only_calls as _tool_only_calls,
+)
 from lore.utils.formatting import format_message as format_message_with_rules
 from lore.utils.injected import classify_injected_display as _classify_injected_display
 
-from .session_view_prep import fold_tool_bursts, render_message_body, strip_tool_blocks
+from .session_view_prep import fold_tool_bursts, render_message_body
 from .web_formatting import format_session_event
 
 ANSI_ESCAPE_RE = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
@@ -411,90 +420,11 @@ def preview_normalize_message(
     )
 
 
-def _is_tool_result_record(message) -> bool:
-    """True for a user-role record whose text is a ``[Tool Result]`` block (Claude tool_result)."""
-    original = getattr(message, "original_content", None) or message.content or ""
-    return original.lstrip().startswith("[Tool Result]")
-
-
 def _as_int(value: Any) -> int:
     try:
         return int(value or 0)
     except (TypeError, ValueError):
         return 0
-
-
-_TOOL_ONLY_RE = re.compile(r"^\[Tool:\s*([^\]]+)\]\s*(.*)\Z", flags=re.DOTALL)
-_EXIT_CODE_RE = re.compile(r"^\s*Exit code (\d+)")
-_EXPORT_TOOL_STATUS_RE = re.compile(r"<summary>Tool:[^<]*?\u2014\s*(\w+)\s*</summary>")
-
-
-def _flat_tool_call(message) -> Optional[Dict[str, Any]]:
-    """Parse a record that is nothing but one flattened ``[Tool: X] args`` block.
-
-    The export-markdown path keeps tool calls only as text (no structured ``tool_calls``);
-    returns ``None`` for anything with prose or several calls.
-    """
-    raw = (getattr(message, "original_content", None) or message.content or "").strip()
-    match = _TOOL_ONLY_RE.match(raw)
-    if not match or "[Tool:" in match.group(2):
-        return None
-    body = match.group(2)
-    status = _EXPORT_TOOL_STATUS_RE.search(body)
-    return {
-        "tool": match.group(1).strip(),
-        "input": body.split("<details>", 1)[0].strip(),
-        # None, not "": the export markdown has no output here — the result
-        # arrives in a later record and may still fill it.
-        "output": None,
-        "status": status.group(1) if status else None,
-    }
-
-
-def _tool_only_calls(message) -> Optional[List[Dict[str, Any]]]:
-    """Tool calls of an assistant record that has no prose or reasoning, else ``None``.
-
-    Structured ``tool_calls`` (v2 store, live) get their compact event's status; a
-    flattened ``[Tool: X]`` record (export markdown) is parsed from its text.
-    """
-    if message.display_role != "assistant" or message.reasoning:
-        return None
-    structured = getattr(message, "tool_calls", None)
-    if not structured:
-        flat = _flat_tool_call(message)
-        return [flat] if flat else None
-    if strip_tool_blocks(message.content or "").strip():
-        return None
-    events = getattr(message, "tool_events", None) or []
-    aligned = len(events) == len(structured)
-    calls = []
-    for index, raw in enumerate(structured):
-        call = dict(raw) if isinstance(raw, dict) else {"tool": str(raw), "input": {}}
-        event = events[index] if aligned and isinstance(events[index], dict) else None
-        if event:
-            if call.get("status") is None:
-                call["status"] = event.get("status")
-            if call.get("duration_ms") is None:
-                call["duration_ms"] = event.get("duration_ms")
-            call["is_error"] = bool(call.get("is_error") or event.get("is_error"))
-        calls.append(call)
-    return calls
-
-
-def _attach_result(calls: List[Dict[str, Any]], output: str) -> bool:
-    """Give ``output`` to the first call still without one; False when all have output."""
-    # An empty output is a real output: only a missing/None one may be filled,
-    # or a later result would overwrite the first call's (empty) output.
-    target = next((call for call in calls if call.get("output") is None), None)
-    if target is None:
-        return False
-    target["output"] = output
-    exit_match = _EXIT_CODE_RE.match(output)
-    if exit_match:  # Claude prefixes a failed Bash result with "Exit code N"
-        target.update(status="failed", exit_code=int(exit_match.group(1)))
-    elif output.lstrip().startswith("<tool_use_error>"):
-        target["status"] = "failed"
-    return True
 
 
 def group_flat_tool_steps(pairs: List[Dict[str, Any]], format_tool_calls_fn) -> None:

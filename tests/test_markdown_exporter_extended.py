@@ -114,13 +114,15 @@ def test_export_session_contains_messages(tmp_path):
     assert "Quicksort divides" in content
 
 
-def test_export_session_user_messages_quoted(tmp_path):
+def test_export_session_user_messages_under_prompt_heading(tmp_path):
     exporter = MarkdownExporter(tmp_path)
     session = _make_session(messages=[("user", "What is Python?"), ("assistant", "A language.")])
     out_path = exporter.export_session(session)
     content = out_path.read_text(encoding="utf-8")
 
-    assert "> What is Python?" in content
+    assert "### Prompt 1 ·" in content
+    assert "What is Python?" in content
+    assert "> What is Python?" not in content
 
 
 def test_export_session_statistics_section(tmp_path):
@@ -217,8 +219,8 @@ def test_export_session_with_tool_calls(tmp_path):
     out_path = exporter.export_session(session)
     content = out_path.read_text(encoding="utf-8")
 
-    assert "Tool: read_file" in content
-    assert "<details>" in content
+    assert "**Read_File**" in content
+    assert "/foo/bar.py" in content
 
 
 def test_export_session_with_reasoning(tmp_path):
@@ -242,7 +244,7 @@ def test_export_session_with_reasoning(tmp_path):
     out_path = exporter.export_session(session)
     content = out_path.read_text(encoding="utf-8")
 
-    assert "Reasoning" in content
+    assert "Thinking" in content
     assert "First I should consider A" in content
 
 

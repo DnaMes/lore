@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from ..core.models import Role, UnifiedSession
+from ..formatting.turns import build_session_turns, render_turns_to_lines
 from ..utils.paths import project_to_dirname, sanitize_filename
-from .tool_calls import canonical_tool_calls, tool_call_markdown
 
 
 class MarkdownExporter:
@@ -133,45 +133,12 @@ class MarkdownExporter:
         lines.append("## Conversation")
         lines.append("")
 
-        # Messages
         if not session.messages:
             lines.append("_No messages were captured for this session._")
             lines.append("")
-        for msg in session.messages:
-            role_display = msg.role.value.title()
-            time_str = msg.timestamp.strftime("%H:%M:%S")
-
-            lines.append(f"### {role_display} ({time_str})")
-            lines.append("")
-
-            if msg.role == Role.USER:
-                # Quote user messages
-                for line in msg.content.split("\n"):
-                    lines.append(f"> {line}")
-            else:
-                lines.append(msg.content)
-
-            # Tool calls and events, canonical envelope (#166): name, identity,
-            # arguments, result/error, status and truncation, in one shape.
-            calls = canonical_tool_calls(msg)
-            if calls:
-                lines.append("")
-                for call in calls:
-                    lines.extend(tool_call_markdown(call))
-                    lines.append("")
-
-            # Reasoning/thoughts
-            if msg.reasoning:
-                lines.append("")
-                lines.append("<details>")
-                lines.append("<summary>Reasoning</summary>")
-                lines.append("")
-                lines.append(msg.reasoning)
-                lines.append("</details>")
-
-            lines.append("")
-            lines.append("---")
-            lines.append("")
+        else:
+            turns = build_session_turns(session)
+            lines.extend(render_turns_to_lines(turns))
 
         # Statistics
         if session.message_count > 0:
