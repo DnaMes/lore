@@ -221,6 +221,16 @@ def resolve_export_path(path_value: Optional[str]) -> Optional[Path]:
     if result:
         return result
 
+    # A host sync records host paths (/home/<user>/.lore/...); a container mounts the
+    # same tree elsewhere. Re-anchor the part after the last output-dir name; _safe
+    # still rejects anything that resolves outside OUTPUT_DIR.
+    parts = raw_path.parts
+    if OUTPUT_DIR.name in parts:
+        cut = len(parts) - 1 - parts[::-1].index(OUTPUT_DIR.name)
+        rest = parts[cut + 1 :]
+        if rest:
+            return _safe(OUTPUT_DIR.joinpath(*rest))
+
     return None
 
 
