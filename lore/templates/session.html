@@ -14,7 +14,7 @@
                     <span>{{ session.prompt_count }} prompts</span>
                     <span class="session-meta-dot"></span>
                     <span>{{ project_label(session.project_path) }}</span>
-                </div>
+                </div>{% if session.source_missing %}<p class="mt-1 text-xs text-amber-700">Source file no longer on disk — showing the stored copy.</p>{% endif %}
             </div>
         </div>
         <div class="session-header-actions flex flex-wrap items-center gap-2 flex-shrink-0">

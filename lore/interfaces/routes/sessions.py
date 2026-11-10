@@ -24,6 +24,7 @@ from lore.utils.tooling import normalize_tool_name
 
 from ...extractors.opencode import OpenCodeExtractor
 from ...services.cache import threadsafe_lru_cache
+from ...services.extraction import source_ruled_out
 from ...services.index import is_automated, session_by_id_map
 from ...services.summarize_cli import web_summarize_enabled
 from ..web_data import (
@@ -562,6 +563,10 @@ def load_session_by_id(
             direct = None
         if direct is not None:
             return direct
+        if tool and source_ruled_out(session_id, tool):
+            # The id maps to one file and it is gone; re-extracting every session of
+            # the tool took ~2 minutes and could not find it either.
+            continue
         try:
             sessions = _web.load_sessions_for_tool(tool if tool else None)
         except Exception as exc:
@@ -820,6 +825,12 @@ def _enriched_session_for_detail_uncached(session_id: str, *, force_live: bool):
 
     if live_session:
         return _enrich(live_session)
+    if force_live:
+        # The source is gone: show the stored copy instead of nothing, and say so.
+        stored = _build_session_from_v2(session_id, session_meta)
+        if stored is not None:
+            stored.source_missing = True
+            return _enrich(stored)
     return None
 
 

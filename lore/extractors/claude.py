@@ -331,6 +331,10 @@ class ClaudeCodeExtractor(BaseExtractor):
         )
         return "/" + encoded[1:].replace("-", "/")
 
+    def addresses_session_id(self, session_id: str) -> bool:
+        """Main sessions are ``<projectdir>/<id>.jsonl``; subagent ids are not addressable."""
+        return bool(session_id) and ":" not in session_id and self.is_available()
+
     def find_session_by_id(self, session_id: str) -> Optional[UnifiedSession]:
         """Locate one session by id, parsing only its source file (#127).
 

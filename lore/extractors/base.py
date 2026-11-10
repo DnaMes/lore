@@ -224,6 +224,14 @@ class BaseExtractor(ABC):
         skipped.add(str(path))
         return True
 
+    def addresses_session_id(self, session_id: str) -> bool:
+        """Whether :meth:`find_session_by_id` maps ``session_id`` to exactly one file.
+
+        When it does and the lookup misses, the source is not on disk and a bulk
+        scan of the tool cannot find it either. Default: no such guarantee.
+        """
+        return False
+
     def find_session_by_id(self, session_id: str) -> Optional[UnifiedSession]:
         """Locate a single session by id without a full archive scan (#127).
 

@@ -94,6 +94,22 @@ def collect_sessions(
     return sessions
 
 
+def source_ruled_out(session_id: str, tool: str) -> bool:
+    """Whether a missed direct lookup proves ``session_id`` has no source on disk (#127).
+
+    True only when the tool's extractor maps this id to exactly one file; then a
+    bulk re-extraction of every session of the tool cannot find it either.
+    """
+    for extractor in get_all_extractors():
+        if extractor.tool.value == tool:
+            try:
+                return extractor.addresses_session_id(session_id)
+            except Exception as exc:
+                logger.debug("addresses_session_id failed for %s: %s", tool, exc)
+                return False
+    return False
+
+
 def find_live_session(
     session_id: str,
     tool_filter: Optional[str] = None,

@@ -151,3 +151,59 @@ def test_summary_fallback_is_headed_by_the_session_title_not_rules(monkeypatch, 
     assert "project-level instruction files" not in page
     assert "Fix the &lt;b&gt;parser&lt;/b&gt;</h1>" in page
     assert page.count("Fix the &lt;b&gt;parser&lt;/b&gt;</h") == 1  # no duplicate <h2>
+
+
+def test_live_with_missing_source_shows_the_stored_copy(client):
+    """?live=1 for a session whose source file is gone falls back to the store and says so."""
+    page = client.get(f"/session/{SID}?live=1").get_data(as_text=True)
+    assert "first real prompt" in page and "second real prompt" in page
+    assert "Source file no longer on disk" in page
+    assert "Source file no longer on disk" not in client.get(f"/session/{SID}").get_data(
+        as_text=True
+    )
+
+
+def test_direct_lookup_miss_skips_the_bulk_scan(monkeypatch):
+    """An id that maps to one file is not searched by re-extracting the whole tool."""
+    from lore.services import extraction
+
+    monkeypatch.setattr(web, "find_live_session", lambda *a, **k: None)
+    monkeypatch.setattr(extraction, "source_ruled_out", lambda sid, tool: True)
+    monkeypatch.setattr(sessions_routes, "source_ruled_out", lambda sid, tool: True)
+
+    def _bulk(_tool=None):
+        raise AssertionError("bulk scan must not run once the source is ruled out")
+
+    monkeypatch.setattr(web, "load_sessions_for_tool", _bulk)
+    assert (
+        sessions_routes.load_session_by_id(
+            SID, preferred_tool="claude-code", allow_cross_tool_fallback=False
+        )
+        is None
+    )
+
+
+def test_unaddressable_ids_keep_the_bulk_scan(monkeypatch):
+    """Subagent ids and tools without a file layout still fall back to the bulk scan."""
+    found = UnifiedSession(
+        tool=Tool.CLAUDE_CODE, session_id="p:agent-1", created_at=T0, last_updated=T0, messages=[]
+    )
+    monkeypatch.setattr(web, "find_live_session", lambda *a, **k: None)
+    monkeypatch.setattr(web, "load_sessions_for_tool", lambda _tool=None: [found])
+    assert (
+        sessions_routes.load_session_by_id(
+            "p:agent-1", preferred_tool="claude-code", allow_cross_tool_fallback=False
+        )
+        is found
+    )
+
+
+def test_claude_addresses_main_ids_only(monkeypatch):
+    from lore.extractors.claude import ClaudeCodeExtractor
+
+    extractor = ClaudeCodeExtractor()
+    monkeypatch.setattr(extractor, "is_available", lambda: True)
+    assert extractor.addresses_session_id("f963557e-d5ba-4f0d-b943-3e35e25a4c87")
+    assert not extractor.addresses_session_id("parent:agent-a123")
+    monkeypatch.setattr(extractor, "is_available", lambda: False)
+    assert not extractor.addresses_session_id("f963557e-d5ba-4f0d-b943-3e35e25a4c87")
