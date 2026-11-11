@@ -69,7 +69,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 120s
-    cpus: "1.0"
+    cpus: "0.25"
     mem_limit: 4g  # the embed-messages child peaked at ~2.9 GiB; the idle loop needs ~30 MiB
     pids_limit: 256
     logging:
