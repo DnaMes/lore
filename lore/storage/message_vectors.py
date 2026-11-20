@@ -139,8 +139,11 @@ def embed_messages(
     skipped = 0
     deadline = time.monotonic() + budget_seconds if budget_seconds else None
     created = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # One short transaction per message, never across embed_text(): a pass runs
+    # for minutes on a throttled worker, and holding the write lock that long
+    # locks out `lore memory add` (busy_timeout 5 s) and loses all progress
+    # when the child is killed.
     try:
-        conn.execute("BEGIN")
         for idx, (session_id, seq, content) in enumerate(pending):
             if deadline and time.monotonic() > deadline:
                 skipped = len(pending) - idx
@@ -150,6 +153,7 @@ def embed_messages(
                 # Empty or whitespace-only body: nothing to embed. Drop the
                 # stale vector so the deleted text is no longer searchable and
                 # record the empty hash so the message is not pending again.
+                conn.execute("BEGIN")
                 conn.execute("DELETE FROM message_embeddings WHERE message_key = ?", (key,))
                 conn.execute(
                     "INSERT OR REPLACE INTO message_embedding_meta"
@@ -157,11 +161,13 @@ def embed_messages(
                     "VALUES (?, ?, ?, ?, ?, ?)",
                     (key, session_id, seq, DEFAULT_MODEL, _content_hash(content), created),
                 )
+                conn.execute("COMMIT")
                 continue
             vector = embed_text(content[:_MAX_EMBED_CHARS])
             if vector is None:
                 continue  # an embed failure must not abort the pass
             # vec0 has no working OR REPLACE — an update is DELETE + INSERT.
+            conn.execute("BEGIN")
             conn.execute("DELETE FROM message_embeddings WHERE message_key = ?", (key,))
             conn.execute(
                 "INSERT INTO message_embeddings(message_key, model, embedding) VALUES (?, ?, ?)",
@@ -180,8 +186,8 @@ def embed_messages(
                     created,
                 ),
             )
+            conn.execute("COMMIT")
             written += 1
-        conn.execute("COMMIT")
         if skipped:
             logger.info(
                 "Message embedding budget (%.0fs) reached: %d written, %d deferred to the next run",
@@ -191,9 +197,7 @@ def embed_messages(
             )
     except sqlite3.Error as exc:
         logger.warning("Message embedding pass failed, leaving FTS-only: %s", exc)
-        try:
+        if conn.in_transaction:
             conn.execute("ROLLBACK")
-        except sqlite3.OperationalError:
-            pass
-        return 0
+        return written
     return written

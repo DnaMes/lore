@@ -10,6 +10,7 @@ every test, so no model is downloaded.
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import datetime
 from pathlib import Path
 
@@ -376,3 +377,38 @@ def test_migration_28_is_idempotent_on_rerun(tmp_path, monkeypatch):
     ]
     assert versions == [28]
     conn.close()
+
+
+@requires_vec
+def test_pass_does_not_hold_the_write_lock_while_embedding(tmp_path, monkeypatch):
+    """A memory write must not wait out a whole embedding pass.
+
+    The worker child runs for up to its budget on a throttled CPU; one
+    transaction around the whole pass locked ``lore memory add`` out with
+    "database is busy" and lost every vector when the child was killed.
+    """
+    db = v2_db_path(tmp_path)
+    write_sessions(db, [_session("a", ["one", "two", "three"])])
+
+    lock_free: list[bool] = []
+
+    def probing_embed(text: str) -> list[float]:
+        other = sqlite3.connect(str(db), timeout=0, isolation_level=None)
+        try:
+            other.execute("BEGIN IMMEDIATE")
+            other.execute("ROLLBACK")
+            lock_free.append(True)
+        except sqlite3.OperationalError:
+            lock_free.append(False)
+        finally:
+            other.close()
+        return [1.0] * EMBEDDING_DIM
+
+    monkeypatch.setattr(message_vectors, "embeddings_available", lambda: True)
+    monkeypatch.setattr(message_vectors, "embed_text", probing_embed)
+    conn = initialise(db)
+    try:
+        assert embed_messages(conn, budget_seconds=0) == 3
+        assert lock_free == [True, True, True]
+    finally:
+        conn.close()
