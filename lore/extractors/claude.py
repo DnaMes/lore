@@ -4,6 +4,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import Iterator, Optional
@@ -276,6 +277,23 @@ class ClaudeCodeExtractor(BaseExtractor):
     def source_description(self) -> str:
         return "~/.claude/projects/*/*.jsonl, ~/.claude/projects/*/*/subagents/*.jsonl"
 
+    @staticmethod
+    def _on_disk_name(parent: str, encoded: str) -> Optional[str]:
+        """Real directory name for one encoded path part.
+
+        Claude Code encodes every non-alphanumeric character as "-", so
+        ``my_app`` arrives as ``my-app``. Without this the
+        session is indexed under a path that does not exist and every
+        project-filtered lookup for the real path finds nothing.
+        """
+        if os.path.exists(os.path.join(parent, encoded)):
+            return encoded
+        try:
+            names = sorted(os.listdir(parent))
+        except OSError:
+            return None
+        return next((n for n in names if re.sub(r"[^A-Za-z0-9]", "-", n) == encoded), None)
+
     def _decode_project_name(self, encoded: str) -> str:
         """Decode project path from directory name."""
         if not encoded.startswith("-"):
@@ -300,8 +318,9 @@ class ClaudeCodeExtractor(BaseExtractor):
             else:
                 full_test = "/" + test_path
 
-            if os.path.exists(full_test):
-                result_parts.append(test_path)
+            on_disk = self._on_disk_name(os.path.dirname(full_test), test_path)
+            if on_disk:
+                result_parts.append(on_disk)
                 current = ""
                 matched_any = True
             else:

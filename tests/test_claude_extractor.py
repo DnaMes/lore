@@ -731,6 +731,17 @@ def test_decode_project_name_reconstructs_real_path(tmp_path):
     assert decoded == str(real)
 
 
+def test_decode_project_name_restores_underscores(tmp_path):
+    """Claude Code writes "_" (and ".") as "-": the real directory name wins."""
+    real = tmp_path / "private" / "my_app"
+    real.mkdir(parents=True)
+    encoded = "-" + str(tmp_path)[1:].replace("/", "-") + "-private-my-app"
+
+    extractor = ClaudeCodeExtractor.__new__(ClaudeCodeExtractor)
+
+    assert extractor._decode_project_name(encoded) == str(real)
+
+
 def test_decode_project_name_no_disk_match_logs_heuristic(tmp_path, caplog):
     """No on-disk prefix matched → the result is an unvalidated guess that
     must leave a debug trace (#124)."""
