@@ -93,7 +93,8 @@ def _is_scratch_shelf_project(project_path: str) -> bool:
     if normalized == "_unknown" or project_to_dirname(raw).strip("-") in ("", "_unknown"):
         return True
     expanded = str(Path(raw).expanduser())
-    return expanded == "/tmp" or expanded.startswith("/tmp/")
+    # A path comparison, not temp-file use: /tmp sessions are scratch work on every OS.
+    return expanded == "/tmp" or expanded.startswith("/tmp/")  # nosec B108
 
 
 def _first_real_user_prompt(
