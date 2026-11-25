@@ -396,3 +396,16 @@ def test_secret_under_a_nested_yaml_key_is_still_redacted():
     result = redact("api_key:\n    password: hunter2hunter2\n")
     assert "hunter2hunter2" not in result.text
     assert result.count == 1
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        'api_key:\n    "password": hunter2hunter2\n',
+        "api_key:\n    'password': hunter2hunter2\n",
+        'api_key:\n    "password": "hunter2hunter2"\n',
+        "api_key:\n    password:hunter2hunter2\n",
+    ],
+)
+def test_quoted_or_tight_nested_yaml_key_does_not_hide_the_secret(text):
+    assert "hunter2hunter2" not in redact(text).text

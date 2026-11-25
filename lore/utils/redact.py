@@ -77,7 +77,7 @@ _ASSIGN = re.compile(
     # Second alternative: a YAML block scalar, the value on the next indented line. The
     # lookahead refuses a nested ``key:`` so the inner key is matched on its own (a match
     # that swallowed it would leave ``api_key:\n  password: hunter2`` unredacted).
-    r"(?P<sep>\]?[ \t]*[=:][ \t]*|:[ \t]*\r?\n[ \t]+(?![^\s\"',;]*:(?:\s|$)))"
+    r"(?P<sep>\]?[ \t]*[=:][ \t]*|:[ \t]*\r?\n[ \t]+(?![\"']?[^\s:\"']+[\"']?:(?:\s|$)))"
     r'(?:"(?P<dq>(?:[^"\\\r\n]|\\.){4,500})"'
     r"|'(?P<sq>(?:[^'\\\r\n]|\\.){4,500})'"
     r"|(?P<uv>[^\s\"',;]{8,}))"
