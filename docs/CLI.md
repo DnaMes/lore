@@ -624,7 +624,7 @@ options:
 
 ## threads
 
-List open threads collected from session summaries.
+List thread groups: the sessions of one project path, across tools.
 
 Mode: read-only
 

@@ -11,8 +11,8 @@ and the source directories are only ever read.
 
 ## Status
 
-Lore is version 2.4.0. That version is unreleased until it is tagged; the release
-notes are in [CHANGELOG.md](CHANGELOG.md). `pyproject.toml` declares the
+Lore 2.4.0 is the latest tagged release; `main` carries the work toward 2.5.0. The
+release notes are in [CHANGELOG.md](CHANGELOG.md). `pyproject.toml` declares the
 classifier `Development Status :: 3 - Alpha`.
 
 Stable, used daily by the maintainer:

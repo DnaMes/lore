@@ -1,4 +1,4 @@
-# AI History LLM Integration
+# Lore LLM Integration
 
 This module provides LLM-powered features for analyzing and processing your AI coding sessions.
 

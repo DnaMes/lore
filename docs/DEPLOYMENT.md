@@ -3,7 +3,8 @@
 Operations page for the running Docker stack. For setup, environment variables and
 the opt-in overlays, use [DOCKER.md](./DOCKER.md), the runtime-verified Docker guide.
 
-The stack is a single service `app` built from `Dockerfile` by `docker-compose.yml`.
+The stack has two services, `app` (the web UI) and `worker` (library, embeddings,
+summaries), both built from `Dockerfile` by `docker-compose.yml`.
 Compose has no `image:` key; the image is built locally and named after the checkout
 directory and service (for a checkout in `lore/`: `lore-app`). The container name
 `lore-app` is set in `docker-compose.yml`.

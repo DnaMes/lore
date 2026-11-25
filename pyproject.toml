@@ -117,8 +117,6 @@ exclude_dirs = ["tests", ".venv", ".claude"]
 skips = ["B101", "B310", "B608"]
 
 [tool.ruff.lint.per-file-ignores]
-# Embedded JS/CSS strings legitimately contain blank-line whitespace
-"lore/utils/themes.py" = ["W293"]
 # Lazy imports gated on optional dependency availability
 "lore/interfaces/mcp.py" = ["E402"]
 "lore/titles/generator.py" = ["E402"]
