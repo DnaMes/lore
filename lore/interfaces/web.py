@@ -3,6 +3,7 @@ import importlib
 import json
 import logging
 import os
+import re
 import secrets
 import time
 from functools import lru_cache
@@ -292,6 +293,10 @@ if os.environ.get("LORE_CLEAR_OPENCODE_CACHE", "").lower() == "true":
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 
+# Fenced blocks and inline code are kept verbatim (Markdown escapes them itself); only prose is escaped.
+_ESCAPE_OUTSIDE_CODE = re.compile(r"(```.*?```|~~~.*?~~~|`[^`\n]+`)|([^`~]+|[`~])", re.DOTALL)
+
+
 def _markdown_safe(text: object):
     """Render agent-writable Markdown for a template: Markdown, then the nh3 allowlist.
 
@@ -304,7 +309,9 @@ def _markdown_safe(text: object):
 
     # "<" is escaped first: memory is prose, so placeholders such as <slug> must stay visible
     # instead of being parsed (and stripped) as tags. "&" and ">" stay Markdown-meaningful.
-    source = str(text or "").replace("<", "&lt;")
+    source = _ESCAPE_OUTSIDE_CODE.sub(
+        lambda m: m.group(1) or m.group(2).replace("<", "&lt;"), str(text or "")
+    )
     return Markup(sanitize_html(render_markdown(source)))  # nosec B704 - nh3-sanitised
 
 

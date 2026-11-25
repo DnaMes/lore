@@ -89,3 +89,11 @@ def test_markdown_safe_filter_renders_markdown_and_strips_active_content():
     assert "<script" not in html and "<img" not in html
     assert "&lt;script" in html  # shown as text, not executed
     assert "&lt;slug&gt;" in str(_markdown_safe("deploy to <slug>.example.com"))
+
+
+def test_markdown_safe_keeps_angle_brackets_in_code_spans_and_fences():
+    from lore.interfaces.web import _markdown_safe
+
+    html = str(_markdown_safe("run `<slug>` now\n\n```\n<tag>x</tag>\n```\n\nplain <slug> too"))
+    assert "&lt;slug&gt;" in html and "&amp;lt;" not in html
+    assert html.count("&lt;slug&gt;") == 2 and "&lt;tag&gt;" in html

@@ -5,9 +5,15 @@ Captures the rendered HTML of each route so the Jinja-template extraction
 output-neutral. The per-request CSP nonce is normalized out before
 comparison since it varies by request.
 
-Regenerate snapshots after an *intentional* template change with:
+The bodies of inline ``<style>`` and ``<script>`` blocks are not compared: every page embeds
+the same ~46 KB of base.html CSS/JS, so one palette tweak rewrote all ten snapshots (and made
+the commit unreviewable). A snapshot pins the markup; CSS and JS have their own tests.
+
+Regenerate snapshots after an *intentional* markup change with:
 
     UPDATE_TEMPLATE_SNAPSHOTS=1 pytest tests/test_template_render_snapshots.py
+
+Only snapshots whose markup changed are rewritten.
 """
 
 from __future__ import annotations
@@ -28,8 +34,16 @@ SNAPSHOT_DIR = Path(__file__).parent / "snapshots" / "templates"
 _NONCE_RE = re.compile(r'nonce="[^"]*"')
 
 
+_BLOCK_RE = re.compile(r"(<(style|script)\b[^>]*>)(.*?)(</\2>)", re.DOTALL | re.IGNORECASE)
+
+
 def _normalize(html: str) -> str:
     return _NONCE_RE.sub('nonce="NONCE"', html)
+
+
+def _skeleton(html: str) -> str:
+    """The markup of a page with the bodies of its inline style and script blocks elided."""
+    return _BLOCK_RE.sub(lambda m: f"{m.group(1)}…{m.group(4)}", _normalize(html))
 
 
 def _index_payload() -> dict:
@@ -122,13 +136,19 @@ def _assert_snapshot(name: str, html: str) -> None:
     SNAPSHOT_DIR.mkdir(parents=True, exist_ok=True)
     path = SNAPSHOT_DIR / f"{name}.html"
     normalized = _normalize(html)
-    if os.environ.get("UPDATE_TEMPLATE_SNAPSHOTS") == "1" or not path.exists():
+    updating = os.environ.get("UPDATE_TEMPLATE_SNAPSHOTS") == "1"
+    if not path.exists():
         path.write_text(normalized, encoding="utf-8")
-        if os.environ.get("UPDATE_TEMPLATE_SNAPSHOTS") != "1":
-            pytest.skip(f"created baseline snapshot {name}.html")
-        return
+        pytest.skip(f"created baseline snapshot {name}.html")
     expected = path.read_text(encoding="utf-8")
-    assert normalized == expected, f"render output changed for {name} (route snapshot mismatch)"
+    if _skeleton(normalized) == _skeleton(expected):
+        return
+    if updating:
+        path.write_text(normalized, encoding="utf-8")
+        return
+    assert _skeleton(normalized) == _skeleton(expected), (
+        f"render output changed for {name} (route snapshot mismatch)"
+    )
 
 
 @pytest.mark.parametrize("name,route", PAGE_ROUTES)

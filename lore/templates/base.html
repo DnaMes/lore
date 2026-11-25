@@ -41,6 +41,9 @@
             --primary-soft: #fff1e8;
             --on-primary: #ffffff;
             --user-bg: #fff4ec;
+            --user-border: #f5cdb4;
+            --user-text: #1c1a1f;
+            --accent: #7c3aed;
             --bg-alt: #f3f0ec;
             --shadow-lg: 0 18px 44px -20px rgba(28, 26, 31, 0.28);
         }
@@ -60,6 +63,9 @@
             --primary-soft: rgba(250, 179, 135, 0.14);
             --on-primary: #1a1209;
             --user-bg: #1a120c;
+            --user-border: #4a3426;
+            --user-text: #fde8d8;
+            --accent: #cba6f7;
             --bg-alt: #15151a;
             --shadow-lg: 0 22px 52px -22px rgba(0, 0, 0, 0.85);
         }
@@ -881,7 +887,7 @@
         .tool-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 11px; font-weight: 600; color: #475569; }
         .thinking-summary { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--accent); }
         .thinking-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); padding: 2px 8px; border-radius: 999px; }
-        .thinking-content { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.65; color: var(--text-muted); }
+        .thinking-content { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; font-size: 13px; line-height: 1.65; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; max-height: 400px; overflow-y: auto; }
         details.think-fold { border: 1px solid var(--border); border-radius: 10px; background: var(--card); margin: 8px 0; font-size: 13px; }
         details.think-fold > summary { cursor: pointer; padding: 8px 12px; color: var(--muted); list-style: none; font-weight: 600; }
         details.think-fold > summary::-webkit-details-marker { display: none; }
@@ -1318,7 +1324,7 @@
             const DEFAULT_THEME = 'light';
 
             const THEMES = [
-                { id: 'light', name: 'Light', swatch: '#f6f7fb' },
+                { id: 'light', name: 'Light', swatch: '#f8f7f5' },
                 { id: 'dark', name: 'Dark', swatch: '#0c0c10' },
             ];
 
