@@ -1316,6 +1316,50 @@
             #sidebarBackdrop { display: none !important; }
             #appSidebar { transform: none !important; position: static; }
         }
+        /* Footer status bar */
+        .app-main > .overflow-y-auto { padding-bottom: 28px; }
+        .status-bar {
+            height: 28px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 0 16px;
+            border-top: 1px solid var(--border);
+            background: var(--panel-strong);
+            color: var(--text-muted);
+            font-family: "Source Code Pro", "SF Mono", Menlo, monospace;
+            font-size: 11px;
+            line-height: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            z-index: 10;
+        }
+        .status-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            flex-shrink: 0;
+            background: var(--text-muted);
+        }
+        .status-dot.is-fresh { background: var(--success); }
+        .status-dot.is-stale { background: var(--warning); }
+        .status-chip-accent { color: var(--primary); }
+        .status-chip-ok { color: var(--success); }
+        .status-chip-warn { color: var(--warning); }
+        .status-chip-err { color: var(--error); }
+        .status-unavailable { color: var(--error); }
+        @media (max-width: 639px) {
+            .status-chip-hide-sm { display: none; }
+        }
     </style>
     <script nonce="{{ nonce }}">
         /* Theme Switcher */
@@ -1548,6 +1592,18 @@
             <div class="flex-1 min-h-0 overflow-y-auto">
                 {% block content %}{% endblock %}
             </div>
+            <footer id="statusBar" class="status-bar" role="status" aria-live="polite">
+                <span id="sbSessions" class="status-chip" title="Total indexed sessions"></span>
+                <span id="sbSynced" class="status-chip status-chip-hide-sm" title="Last session index sync time"></span>
+                <span id="sbIndex" class="status-chip" title="Index freshness">
+                    <span id="sbIndexDot" class="status-dot" aria-hidden="true"></span>
+                </span>
+                <span id="sbSearch" class="status-chip status-chip-hide-sm" title="Search mode and message index status"></span>
+                <span id="sbWorker" class="status-chip status-chip-hide-sm" title="Background worker heartbeat status"></span>
+                <span id="sbSummaries" class="status-chip status-chip-hide-sm" title="Web summary generation mode"></span>
+                <span id="sbVersion" class="status-chip status-chip-hide-sm" title="Lore version"></span>
+                <span id="sbUnavailable" class="status-chip status-unavailable" hidden></span>
+            </footer>
         </main>
     </div>
     <div id="shortcutsHelpDialog" class="bottom-sheet-host confirm-sheet-host" role="dialog" aria-modal="true" aria-labelledby="shortcutsHelpTitle" hidden>
@@ -2784,6 +2840,160 @@
                     field.form.submit();
                 }
             });
+        })();
+    </script>
+    <script nonce="{{ nonce }}">
+        (function () {
+            var bar = document.getElementById('statusBar');
+            if (!bar) return;
+
+            var elSessions = document.getElementById('sbSessions');
+            var elSynced = document.getElementById('sbSynced');
+            var elIndex = document.getElementById('sbIndex');
+            var elIndexDot = document.getElementById('sbIndexDot');
+            var elSearch = document.getElementById('sbSearch');
+            var elWorker = document.getElementById('sbWorker');
+            var elSummaries = document.getElementById('sbSummaries');
+            var elVersion = document.getElementById('sbVersion');
+            var elUnavailable = document.getElementById('sbUnavailable');
+
+            var chipEls = [elSessions, elSynced, elIndex, elSearch, elWorker, elSummaries, elVersion];
+
+            function formatRelativeTime(iso) {
+                if (!iso) return 'never';
+                var ts = Date.parse(iso);
+                if (isNaN(ts)) return 'unknown';
+                var diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+                if (diffSec < 60) return 'just now';
+                var diffMin = Math.floor(diffSec / 60);
+                if (diffMin < 60) return diffMin + 'm ago';
+                var diffHr = Math.floor(diffMin / 60);
+                if (diffHr < 24) return diffHr + 'h ago';
+                var diffDay = Math.floor(diffHr / 24);
+                return diffDay + 'd ago';
+            }
+
+            function showUnavailable() {
+                chipEls.forEach(function (el) {
+                    if (el) el.hidden = true;
+                });
+                if (elUnavailable) {
+                    elUnavailable.textContent = 'status unavailable';
+                    elUnavailable.hidden = false;
+                }
+            }
+
+            function renderStatus(data) {
+                if (!data || typeof data !== 'object') {
+                    showUnavailable();
+                    return;
+                }
+                if (elUnavailable) {
+                    elUnavailable.textContent = '';
+                    elUnavailable.hidden = true;
+                }
+                chipEls.forEach(function (el) {
+                    if (el) el.hidden = false;
+                });
+
+                var sessions = data.sessions || {};
+                if (elSessions) {
+                    var total = typeof sessions.total_sessions === 'number' ? sessions.total_sessions : 0;
+                    var hiddenCount = typeof sessions.automated_hidden === 'number' ? sessions.automated_hidden : 0;
+                    var text = total + ' sessions';
+                    if (hiddenCount > 0) {
+                        text += ' \u00b7 ' + hiddenCount + ' automated hidden';
+                    }
+                    elSessions.textContent = text;
+                }
+
+                if (elSynced) {
+                    elSynced.textContent = 'synced ' + formatRelativeTime(sessions.last_updated);
+                    if (sessions.last_updated) {
+                        elSynced.title = 'Last session index sync: ' + sessions.last_updated;
+                    }
+                }
+
+                var index = data.index;
+                if (elIndex && elIndexDot) {
+                    elIndexDot.classList.remove('is-fresh', 'is-stale');
+                    if (index && index.fresh === true) {
+                        elIndexDot.classList.add('is-fresh');
+                        elIndex.title = 'Index freshness: fresh';
+                    } else if (index && index.fresh === false) {
+                        elIndexDot.classList.add('is-stale');
+                        var reasons = Array.isArray(index.reasons) && index.reasons.length
+                            ? ' (' + index.reasons.join(', ') + ')'
+                            : '';
+                        elIndex.title = 'Index freshness: stale' + reasons;
+                    } else {
+                        elIndex.title = 'Index freshness: unknown';
+                    }
+                }
+
+                var search = data.search || {};
+                if (elSearch) {
+                    var mode = search.mode === 'hybrid' ? 'hybrid' : 'keyword';
+                    var searchText = 'search: ' + mode;
+                    if (search.message_index === 'backfilling') {
+                        searchText += ' (backfilling)';
+                    }
+                    elSearch.textContent = searchText;
+                }
+
+                var worker = data.worker || {};
+                if (elWorker) {
+                    var state = worker.state;
+                    var workerLabel = 'worker off';
+                    elWorker.classList.remove('status-chip-ok', 'status-chip-warn');
+                    if (state === 'ok') {
+                        workerLabel = 'worker ok';
+                        elWorker.classList.add('status-chip-ok');
+                    } else if (state === 'stale') {
+                        workerLabel = 'worker stale';
+                        elWorker.classList.add('status-chip-warn');
+                    }
+                    elWorker.textContent = workerLabel;
+                }
+
+                var llm = data.llm || {};
+                if (elSummaries) {
+                    var summariesText = 'summaries: off';
+                    if (llm.web_summaries !== false && llm.provider != null) {
+                        summariesText = llm.local === true ? 'summaries: local' : 'summaries: cloud';
+                    }
+                    elSummaries.textContent = summariesText;
+                }
+
+                if (elVersion) {
+                    var ver = typeof data.version === 'string'
+                        ? data.version
+                        : (data.version && data.version.version ? data.version.version : '');
+                    elVersion.textContent = ver ? 'v' + ver : '';
+                }
+            }
+
+            function fetchStatus() {
+                fetch('/api/status', { credentials: 'same-origin' })
+                    .then(function (res) {
+                        if (!res.ok) throw new Error('status ' + res.status);
+                        return res.json();
+                    })
+                    .then(renderStatus)
+                    .catch(showUnavailable);
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', fetchStatus);
+            } else {
+                fetchStatus();
+            }
+
+            setInterval(function () {
+                if (document.visibilityState === 'visible') {
+                    fetchStatus();
+                }
+            }, 30000);
         })();
     </script>
 </body>

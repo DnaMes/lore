@@ -29,6 +29,135 @@ def api_build_info():
     return jsonify(_web._build_info_payload())
 
 
+@bp.route("/api/status")
+def api_status():
+    """Return lightweight operational status for the web UI status bar."""
+    from lore import __version__
+    from lore.services import index as _index_service
+    from lore.services import summarize_cli as _summarize_cli
+    from lore.services import worker as _worker_service
+    from lore.storage import v2_db_path
+    from lore.storage.freshness import store_freshness
+    from lore.storage.message_fts import message_fts_pending, message_fts_ready
+    from lore.storage.schema import open_connection
+
+    errors: list[str] = []
+
+    sessions_info: Optional[dict[str, Any]] = None
+    try:
+        summary = _web.load_index_summary()
+        sessions_info = {
+            "total_sessions": int(summary.get("total_sessions") or 0),
+            "automated_hidden": int(summary.get("automated_hidden") or 0),
+            "last_updated": summary.get("last_updated"),
+        }
+    except Exception as exc:  # noqa: BLE001 — status endpoint must never raise
+        errors.append(f"sessions: {exc}")
+
+    index_info: Optional[dict[str, Any]] = None
+    try:
+        db_path = v2_db_path(_web.INDEX_PATH.parent)
+        freshness = store_freshness(db_path, compare_to=_web.INDEX_PATH)
+        index_info = {
+            "fresh": bool(freshness.get("ok")),
+            "reasons": list(freshness.get("reasons") or []),
+        }
+    except Exception as exc:  # noqa: BLE001 — status endpoint must never raise
+        errors.append(f"index: {exc}")
+
+    search_info: Optional[dict[str, Any]] = None
+    try:
+        db_path = v2_db_path(_web.INDEX_PATH.parent)
+        build_info = _web._build_info_payload() or {}
+        semantic = build_info.get("semantic") or {}
+        is_hybrid = bool(
+            _index_service._hybrid_enabled()
+            and semantic.get("embeddings_available")
+            and semantic.get("sqlite_vec_available")
+        )
+        mode = "hybrid" if is_hybrid else "keyword"
+
+        if not db_path.exists():
+            message_index = "absent"
+        else:
+            conn = open_connection(db_path)
+            try:
+                if message_fts_ready(conn):
+                    message_index = "ready"
+                elif message_fts_pending(conn):
+                    message_index = "backfilling"
+                else:
+                    message_index = "absent"
+            finally:
+                conn.close()
+
+        search_info = {
+            "mode": mode,
+            "message_index": message_index,
+        }
+    except Exception as exc:  # noqa: BLE001 — status endpoint must never raise
+        errors.append(f"search: {exc}")
+
+    worker_info: Optional[dict[str, Any]] = None
+    try:
+        worker_status = _worker_service.load_status(_web.OUTPUT_DIR)
+        mtime = worker_status.get("heartbeat_mtime")
+        interval = int(worker_status.get("interval_seconds") or 0)
+        if mtime is None:
+            state_exists = (_worker_service.worker_dir(_web.OUTPUT_DIR) / "state.json").is_file()
+            worker_info = {
+                "state": "stale" if state_exists else "absent",
+                "heartbeat_age_seconds": None,
+            }
+        else:
+            age = max(0, int(time.time() - float(mtime)))
+            worker_info = {
+                "state": "stale" if age > interval * 3 else "ok",
+                "heartbeat_age_seconds": age,
+            }
+    except Exception as exc:  # noqa: BLE001 — status endpoint must never raise
+        errors.append(f"worker: {exc}")
+
+    llm_info: Optional[dict[str, Any]] = None
+    try:
+        raw_provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip()
+        if raw_provider:
+            provider: Optional[str] = raw_provider.lower()
+            local: Optional[bool] = _summarize_cli.provider_locality(provider) == "local"
+        else:
+            provider = None
+            local = None
+        llm_info = {
+            "provider": provider,
+            "local": local,
+            "web_summaries": bool(_summarize_cli.web_summarize_enabled()),
+        }
+    except Exception as exc:  # noqa: BLE001 — status endpoint must never raise
+        errors.append(f"llm: {exc}")
+
+    version_val: Optional[str] = None
+    revision_val: Optional[str] = None
+    try:
+        version_val = __version__
+        revision_val = _web._current_revision()
+    except Exception as exc:  # noqa: BLE001 — status endpoint must never raise
+        errors.append(f"version: {exc}")
+
+    return jsonify(
+        {
+            "sessions": sessions_info,
+            "index": index_info,
+            "search": search_info,
+            "worker": worker_info,
+            "llm": llm_info,
+            "version": version_val,
+            "revision": revision_val,
+            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "errors": errors,
+        }
+    )
+
+
 @bp.route("/api/health")
 def api_health():
     uptime_seconds = max(0, int(time.time() - APP_STARTED_EPOCH))

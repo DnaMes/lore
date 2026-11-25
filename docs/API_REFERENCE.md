@@ -477,6 +477,22 @@ Returns:
 - `groups`: per-tool groupings
 - `continue_command`: suggested `ai-session` continuation command
 
+### `GET /api/status`
+
+Returns a lightweight operational status snapshot for the web UI status bar. Never raises; if an individual subsystem fails, its field is `null` and a diagnostic message is appended to `errors`.
+
+Response fields:
+
+- `sessions`: `{total_sessions, automated_hidden, last_updated}`
+- `index`: `{fresh, reasons}` from v2 store freshness vs `index.json`
+- `search`: `{mode, message_index}` where `mode` is `"hybrid"` or `"keyword"` and `message_index` is `"ready"`, `"backfilling"`, or `"absent"`
+- `worker`: `{state, heartbeat_age_seconds}` where `state` is `"ok"`, `"stale"`, or `"absent"`
+- `llm`: `{provider, local, web_summaries}` (never exposes API keys or URLs)
+- `version`: Lore package version string
+- `revision`: current git revision
+- `generated_at`: UTC ISO-8601 timestamp
+- `errors`: list of per-section error strings (empty when healthy)
+
 ## Common Response Fields
 
 Session summary fields:
