@@ -74,7 +74,10 @@ _KEY_NAME = (
 _ASSIGN = re.compile(
     r"(?i)(?<![A-Za-z0-9_.-])(?:export[ \t]+)?"
     r"(?P<key>[\"']?" + _KEY_NAME + r"[\"']?)"
-    r"(?P<sep>\]?[ \t]*[=:][ \t]*|:[ \t]*\r?\n[ \t]+)"
+    # Second alternative: a YAML block scalar, the value on the next indented line. The
+    # lookahead refuses a nested ``key:`` so the inner key is matched on its own (a match
+    # that swallowed it would leave ``api_key:\n  password: hunter2`` unredacted).
+    r"(?P<sep>\]?[ \t]*[=:][ \t]*|:[ \t]*\r?\n[ \t]+(?![^\s\"',;]*:(?:\s|$)))"
     r'(?:"(?P<dq>(?:[^"\\\r\n]|\\.){4,500})"'
     r"|'(?P<sq>(?:[^'\\\r\n]|\\.){4,500})'"
     r"|(?P<uv>[^\s\"',;]{8,}))"
@@ -211,8 +214,6 @@ def _assign_repl(m: re.Match[str]) -> Optional[str]:
             while value.endswith(closer) and value.count(closer) > value.count(opener):
                 value, tail = value[:-1], closer + tail
     if _is_placeholder(value):
-        return None
-    if "\n" in m.group("sep") and value.endswith(":"):  # nested YAML key, not a value
         return None
     prefix = m.group(0)[: m.start("sep") - m.start() + len(m.group("sep"))]
     marker = _marker("secret_assignment")

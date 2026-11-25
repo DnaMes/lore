@@ -389,3 +389,10 @@ def test_nested_yaml_key_under_secret_key_is_not_a_value():
 def test_percent_templates_stay_placeholders(template):
     text = f"https://user:{template}@host.example/path"
     assert redact(text).text == text
+
+
+def test_secret_under_a_nested_yaml_key_is_still_redacted():
+    # The outer key must not swallow the inner one: "password:" is a key, not a value.
+    result = redact("api_key:\n    password: hunter2hunter2\n")
+    assert "hunter2hunter2" not in result.text
+    assert result.count == 1
