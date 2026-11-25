@@ -74,7 +74,7 @@ _KEY_NAME = (
 _ASSIGN = re.compile(
     r"(?i)(?<![A-Za-z0-9_.-])(?:export[ \t]+)?"
     r"(?P<key>[\"']?" + _KEY_NAME + r"[\"']?)"
-    r"(?P<sep>\]?[ \t]*[=:][ \t]*)"
+    r"(?P<sep>\]?[ \t]*[=:][ \t]*|:[ \t]*\r?\n[ \t]+)"
     r'(?:"(?P<dq>(?:[^"\\\r\n]|\\.){4,500})"'
     r"|'(?P<sq>(?:[^'\\\r\n]|\\.){4,500})'"
     r"|(?P<uv>[^\s\"',;]{8,}))"
@@ -94,6 +94,8 @@ _SECRET_WORDS = frozenset(
     {"password", "passwd", "pwd", "secret", "token", "key", "api_key", "apikey", "credentials"}
 )
 _NUMERIC = re.compile(r"^[0-9._-]+$")
+# "%s", "%(name)s", "%VAR%" are templates; "%70ass%40word" is a percent-encoded literal.
+_PERCENT_TEMPLATE = re.compile(r"^%(?:\(|[sd]\b|[A-Za-z_][A-Za-z0-9_]*%$)")
 
 
 @dataclass(frozen=True)
@@ -109,7 +111,9 @@ def _is_placeholder(value: str) -> bool:
     low = value.lower().strip()
     if low in _PLACEHOLDER_LOWER or _NUMERIC.match(low):
         return True
-    if value[:1] in ("<", "$", "%", "{") or value.startswith(("{{", "${")):
+    if value[:1] in ("<", "$", "{") or value.startswith(("{{", "${")):
+        return True
+    if value[:1] == "%" and _PERCENT_TEMPLATE.match(value):
         return True
     if low.startswith("your_") or low.startswith("your-"):
         return True
@@ -208,13 +212,19 @@ def _assign_repl(m: re.Match[str]) -> Optional[str]:
                 value, tail = value[:-1], closer + tail
     if _is_placeholder(value):
         return None
+    if "\n" in m.group("sep") and value.endswith(":"):  # nested YAML key, not a value
+        return None
     prefix = m.group(0)[: m.start("sep") - m.start() + len(m.group("sep"))]
     marker = _marker("secret_assignment")
     return f"{prefix}{quote}{marker}{quote}" if quote else f"{prefix}{marker}{tail}"
 
 
 def redact(text: str) -> RedactionResult:
-    """Return ``text`` with secret-shaped substrings replaced; never raises."""
+    """Return ``text`` with secret-shaped substrings replaced; never raises.
+
+    Repeats the pass until nothing new matches: a token whose ``\\b`` was blocked by an adjacent
+    token only matches once that neighbour is a marker, so one pass is not idempotent.
+    """
     if not isinstance(text, str):
         try:
             return RedactionResult(str(text), 0, {})
@@ -222,6 +232,20 @@ def redact(text: str) -> RedactionResult:
             return RedactionResult("", 0, {})
 
     kinds: dict[str, int] = {}
+    current = text
+    for _ in range(4):  # ponytail: a pass can only unblock tokens next to markers; 4 is ample
+        before = sum(kinds.values())
+        result = _redact_pass(current, kinds)
+        if result is None:
+            return RedactionResult(_marker("unprocessable"), 1, {"unprocessable": 1})
+        current = result
+        if sum(kinds.values()) == before:
+            break
+    return RedactionResult(current, sum(kinds.values()), kinds)
+
+
+def _redact_pass(text: str, kinds: dict[str, int]) -> Optional[str]:
+    """One pass over every pattern; ``None`` means the input could not be processed."""
     try:
         current = _redact_pem(text, kinds)
         for pattern, kind in (
@@ -285,9 +309,9 @@ def redact(text: str) -> RedactionResult:
             lambda m: f"{m.group(1)}{_marker('sas_signature')}",
         )
     except (RecursionError, MemoryError):  # never raise: fail closed, nothing is sent through
-        return RedactionResult(_marker("unprocessable"), 1, {"unprocessable": 1})
+        return None
 
-    return RedactionResult(current, sum(kinds.values()), kinds)
+    return current
 
 
 _SECRET_KEY = re.compile(r"(?i)^" + _KEY_NAME + r"$")

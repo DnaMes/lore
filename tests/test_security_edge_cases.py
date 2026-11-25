@@ -44,13 +44,6 @@ def test_secrets_on_separate_lines_are_each_redacted():
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "bug: redact() leaves an assignment value unredacted when it sits on the line after "
-        "the key (valid YAML block scalar); the secret leaks with count 0"
-    ),
-)
 def test_assignment_value_on_next_line_is_redacted():
     result = redact("db_password:\n    hunter2hunter2\n")
     assert "hunter2hunter2" not in result.text
@@ -106,13 +99,6 @@ def test_url_placeholder_password_is_left_alone():
     assert result.count == 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "bug: a percent-encoded URL password starting with % (e.g. %70ass%40word) is treated "
-        "as a placeholder by _is_placeholder, so the credentials leak unredacted"
-    ),
-)
 def test_percent_encoded_url_password_is_redacted():
     result = redact("https://user:%70ass%40word@host.example/path")
     assert "%70ass%40word" not in result.text
@@ -135,14 +121,6 @@ def test_one_megabyte_input_with_scattered_tokens_under_5s():
     assert result.count == 2 * repeats
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "bug: a token whose trailing \\b is blocked by an adjacent token leaks after one pass "
-        "(npm_<36 alnum>xoxb-... only redacts the xoxb token; on a second pass the boundary "
-        "has appeared and the npm token is redacted too), so redact is not idempotent"
-    ),
-)
 def test_redact_is_idempotent_on_seeded_token_composites():
     # Minimal deterministic repro first: a full npm token survives one pass here.
     minimal = "npm_" + "N" * 36 + "xoxb-" + "A" * 12
@@ -400,3 +378,14 @@ def test_prune_refuses_symlinked_parent_directory_escape(tmp_path, monkeypatch):
     assert real.read_text(encoding="utf-8") == "keep me"
     assert (archive / "projects" / "p").is_symlink()
     assert "refusing to delete" in err
+
+
+def test_nested_yaml_key_under_secret_key_is_not_a_value():
+    text = "api_key:\n    description: shared key\n"
+    assert redact(text).text == text
+
+
+@pytest.mark.parametrize("template", ["%s", "%(password)s", "%DB_PASSWORD%"])
+def test_percent_templates_stay_placeholders(template):
+    text = f"https://user:{template}@host.example/path"
+    assert redact(text).text == text
