@@ -1,6 +1,7 @@
 
 
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1361,6 +1362,9 @@
         @media (max-width: 639px) {
             .status-chip-hide-sm { display: none; }
         }
+        .tool-icon { display: inline-block; width: 1.1em; height: 1.1em; -webkit-mask: var(--icon) center/contain no-repeat; mask: var(--icon) center/contain no-repeat; }
+        .tool-icon-sm { width: 16px; height: 16px; }
+        .tool-icon-md { width: 18px; height: 18px; }
     </style>
     <script nonce="NONCE">
         /* Theme Switcher */
@@ -1426,7 +1430,7 @@
                     
     <a href="/session/session-1?back=%2Fprojects" class="sidebar-link text-xs" title="Claude debugging session">
                         <span class="flex items-center gap-2 min-w-0">
-                            <span class="w-6 h-6 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-[10px]" style="color: #C084FC">C</span>
+                            <span class="w-6 h-6 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-[10px]" style="color: #C084FC"><span class="tool-icon tool-icon-sm" style="--icon: url('/static/icons/claudecode.svg'); background-color: #C084FC" role="img" aria-label="Claude" title="Claude"></span></span>
                             <span class="truncate">Claude debugging session</span>
                         </span>
                     </a>
@@ -1486,11 +1490,11 @@
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="command-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#6366F1"></span>Command Code
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="hermes" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full" style="background:#14B8A6"></span>Hermes
+                                <span class="w-2 h-2 rounded-full" style="background:#06B6D4"></span>Hermes
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="cline" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#F59E0B"></span>Cline
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="roo-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full" style="background:#8B5CF6"></span>Roo Code
+                                <span class="w-2 h-2 rounded-full" style="background:#7C3AED"></span>Roo Code
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="kilo-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#10B981"></span>Kilo Code
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="goose" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
@@ -1504,7 +1508,7 @@
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="zed" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#84CC16"></span>Zed
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="factory-droid" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full" style="background:#F97316"></span>Factory Droid
+                                <span class="w-2 h-2 rounded-full" style="background:#EF4444"></span>Factory Droid
                             </button>
                             <button type="button" data-action="run-sync" data-sync-action="reload" data-sync-full="true" class="w-full text-left px-3 py-2 text-[11px] hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-500 italic" title="Force full rebuild (slow). Use when incremental sync misses changes.">
                                 <span class="w-2 h-2 rounded-full bg-amber-400"></span>Full rebuild (slow)
@@ -1644,7 +1648,7 @@
             <div class="flex items-center gap-2 mt-4">
                 
                 <div class="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-xs font-semibold" style="color: #C084FC" title="Claude · 1">
-                    C
+                    <span class="tool-icon tool-icon-md" style="--icon: url('/static/icons/claudecode.svg'); background-color: #C084FC" role="img" aria-label="Claude" title="Claude"></span>
                 </div>
                 
             </div>

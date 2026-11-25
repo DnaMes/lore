@@ -2,6 +2,7 @@
 
 
 <!DOCTYPE html>
+
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1362,6 +1363,9 @@
         @media (max-width: 639px) {
             .status-chip-hide-sm { display: none; }
         }
+        .tool-icon { display: inline-block; width: 1.1em; height: 1.1em; -webkit-mask: var(--icon) center/contain no-repeat; mask: var(--icon) center/contain no-repeat; }
+        .tool-icon-sm { width: 16px; height: 16px; }
+        .tool-icon-md { width: 18px; height: 18px; }
     </style>
     <script nonce="NONCE">
         /* Theme Switcher */
@@ -1427,7 +1431,7 @@
                     
     <a href="/session/session-1?back=%2F" class="sidebar-link text-xs" title="Claude debugging session">
                         <span class="flex items-center gap-2 min-w-0">
-                            <span class="w-6 h-6 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-[10px]" style="color: #C084FC">C</span>
+                            <span class="w-6 h-6 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-[10px]" style="color: #C084FC"><span class="tool-icon tool-icon-sm" style="--icon: url('/static/icons/claudecode.svg'); background-color: #C084FC" role="img" aria-label="Claude" title="Claude"></span></span>
                             <span class="truncate">Claude debugging session</span>
                         </span>
                     </a>
@@ -1487,11 +1491,11 @@
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="command-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#6366F1"></span>Command Code
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="hermes" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full" style="background:#14B8A6"></span>Hermes
+                                <span class="w-2 h-2 rounded-full" style="background:#06B6D4"></span>Hermes
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="cline" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#F59E0B"></span>Cline
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="roo-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full" style="background:#8B5CF6"></span>Roo Code
+                                <span class="w-2 h-2 rounded-full" style="background:#7C3AED"></span>Roo Code
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="kilo-code" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#10B981"></span>Kilo Code
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="goose" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
@@ -1505,7 +1509,7 @@
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="zed" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
                                 <span class="w-2 h-2 rounded-full" style="background:#84CC16"></span>Zed
                             </button><button type="button" data-action="run-sync" data-sync-action="reload" data-sync-provider="factory-droid" class="w-full text-left px-3 py-2 text-xs hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full" style="background:#F97316"></span>Factory Droid
+                                <span class="w-2 h-2 rounded-full" style="background:#EF4444"></span>Factory Droid
                             </button>
                             <button type="button" data-action="run-sync" data-sync-action="reload" data-sync-full="true" class="w-full text-left px-3 py-2 text-[11px] hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2 text-slate-500 italic" title="Force full rebuild (slow). Use when incremental sync misses changes.">
                                 <span class="w-2 h-2 rounded-full bg-amber-400"></span>Full rebuild (slow)
@@ -1627,7 +1631,7 @@
                 <a href="/session/session-1" class="surface-card p-5 block group transition-all">
                     <div class="flex items-start gap-3">
                         <div class="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-semibold bg-white border border-slate-200" style="color: #C084FC">
-                            C
+                            <span class="tool-icon tool-icon-md" style="--icon: url('/static/icons/claudecode.svg'); background-color: #C084FC" role="img" aria-label="Claude" title="Claude"></span>
                         </div>
                         <div class="min-w-0 flex-1">
                             <div class="text-sm font-semibold text-slate-900 truncate group-hover:text-slate-900">Claude debugging session</div>
@@ -1719,7 +1723,7 @@
                 
                 <a href="/session/session-1" class="compact-row flex items-center gap-3 group">
                     <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-white border border-slate-200" style="color: #C084FC">
-                        C
+                        <span class="tool-icon tool-icon-md" style="--icon: url('/static/icons/claudecode.svg'); background-color: #C084FC" role="img" aria-label="Claude" title="Claude"></span>
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="compact-title text-slate-900 group-hover:text-slate-900 truncate">Claude debugging session</div>
@@ -1845,7 +1849,7 @@
                 
                 <a href="/sessions?tool=hermes" class="list-row flex items-center justify-between p-3 group">
                     <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #14B8A6"></div>
+                        <div class="w-2 h-2 rounded-full" style="background: #06B6D4"></div>
                         <span class="text-sm text-slate-600 group-hover:text-slate-900">Hermes</span>
                     </div>
                     <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
@@ -1863,7 +1867,7 @@
                 
                 <a href="/sessions?tool=roo-code" class="list-row flex items-center justify-between p-3 group">
                     <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #8B5CF6"></div>
+                        <div class="w-2 h-2 rounded-full" style="background: #7C3AED"></div>
                         <span class="text-sm text-slate-600 group-hover:text-slate-900">Roo Code</span>
                     </div>
                     <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
@@ -1926,7 +1930,7 @@
                 
                 <a href="/sessions?tool=factory-droid" class="list-row flex items-center justify-between p-3 group">
                     <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #F97316"></div>
+                        <div class="w-2 h-2 rounded-full" style="background: #EF4444"></div>
                         <span class="text-sm text-slate-600 group-hover:text-slate-900">Factory Droid</span>
                     </div>
                     <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
