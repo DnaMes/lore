@@ -1421,11 +1421,8 @@
                 <a href="/" class="sidebar-link active">Dashboard</a>
                 <a href="/sessions" class="sidebar-link ">Sessions</a>
                 <a href="/projects" class="sidebar-link ">Projects</a>
-                <a href="/threads" class="sidebar-link ">Threads</a>
                 <a href="/memory" class="sidebar-link ">Memory</a>
                 <a href="/stats" class="sidebar-link ">Stats</a>
-                <a href="/rules" class="sidebar-link ">Rules</a>
-                <a href="/noise-rules" class="sidebar-link ">Noise Rules</a>
                 <div class="mt-8 mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Recent Activity</div>
                 <div class="space-y-1">
                     
@@ -1438,7 +1435,11 @@
                     
                 </div>
             </div>
-            <div class="mt-auto px-5 py-3 border-t border-slate-200/70 text-[10px] text-slate-500 flex items-center justify-between">
+            <div class="px-3 py-2 border-t border-slate-200/70 space-y-1">
+                <a href="/settings" class="sidebar-link ">Settings</a>
+                <a href="/help" class="sidebar-link ">Help</a>
+            </div>
+            <div class="px-5 py-3 border-t border-slate-200/70 text-[10px] text-slate-500 flex items-center justify-between">
                 <span class="font-mono">lore v2.4.0</span>
                 <a href="/api/build-info" class="hover:text-slate-700" aria-label="Build info">build</a>
             </div>
@@ -1696,249 +1697,103 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Sessions</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Sessions · all time</div>
             <div class="text-3xl font-semibold text-slate-900">1</div>
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Messages</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Messages · all time</div>
             <div class="text-3xl font-semibold text-slate-900">2</div>
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Tools</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Tools · all time</div>
             <div class="text-3xl font-semibold text-slate-900">1</div>
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Projects</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Projects · all time</div>
             <div class="text-3xl font-semibold text-slate-900">1</div>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div class="lg:col-span-2">
-            <div class="flex items-center justify-between mb-5">
-                <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent Activity</h2>
-                <a href="/sessions" class="text-xs text-slate-500 hover:text-slate-900">View all</a>
-            </div>
-            <div class="compact-list">
-                
-                <a href="/session/session-1" class="compact-row flex items-center gap-3 group">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-white border border-slate-200" style="color: #C084FC">
-                        <span class="tool-icon tool-icon-md" style="--icon: url('/static/icons/claudecode.svg'); background-color: #C084FC" role="img" aria-label="Claude" title="Claude"></span>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="compact-title text-slate-900 group-hover:text-slate-900 truncate">Claude debugging session</div>
-                        <div class="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">via Claude • 2026-04-01</div>
-                    </div>
-                    <div class="text-[10px] font-mono text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-full">1 prompts</div>
-                </a>
-                
-            </div>
+    <section>
+        <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-5">Tools</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            
+            
+            
+            <a href="/sessions?tool=claude-code" class="list-row flex items-center justify-between p-3 group">
+                <div class="flex items-center gap-3">
+                    <div class="w-2 h-2 rounded-full" style="background: #C084FC"></div>
+                    <span class="text-sm text-slate-600 group-hover:text-slate-900">Claude</span>
+                </div>
+                <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">1</span>
+            </a>
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
+            
         </div>
-        <div>
-            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-5">Tools</h2>
-            <div class="space-y-2">
-                
-                
-                <a href="/sessions?tool=claude-code" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #C084FC"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Claude</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">1</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=cursor" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #3B82F6"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Cursor</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=gemini-cli" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #60A5FA"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Gemini</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=codex" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #22C55E"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Codex</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=vscode-copilot" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #0ea5e9"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">VSCode Copilot</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=visual-studio-copilot" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #A179DC"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Visual Studio Copilot</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=copilot-cli" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #0284c7"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Copilot CLI</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=opencode" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #F97316"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">OpenCode</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=antigravity" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #8B5CF6"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Antigravity</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=aider" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #14B8A6"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Aider</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=pi" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #EC4899"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Pi</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=command-code" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #6366F1"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Command Code</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=hermes" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #06B6D4"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Hermes</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=cline" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #F59E0B"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Cline</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=roo-code" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #7C3AED"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Roo Code</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=kilo-code" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #10B981"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Kilo Code</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=goose" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #EAB308"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Goose</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=crush" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #F472B6"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Crush</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=kimi" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #38BDF8"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Kimi</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=qwen" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #A78BFA"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Qwen Code</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=zed" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #84CC16"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Zed</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-                
-                <a href="/sessions?tool=factory-droid" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: #EF4444"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">Factory Droid</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">0</span>
-                </a>
-                
-            </div>
-        </div>
-    </div>
+    </section>
 </section>
 
             </div>

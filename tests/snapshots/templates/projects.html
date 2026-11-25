@@ -1420,11 +1420,8 @@
                 <a href="/" class="sidebar-link ">Dashboard</a>
                 <a href="/sessions" class="sidebar-link ">Sessions</a>
                 <a href="/projects" class="sidebar-link active">Projects</a>
-                <a href="/threads" class="sidebar-link ">Threads</a>
                 <a href="/memory" class="sidebar-link ">Memory</a>
                 <a href="/stats" class="sidebar-link ">Stats</a>
-                <a href="/rules" class="sidebar-link ">Rules</a>
-                <a href="/noise-rules" class="sidebar-link ">Noise Rules</a>
                 <div class="mt-8 mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Recent Activity</div>
                 <div class="space-y-1">
                     
@@ -1437,7 +1434,11 @@
                     
                 </div>
             </div>
-            <div class="mt-auto px-5 py-3 border-t border-slate-200/70 text-[10px] text-slate-500 flex items-center justify-between">
+            <div class="px-3 py-2 border-t border-slate-200/70 space-y-1">
+                <a href="/settings" class="sidebar-link ">Settings</a>
+                <a href="/help" class="sidebar-link ">Help</a>
+            </div>
+            <div class="px-5 py-3 border-t border-slate-200/70 text-[10px] text-slate-500 flex items-center justify-between">
                 <span class="font-mono">lore v2.4.0</span>
                 <a href="/api/build-info" class="hover:text-slate-700" aria-label="Build info">build</a>
             </div>
@@ -1611,6 +1612,7 @@
         <div>
             <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Workspace</div>
             <h1 class="title-font page-headline text-slate-900 mt-2">Projects</h1>
+            <p class="text-sm text-slate-500 mt-2">Sessions grouped by the folder you worked in, across all tools. <a href="/threads" class="link-accent">Timeline view</a></p>
         </div>
     </div>
     <form method="get" data-autosubmit="true" class="grid grid-cols-1 lg:grid-cols-5 gap-3 mb-8">
