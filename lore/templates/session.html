@@ -1,11 +1,12 @@
 
 {% extends "base.html" %}
+{% from '_macros.html' import tool_badge %}
 {% block content %}
 <div data-transcript-view="1" hidden></div>
 <section class="max-w-[90rem] mx-auto px-6 pb-4 session-header-wrap">
     <div id="sessionHeader" class="session-header surface-card flex flex-wrap items-center justify-between gap-3 px-5 py-4 backdrop-blur-xl">
         <div class="session-header-main min-w-0 flex-1 flex flex-wrap items-center gap-3">
-            <div class="session-header-icon w-9 h-9 rounded-lg flex items-center justify-center text-sm border border-slate-200 flex-shrink-0" style="color: {{ style.color }}">{{ style.icon }}</div>
+            <div class="session-header-icon w-9 h-9 rounded-lg flex items-center justify-center text-sm border border-slate-200 flex-shrink-0" style="color: {{ style.color }}">{{ tool_badge(style, 'tool-icon-md') }}</div>
             <div class="min-w-0 flex-1">
                 <h1 class="session-headline truncate">{{ session.title or 'Untitled Session' }}</h1>
                 <div class="session-header-meta session-meta mt-1">

@@ -1,5 +1,6 @@
 
 <!DOCTYPE html>
+{% from '_macros.html' import tool_badge %}
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1360,6 +1361,9 @@
         @media (max-width: 639px) {
             .status-chip-hide-sm { display: none; }
         }
+        .tool-icon { display: inline-block; width: 1.1em; height: 1.1em; -webkit-mask: var(--icon) center/contain no-repeat; mask: var(--icon) center/contain no-repeat; }
+        .tool-icon-sm { width: 16px; height: 16px; }
+        .tool-icon-md { width: 18px; height: 18px; }
     </style>
     <script nonce="{{ nonce }}">
         /* Theme Switcher */
@@ -1425,7 +1429,7 @@
                     {% for s in recent %}
     <a href="/session/{{ s.id|urlpath }}?back={{ nav_back|urlpath }}" class="sidebar-link text-xs" title="{{ s.display_title or s.title }}">
                         <span class="flex items-center gap-2 min-w-0">
-                            <span class="w-6 h-6 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-[10px]" style="color: {{ get_style(s.tool).color }}">{{ get_style(s.tool).icon }}</span>
+                            <span class="w-6 h-6 rounded-lg border border-slate-200 bg-white flex items-center justify-center text-[10px]" style="color: {{ get_style(s.tool).color }}">{{ tool_badge(get_style(s.tool), 'tool-icon-sm') }}</span>
                             <span class="truncate">{{ s.display_title or s.title or s.id[:12] }}</span>
                         </span>
                     </a>

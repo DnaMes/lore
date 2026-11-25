@@ -1,5 +1,6 @@
 
 {% extends "base.html" %}
+{% from '_macros.html' import tool_badge %}
 {% block content %}
 <section class="max-w-6xl mx-auto px-8 py-10">
     <div class="flex flex-wrap justify-between items-center mb-8 gap-4">
@@ -47,7 +48,7 @@
             <div class="flex items-center gap-2 mt-4">
                 {% for agent in p.agents %}
                 <div class="w-9 h-9 rounded-xl border border-slate-200 bg-white flex items-center justify-center text-xs font-semibold" style="color: {{ get_style(agent.tool).color }}" title="{{ get_style(agent.tool).name }} · {{ agent.count }}">
-                    {{ get_style(agent.tool).icon }}
+                    {{ tool_badge(get_style(agent.tool), 'tool-icon-md') }}
                 </div>
                 {% endfor %}
             </div>

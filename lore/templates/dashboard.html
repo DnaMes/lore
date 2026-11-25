@@ -4,6 +4,7 @@
    This avoids shipping the full index.json (can be 19MB+) on the initial page load.
    Wire up with fetch() on DOMContentLoaded and replace the static Jinja blocks below. #}
 {% extends "base.html" %}
+{% from '_macros.html' import tool_badge %}
 {% block content %}
 <section class="max-w-6xl mx-auto px-8 py-10">
     <div class="flex flex-wrap items-center justify-between gap-6 mb-10">
@@ -29,7 +30,7 @@
                 <a href="/session/{{ card.id|urlpath }}" class="surface-card p-5 block group transition-all">
                     <div class="flex items-start gap-3">
                         <div class="w-9 h-9 rounded-xl flex items-center justify-center text-xs font-semibold bg-white border border-slate-200" style="color: {{ get_style(card.tool).color }}">
-                            {{ get_style(card.tool).icon }}
+                            {{ tool_badge(get_style(card.tool), 'tool-icon-md') }}
                         </div>
                         <div class="min-w-0 flex-1">
                             <div class="text-sm font-semibold text-slate-900 truncate group-hover:text-slate-900">{{ card.title }}</div>
@@ -132,7 +133,7 @@
                 {% for s in recent_sessions %}
                 <a href="/session/{{ s.id|urlpath }}" class="compact-row flex items-center gap-3 group">
                     <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-white border border-slate-200" style="color: {{ get_style(s.tool).color }}">
-                        {{ get_style(s.tool).icon }}
+                        {{ tool_badge(get_style(s.tool), 'tool-icon-md') }}
                     </div>
                     <div class="flex-1 min-w-0">
                         <div class="compact-title text-slate-900 group-hover:text-slate-900 truncate">{{ s.display_title or s.title or 'Untitled Session' }}</div>

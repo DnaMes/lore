@@ -1,0 +1,5 @@
+Icons in this directory are taken unmodified from @lobehub/icons-static-svg 1.106.0
+(https://github.com/lobehub/lobe-icons), whose package.json declares the MIT license.
+SHA256SUMS pins every file. The MIT license covers the SVG files only: the logos are
+trademarks of their respective owners. Lore is not affiliated with or endorsed by any of them;
+the marks identify the tools whose sessions Lore indexes.
