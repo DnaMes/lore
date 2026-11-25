@@ -998,6 +998,28 @@ options:
                      LORE_EMBED_BUDGET_SECONDS or 60)
 ```
 
+## message-fts
+
+Index the messages that were stored before migration 29 into `message_fts`, the
+message-level FTS5 index that gives search results their evidence excerpt without
+re-tokenising whole transcripts on every request. Messages written after the migration
+are indexed by triggers; this command only catches up the older ones. It is resumable:
+progress is committed per batch, so a run that stops on `--budget` (or is interrupted)
+continues where it stopped. Until it reports `Backfill complete.`, search keeps using
+the slower per-request path, so results never change, only the latency. The worker runs
+it automatically (90 s per pass); run it by hand to finish sooner.
+
+Mode: writes `message_fts` rows and two `store_meta` keys inside the v2 SQLite store.
+
+```text
+usage: lore message-fts [-h] [--budget BUDGET]
+
+options:
+  -h, --help       show this help message and exit
+  --budget BUDGET  Seconds of indexing work, stopping after the batch that
+                   exhausts it (default: all)
+```
+
 ## analyze
 
 Generate AI-powered statistics and insights.

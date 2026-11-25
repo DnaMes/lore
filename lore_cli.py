@@ -1833,6 +1833,43 @@ def cmd_embed_messages(args):
         )
 
 
+def cmd_message_fts(args):
+    """Index the messages that predate the message-level FTS index (migration 29).
+
+    Resumable: progress is committed per batch, so a run that hit ``--budget`` continues
+    where it stopped. Search evidence uses the index once this has finished.
+    """
+    from lore.storage import v2_db_path
+    from lore.storage.message_fts import (
+        backfill_message_fts,
+        message_fts_pending,
+        message_fts_ready,
+    )
+    from lore.storage.schema import open_v2_connection
+
+    output_dir = Path(args.output_dir).expanduser()
+    db = v2_db_path(output_dir)
+    if not db.exists():
+        print("No index found. Run 'lore export --all' first.")
+        return 1
+    budget = getattr(args, "budget", None)
+    conn = open_v2_connection(db)
+    try:
+        indexed = backfill_message_fts(conn, budget_seconds=budget)
+        state = (
+            "pending"
+            if message_fts_pending(conn)
+            else "complete"
+            if message_fts_ready(conn)
+            else "n/a"
+        )
+    finally:
+        conn.close()
+    noun = "message" if indexed == 1 else "messages"
+    print(f"Indexed {indexed} {noun}. Backfill {state}.")
+    return 0
+
+
 def cmd_stats(args):
     """Show statistics."""
     output_dir = Path(args.output_dir).expanduser()
@@ -2967,6 +3004,7 @@ COMMANDS = {
     "generate-titles": cmd_generate_titles,
     "reindex": cmd_reindex,
     "embed-messages": cmd_embed_messages,
+    "message-fts": cmd_message_fts,
     "analyze": cmd_analyze,
     "knowledge": cmd_knowledge,
     "improve": cmd_improve,
@@ -3486,6 +3524,17 @@ Examples:
         type=float,
         default=None,
         help="Seconds of embedding work (0 = unlimited, default: LORE_EMBED_BUDGET_SECONDS or 60)",
+    )
+
+    fts_parser = subparsers.add_parser(
+        "message-fts",
+        help="Index existing messages for fast search evidence (resumable, after an upgrade)",
+    )
+    fts_parser.add_argument(
+        "--budget",
+        type=float,
+        default=None,
+        help="Seconds of indexing work, stopping after the batch that exhausts it (default: all)",
     )
 
     # analyze command - LLM-powered statistics

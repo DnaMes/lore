@@ -584,6 +584,38 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         ALTER TABLE message_embedding_meta ADD COLUMN content_hash TEXT;
         """,
     ),
+    (
+        29,
+        "message-level FTS5 index for search evidence",
+        # ``message_evidence_for_sessions`` copied and re-tokenised every message of
+        # every hit into a throwaway index on each request (390-470 ms on a 1.3 M
+        # message store). This index is kept current by triggers instead. Rows that
+        # exist now (id <= ``message_fts_upto``) are indexed by
+        # ``backfill_message_fts`` in small committed batches; readers use the index
+        # only once ``message_fts_ready`` is set. Everything below runs in one
+        # transaction, so no message can slip between "upto" and the triggers. A
+        # store with no messages is ready at once. Rowid equals ``messages.id``.
+        """
+        BEGIN IMMEDIATE;
+        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts
+            USING fts5(body, tokenize='porter unicode61');
+        INSERT OR IGNORE INTO store_meta(key, value)
+            SELECT 'message_fts_upto', CAST(COALESCE(MAX(id), 0) AS TEXT) FROM messages;
+        INSERT OR IGNORE INTO store_meta(key, value)
+            SELECT 'message_fts_ready', '1' WHERE NOT EXISTS (SELECT 1 FROM messages);
+        CREATE TRIGGER IF NOT EXISTS messages_fts_ai AFTER INSERT ON messages BEGIN
+            INSERT INTO message_fts(rowid, body) VALUES (new.id, new.content);
+        END;
+        CREATE TRIGGER IF NOT EXISTS messages_fts_ad AFTER DELETE ON messages BEGIN
+            DELETE FROM message_fts WHERE rowid = old.id;
+        END;
+        CREATE TRIGGER IF NOT EXISTS messages_fts_au AFTER UPDATE OF content ON messages BEGIN
+            DELETE FROM message_fts WHERE rowid = old.id;
+            INSERT INTO message_fts(rowid, body) VALUES (new.id, new.content);
+        END;
+        COMMIT;
+        """,
+    ),
 ]
 
 
@@ -687,6 +719,23 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set:
         return set()
 
 
+def _split_statements(sql: str) -> List[str]:
+    """Split migration SQL on ``;``, keeping a ``CREATE TRIGGER ... END`` body whole."""
+    statements: List[str] = []
+    pending: List[str] = []
+    for part in sql.split(";"):
+        pending.append(part)
+        joined = ";".join(pending).strip()
+        if joined.upper().startswith("CREATE TRIGGER") and not re.search(
+            r"\bEND\s*$", joined, re.IGNORECASE
+        ):
+            continue  # inside a trigger body: the next ';' does not end the statement
+        if joined:
+            statements.append(joined)
+        pending = []
+    return statements
+
+
 def _run_migration_sql(conn: sqlite3.Connection, sql: str) -> None:
     """Execute migration DDL, skipping ALTER ADD COLUMN for existing columns.
 
@@ -696,9 +745,7 @@ def _run_migration_sql(conn: sqlite3.Connection, sql: str) -> None:
     column but never recorded the version), re-running would wedge the
     runner. So each ADD COLUMN is checked against the live schema first.
     """
-    # Split on ';' — migration SQL only ever contains simple statements.
-    statements = [s.strip() for s in sql.split(";") if s.strip()]
-    for statement in statements:
+    for statement in _split_statements(sql):
         match = _ALTER_ADD_COLUMN.search(statement)
         if match:
             table, column = match.group(1), match.group(2)

@@ -30,6 +30,7 @@ from .fts import (
     SNIPPET_OPEN,
     build_fts_query,
 )
+from .message_fts import message_fts_ready
 from .reader import (
     _row_to_session_dict,
     automated_exclusion_sql,
@@ -89,6 +90,16 @@ def _bind_ignored_exclusion(
             [(session_id,) for session_id in chunk],
         )
     return f" AND {column_sql} NOT IN (SELECT id FROM _lore_ignored_ids)", ()
+
+
+# Rank on the FTS rowid and map it to a session through the FTS5 shadow table
+# ``search_index_content`` (c0 = entity_type, c1 = entity_id). Reading the UNINDEXED
+# columns through the virtual table instead costs a megabyte-row fetch per match: on the
+# live store 441 ms became 28 to 46 ms with an identical top 10. Layout per migration 4.
+_RANKED_MATCHES = (
+    "SELECT rowid AS rid, bm25(search_index) AS score FROM search_index WHERE search_index MATCH ?"
+)
+_MATCHED_ROWIDS = "SELECT rowid AS rid FROM search_index WHERE search_index MATCH ?"
 
 
 def _like_escape(value: str) -> str:
@@ -243,12 +254,12 @@ def search_sessions(
                    s.messages_count, s.prompt_count, s.prompt_outline,
                    s.export_path, s.total_tokens,
                    {session_contract_select(conn, "s")},
-                   bm25(search_index) AS score
-            FROM search_index
-            JOIN sessions s ON s.id = search_index.entity_id
-            WHERE search_index MATCH ?
-              AND search_index.entity_type = 'session'{exclusion}{ignored_sql}{filter_sql}
-            ORDER BY score ASC, search_index.entity_id ASC
+                   f.score AS score
+            FROM ({_RANKED_MATCHES}) f
+            JOIN search_index_content c ON c.id = f.rid
+            JOIN sessions s ON s.id = c.c1
+            WHERE c.c0 = 'session'{exclusion}{ignored_sql}{filter_sql}
+            ORDER BY f.score ASC, s.id ASC
             LIMIT ? OFFSET ?
             """,
             (
@@ -304,6 +315,38 @@ def search_sessions(
     return results
 
 
+def _body_snippets(
+    conn: sqlite3.Connection, session_ids: List[str], fts_query: str
+) -> Dict[str, Optional[str]]:
+    """``snippet()`` over the session body for the given sessions only, addressed by rowid.
+
+    The ``entity_id IN (...)`` form was not pushed into FTS5, so it scanned every match of
+    the query (359 ms before any tokenising on a common term).
+    """
+    if not session_ids:
+        return {}
+    placeholders = ",".join("?" for _ in session_ids)
+    rowids = {
+        int(row[0]): str(row[1])
+        for row in conn.execute(
+            "SELECT id, c1 FROM search_index_content "
+            f"WHERE c0 = 'session' AND c1 IN ({placeholders})",
+            session_ids,
+        )
+    }
+    if not rowids:
+        return {}
+    marks = ",".join("?" for _ in rowids)
+    out: Dict[str, Optional[str]] = {}
+    for row in conn.execute(
+        f"SELECT rowid, snippet(search_index, {SEARCH_INDEX_BODY_COLUMN}, ?, ?, '…', 24) "
+        f"FROM search_index WHERE search_index MATCH ? AND rowid IN ({marks})",
+        (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, *rowids),
+    ):
+        out[rowids[int(row[0])]] = row[1] or None
+    return out
+
+
 def annotate_session_hits(
     output_dir: Path,
     results: List[Dict[str, Any]],
@@ -313,37 +356,41 @@ def annotate_session_hits(
 ) -> List[Dict[str, Any]]:
     """Fill ``snippet`` and ``evidence`` of :func:`search_sessions` hits in place.
 
-    Both are computed only for the given hits: ``snippet()`` in the ranking query
-    ran for every matching session before the sort (2 900 bodies for a common
-    term), and evidence re-indexes each hit's messages. Hits the query does not
-    match keep ``None``. Returns ``results``.
+    Both are computed only for the given hits. Evidence comes from the message index
+    (or, before its backfill has finished, a per-request throwaway index); a hit with
+    evidence uses the excerpt as its snippet, any other hit gets ``snippet()`` over the
+    session body. Hits the query does not match keep ``None``. Returns ``results``.
     """
     if not results:
         return results
     scope_roles = SEARCH_SCOPES.get((scope or "all").strip().lower(), ())
     ids = [str(entry["session"].get("id")) for entry in results]
-    snippets: Dict[str, Optional[str]] = {}
     fts_query = build_fts_query(query)
     db = v2_db_path(output_dir)
+    # (#175) Name the message a hit is based on, so a result is evidence rather than a
+    # claim. With the maintained message index this costs milliseconds.
+    evidence = message_evidence_for_sessions(output_dir, ids, query, roles=scope_roles)
+    snippets: Dict[str, Optional[str]] = {}
     if fts_query is not None and db.exists():
         conn = open_connection(db)
         try:
-            placeholders = ",".join("?" for _ in ids)
-            for row in conn.execute(
-                f"SELECT entity_id, snippet(search_index, {SEARCH_INDEX_BODY_COLUMN}, "
-                "?, ?, '…', 24) AS snippet FROM search_index "
-                "WHERE search_index MATCH ? AND search_index.entity_type = 'session' "
-                f"AND search_index.entity_id IN ({placeholders})",
-                (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, *ids),
-            ):
-                snippets[str(row["entity_id"])] = row["snippet"] or None
+            # The evidence excerpt is the snippet: ``snippet()`` over a session body means
+            # tokenising up to megabytes per hit (0.3-0.9 s for ten hits). Only a hit with
+            # no matching message (a title match) still needs the body, and a store
+            # without the message index keeps the old behaviour for every hit.
+            ready = message_fts_ready(conn)
+            snippets = _body_snippets(
+                conn, [sid for sid in ids if not (ready and evidence.get(sid))], fts_query
+            )
+            if ready:
+                for sid in ids:
+                    matches = evidence.get(sid)
+                    if matches:
+                        snippets[sid] = matches[0]["excerpt"] or None
         except sqlite3.Error:
             snippets = {}
         finally:
             conn.close()
-    # (#175) Name the message a hit is based on, so a result is evidence
-    # rather than a claim. One connection, one throwaway index, one pass.
-    evidence = message_evidence_for_sessions(output_dir, ids, query, roles=scope_roles)
     for entry, session_id in zip(results, ids):
         entry["snippet"] = snippets.get(session_id)
         matches = evidence.get(session_id, [])
@@ -392,10 +439,10 @@ def count_session_hits(
         ignored_sql, ignored_params = _bind_ignored_exclusion(conn, "s.id", ignored)
         row = conn.execute(
             f"""
-            SELECT COUNT(*) FROM search_index
-            JOIN sessions s ON s.id = search_index.entity_id
-            WHERE search_index MATCH ?
-              AND search_index.entity_type = 'session'{exclusion}{ignored_sql}{filter_sql}
+            SELECT COUNT(*) FROM ({_MATCHED_ROWIDS}) f
+            JOIN search_index_content c ON c.id = f.rid
+            JOIN sessions s ON s.id = c.c1
+            WHERE c.c0 = 'session'{exclusion}{ignored_sql}{filter_sql}
             """,
             (fts_query, *ignored_params, *filter_params),
         ).fetchone()
@@ -434,6 +481,67 @@ def session_message_evidence(
     return message_evidence_for_sessions(
         output_dir, [session_id], query, roles=roles, per_session=limit
     ).get(str(session_id), [])
+
+
+def _evidence_from_message_fts(
+    conn: sqlite3.Connection,
+    ids: List[str],
+    fts_query: str,
+    roles: tuple,
+    per_session: int,
+) -> Dict[str, List[Dict[str, Any]]]:
+    """Evidence from the maintained ``message_fts`` index (migration 29).
+
+    Same tokenizer and expression as the throwaway path, so an excerpt still cannot claim a
+    match the session search would not accept. Matching rowids are walked in ascending order
+    (message ids grow with ``seq`` inside a session) and stop after ``per_session`` hits;
+    ``snippet()`` and the message text are fetched only for those, because computing them for
+    every match of a common term before sorting took seconds on a long session. The session's
+    id range keeps FTS5 from walking the whole archive and ``session_id`` guards against ids
+    that are not contiguous.
+    """
+    found: Dict[str, List[Dict[str, Any]]] = {}
+    wanted = max(1, int(per_session))
+    for session_id in ids:
+        bounds = conn.execute(
+            "SELECT MIN(id), MAX(id) FROM messages WHERE session_id = ?", (session_id,)
+        ).fetchone()
+        if bounds is None or bounds[0] is None:
+            continue
+        hits: List[Dict[str, Any]] = []
+        cursor = conn.execute(
+            "SELECT rowid FROM message_fts WHERE message_fts MATCH ? "
+            "AND rowid BETWEEN ? AND ? ORDER BY rowid",
+            (fts_query, bounds[0], bounds[1]),
+        )
+        try:
+            for (rowid,) in cursor:
+                message = conn.execute(
+                    "SELECT seq, role, content FROM messages WHERE id = ? AND session_id = ?",
+                    (rowid, session_id),
+                ).fetchone()
+                if message is None or (roles and message["role"] not in roles):
+                    continue
+                excerpt = conn.execute(
+                    "SELECT snippet(message_fts, 0, ?, ?, '…', 20) FROM message_fts "
+                    "WHERE message_fts MATCH ? AND rowid = ?",
+                    (SNIPPET_OPEN, SNIPPET_CLOSE, fts_query, rowid),
+                ).fetchone()[0]
+                hits.append(
+                    {
+                        "seq": int(message["seq"]),
+                        "role": message["role"],
+                        "excerpt": excerpt or "",
+                        "truncated": _excerpt_elided(excerpt or "", message["content"] or ""),
+                    }
+                )
+                if len(hits) >= wanted:
+                    break
+        finally:
+            cursor.close()
+        if hits:
+            found[session_id] = sorted(hits, key=lambda hit: hit["seq"])
+    return found
 
 
 def message_evidence_for_sessions(
@@ -475,6 +583,8 @@ def message_evidence_for_sessions(
 
     conn = open_connection(db)
     try:
+        if message_fts_ready(conn):
+            return _evidence_from_message_fts(conn, ids, fts_query, roles, per_session)
         conn.execute("ATTACH DATABASE ':memory:' AS evidence_check")
         conn.execute(
             "CREATE VIRTUAL TABLE evidence_check.messages USING fts5("

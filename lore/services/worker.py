@@ -56,6 +56,7 @@ def read_store_stamp(output_dir: Path) -> Optional[str]:
 def _default_jobs() -> dict[str, JobFn]:
     return {
         "library": run_library_job,
+        "message_fts": run_message_fts_job,
         "embed_messages": run_embed_messages_job,
         "summaries": run_summaries_job,
     }
@@ -312,6 +313,27 @@ def run_library_job(output_dir: Path) -> dict[str, Any]:
     return result
 
 
+MESSAGE_FTS_BUDGET = 90  # seconds per pass; the backfill is resumable, so a pass may stop early
+
+
+def run_message_fts_job(output_dir: Path) -> dict[str, Any]:
+    """Finish the message-level FTS backfill after an upgrade (a no-op once it is complete)."""
+    db = v2_db_path(output_dir)
+    if not db.exists():
+        return {"status": "skipped", "skipped": True, "last_error": "no v2 store"}
+    result, stdout = _run_cli_child(
+        output_dir,
+        ["message-fts", "--budget", str(MESSAGE_FTS_BUDGET)],
+        MESSAGE_FTS_BUDGET + 120,
+        "message-fts",
+    )
+    if result.get("status") == "ok":
+        match = re.search(r"Indexed (\d+) message", stdout or "")
+        result["indexed"] = int(match.group(1)) if match else 0
+        result["more"] = "Backfill pending" in (stdout or "")
+    return result
+
+
 def _embed_budget() -> int:
     raw = os.environ.get("LORE_WORKER_EMBED_BUDGET", "").strip()
     try:
@@ -428,7 +450,7 @@ def run_pass(
     remaining = summary_remaining(state, cap)
     allow_cloud = False  # ponytail: worker never opts into cloud by itself
 
-    order = ("library", "embed_messages", "summaries")
+    order = ("library", "message_fts", "embed_messages", "summaries")
     stamp_changed = stamp != state.get("last_stamp")
     jobs_to_run: list[str] = []
     for name in order:
@@ -493,7 +515,7 @@ def run_pass(
             entry.pop("retry_after", None)
             entry.pop("pending", None)
 
-    if _stamp_fully_processed(state, stamp, order):
+    if _stamp_fully_processed(state, stamp, tuple(n for n in order if job_map.get(n) is not None)):
         state["last_stamp"] = stamp
     state["last_pass_at"] = _now_iso()
     _save_state(state_path, state)

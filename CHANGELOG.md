@@ -5,6 +5,10 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
 
+### Changed
+
+- Search is an order of magnitude faster on large archives. Ranking now orders FTS rowids and maps them to sessions through the FTS5 shadow table instead of reading the megabyte `entity_*` columns through the virtual table (441 ms to 28-46 ms on a 16 000-session store, identical top ten), and result evidence comes from a maintained message-level index (migration 29, `message_fts`, kept current by triggers) instead of re-tokenising every message of every hit per request. A hit's snippet is its evidence excerpt; only a title-only hit still uses the session body. `lore message-fts` (and the worker, 90 s per pass) backfills the older messages in small committed batches; until it reports `Backfill complete.` search uses the previous path and returns the same results.
+
 ### Added
 - `lore library` builds a browsable, Obsidian-compatible Markdown library from the v2 store (`Index.md`, `Projects/`, `Days/`, `Sessions/` with wikilinks; incremental via `.lore-library.json` in the output directory). Automated and subagent sessions, tombstones and pruned ids are excluded; shelves use display titles, short project labels and a **Scratch & unknown** group for `/tmp` and unscoped paths; index counts cover published pages only.
 - Background worker (`lore worker`, `lore worker run-once`, `lore worker status [--json] [--check]`): after each v2 store sync stamp, runs library export, message embedding backfill, and local-only session summaries (caps via `LORE_WORKER_SUMMARY_DAILY_CAP`, loop interval via `LORE_WORKER_INTERVAL`). Persists `<output>/worker/state.json` and `heartbeat`; Docker Compose adds a `worker` service (`lore-worker`) with health check `lore worker status --check`.

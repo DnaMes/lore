@@ -101,7 +101,8 @@ def _tables(conn) -> set[str]:
         "  AND name NOT LIKE 'search_index_%' "
         # vec0 creates several shadow tables (session_embeddings_chunks,
         # _rowids, _vector_chunks00, …) — only the virtual table itself is ours.
-        "  AND name NOT LIKE 'session_embeddings_%'"
+        "  AND name NOT LIKE 'session_embeddings_%' "
+        "  AND name NOT LIKE 'message_fts_%'"
     ).fetchall()
     return {r[0] for r in rows}
 
@@ -132,6 +133,7 @@ def test_expected_tables_exist(tmp_path):
         "analysis_jobs",
         "analysis_job_chunks",
         "message_embedding_meta",
+        "message_fts",
         "ignored_sessions",
     }
     tables = _tables(conn)

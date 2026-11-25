@@ -363,15 +363,15 @@ def test_migration_28_is_idempotent_on_rerun(tmp_path, monkeypatch):
     )
     monkeypatch.setattr(schema_module, "MIGRATIONS", MIGRATIONS)
 
-    # First run to 28: column exists, legacy row untouched.
-    assert apply_migrations(conn) == 28
+    # First run past 28: column exists, legacy row untouched.
+    assert apply_migrations(conn) == schema_module.SCHEMA_VERSION
     cols = {row[1] for row in conn.execute("PRAGMA table_info(message_embedding_meta)")}
     assert "content_hash" in cols
     legacy = [tuple(row) for row in conn.execute("SELECT content_hash FROM message_embedding_meta")]
     assert legacy == [(None,)]  # no data rewritten or deleted
 
     # Second run: a no-op, no error, no duplicate version row.
-    assert apply_migrations(conn) == 28
+    assert apply_migrations(conn) == schema_module.SCHEMA_VERSION
     versions = [
         row[0] for row in conn.execute("SELECT version FROM schema_version WHERE version = 28")
     ]
