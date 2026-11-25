@@ -6,7 +6,9 @@
 <section class="max-w-[90rem] mx-auto px-6 pt-6 pb-4">
     <div class="surface-card flex flex-wrap items-center justify-between gap-4 px-5 py-4 backdrop-blur-xl">
         <div class="min-w-0">
-            <h1 class="session-headline truncate">Thread {{ thread_id[-10:] }}</h1>
+            {% set latest_session = thread_timeline[-1] if thread_timeline else None %}
+            {% set thread_title = (latest_session.display_title or latest_session.title) if latest_session else '' %}
+            <h1 class="session-headline truncate">{{ thread_title or ('Thread ' ~ thread_id[-10:]) }}</h1>
             <div class="session-meta mt-2">
                 <span>Thread timeline</span>
                 <span class="session-meta-dot"></span>

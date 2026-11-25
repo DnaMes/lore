@@ -10,22 +10,22 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Sessions</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Sessions · last 30 days</div>
             <div class="text-3xl font-semibold text-slate-900">{{ total_sessions }}</div>
             {%- if automated_hidden_line %}
             <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="link-accent">show</a></p>
             {%- endif %}
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Messages</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Messages · last 30 days</div>
             <div class="text-3xl font-semibold text-slate-900">{{ total_messages }}</div>
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Prompts</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Prompts · last 30 days</div>
             <div class="text-3xl font-semibold text-slate-900">{{ total_prompts }}</div>
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Busiest day</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Busiest day · last 30 days</div>
             {% if busiest_day %}
             <div class="text-xl font-semibold text-slate-900">{{ busiest_day[0][5:] }}</div>
             <div class="text-[11px] text-slate-500 mt-1">{{ busiest_day[1] }} session{{ '' if busiest_day[1] == 1 else 's' }}</div>

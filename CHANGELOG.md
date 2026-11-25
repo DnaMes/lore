@@ -7,6 +7,7 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ### Changed
 
+- Sidebar navigation reduced to the main list (Dashboard, Sessions, Projects, Memory, Stats) and footer (Settings, Help) with Threads, Rules and Noise rules moved out of it, the duplicate section on the dashboard removed, and thread headlines now using the latest session title.
 - New palette: warm paper in Light, true black in Dark, one pastel accent (peach `#fab387`, a darker `#c2410c` on Light). Every accent surface reads `--primary`, `--primary-soft` and `--on-primary`; the hardcoded blues, the navy slate darks and the dead `html[data-theme]` duplicates of the base tokens are gone, search hits (`<mark>`) use the accent, the sidebar mark is an accent tile, and the favicon says L. Dark mode now has its own syntax colours (highlight.js shipped a light GitHub theme only, so strings were unreadable on black).
 
 ### Fixed
@@ -21,6 +22,7 @@ The version is the single source of truth in `lore/__init__.py`.
 - Search is an order of magnitude faster on large archives. Ranking now orders FTS rowids and maps them to sessions through the FTS5 shadow table instead of reading the megabyte `entity_*` columns through the virtual table (441 ms to 28-46 ms on a 16 000-session store, identical top ten), and result evidence comes from a maintained message-level index (migration 29, `message_fts`, kept current by triggers) instead of re-tokenising every message of every hit per request. A hit's snippet is its evidence excerpt; only a title-only hit still uses the session body. `lore message-fts` (and the worker, 90 s per pass) backfills the older messages in small committed batches; until it reports `Backfill complete.` search uses the previous path and returns the same results.
 
 ### Added
+- `/help` page (glossary, search tips, keyboard shortcuts, sync, privacy, credits) and `/settings` read-only overview (version/revision, theme picker, search mode/index status, data directory, AI summary provider/key presence, links to Threads, Rules and Noise rules).
 - `GET /api/status` endpoint in `lore-web` returning lightweight operational status (`sessions`, `index`, `search`, `worker`, `llm`, `version`, `revision`, `generated_at`, `errors`) without exposing credentials or raising on partial failures.
 - Original tool icons from lobe-icons 1.106.0 (MIT; trademarks belong to their owners) in the web UI, with letter badge fallback for six tools (`aider`, `crush`, `zed`, `factory-droid`, `warp`, `pi`).
 - `lore library` builds a browsable, Obsidian-compatible Markdown library from the v2 store (`Index.md`, `Projects/`, `Days/`, `Sessions/` with wikilinks; incremental via `.lore-library.json` in the output directory). Automated and subagent sessions, tombstones and pruned ids are excluded; shelves use display titles, short project labels and a **Scratch & unknown** group for `/tmp` and unscoped paths; index counts cover published pages only.

@@ -103,64 +103,42 @@
 
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Sessions</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Sessions · all time</div>
             <div class="text-3xl font-semibold text-slate-900">{{ stats.total_sessions }}</div>
             {%- if automated_hidden_line %}
             <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="link-accent">show</a></p>
             {%- endif %}
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Messages</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Messages · all time</div>
             <div class="text-3xl font-semibold text-slate-900">{{ stats.total_messages }}</div>
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Tools</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Tools · all time</div>
             <div class="text-3xl font-semibold text-slate-900">{{ stats.by_tool|length }}</div>
         </div>
         <div class="stat-card p-6">
-            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Projects</div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Projects · all time</div>
             <div class="text-3xl font-semibold text-slate-900">{{ stats.by_project|length }}</div>
         </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-10">
-        <div class="lg:col-span-2">
-            <div class="flex items-center justify-between mb-5">
-                <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">Recent Activity</h2>
-                <a href="/sessions" class="text-xs text-slate-500 hover:text-slate-900">View all</a>
-            </div>
-            <div class="compact-list">
-                {% for s in recent_sessions %}
-                <a href="/session/{{ s.id|urlpath }}" class="compact-row flex items-center gap-3 group">
-                    <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-white border border-slate-200" style="color: {{ get_style(s.tool).color }}">
-                        {{ tool_badge(get_style(s.tool), 'tool-icon-md') }}
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <div class="compact-title text-slate-900 group-hover:text-slate-900 truncate">{{ s.display_title or s.title or 'Untitled Session' }}</div>
-                        <div class="text-[10px] text-slate-500 mt-1 uppercase tracking-tight">via {{ get_style(s.tool).name }} • {{ s.created[:10] }}</div>
-                    </div>
-                    <div class="text-[10px] font-mono text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-full">{{ s.prompts or s.messages }} prompts</div>
-                </a>
-                {% else %}
-                <div class="compact-row text-sm text-slate-500">No sessions yet. Run <code>lore sync --all</code> and refresh to import your AI conversations.</div>
-                {% endfor %}
-            </div>
+    <section>
+        <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-5">Tools</h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {% for tool in all_tools %}
+            {% set count = stats.by_tool.get(tool, 0) %}
+            {% if count > 0 %}
+            <a href="/sessions?tool={{ tool }}" class="list-row flex items-center justify-between p-3 group">
+                <div class="flex items-center gap-3">
+                    <div class="w-2 h-2 rounded-full" style="background: {{ get_style(tool).color }}"></div>
+                    <span class="text-sm text-slate-600 group-hover:text-slate-900">{{ get_style(tool).name }}</span>
+                </div>
+                <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">{{ count }}</span>
+            </a>
+            {% endif %}
+            {% endfor %}
         </div>
-        <div>
-            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-5">Tools</h2>
-            <div class="space-y-2">
-                {% for tool in all_tools %}
-                {% set count = stats.by_tool.get(tool, 0) %}
-                <a href="/sessions?tool={{ tool }}" class="list-row flex items-center justify-between p-3 group">
-                    <div class="flex items-center gap-3">
-                        <div class="w-2 h-2 rounded-full" style="background: {{ get_style(tool).color }}"></div>
-                        <span class="text-sm text-slate-600 group-hover:text-slate-900">{{ get_style(tool).name }}</span>
-                    </div>
-                    <span class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">{{ count }}</span>
-                </a>
-                {% endfor %}
-            </div>
-        </div>
-    </div>
+    </section>
 </section>
 {% endblock %}

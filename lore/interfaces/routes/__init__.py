@@ -18,18 +18,22 @@ def register_blueprints(app: Flask) -> None:
     register them, so the submodules must load only once ``web`` asks for them.
     """
     from .api_v1 import bp as api_v1_bp
+    from .help import bp as help_bp
     from .jobs import bp as jobs_bp
     from .memory import bp as memory_bp
     from .search import bp as search_bp
     from .sessions import bp as sessions_bp
+    from .settings import bp as settings_bp
     from .tags import bp as tags_bp
 
     for blueprint in (
         api_v1_bp,
+        help_bp,
         jobs_bp,
         memory_bp,
         search_bp,
         sessions_bp,
+        settings_bp,
         tags_bp,
     ):
         if blueprint.name not in app.blueprints:

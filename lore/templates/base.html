@@ -1419,11 +1419,8 @@
                 <a href="/" class="sidebar-link {{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
                 <a href="/sessions" class="sidebar-link {{ 'active' if active=='sessions' else '' }}">Sessions</a>
                 <a href="/projects" class="sidebar-link {{ 'active' if active=='projects' else '' }}">Projects</a>
-                <a href="/threads" class="sidebar-link {{ 'active' if active=='threads' else '' }}">Threads</a>
                 <a href="/memory" class="sidebar-link {{ 'active' if active=='memory' else '' }}">Memory</a>
                 <a href="/stats" class="sidebar-link {{ 'active' if active=='stats' else '' }}">Stats</a>
-                <a href="/rules" class="sidebar-link {{ 'active' if active=='rules' else '' }}">Rules</a>
-                <a href="/noise-rules" class="sidebar-link {{ 'active' if active=='noise-rules' else '' }}">Noise Rules</a>
                 <div class="mt-8 mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">Recent Activity</div>
                 <div class="space-y-1">
                     {% for s in recent %}
@@ -1436,7 +1433,11 @@
                     {% endfor %}
                 </div>
             </div>
-            <div class="mt-auto px-5 py-3 border-t border-slate-200/70 text-[10px] text-slate-500 flex items-center justify-between">
+            <div class="px-3 py-2 border-t border-slate-200/70 space-y-1">
+                <a href="/settings" class="sidebar-link {{ 'active' if active=='settings' else '' }}">Settings</a>
+                <a href="/help" class="sidebar-link {{ 'active' if active=='help' else '' }}">Help</a>
+            </div>
+            <div class="px-5 py-3 border-t border-slate-200/70 text-[10px] text-slate-500 flex items-center justify-between">
                 <span class="font-mono">lore v{{ app_version }}</span>
                 <a href="/api/build-info" class="hover:text-slate-700" aria-label="Build info">build</a>
             </div>

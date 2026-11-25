@@ -139,6 +139,15 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
   unset environment variables) keep the lines they fold inside a collapsed
   `details` block, so nothing disappears and the export still contains every line.
 
+### Help and Settings
+
+The sidebar navigation is grouped into the main list (`Dashboard`, `Sessions`, `Projects`, `Memory`, `Stats`) and the footer (`Settings`, `Help`). Secondary pages (`Threads`, `Rules`, and `Noise rules`) remain reachable from `/settings` and from project pages.
+
+| Route | Purpose |
+| --- | --- |
+| `/help` | In-app guide covering what Lore does, glossary terms, search syntax, keyboard shortcuts, sync, privacy, and credits. |
+| `/settings` | Read-only overview of the local instance (version and revision, Light/Dark theme picker, search mode and message index status, data directory, AI summary provider/key presence without exposing values, and links to Threads, Rules, and Noise rules). |
+
 ### Mutating Actions and Exports
 
 - `/session/<session_id>/summary` (`POST`): Triggers asynchronous summary generation for a session.
@@ -325,11 +334,13 @@ and exposes `create_app()`. Every route handler lives in
 | Module | Owns |
 | --- | --- |
 | `routes/api_v1.py` | `/api/v1/*` — versioned, read-only JSON API and the bounded message window it shares with the permalink page |
+| `routes/help.py` | `/help` — in-app guide, glossary, search tips, and keyboard shortcuts |
 | `routes/memory.py` | `/memory`, `/noise-rules` and their JSON endpoints |
 | `routes/jobs.py` | reload/audit job endpoints, the incremental index reload, and the operational status endpoints (`/api/health`, `/api/ready`, `/api/metrics`, `/api/build-info`) |
 | `routes/tags.py` | session tag/bookmark endpoints and bulk-tag |
 | `routes/search.py` | `/api/search` and the shared tag/date search filters |
 | `routes/sessions.py` | session list, peek, detail, message fragments, permalinks, projects, stats, export, delete/bulk actions, threads |
+| `routes/settings.py` | `/settings` — read-only instance overview (version, theme, search, data dir, AI summary status) |
 
 `routes/__init__.register_blueprints()` imports and registers them; `web.py`
 calls it at import time and again from `create_app()` (idempotent).
