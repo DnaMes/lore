@@ -473,11 +473,6 @@ def _hybrid_enabled() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
-# Candidate window used whenever hybrid fusion is on: a fixed width keeps the
-# fused ranking stable across pages (#175).
-_HYBRID_WINDOW = 200
-
-
 def _serving_legacy(reason: str, *, level: int = logging.INFO) -> None:
     """Record that a read is served from the legacy JSON store, and why (#48).
 
@@ -545,14 +540,21 @@ def _hybrid_search(
     end: Optional[str] = None,
     offset: int = 0,
 ) -> list[dict]:
-    """Fuse the already-computed FTS hits with semantic (vector) hits via RRF.
+    """Label the keyword hits and, once they run out, append semantic-only hits (#87).
 
-    Returns the FTS results unchanged when semantic search yields nothing
-    (vector backend absent, or query empty) — so hybrid never *loses* a keyword
-    match, it only adds meaning-based ones.
+    Keyword order is never disturbed: a session that contains the words always outranks one
+    that is merely close in meaning. Reciprocal-rank fusion let a semantic-only hit take the
+    rank of a real keyword hit (rank 2, 4 and 6 for "review gate"), and with unweighted ranks
+    a stale or weak vector looked as good as an exact match. Semantic hits fill up the page
+    only when the keyword list is shorter than ``limit`` (so it is complete and the page order
+    cannot change with the page size) and carry ``match == "semantic"``; the vector pass is
+    skipped entirely when keyword hits already fill the page.
     """
-    from lore.storage import rrf_merge, semantic_search_sessions
+    from lore.storage import semantic_search_sessions
 
+    labelled = [dict(entry, match="keyword") for entry in fts_results]
+    if len(fts_results) >= limit:
+        return labelled
     vec_results = semantic_search_sessions(
         index_dir,
         query,
@@ -564,14 +566,13 @@ def _hybrid_search(
         limit=limit,
         include_automated=include_automated,
     )
-    if not vec_results:
-        return fts_results
-    fused = rrf_merge(fts_results, vec_results, limit=limit)
-    # (#175) Every hit carries an evidence field; keyword hits keep theirs (or get it
-    # when the caller annotates the returned page), semantic-only hits have none.
-    for entry in fused:
-        entry.setdefault("evidence", None)
-    return fused
+    seen = {str(entry["session"].get("id")) for entry in fts_results}
+    for entry in vec_results:
+        if str(entry["session"].get("id")) in seen or len(labelled) >= limit:
+            continue
+        # (#175) A semantic-only hit names no matching message and has no snippet.
+        labelled.append(dict(entry, match="semantic", evidence=None))
+    return labelled
 
 
 def _load_index_from_v2(index_path: Path, deleted: set[str]) -> Optional[dict]:
@@ -774,14 +775,10 @@ def search_index(
                 # vector pass) and then slices. Otherwise page 1 would be fused
                 # and page 2 would not, and the pages would not tile (#175).
                 start_index = max(0, int(offset))
-                # Fusion depends on the ranks it sees, so a fused order computed
-                # from 10 candidates differs from one computed from 30. Fetch a
-                # constant window whenever fusion is on, otherwise the pages of
-                # one query do not tile (a hit can appear on two pages) (#175).
+                # Semantic hits only ever follow the keyword hits (see _hybrid_search), so
+                # the keyword list is a stable prefix and pages tile whatever the limit.
                 fused = _hybrid_enabled() and not (scope and scope != "all")
-                fetch_limit = (
-                    max(limit + start_index, _HYBRID_WINDOW) if fused else (limit + start_index)
-                )
+                fetch_limit = limit + start_index
                 results = search_sessions(
                     index_dir,
                     query,
@@ -828,13 +825,10 @@ def search_index(
                         query,
                         scope=scope,
                     )
-                    return results
-                # v2 returned nothing — fall through to legacy. Better to
-                # double-check than to silently lie. Legacy may still have it.
-                _serving_legacy(
-                    "search: the v2 store returned no hits; checking the legacy index",
-                    level=logging.DEBUG,
-                )
+                # A usable v2 store with no hit is the answer: the legacy engine scores a single
+                # matching word (OR semantics), so falling through returned loosely related
+                # sessions for a query that matched nothing.
+                return results
         except ValueError:
             # Invalid scope — surface to the caller, do not fall back.
             raise

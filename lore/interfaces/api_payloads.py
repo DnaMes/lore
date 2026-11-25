@@ -83,6 +83,7 @@ def serialize_search_result(result: Dict[str, Any]) -> Dict[str, Any]:
         "score": result.get("score"),
         "snippet": search_result_snippet(result),
         "evidence": serialize_search_evidence(result),
+        "match": result.get("match") or "keyword",
         "source": "session",
     }
 

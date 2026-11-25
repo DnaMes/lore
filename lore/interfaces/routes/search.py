@@ -55,9 +55,10 @@ def api_search():
                 "id": r["session"].get("id"),
                 "title": r["session"].get("title"),
                 "tool": r["session"].get("tool"),
-                "date": r["session"].get("created")[:10],
+                "date": (r["session"].get("created") or "")[:10],
                 "snippet": search_result_snippet(r),
                 "evidence": serialize_search_evidence(r),
+                "match": r.get("match") or "keyword",
                 "source": "session",
             }
             for r in res

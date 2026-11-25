@@ -99,6 +99,10 @@ def _bind_ignored_exclusion(
 _RANKED_MATCHES = (
     "SELECT rowid AS rid, bm25(search_index) AS score FROM search_index WHERE search_index MATCH ?"
 )
+# Sessions whose title matches come first: bm25 clamps the idf of a term that is in most rows
+# to ~0, so for common words the body score is noise (every "review gate" score was -4.4e-06).
+# Within a tier the score is rounded to one decimal so near-ties fall back to recency.
+_TITLE_MATCHES = "SELECT rowid FROM search_index WHERE search_index MATCH ?"
 _MATCHED_ROWIDS = "SELECT rowid AS rid FROM search_index WHERE search_index MATCH ?"
 
 
@@ -259,13 +263,15 @@ def search_sessions(
             JOIN search_index_content c ON c.id = f.rid
             JOIN sessions s ON s.id = c.c1
             WHERE c.c0 = 'session'{exclusion}{ignored_sql}{filter_sql}
-            ORDER BY f.score ASC, s.id ASC
+            ORDER BY CASE WHEN f.rid IN ({_TITLE_MATCHES}) THEN 0 ELSE 1 END,
+                     ROUND(f.score, 1) ASC, s.updated DESC, s.id ASC
             LIMIT ? OFFSET ?
             """,
             (
                 fts_query,
                 *ignored_params,
                 *filter_params,
+                f"title : ({fts_query})",
                 candidate_limit,
                 window_offset if not scope_roles else 0,
             ),
