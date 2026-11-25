@@ -292,6 +292,22 @@ if os.environ.get("LORE_CLEAR_OPENCODE_CACHE", "").lower() == "true":
 TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 
 
+def _markdown_safe(text: object):
+    """Render agent-writable Markdown for a template: Markdown, then the nh3 allowlist.
+
+    The only sanctioned way to emit memory text as HTML (#43): never ``|safe`` raw input.
+    """
+    from markupsafe import Markup
+
+    from lore.utils.html_sanitize import sanitize_html
+    from lore.utils.markdown_render import render_markdown
+
+    # "<" is escaped first: memory is prose, so placeholders such as <slug> must stay visible
+    # instead of being parsed (and stripped) as tags. "&" and ">" stay Markdown-meaningful.
+    source = str(text or "").replace("<", "&lt;")
+    return Markup(sanitize_html(render_markdown(source)))  # nosec B704 - nh3-sanitised
+
+
 @lru_cache(maxsize=1)
 def _template_env():
     """Build the Jinja Environment once (templates are static files in the wheel).
@@ -308,6 +324,7 @@ def _template_env():
     )
     env.filters["urlpath"] = lambda value: quote(str(value or ""), safe="")
     env.filters["snippet_html"] = escape_snippet_html
+    env.filters["markdown_safe"] = _markdown_safe
     return env
 
 

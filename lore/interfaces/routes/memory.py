@@ -12,6 +12,8 @@ from ..web_utils import _noise_rule_presets, save_noise_rules
 
 bp = Blueprint("memory", __name__)
 
+_TAB_COUNT_CAP = 500  # list_memory limit used to count a tab; shown as "500+" when reached
+
 
 @bp.route("/memory")
 def memory_page():
@@ -51,6 +53,12 @@ def memory_page():
         entries = list_memory(output_dir, kind=kind, limit=100, status=status)
 
     memories = [entry.to_dict() for entry in entries]
+    candidate_count = len(
+        list_memory(output_dir, kind=kind, limit=_TAB_COUNT_CAP, status="candidate")
+    )
+    confirmed_count = len(
+        list_memory(output_dir, kind=kind, limit=_TAB_COUNT_CAP, status="confirmed")
+    )
 
     return _web.render(
         "memory",
@@ -63,8 +71,11 @@ def memory_page():
         semantic=semantic,
         semantic_available=embeddings_available(),
         status=status,
-        candidate_count=len(list_memory(output_dir, kind=kind, limit=500, status="candidate")),
-        confirmed_count=len(list_memory(output_dir, kind=kind, limit=500, status="confirmed")),
+        candidate_count=candidate_count,
+        confirmed_count=confirmed_count,
+        tab_total=candidate_count if status == "candidate" else confirmed_count,
+        tab_capped=(candidate_count if status == "candidate" else confirmed_count)
+        >= _TAB_COUNT_CAP,
         title="Memory",
     )
 

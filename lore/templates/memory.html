@@ -7,7 +7,7 @@
             <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Knowledge</div>
             <h1 class="title-font page-headline text-slate-900 mt-2">Memory</h1>
             <p class="text-sm text-slate-500 mt-2">
-                {{ total }} entr{{ 'y' if total == 1 else 'ies' }} — facts, decisions and lessons
+                {% if not query and tab_total > total %}Showing {{ total }} of {{ tab_total }}{% if tab_capped %}+{% endif %}{% else %}{{ total }} entr{{ 'y' if total == 1 else 'ies' }}{% endif %} — facts, decisions and lessons
                 any AI tool can record and recall.
             </p>
         </div>
@@ -16,11 +16,11 @@
     <div class="flex flex-wrap items-center gap-2 mb-6" role="tablist" aria-label="Memory views">
         <a href="/memory" role="tab" aria-selected="{{ 'true' if status != 'candidate' else 'false' }}"
            class="tag-chip {{ 'bg-slate-900 text-white' if status != 'candidate' else '' }}">
-            Confirmed ({{ confirmed_count }})
+            Confirmed ({{ confirmed_count }}{{ '+' if confirmed_count >= 500 else '' }})
         </a>
         <a href="/memory?status=candidate" role="tab" aria-selected="{{ 'true' if status == 'candidate' else 'false' }}"
            class="tag-chip {{ 'bg-slate-900 text-white' if status == 'candidate' else '' }}">
-            Candidates ({{ candidate_count }})
+            Candidates ({{ candidate_count }}{{ '+' if candidate_count >= 500 else '' }})
         </a>
     </div>
 
@@ -62,11 +62,11 @@
                         {% if m.scope_tool %}<span class="tag-chip">{{ m.scope_tool }}</span>{% endif %}
                         {% if m.feedback_count %}<span class="tag-chip" title="Feedback weight (0 to 1) and number of ratings">★ {{ '%.2f'|format(m.feedback_weight) }} ({{ m.feedback_count }})</span>{% endif %}
                     </div>
-                    {# SECURITY (#43): memory is agent-writable — title/body
-                       MUST stay {{ }}-escaped. Never switch these to | safe
-                       without routing through nh3 sanitisation first. #}
+                    {# SECURITY (#43): memory is agent-writable. The title stays {{ }}-escaped;
+                       the body goes through |markdown_safe (Markdown, then the nh3 allowlist).
+                       Never use | safe on either. #}
                     <h2 class="text-sm font-semibold text-slate-900">{{ m.title }}</h2>
-                    <p class="text-sm text-slate-600 mt-1.5 whitespace-pre-wrap">{{ m.body }}</p>
+                    <div class="prose text-sm text-slate-600 mt-1.5">{{ m.body|markdown_safe }}</div>
                     {# snippet_html escapes first, then adds <mark>; see escape_snippet_html #}
                     {% if m.snippet %}<p class="text-xs text-slate-500 mt-1.5 italic">{{ m.snippet|snippet_html }}</p>{% endif %}
                     <div class="flex flex-wrap gap-1.5 mt-3">

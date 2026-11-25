@@ -21,7 +21,7 @@
 
     <div class="space-y-4">
         {% for message in messages %}
-        <div id="msg-{{ message.seq }}" class="surface-card p-5{% if message.seq == seq %} border-blue-200 shadow-sm{% endif %}">
+        <div id="msg-{{ message.seq }}" class="surface-card p-5{% if message.seq == seq %} permalink-target shadow-sm{% endif %}">
             <div class="flex items-center justify-between mb-3">
                 <div class="flex items-center gap-2">
                     <span class="role-badge">{{ message.role }}</span>

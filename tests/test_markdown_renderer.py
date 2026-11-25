@@ -75,3 +75,17 @@ def test_parser_uses_the_documented_extensions():
     parser = thread_local_markdown_parser()
     assert parser.convert("| a |\n| - |\n| 1 |").startswith("<table>")
     assert "nl2br" in " ".join(MARKDOWN_EXTENSIONS)
+
+
+def test_markdown_safe_filter_renders_markdown_and_strips_active_content():
+    from lore.interfaces.web import _markdown_safe
+
+    html = str(
+        _markdown_safe(
+            "**bold** and `code`\n\n<script>alert(1)</script><img src=x onerror=alert(1)>"
+        )
+    )
+    assert "<strong>bold</strong>" in html and "<code>code</code>" in html
+    assert "<script" not in html and "<img" not in html
+    assert "&lt;script" in html  # shown as text, not executed
+    assert "&lt;slug&gt;" in str(_markdown_safe("deploy to <slug>.example.com"))

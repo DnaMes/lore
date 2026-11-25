@@ -496,3 +496,19 @@ def test_list_one_liner_marks_outdated_and_hides_deleted(tmp_path):
     assert set(lines) == {"fresh", "stale"}
     assert lines["fresh"]["outdated"] is False
     assert lines["stale"]["outdated"] is True
+
+
+def test_at_a_glance_names_tools_stored_under_name():
+    # Claude tool_use blocks store the tool as "name"; "tool (394)" hid every real name.
+    message = UnifiedMessage(
+        role=Role.ASSISTANT,
+        content="working",
+        timestamp=T0,
+        tool_calls=[{"name": "Skill", "input": {}}, {"tool": "Bash", "input": {}}],
+    )
+    session = UnifiedSession(
+        tool=Tool.CLAUDE_CODE, session_id="x", created_at=T0, last_updated=T0, messages=[message]
+    )
+    glance = at_a_glance(session)
+    assert glance["tool_calls"] == 2
+    assert "Skill" in str(glance) and "Bash" in str(glance)

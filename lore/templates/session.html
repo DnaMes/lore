@@ -659,11 +659,11 @@ document.addEventListener('keydown', function(e) {
         list.replaceChildren();
         (tags || []).forEach(function (t) {
             const pill = document.createElement('span');
-            pill.className = 'pill bg-blue-50 border border-blue-200 text-blue-700 flex items-center gap-1';
+            pill.className = 'pill tag-pill flex items-center gap-1';
             pill.appendChild(document.createTextNode(t));
             const x = document.createElement('button');
             x.type = 'button';
-            x.className = 'tag-remove text-blue-400 hover:text-blue-700';
+            x.className = 'tag-remove';
             x.setAttribute('aria-label', 'Remove tag');
             x.textContent = '×';
             x.addEventListener('click', function () { mutate('DELETE', t); });

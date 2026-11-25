@@ -7,6 +7,17 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ### Changed
 
+- New palette: warm paper in Light, true black in Dark, one pastel accent (peach `#fab387`, a darker `#c2410c` on Light). Every accent surface reads `--primary`, `--primary-soft` and `--on-primary`; the hardcoded blues, the navy slate darks and the dead `html[data-theme]` duplicates of the base tokens are gone, search hits (`<mark>`) use the accent, the sidebar mark is an accent tile, and the favicon says L. Dark mode now has its own syntax colours (highlight.js shipped a light GitHub theme only, so strings were unreadable on black).
+
+### Fixed
+
+- The Statistics bar chart was flat (its columns had no height, so the percentage bars collapsed).
+- "At a glance" listed every tool as `tool (394)`: Claude stores the tool name under `name`, not `tool`.
+- Memory entries render as Markdown (escaped first, then sanitised by the nh3 allowlist) instead of raw text, `<placeholders>` stay visible, and the list says "Showing 100 of 500+" instead of "100 entries" next to a count of 500.
+- The search box says "Search all sessions…" and the dashboard button "Search" (they said "Start a new chat" and "New Session"); inline code no longer breaks in the middle of a word.
+
+### Changed
+
 - Search is an order of magnitude faster on large archives. Ranking now orders FTS rowids and maps them to sessions through the FTS5 shadow table instead of reading the megabyte `entity_*` columns through the virtual table (441 ms to 28-46 ms on a 16 000-session store, identical top ten), and result evidence comes from a maintained message-level index (migration 29, `message_fts`, kept current by triggers) instead of re-tokenising every message of every hit per request. A hit's snippet is its evidence excerpt; only a title-only hit still uses the session body. `lore message-fts` (and the worker, 90 s per pass) backfills the older messages in small committed batches; until it reports `Backfill complete.` search uses the previous path and returns the same results.
 
 ### Added

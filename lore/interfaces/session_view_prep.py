@@ -177,7 +177,7 @@ def at_a_glance(session) -> dict[str, Any]:
             if not isinstance(raw, dict):
                 continue
             tool_calls += 1
-            name = str(raw.get("tool") or "tool")
+            name = str(raw.get("tool") or raw.get("name") or "tool")
             tool_names[name] += 1
             status = str(raw.get("status") or "").lower()
             if status in {"failed", "error"} or raw.get("is_error"):
