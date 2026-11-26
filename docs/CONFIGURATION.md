@@ -61,7 +61,11 @@ Defaults below are taken from the code. Where a default depends on the call site
 | Name | Default | Purpose | Read in |
 | --- | --- | --- | --- |
 | LORE_LLM_PROVIDER | empty (none) | Provider for the `extract_knowledge` stage of `lore improve` when `--provider` is not given. No other command reads it: `knowledge` always needs an explicit `--provider`, and `analyze`, `format` and `generate-titles` have their own defaults. A non-local value needs the cloud opt-in unless `--dry-run` is given. | lore_cli.py (cmd_improve), lore/services/improve.py |
-| LORE_LLM_TIMEOUT | openrouter 90 s; jev 180 s | Request timeout override in seconds for openrouter and jev only. Invalid or non-positive values use the provider default with a warning. An explicit `timeout` argument wins. | lore/llm/factory.py |
+| LORE_LLM_TIMEOUT | openrouter/openai-compatible 90 s; jev 180 s | Request timeout override in seconds for openrouter, openai-compatible, and jev. Invalid or non-positive values use the provider default with a warning. An explicit `timeout` argument wins. | lore/llm/factory.py |
+| LORE_LLM_BASE_URL | empty (none) | Base URL for `openai-compatible` (e.g. `http://127.0.0.1:11434/v1`). Loopback hosts count as local; other hosts require cloud opt-in. | lore/llm/openai_compat.py, lore/services/summarize_cli.py |
+| LORE_LLM_MODEL | empty (none) | Model identifier for `openai-compatible`. | lore/llm/openai_compat.py, lore/llm/adapters/selection.py |
+| LORE_LLM_API_KEY | empty (none) | Optional bearer token for `openai-compatible`. | lore/llm/openai_compat.py |
+| LORE_LLM_API_KEY_ENV | empty (none) | Env var name holding the bearer token for `openai-compatible` when `LORE_LLM_API_KEY` is unset. | lore/llm/openai_compat.py |
 | LORE_ALLOW_CLOUD | unset (off) | Grants the cloud opt-in for every non-local provider without `--allow-cloud`. Accepts `1`, `true` or `yes`. Non-local means gemini, openrouter, jev, gemini-cli, and ollama when `OLLAMA_HOST` resolves off-host. Applies to `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles`, and now also covers the session handoff: `lore-session switch`, `lore-session continue` and the MCP `switch_to_tool` when the target tool is `gemini` or `codex`. Without the opt-in the command refuses and exits with code 2 before anything is sent. | lore/services/summarize_cli.py; session handoff: lore_session_cli.py, lore/interfaces/mcp_tools/sessions.py |
 | LORE_OPENROUTER_MODEL | nvidia/nemotron-3-ultra-550b-a55b:free | Default OpenRouter model. | lore/llm/openrouter.py, lore/llm/factory.py, lore/services/summarize_cli.py |
 | LORE_OPENROUTER_BASE_URL | https://openrouter.ai/api/v1 | OpenRouter API base URL. | lore/llm/openrouter.py |
@@ -69,7 +73,7 @@ Defaults below are taken from the code. Where a default depends on the call site
 | LORE_JEV_LANES | local,fastcheap | Comma-separated lane order for the jev provider. This default is specific to the owner's delegate broker lanes. | lore/llm/jev.py |
 | OLLAMA_HOST | unset (loopback) | Ollama endpoint. Lore treats Ollama as local only when this resolves to loopback; an off-host value makes `ollama` a cloud provider that needs the opt-in. The `ollama` client library also reads it to pick the endpoint. Not a `LORE_` variable. | lore/services/summarize_cli.py (locality check); the `ollama` client library |
 | LORE_OLLAMA_NUM_CTX | 8192 | Ollama context window size. Clamped to 2048 to 131072. | lore/llm/ollama.py |
-| LORE_SUMMARY_PROVIDER | empty (none) | Local provider for session summaries. Only `ollama` enables web summaries. | lore/services/summarize_cli.py |
+| LORE_SUMMARY_PROVIDER | empty (none) | Local provider for session summaries (`ollama` or `openai-compatible` with a loopback `LORE_LLM_BASE_URL`). | lore/services/summarize_cli.py |
 | LORE_SUMMARY_MODEL | llama3.2 (ollama default) | Model for session summaries. | lore/services/summarize_cli.py |
 | LORE_MCP_ALLOW_SUMMARIZE | off | Enables the MCP summarize tool only when set to `1`. | lore/interfaces/mcp_tools/summaries.py |
 

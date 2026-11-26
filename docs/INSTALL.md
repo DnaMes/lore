@@ -96,10 +96,12 @@ git clone https://github.com/DnaMes/lore && cd lore && pip install -e .
 
 ## Optional Extras
 
-Lore has two optional extras, both defined in `pyproject.toml`. The former `watch` extra is gone: `lore watch` polls the filesystem on its own (`--interval`, default 60 seconds) and needs no extra package.
+Lore defines optional extras in `pyproject.toml`. The former `watch` extra is gone: `lore watch` polls the filesystem on its own (`--interval`, default 60 seconds) and needs no extra package.
 
 | Extra | Adds | Without it |
 | --- | --- | --- |
+| `gemini` | `google-generativeai>=0.3.0,<1.0.0` | The `gemini` API provider raises an `ImportError` pointing to `pip install 'lore[gemini]'`. |
+| `ollama` | `ollama>=0.3` | The `ollama` provider raises an `ImportError`; install with `pip install 'lore[ollama]'`. |
 | `semantic` | `fastembed>=0.3`, `sqlite-vec>=0.1.9` | Keyword-only search. When installed, enables semantic vector search and KNN similarity queries over session embeddings (`bge-small-en-v1.5`), fusing vector scores with FTS5 BM25 keyword matches via Reciprocal Rank Fusion (RRF). Without this extra, `sqlite_vec_available()` returns false and search falls back strictly to FTS5 keyword search. |
 | `zstd` | `zstandard>=0.22` | Decompression of zstd-compressed sources: Codex archived rollouts (`.jsonl.zst`) and Zed thread rows stored with zstd. Without it those sources are skipped and a warning naming this extra is logged once per run. Install with `pip install 'lore[zstd]'` or `pipx inject lore zstandard`. |
 | `dev` | `pytest>=8,<10`, `pytest-cov>=5`, `coverage>=7`, `ruff>=0.6`, `mypy>=1.8`, `pre-commit>=3,<5`, `bandit[toml]>=1.7`, `fastembed>=0.3`, `sqlite-vec>=0.1.9` | Development and testing dependencies: test suites, coverage reports, linting, type checking, pre-commit hooks and bandit security scanning; `fastembed` and `sqlite-vec` are included so the semantic tests run for real instead of being skipped. Only required for contributors. |
@@ -127,7 +129,6 @@ The core runtime dependencies specified in `pyproject.toml` are:
 - `flask` (`>=3.0.0,<4.0.0`): Web application server and API endpoints.
 - `markdown` (`>=3.5.0,<4.0.0`): Markdown rendering for exported transcripts and UI views.
 - `nh3` (`>=0.2.0`): HTML sanitization for safe rendering of user prompts and assistant outputs.
-- `google-generativeai` (`>=0.3.0,<1.0.0`): Client library for Gemini LLM integrations.
 - `google-auth` (`>=2.0.0,<3.0.0`): Authentication library for Google Cloud and Gemini credentials.
 
 ## Verification

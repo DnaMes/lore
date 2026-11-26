@@ -31,6 +31,18 @@ services:
       - LORE_RATE_LIMIT_AUDIT_PER_WINDOW=${LORE_RATE_LIMIT_AUDIT_PER_WINDOW:-20}
       - LORE_RATE_LIMIT_RELOAD_PER_WINDOW=${LORE_RATE_LIMIT_RELOAD_PER_WINDOW:-12}
       - LORE_JSON_REQUEST_LOGS=${LORE_JSON_REQUEST_LOGS:-false}
+      # Optional LLM summary configuration. Do NOT put API key values here;
+      # use an untracked env_file instead, e.g.:
+      #   env_file:
+      #     - .env.llm   # with LORE_LLM_API_KEY=... inside it
+      # Inside a container, 127.0.0.1 is the container itself, not the host.
+      # To reach a host Ollama, use host.docker.internal or the compose network service name.
+      - LORE_SUMMARY_PROVIDER=${LORE_SUMMARY_PROVIDER:-}
+      - LORE_SUMMARY_MODEL=${LORE_SUMMARY_MODEL:-}
+      - LORE_LLM_BASE_URL=${LORE_LLM_BASE_URL:-}
+      - LORE_LLM_MODEL=${LORE_LLM_MODEL:-}
+      - LORE_LLM_API_KEY_ENV=${LORE_LLM_API_KEY_ENV:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-}
     healthcheck:
       test:
         [
@@ -63,6 +75,14 @@ services:
       - HOME=/home/ai
       - LORE_WORKER_INTERVAL=${LORE_WORKER_INTERVAL:-}
       - LORE_WORKER_SUMMARY_DAILY_CAP=${LORE_WORKER_SUMMARY_DAILY_CAP:-}
+      # Optional LLM summary configuration (use env_file for API keys;
+      # use host.docker.internal or the compose network service name instead of 127.0.0.1).
+      - LORE_SUMMARY_PROVIDER=${LORE_SUMMARY_PROVIDER:-}
+      - LORE_SUMMARY_MODEL=${LORE_SUMMARY_MODEL:-}
+      - LORE_LLM_BASE_URL=${LORE_LLM_BASE_URL:-}
+      - LORE_LLM_MODEL=${LORE_LLM_MODEL:-}
+      - LORE_LLM_API_KEY_ENV=${LORE_LLM_API_KEY_ENV:-}
+      - OLLAMA_HOST=${OLLAMA_HOST:-}
     healthcheck:
       test: ["CMD", "lore", "worker", "status", "--check"]
       interval: 60s

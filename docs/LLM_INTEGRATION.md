@@ -2,6 +2,40 @@
 
 This module provides LLM-powered features for analyzing and processing your AI coding sessions.
 
+## Any OpenAI-compatible server
+
+Use `--provider openai-compatible` (or `LORE_SUMMARY_PROVIDER=openai-compatible` for web/worker summaries) to point Lore at any server implementing `POST /chat/completions`.
+
+| Variable | Purpose |
+| --- | --- |
+| `LORE_LLM_BASE_URL` | Base URL including version path (e.g. `http://127.0.0.1:11434/v1`). `http://` is allowed for loopback/private hosts; `https://` is required elsewhere. |
+| `LORE_LLM_MODEL` | Model name sent in the request payload. |
+| `LORE_LLM_API_KEY` | Optional bearer token (never logged or stored). |
+| `LORE_LLM_API_KEY_ENV` | Name of an existing env var holding the bearer token (used when `LORE_LLM_API_KEY` is unset). |
+| `LORE_LLM_TIMEOUT` | Request timeout in seconds (default `90`). |
+| `LORE_SUMMARY_PROVIDER` | Set to `openai-compatible` to enable web UI summaries when `LORE_LLM_BASE_URL` is loopback. |
+
+Examples:
+
+```bash
+# 1. Ollama via its /v1 endpoint (local)
+LORE_LLM_BASE_URL=http://127.0.0.1:11434/v1 LORE_LLM_MODEL=llama3.2 \
+  lore summarize --provider openai-compatible
+
+# 2. Local llama.cpp or LM Studio server (local)
+LORE_LLM_BASE_URL=http://127.0.0.1:1234/v1 LORE_LLM_MODEL=local-model \
+  lore summarize --provider openai-compatible
+
+# 3. Hosted provider with LORE_LLM_API_KEY_ENV (cloud opt-in required)
+LORE_LLM_BASE_URL=https://api.example.com/v1 LORE_LLM_MODEL=gpt-4o-mini \
+  LORE_LLM_API_KEY_ENV=MY_PROVIDER_KEY \
+  lore summarize --provider openai-compatible --allow-cloud
+```
+
+### Subscription CLIs
+
+`claude-cli`, `codex-cli`, and `gemini-cli` are cloud providers that invoke the installed CLI using its own login; they require `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. `antigravity-cli` is not available.
+
 ## Features
 
 ### 1. `lore analyze` - Statistics & Insights

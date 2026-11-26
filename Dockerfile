@@ -24,7 +24,7 @@ ENV FASTEMBED_CACHE_PATH=/opt/fastembed-cache
 # hadolint ignore=DL3013
 RUN chmod -R a+rX /app/lore /app/pyproject.toml /app/README.md \
         /app/lore_cli.py /app/lore_session_cli.py \
-    && pip install --no-cache-dir ".[semantic]" gunicorn \
+    && pip install --no-cache-dir ".[semantic,ollama]" gunicorn \
     && if [ "$PREFETCH_EMBEDDING_MODEL" = "on" ]; then \
          if ! python -c "from lore.storage.embeddings import embed_text; \
 v = embed_text('warmup'); \
