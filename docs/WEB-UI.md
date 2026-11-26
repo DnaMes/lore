@@ -145,6 +145,7 @@ The sidebar navigation is grouped into the main list (`Dashboard`, `Sessions`, `
 
 | Route | Purpose |
 | --- | --- |
+| /search | Dedicated search page with tool, project, and date filters plus paginated results. |
 | `/help` | In-app guide covering what Lore does, glossary terms, search syntax, keyboard shortcuts, sync, privacy, and credits. |
 | `/settings` | Read-only overview of the local instance (version and revision, Light/Dark theme picker, search mode and message index status, data directory, AI summary provider/key presence without exposing values, and links to Threads, Rules, and Noise rules). |
 

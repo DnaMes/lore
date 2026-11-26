@@ -1062,6 +1062,8 @@
         html.dark .view-menu-panel { background: #0c0c10; border-color: #34343c; }
         .search-modal { display: none; visibility: hidden; opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
         .search-modal.open { display: flex; visibility: visible; opacity: 1; pointer-events: auto; }
+        .search-result-row[aria-selected="true"] { background: var(--primary-soft); outline: 1px solid color-mix(in srgb, var(--primary) 40%, transparent); }
+        .search-footer { border-top: 1px solid var(--border); color: var(--muted); }
         .density-toggle.active, .clean-toggle.active, .readability-toggle.active, .ultra-clean-toggle.active, .presenter-toggle.active, .theme-toggle.active { background: var(--primary) !important; color: var(--on-primary) !important; border-color: var(--primary) !important; }
         body.density-compact .message-cluster { padding: 8px; }
         body.density-compact .turn-row { gap: 8px; }
@@ -1656,7 +1658,8 @@
             <div class="flex items-center px-4 border-b border-slate-200">
                 <input type="text" id="searchInput" aria-label="Search prompts, code, and tools" class="flex-1 bg-transparent border-none p-4 text-sm outline-none text-slate-900" placeholder="Search prompts, code, tools...">
             </div>
-            <div id="searchResults" class="max-h-[60vh] overflow-y-auto p-2"></div>
+            <div id="searchResults" role="listbox" aria-label="Search results" class="max-h-[60vh] overflow-y-auto p-2"></div>
+            <div id="searchFooter" class="search-footer hidden px-4 py-2 text-xs">Press Enter for all results</div>
         </div>
     </div>
     <script src="/static/highlight-11.9.0.min.js" defer></script>
@@ -1979,6 +1982,87 @@
         });
 
         let searchTrapRelease = null;
+        const SEARCH_TOOL_NAMES = {
+            {% for provider in provider_tools | default([]) %}
+            {{ provider | tojson }}: {{ get_style(provider).name | tojson }}{{ ',' if not loop.last else '' }}
+            {% endfor %}
+        };
+        const SEARCH_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        let debounce;
+        // Only the newest query may paint: a slow answer for an earlier prefix ("tr")
+        // used to arrive after the one for "traefik" and replace or clear its hits.
+        let searchSeq = 0;
+        let searchAbort = null;
+        let searchActiveIndex = -1;
+
+        function getSearchRows() {
+            const resultsEl = document.getElementById('searchResults');
+            if (!resultsEl) return [];
+            return Array.from(resultsEl.querySelectorAll('[role="option"]'));
+        }
+
+        function setSearchActiveIndex(nextIndex) {
+            const rows = getSearchRows();
+            if (!rows.length) {
+                searchActiveIndex = -1;
+                return;
+            }
+            const bounded = Math.max(0, Math.min(nextIndex, rows.length - 1));
+            searchActiveIndex = bounded;
+            rows.forEach((row, idx) => {
+                row.setAttribute('aria-selected', idx === bounded ? 'true' : 'false');
+            });
+            rows[bounded].scrollIntoView({ block: 'nearest' });
+        }
+
+        function updateSearchFooter(q) {
+            const footerEl = document.getElementById('searchFooter');
+            if (!footerEl) return;
+            footerEl.classList.toggle('hidden', !q);
+        }
+
+        function renderSearchRows(items, emptyMessage) {
+            const resultsEl = document.getElementById('searchResults');
+            if (!resultsEl) return;
+            searchActiveIndex = -1;
+            if (!items.length) {
+                resultsEl.innerHTML = `<div class="p-3 text-xs text-slate-500">${escapeHtml(emptyMessage)}</div>`;
+                return;
+            }
+            resultsEl.innerHTML = items.map(s => {
+                const sid = encodeURIComponent(String(s.id || ''));
+                const rawPermalink = s.evidence && s.evidence.permalink ? String(s.evidence.permalink) : '';
+                const href = rawPermalink.startsWith('/') ? escapeHtml(rawPermalink) : `/session/${sid}`;
+                const label = escapeHtml(s.display_title || s.title || s.id || 'Untitled Session');
+                const toolName = escapeHtml(s.tool_name || SEARCH_TOOL_NAMES[s.tool] || s.tool || 'unknown');
+                const date = escapeHtml(s.date || String(s.updated || s.created || '').slice(0, 10));
+                const semanticChip = s.match === 'semantic' ? '<span class="tag-chip">semantic</span>' : '';
+                const snippet = s.snippet ? `<div class="text-xs text-slate-600 mt-1">${escapeHtml(s.snippet || '').replace(/«/g, '<mark>').replace(/»/g, '</mark>')}</div>` : '';
+                return `<a href="${href}" role="option" aria-selected="false" class="search-result-row block p-3 rounded-lg hover:bg-slate-100 group"><div class="flex items-center justify-between gap-2"><div class="text-sm font-medium text-slate-900 group-hover-accent transition-colors truncate">${label}</div>${semanticChip}</div>${snippet}<div class="text-[10px] text-slate-500 mt-1">${toolName} • ${date}</div></a>`;
+            }).join('');
+        }
+
+        function loadRecentSessions(seq) {
+            const resultsEl = document.getElementById('searchResults');
+            if (!resultsEl) return;
+            searchAbort = new AbortController();
+            const recentUrl = new URL('/api/v1/sessions', window.location.origin);
+            recentUrl.searchParams.set('per_page', '8');
+            resultsEl.innerHTML = '<div class="p-3 text-xs text-slate-500">Loading recent sessions…</div>';
+            fetch(recentUrl.toString(), { credentials: 'same-origin', signal: searchAbort.signal })
+                .then(r => r.json())
+                .then(data => {
+                    if (seq !== searchSeq) return;
+                    const sessions = Array.isArray(data && data.sessions) ? data.sessions : [];
+                    renderSearchRows(sessions, 'No recent sessions');
+                })
+                .catch(err => {
+                    if (seq !== searchSeq || (err && err.name === 'AbortError')) return;
+                    searchActiveIndex = -1;
+                    resultsEl.innerHTML = '<div class="p-3 text-xs text-red-600">Failed to load recent sessions</div>';
+                });
+        }
+
         function openSearch() {
             const modal = document.getElementById('searchModal');
             const panel = document.getElementById('searchPanel');
@@ -1988,6 +2072,14 @@
             modal.setAttribute('aria-hidden', 'false');
             if (searchTrapRelease) { searchTrapRelease(); searchTrapRelease = null; }
             searchTrapRelease = window.FocusTrap.activate(panel || modal, { initialFocus: input });
+            const q = input.value.trim();
+            updateSearchFooter(q);
+            if (!q) {
+                clearTimeout(debounce);
+                const seq = ++searchSeq;
+                if (searchAbort) { searchAbort.abort(); searchAbort = null; }
+                loadRecentSessions(seq);
+            }
             requestAnimationFrame(() => {
                 input.focus();
                 input.select();
@@ -2025,46 +2117,69 @@
                 "'": '&#39;'
             }[char] || char));
         }
-        let debounce;
-        // Only the newest query may paint: a slow answer for an earlier prefix ("tr")
-        // used to arrive after the one for "traefik" and replace or clear its hits.
-        let searchSeq = 0;
-        let searchAbort = null;
         const searchInputEl = document.getElementById('searchInput');
         const searchResultsEl = document.getElementById('searchResults');
         if (searchInputEl && searchResultsEl) {
+            searchInputEl.addEventListener('keydown', e => {
+                if (e.key === 'ArrowDown') {
+                    const rows = getSearchRows();
+                    if (!rows.length) return;
+                    e.preventDefault();
+                    setSearchActiveIndex(searchActiveIndex < rows.length - 1 ? searchActiveIndex + 1 : 0);
+                } else if (e.key === 'ArrowUp') {
+                    const rows = getSearchRows();
+                    if (!rows.length) return;
+                    e.preventDefault();
+                    setSearchActiveIndex(searchActiveIndex > 0 ? searchActiveIndex - 1 : rows.length - 1);
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const rows = getSearchRows();
+                    if (searchActiveIndex >= 0 && searchActiveIndex < rows.length) {
+                        rows[searchActiveIndex].click();
+                        return;
+                    }
+                    const q = searchInputEl.value.trim();
+                    if (!q) return;
+                    if (SEARCH_UUID_RE.test(q)) {
+                        window.location.href = `/session/${encodeURIComponent(q)}`;
+                        return;
+                    }
+                    window.location.href = `/search?q=${encodeURIComponent(q)}`;
+                }
+            });
             searchInputEl.addEventListener('input', e => {
                 clearTimeout(debounce);
                 const seq = ++searchSeq;
                 if (searchAbort) { searchAbort.abort(); searchAbort = null; }
                 const q = e.target.value.trim();
-                if (q.length < 2) { searchResultsEl.innerHTML = ''; return; }
+                updateSearchFooter(q);
+                if (!q) {
+                    loadRecentSessions(seq);
+                    return;
+                }
+                if (q.length < 2) {
+                    searchActiveIndex = -1;
+                    searchResultsEl.innerHTML = '';
+                    return;
+                }
                 debounce = setTimeout(() => {
                     const apiUrl = new URL('/api/search', window.location.origin);
                     apiUrl.searchParams.set('q', q);
                     searchAbort = new AbortController();
+                    searchActiveIndex = -1;
                     searchResultsEl.innerHTML = '<div class="p-3 text-xs text-slate-500">Searching…</div>';
                     fetch(apiUrl.toString(), { credentials: 'same-origin', signal: searchAbort.signal }).then(r=>r.json()).then(data => {
                         if (seq !== searchSeq) return;
                         if (!Array.isArray(data)) {
                             const message = escapeHtml((data && data.error) || 'Search failed');
+                            searchActiveIndex = -1;
                             searchResultsEl.innerHTML = `<div class="p-3 text-xs text-red-600">${message}</div>`;
                             return;
                         }
-                        if (!data.length) {
-                            searchResultsEl.innerHTML = '<div class="p-3 text-xs text-slate-500">No matches</div>';
-                            return;
-                        }
-                        searchResultsEl.innerHTML = data.map(s => {
-                            const sid = encodeURIComponent(String(s.id || ''));
-                            const label = escapeHtml(s.title || s.id || 'Untitled Session');
-                            const tool = escapeHtml(s.tool || 'unknown');
-                            const date = escapeHtml(s.date || '');
-                            const snippet = s.snippet ? `<div class="text-xs text-slate-600 mt-1">${escapeHtml(s.snippet || '').replace(/«/g, '<mark>').replace(/»/g, '</mark>')}</div>` : '';
-                            return `<a href="/session/${sid}" class="block p-3 rounded-lg hover:bg-slate-100 group"><div class="text-sm font-medium text-slate-900 group-hover-accent transition-colors">${label}</div>${snippet}<div class="text-[10px] text-slate-500 mt-1">${tool} • ${date}</div></a>`;
-                        }).join('');
+                        renderSearchRows(data, 'No matches');
                     }).catch(err => {
                         if (seq !== searchSeq || (err && err.name === 'AbortError')) return;
+                        searchActiveIndex = -1;
                         searchResultsEl.innerHTML = '<div class="p-3 text-xs text-red-600">Search failed</div>';
                     });
                 }, 350);  // debounce: fewer superseded requests while typing

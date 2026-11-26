@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% from '_macros.html' import tool_badge %}
+{% block content %}
+<section class="max-w-4xl mx-auto px-8 py-10">
+    <div class="mb-8">
+        <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Archive</div>
+        <h1 class="title-font page-headline text-slate-900 mt-2">Search</h1>
+    </div>
+
+    <form method="get" action="/search" class="surface-card p-5 mb-8">
+        <div class="flex flex-wrap items-center gap-3 mb-4">
+            <input type="text" name="q" value="{{ q or '' }}"
+                   placeholder="Search all sessions…" aria-label="Search query"
+                   class="flex-1 min-w-[12rem] bg-white border border-slate-200 text-sm text-slate-700 rounded-xl px-3 py-2 outline-none focus:border-slate-300">
+            <button type="submit"
+                    class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-4 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">
+                Search
+            </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <select name="tool" aria-label="Tool"
+                    class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300">
+                <option value="">All Tools</option>
+                {% for t in tools %}
+                <option value="{{ t }}" {{ 'selected' if tool == t else '' }}>{{ get_style(t).name }}</option>
+                {% endfor %}
+            </select>
+            <input type="text" name="project" value="{{ project or '' }}"
+                   placeholder="Project path…" aria-label="Project"
+                   class="bg-white border border-slate-200 text-sm text-slate-700 rounded-xl px-3 py-2 outline-none focus:border-slate-300">
+            <input type="date" name="start" value="{{ start or '' }}" aria-label="From date"
+                   class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300">
+            <input type="date" name="end" value="{{ end or '' }}" aria-label="To date"
+                   class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-3 py-2 uppercase tracking-widest font-semibold outline-none focus:border-slate-300">
+        </div>
+    </form>
+
+    {% if error %}
+    <div class="surface-card p-4 mb-6 text-sm text-red-600 border border-red-200" role="alert">
+        {{ error }}
+    </div>
+    {% elif q %}
+    {% set shown_total = total if total is not none else results|length %}
+    <p class="text-sm text-slate-500 mb-4">
+        {{ shown_total }} result{{ '' if shown_total == 1 else 's' }}
+    </p>
+
+    {% if results %}
+    <div class="space-y-3">
+        {% for r in results %}
+        {% set style = get_style(r.tool) %}
+        {% set href = r.evidence.permalink if r.evidence and r.evidence.permalink else '/session/' ~ (r.id|urlpath) %}
+        {% set date_str = (r.updated or r.created or '')[:10] %}
+        <article class="surface-card p-5">
+            <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="flex flex-wrap items-center gap-2 min-w-0">
+                    {{ tool_badge(style) }}
+                    <span class="text-xs font-medium text-slate-600">{{ style.name }}</span>
+                    <span class="tag-chip">{{ project_label(r.project) }}</span>
+                    {% if date_str %}
+                    <span class="text-xs text-slate-500">{{ date_str }}</span>
+                    {% endif %}
+                </div>
+                {% if r.match == 'semantic' %}
+                <span class="tag-chip">semantic</span>
+                {% endif %}
+            </div>
+            <h2 class="text-sm font-semibold text-slate-900 truncate">
+                <a href="{{ href }}" class="link-accent">{{ r.display_title or r.title or r.id or 'Untitled Session' }}</a>
+            </h2>
+            {% if r.snippet %}
+            <p class="text-xs text-slate-600 mt-2">{{ r.snippet|snippet_html }}</p>
+            {% endif %}
+        </article>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="surface-card p-8 text-center">
+        <p class="text-sm text-slate-600">No results for "{{ q }}".</p>
+        <p class="text-xs text-slate-500 mt-2">
+            Try wrapping an exact phrase in double quotes or clearing one of the filters.
+        </p>
+    </div>
+    {% endif %}
+
+    {% if prev_url or next_url %}
+    <nav class="flex items-center justify-between gap-4 mt-8" aria-label="Search pagination">
+        <div>
+            {% if prev_url %}
+            <a href="{{ prev_url }}"
+               class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-4 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">
+                Previous
+            </a>
+            {% endif %}
+        </div>
+        <div>
+            {% if next_url %}
+            <a href="{{ next_url }}"
+               class="bg-white border border-slate-200 text-[11px] text-slate-600 rounded-xl px-4 py-2 uppercase tracking-widest font-semibold hover:text-slate-900 transition-all">
+                Next
+            </a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endif %}
+    {% endif %}
+</section>
+{% endblock %}

@@ -740,6 +740,7 @@ from .routes.memory import (  # noqa: E402,F401  (re-exports)
 from .routes.search import (  # noqa: E402,F401  (re-exports)
     _search_filter_params,
     api_search,
+    search_page,
 )
 from .routes.sessions import (  # noqa: E402,F401  (re-exports)
     _SUMMARY_FORBIDDEN_PARAMS,
