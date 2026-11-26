@@ -70,6 +70,10 @@ class OllamaProvider(LLMProvider):
         if self._client is not None:
             return self._client
 
+        raw_host = os.environ.get("OLLAMA_HOST")
+        if raw_host is not None and not raw_host.strip():
+            os.environ.pop("OLLAMA_HOST", None)
+
         try:
             import ollama
 

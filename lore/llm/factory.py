@@ -26,6 +26,7 @@ from .gate import CloudOptInRequired, ensure_cloud_allowed
 from .gemini import GeminiProvider
 from .jev import JevProvider
 from .ollama import OllamaProvider
+from .openai_compat import OpenAICompatProvider
 from .openrouter import OpenRouterProvider
 
 TIMEOUT_ENV_VAR = "LORE_LLM_TIMEOUT"
@@ -155,6 +156,16 @@ def get_provider(
             **config_kwargs,
         )
         return OpenRouterProvider(config, allow_cloud=allow_cloud)
+
+    elif request.provider == "openai-compatible":
+        config = LLMConfig(
+            provider="openai-compatible",
+            model=request.model,
+            api_key=api_key,
+            timeout=request.timeout,
+            **config_kwargs,
+        )
+        return OpenAICompatProvider(config, allow_cloud=allow_cloud)
 
     elif request.provider == "jev":
         config = LLMConfig(

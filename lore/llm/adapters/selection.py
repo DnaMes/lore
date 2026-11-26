@@ -41,7 +41,7 @@ from .native_cli import NativeCliAdapter
 
 # Hosted providers get more than the LLMConfig default: a delegate hop chain and
 # a free-tier OpenRouter model both routinely exceed 60 s.
-HOSTED_DEFAULT_TIMEOUTS = {"openrouter": 90, "jev": 180}
+HOSTED_DEFAULT_TIMEOUTS = {"openrouter": 90, "jev": 180, "openai-compatible": 90}
 
 
 def _constant(value: str) -> Callable[[], str]:
@@ -50,6 +50,10 @@ def _constant(value: str) -> Callable[[], str]:
 
 def _openrouter_default_model() -> str:
     return os.environ.get("LORE_OPENROUTER_MODEL") or OPENROUTER_DEFAULT_MODEL
+
+
+def _openai_compat_default_model() -> str:
+    return os.environ.get("LORE_LLM_MODEL", "").strip()
 
 
 @dataclass(frozen=True)
@@ -85,6 +89,12 @@ PROVIDERS: Dict[str, ProviderSpec] = {
             AuthMode.API_KEY,
             _openrouter_default_model,
             timeout=HOSTED_DEFAULT_TIMEOUTS["openrouter"],
+        ),
+        ProviderSpec(
+            "openai-compatible",
+            AuthMode.NONE,
+            _openai_compat_default_model,
+            timeout=HOSTED_DEFAULT_TIMEOUTS["openai-compatible"],
         ),
         ProviderSpec(
             "jev",

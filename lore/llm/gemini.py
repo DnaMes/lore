@@ -106,8 +106,8 @@ class GeminiProvider(LLMProvider):
 
         except ImportError as e:
             raise ImportError(
-                f"Required package not installed: {e}. Install with: pip install google-generativeai google-auth"
-            )
+                f"Required package not installed: {e}. Install with: pip install 'lore[gemini]'"
+            ) from e
 
     def generate(
         self,

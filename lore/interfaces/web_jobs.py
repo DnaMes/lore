@@ -380,7 +380,11 @@ def _start_session_summary_job(session_id: str) -> str:
             progress_callback(5, "Preparing local provider")
             if not web_summarize_enabled():
                 raise ValueError("Local summary provider is not configured")
-            provider, model_label = build_mcp_summarize_provider()
+            summary_provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip().lower()
+            if summary_provider and summary_provider != "ollama":
+                provider, model_label = build_mcp_summarize_provider(summary_provider)
+            else:
+                provider, model_label = build_mcp_summarize_provider()
             progress_callback(15, "Summarizing session")
             outcome = run_summarize_session(
                 provider,

@@ -5,6 +5,16 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
 
+### Added
+
+- `openai-compatible` LLM provider (`LORE_LLM_BASE_URL`, `LORE_LLM_MODEL`, `LORE_LLM_API_KEY`, `LORE_LLM_API_KEY_ENV`) for Ollama `/v1`, llama.cpp, LM Studio, and hosted OpenAI-compatible endpoints.
+- `claude-cli`, `codex-cli`, and `gemini-cli` added to `lore summarize` provider choices (cloud opt-in required).
+
+### Changed
+
+- `google-generativeai` is now the optional `gemini` extra (`pip install 'lore[gemini]'`) instead of a core dependency.
+- `ollama` is now an optional extra (`pip install 'lore[ollama]'`).
+
 ### Changed
 
 - Sidebar navigation reduced to the main list (Dashboard, Sessions, Projects, Memory, Stats) and footer (Settings, Help) with Threads, Rules and Noise rules moved out of it, the duplicate section on the dashboard removed, and thread headlines now using the latest session title.

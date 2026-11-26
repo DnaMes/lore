@@ -15,13 +15,13 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from ..utils.paths import lore_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
 from .cache_io import sweep_temp_files
 from .gate import ensure_cloud_allowed
+from .openai_compat import validate_openai_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -62,29 +62,14 @@ def validate_openrouter_model(model: str) -> str:
     )
 
 
-def _openrouter_loopback_host(host: Optional[str]) -> bool:
-    if not host:
-        return False
-    normalized = host.lower().strip("[]")
-    return normalized in ("localhost", "127.0.0.1", "::1")
-
-
 def validate_openrouter_base_url(base_url: str) -> str:
     """Require https, or http only to a loopback host (local OpenAI-compatible servers)."""
-    trimmed = base_url.rstrip("/")
-    parsed = urlparse(trimmed)
-    if not parsed.scheme or not parsed.netloc:
-        raise OpenRouterError(
-            "OpenRouter base URL must be an absolute https URL "
-            "(http:// is only allowed for loopback hosts)"
-        )
-    scheme = parsed.scheme.lower()
-    if scheme == "https":
-        return trimmed
-    if scheme == "http" and _openrouter_loopback_host(parsed.hostname):
-        return trimmed
-    raise OpenRouterError(
-        "OpenRouter base URL must use https (http:// is only allowed for loopback hosts)"
+    return validate_openai_base_url(
+        base_url,
+        allow_private=False,
+        error_cls=OpenRouterError,
+        subject="OpenRouter base URL",
+        include_private_hint=False,
     )
 
 
