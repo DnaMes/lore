@@ -23,11 +23,11 @@ from typing import Any, Dict, List
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.llm import CloudOptInRequired, LLMConfig
-from lore.llm.gemini import GeminiProvider
-from lore.llm.tasks.stats import StatsGenerator
-from lore.titles.generator import TitleGenerator, TitleStrategy
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.llm import CloudOptInRequired, LLMConfig
+from annuli.llm.gemini import GeminiProvider
+from annuli.llm.tasks.stats import StatsGenerator
+from annuli.titles.generator import TitleGenerator, TitleStrategy
 
 TOKEN = "ghp_" + "z" * 36  # matches the redact() github_token pattern
 
@@ -43,7 +43,7 @@ INSIGHTS_JSON = json.dumps(
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
 
 
@@ -73,7 +73,7 @@ def _session(project_path: str = "/work/repo", title: str = "") -> UnifiedSessio
 def _title_generator(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **kwargs: Any
 ) -> TitleGenerator:
-    monkeypatch.setattr("lore.titles.generator.OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr("annuli.titles.generator.OLLAMA_AVAILABLE", True)
     return TitleGenerator(cache_dir=tmp_path / "title_cache", **kwargs)
 
 
@@ -162,7 +162,7 @@ def _ineligible_run(monkeypatch: pytest.MonkeyPatch, out: str = "", err: str = "
 
 @pytest.fixture
 def _fresh_gemini_flag(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("lore.titles.generator._GEMINI_INELIGIBLE_WARNED", False)
+    monkeypatch.setattr("annuli.titles.generator._GEMINI_INELIGIBLE_WARNED", False)
 
 
 def test_gemini_cli_ineligible_tier_warns_once_and_returns_none(
@@ -177,7 +177,7 @@ def test_gemini_cli_ineligible_tier_warns_once_and_returns_none(
         tmp_path, monkeypatch, strategy=TitleStrategy.SMART, provider="gemini-cli", allow_cloud=True
     )
 
-    with caplog.at_level(logging.WARNING, logger="lore.titles.generator"):
+    with caplog.at_level(logging.WARNING, logger="annuli.titles.generator"):
         assert gen._generate_llm_gemini(_session()) is None
         assert gen._generate_llm_gemini(_session()) is None
 
@@ -198,7 +198,7 @@ def test_gemini_cli_ineligible_tier_detected_in_stderr(
         tmp_path, monkeypatch, strategy=TitleStrategy.SMART, provider="gemini-cli", allow_cloud=True
     )
 
-    with caplog.at_level(logging.WARNING, logger="lore.titles.generator"):
+    with caplog.at_level(logging.WARNING, logger="annuli.titles.generator"):
         assert gen._generate_llm_gemini(_session()) is None
 
     assert _INELIGIBLE_MSG in caplog.text
@@ -212,7 +212,7 @@ def test_gemini_cli_other_nonzero_exit_no_ineligible_warning(
         tmp_path, monkeypatch, strategy=TitleStrategy.SMART, provider="gemini-cli", allow_cloud=True
     )
 
-    with caplog.at_level(logging.WARNING, logger="lore.titles.generator"):
+    with caplog.at_level(logging.WARNING, logger="annuli.titles.generator"):
         assert gen._generate_llm_gemini(_session()) is None
 
     assert len(calls) == 1
@@ -248,7 +248,7 @@ def test_remote_ollama_title_optin_redacts_project_path_token(
 ) -> None:
     monkeypatch.setenv("OLLAMA_HOST", "http://192.0.2.1:11434")
     recorder = _RecordingOllama()
-    monkeypatch.setattr("lore.titles.generator.ollama", recorder.module())
+    monkeypatch.setattr("annuli.titles.generator.ollama", recorder.module())
     gen = _title_generator(
         tmp_path, monkeypatch, strategy=TitleStrategy.SMART, provider="local", allow_cloud=True
     )
@@ -268,7 +268,7 @@ def test_remote_ollama_title_without_optin_zero_chat_calls(
 ) -> None:
     monkeypatch.setenv("OLLAMA_HOST", "http://192.0.2.1:11434")
     recorder = _RecordingOllama()
-    monkeypatch.setattr("lore.titles.generator.ollama", recorder.module())
+    monkeypatch.setattr("annuli.titles.generator.ollama", recorder.module())
     gen = _title_generator(tmp_path, monkeypatch, strategy=TitleStrategy.SMART, provider="local")
 
     with pytest.raises(CloudOptInRequired):

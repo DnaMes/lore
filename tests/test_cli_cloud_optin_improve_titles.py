@@ -1,7 +1,7 @@
-"""Cloud opt-in gate for `lore improve` and `lore generate-titles`.
+"""Cloud opt-in gate for `annuli improve` and `annuli generate-titles`.
 
 Both send session text to a provider, so every non-local provider path must
-refuse (exit 2, naming --allow-cloud and LORE_ALLOW_CLOUD) until the user
+refuse (exit 2, naming --allow-cloud and ANNULI_ALLOW_CLOUD) until the user
 opts in — the same shared helper as analyze/knowledge/format/summarize.
 The default local title provider keeps working without opt-in (#185).
 """
@@ -15,9 +15,9 @@ from types import SimpleNamespace
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.titles.generator import TitleGenerator
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.titles.generator import TitleGenerator
 
 
 def _improve_args(tmp_path: Path, **overrides) -> Namespace:
@@ -64,7 +64,7 @@ def _fake_extractors(monkeypatch, sessions) -> None:
         is_available=lambda: True,
         extract_sessions=lambda: iter(sessions),
     )
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda *a, **k: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda *a, **k: [extractor])
 
 
 def _titles_args(**overrides) -> Namespace:
@@ -98,8 +98,8 @@ def title_calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
         "_generate_llm_ollama",
         lambda self, session: seen.__setitem__("local", seen["local"] + 1) or "Ollama Title",
     )
-    monkeypatch.setattr("lore.titles.generator.OLLAMA_AVAILABLE", True)
-    monkeypatch.setattr("lore.titles.generator.lore_home", lambda: tmp_path / "lore_home")
+    monkeypatch.setattr("annuli.titles.generator.OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr("annuli.titles.generator.annuli_home", lambda: tmp_path / "annuli_home")
     _fake_extractors(monkeypatch, [_session()])
     return seen
 
@@ -108,47 +108,55 @@ def title_calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
 
 
 def test_improve_cloud_without_optin_exits_2_and_never_runs(tmp_path, monkeypatch, capsys):
-    monkeypatch.delenv("LORE_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANNULI_LLM_PROVIDER", raising=False)
     calls: list = []
-    monkeypatch.setattr("lore.services.improve.run_improve", lambda *a, **k: calls.append(a) or [])
+    monkeypatch.setattr(
+        "annuli.services.improve.run_improve", lambda *a, **k: calls.append(a) or []
+    )
 
-    rc = lore_cli.cmd_improve(_improve_args(tmp_path, provider="gemini"))
+    rc = annuli_cli.cmd_improve(_improve_args(tmp_path, provider="gemini"))
 
     assert rc == 2
     assert calls == []  # the pipeline (and provider) was never reached
     err = capsys.readouterr().err
     assert "--allow-cloud" in err
-    assert "LORE_ALLOW_CLOUD" in err
+    assert "ANNULI_ALLOW_CLOUD" in err
     assert "gemini" in err
 
 
 def test_improve_cloud_env_provider_also_gated(tmp_path, monkeypatch):
-    monkeypatch.setenv("LORE_LLM_PROVIDER", "openrouter")
+    monkeypatch.setenv("ANNULI_LLM_PROVIDER", "openrouter")
     calls: list = []
-    monkeypatch.setattr("lore.services.improve.run_improve", lambda *a, **k: calls.append(a) or [])
+    monkeypatch.setattr(
+        "annuli.services.improve.run_improve", lambda *a, **k: calls.append(a) or []
+    )
 
-    assert lore_cli.cmd_improve(_improve_args(tmp_path, provider=None)) == 2
+    assert annuli_cli.cmd_improve(_improve_args(tmp_path, provider=None)) == 2
     assert calls == []
 
 
 def test_improve_cloud_with_allow_cloud_runs(tmp_path, monkeypatch):
-    monkeypatch.delenv("LORE_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANNULI_LLM_PROVIDER", raising=False)
     calls: list = []
-    monkeypatch.setattr("lore.services.improve.run_improve", lambda *a, **k: calls.append(a) or [])
+    monkeypatch.setattr(
+        "annuli.services.improve.run_improve", lambda *a, **k: calls.append(a) or []
+    )
 
-    rc = lore_cli.cmd_improve(_improve_args(tmp_path, provider="gemini", allow_cloud=True))
+    rc = annuli_cli.cmd_improve(_improve_args(tmp_path, provider="gemini", allow_cloud=True))
 
     assert rc in (0, None)
     assert len(calls) == 1
 
 
 def test_improve_cloud_with_env_optin_runs(tmp_path, monkeypatch):
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
-    monkeypatch.delenv("LORE_LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
+    monkeypatch.delenv("ANNULI_LLM_PROVIDER", raising=False)
     calls: list = []
-    monkeypatch.setattr("lore.services.improve.run_improve", lambda *a, **k: calls.append(a) or [])
+    monkeypatch.setattr(
+        "annuli.services.improve.run_improve", lambda *a, **k: calls.append(a) or []
+    )
 
-    rc = lore_cli.cmd_improve(_improve_args(tmp_path, provider="jev"))
+    rc = annuli_cli.cmd_improve(_improve_args(tmp_path, provider="jev"))
 
     assert rc in (0, None)
     assert len(calls) == 1
@@ -156,23 +164,27 @@ def test_improve_cloud_with_env_optin_runs(tmp_path, monkeypatch):
 
 def test_improve_local_ollama_needs_no_optin(tmp_path, monkeypatch):
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
-    monkeypatch.delenv("LORE_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
+    monkeypatch.delenv("ANNULI_LLM_PROVIDER", raising=False)
     calls: list = []
-    monkeypatch.setattr("lore.services.improve.run_improve", lambda *a, **k: calls.append(a) or [])
+    monkeypatch.setattr(
+        "annuli.services.improve.run_improve", lambda *a, **k: calls.append(a) or []
+    )
 
-    rc = lore_cli.cmd_improve(_improve_args(tmp_path, provider="ollama"))
+    rc = annuli_cli.cmd_improve(_improve_args(tmp_path, provider="ollama"))
 
     assert rc in (0, None)
     assert len(calls) == 1
 
 
 def test_improve_dry_run_needs_no_optin(tmp_path, monkeypatch):
-    monkeypatch.delenv("LORE_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANNULI_LLM_PROVIDER", raising=False)
     calls: list = []
-    monkeypatch.setattr("lore.services.improve.run_improve", lambda *a, **k: calls.append(a) or [])
+    monkeypatch.setattr(
+        "annuli.services.improve.run_improve", lambda *a, **k: calls.append(a) or []
+    )
 
-    rc = lore_cli.cmd_improve(_improve_args(tmp_path, provider="gemini", dry_run=True))
+    rc = annuli_cli.cmd_improve(_improve_args(tmp_path, provider="gemini", dry_run=True))
 
     assert rc in (0, None)  # a dry run contacts no provider
     assert len(calls) == 1
@@ -184,25 +196,25 @@ def test_improve_dry_run_needs_no_optin(tmp_path, monkeypatch):
 def test_titles_cloud_without_optin_exits_2_and_provider_not_called(
     tmp_path, monkeypatch, capsys, title_calls
 ):
-    rc = lore_cli.cmd_generate_titles(_titles_args(provider="gemini-cli"))
+    rc = annuli_cli.cmd_generate_titles(_titles_args(provider="gemini-cli"))
 
     assert rc == 2
     assert title_calls == {"gemini-cli": 0, "local": 0}
     err = capsys.readouterr().err
     assert "--allow-cloud" in err
-    assert "LORE_ALLOW_CLOUD" in err
+    assert "ANNULI_ALLOW_CLOUD" in err
 
 
 def test_titles_cloud_with_allow_cloud_calls_provider(title_calls):
-    rc = lore_cli.cmd_generate_titles(_titles_args(provider="gemini-cli", allow_cloud=True))
+    rc = annuli_cli.cmd_generate_titles(_titles_args(provider="gemini-cli", allow_cloud=True))
 
     assert rc in (0, None)
     assert title_calls == {"gemini-cli": 1, "local": 0}
 
 
 def test_titles_cloud_with_env_optin_calls_provider(title_calls, monkeypatch):
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
-    rc = lore_cli.cmd_generate_titles(_titles_args(provider="gemini-cli"))
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
+    rc = annuli_cli.cmd_generate_titles(_titles_args(provider="gemini-cli"))
 
     assert rc in (0, None)
     assert title_calls == {"gemini-cli": 1, "local": 0}
@@ -210,8 +222,8 @@ def test_titles_cloud_with_env_optin_calls_provider(title_calls, monkeypatch):
 
 def test_titles_default_local_works_without_optin(title_calls, monkeypatch):
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
-    rc = lore_cli.cmd_generate_titles(_titles_args(provider=None))
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
+    rc = annuli_cli.cmd_generate_titles(_titles_args(provider=None))
 
     assert rc in (0, None)
     assert title_calls == {"gemini-cli": 0, "local": 1}
@@ -221,7 +233,7 @@ def test_titles_default_local_works_without_optin(title_calls, monkeypatch):
 
 
 def test_allow_cloud_flag_registered_for_improve_and_titles():
-    parser = lore_cli.build_parser()
+    parser = annuli_cli.build_parser()
     improve = parser.parse_args(["improve"])
     titles = parser.parse_args(["generate-titles"])
     assert improve.allow_cloud is False

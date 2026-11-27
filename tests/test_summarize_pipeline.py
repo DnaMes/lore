@@ -9,20 +9,20 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse, transcript_safe
-from lore.services.summarize import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse, transcript_safe
+from annuli.services.summarize import (
     run_summaries,
     select_candidates,
     summarize_session,
     validate_summary,
 )
-from lore.services.summary_input import extract_artifacts, from_unified
-from lore.storage import initialise
-from lore.storage.reader import load_session_messages_v2
-from lore.storage.schema import open_connection
-from lore.storage.summaries import get_summary
-from lore.storage.writer import v2_db_path, write_sessions
+from annuli.services.summary_input import extract_artifacts, from_unified
+from annuli.storage import initialise
+from annuli.storage.reader import load_session_messages_v2
+from annuli.storage.schema import open_connection
+from annuli.storage.summaries import get_summary
+from annuli.storage.writer import v2_db_path, write_sessions
 
 T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 T_IDLE = datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
@@ -279,8 +279,8 @@ def test_skipped_small(store: Path):
 def test_needs_chunking_no_provider(store: Path, monkeypatch: pytest.MonkeyPatch):
     from tests.test_summarize_chunking import AutoProvider
 
-    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 10)
-    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 50)
+    monkeypatch.setattr("annuli.services.summarize.SINGLE_PASS_MAX_TOKENS", 10)
+    monkeypatch.setattr("annuli.services.summarize_chunks.CHUNK_TARGET_TOKENS", 50)
     provider = AutoProvider()
     assert summarize_session(provider, store, "rich", model_label=MODEL) == "written"
     assert provider.prompts
@@ -412,7 +412,7 @@ def test_artifacts_in_the_row_are_redacted(tmp_path: Path):
 
 
 def test_changed_artifact_only_input_changes_the_fingerprint(tmp_path: Path):
-    from lore.services.summarize import _fingerprint
+    from annuli.services.summarize import _fingerprint
 
     base = {"files_read": ["a.py"], "files_modified": [], "commands": [], "errors": []}
     other = {**base, "files_read": ["b.py"]}

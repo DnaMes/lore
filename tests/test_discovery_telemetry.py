@@ -1,4 +1,4 @@
-"""Discovery telemetry: ``lore check --deep`` and the recorded last sync run (B1.2)."""
+"""Discovery telemetry: ``annuli check --deep`` and the recorded last sync run (B1.2)."""
 
 from __future__ import annotations
 
@@ -11,17 +11,17 @@ from typing import Any, Iterator
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.extractors.base import BaseExtractor
-from lore.extractors.claude import ClaudeCodeExtractor
-from lore.extractors.codex import CodexExtractor
-from lore.extractors.cursor import CursorExtractor
-from lore.extractors.gemini import GeminiCLIExtractor
-from lore.extractors.vscode import VSCodeCopilotExtractor
-from lore.services.discovery import record_discovery
-from lore.storage.schema import initialise
-from lore.storage.writer import v2_db_path
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.extractors.base import BaseExtractor
+from annuli.extractors.claude import ClaudeCodeExtractor
+from annuli.extractors.codex import CodexExtractor
+from annuli.extractors.cursor import CursorExtractor
+from annuli.extractors.gemini import GeminiCLIExtractor
+from annuli.extractors.vscode import VSCodeCopilotExtractor
+from annuli.services.discovery import record_discovery
+from annuli.storage.schema import initialise
+from annuli.storage.writer import v2_db_path
 
 NOW = datetime(2026, 10, 14, 12, 0, 0)
 
@@ -99,9 +99,9 @@ def test_deep_warns_when_files_matched_but_no_sessions(monkeypatch, tmp_path, ca
     root = tmp_path / "fixture"
     root.mkdir()
     (root / "only.jsonl").write_text("user\n", encoding="utf-8")  # filtered: one prompt
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [FixtureExtractor(root)])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [FixtureExtractor(root)])
 
-    lore_cli.cmd_check(_args(tmp_path / "out", deep=True))
+    annuli_cli.cmd_check(_args(tmp_path / "out", deep=True))
 
     out = capsys.readouterr().out
     assert (
@@ -114,9 +114,9 @@ def test_deep_warns_on_stale_glob_with_data_directory_present(monkeypatch, tmp_p
     root = tmp_path / "fixture"
     root.mkdir()
     (root / "session.json").write_text("user\nuser\nuser\n", encoding="utf-8")  # glob wants jsonl
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [FixtureExtractor(root)])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [FixtureExtractor(root)])
 
-    lore_cli.cmd_check(_args(tmp_path / "out", deep=True))
+    annuli_cli.cmd_check(_args(tmp_path / "out", deep=True))
 
     out = capsys.readouterr().out
     assert "WARNING: codex: 0 source files matched ~/fixture/*.jsonl" in out
@@ -126,9 +126,9 @@ def test_deep_warns_on_stale_glob_with_data_directory_present(monkeypatch, tmp_p
 def test_deep_counts_match_fixture(monkeypatch, tmp_path, capsys):
     root = _fixture_dir(tmp_path)
     extractor = FixtureExtractor(root)
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
 
-    lore_cli.cmd_check(_args(tmp_path / "out", deep=True))
+    annuli_cli.cmd_check(_args(tmp_path / "out", deep=True))
 
     assert extractor.discovery == {"files_matched": 3, "files_parsed": 3, "records_unknown": 1}
     assert extractor.skip_counts == {"too_few_user_prompts": 1}
@@ -149,7 +149,7 @@ def test_deep_writes_nothing(home, tmp_path, capsys):
     out_dir = tmp_path / "out"
     before = _snapshot(home)
 
-    lore_cli.cmd_check(_args(out_dir, deep=True))
+    annuli_cli.cmd_check(_args(out_dir, deep=True))
 
     assert _snapshot(home) == before
     assert not out_dir.exists()
@@ -177,9 +177,9 @@ def test_plain_check_shows_last_recorded_run(monkeypatch, tmp_path, capsys):
     extractor = FixtureExtractor(_fixture_dir(tmp_path))
     list(extractor.extract_sessions())
     record_discovery(out_dir, [extractor])
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
 
-    lore_cli.cmd_check(_args(out_dir, deep=False))
+    annuli_cli.cmd_check(_args(out_dir, deep=False))
 
     out = capsys.readouterr().out
     assert "Last sync" in out
@@ -191,9 +191,9 @@ def test_plain_check_shows_last_recorded_run(monkeypatch, tmp_path, capsys):
 def test_plain_check_works_without_a_database(monkeypatch, tmp_path, capsys):
     out_dir = tmp_path / "out"
     extractor = FixtureExtractor(_fixture_dir(tmp_path))
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
 
-    lore_cli.cmd_check(_args(out_dir, deep=False))
+    annuli_cli.cmd_check(_args(out_dir, deep=False))
 
     out = capsys.readouterr().out
     assert "codex" in out and "Available" in out
@@ -363,7 +363,7 @@ def test_vscode_counts_each_unknown_record_once(home):
 
 
 def test_every_extractor_describes_its_sources_without_the_home_directory(home):
-    from lore.extractors.factory import get_all_extractors
+    from annuli.extractors.factory import get_all_extractors
 
     for extractor in get_all_extractors():
         description = extractor.source_description()

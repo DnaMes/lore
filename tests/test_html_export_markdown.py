@@ -14,8 +14,8 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.html import render_session_html
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.html import render_session_html
 
 TS = datetime(2026, 6, 1, 9, 0, 0)
 
@@ -48,7 +48,7 @@ def _session(content: str = MARKDOWN, title: str = "Rendering") -> UnifiedSessio
         session_id="ses_render",
         created_at=TS,
         last_updated=TS,
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title=title,
         messages=[
             UnifiedMessage(role=Role.USER, content="look at this", timestamp=TS),
@@ -126,7 +126,7 @@ def test_plain_text_still_works():
 
 def test_markdown_rendering_is_shared_with_the_web_ui(page):
     """Same pipeline, so the export and the UI cannot drift apart."""
-    from lore.utils.markdown_render import render_markdown
+    from annuli.utils.markdown_render import render_markdown
 
     assert render_markdown("**x**") == "<p><strong>x</strong></p>"
     assert "<strong>x</strong>" in page or "<strong>strong</strong>" in page

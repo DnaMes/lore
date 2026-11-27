@@ -9,9 +9,9 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import TitleSource
-from lore.extractors.base import BaseExtractor
-from lore.extractors.codex import CodexExtractor
+from annuli.core.models import TitleSource
+from annuli.extractors.base import BaseExtractor
+from annuli.extractors.codex import CodexExtractor
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -157,7 +157,7 @@ def test_odd_source_types_yield_unknown_without_raising(home, bad_source):
 
 def test_exec_one_prompt_imported_interactive_one_prompt_dropped(home, monkeypatch):
     monkeypatch.setattr(BaseExtractor, "MIN_USER_PROMPTS", 3, raising=True)
-    monkeypatch.delenv("LORE_MIN_USER_PROMPTS", raising=False)
+    monkeypatch.delenv("ANNULI_MIN_USER_PROMPTS", raising=False)
     _rollout(
         home,
         [_meta(session_id="exec-one", source="exec"), _one_user("exec only")],
@@ -297,7 +297,7 @@ def test_symlinked_wal_sidecar_disables_native_titles(home, tmp_path):
 def test_oversized_sidecar_disables_native_titles(home, monkeypatch):
     db = _state_db(home, [("sess-rev-01", "x/rollout-rev.jsonl", "Native Title", None)])
     Path(f"{db}-wal").write_bytes(b"x" * 4096)
-    monkeypatch.setattr("lore.extractors.codex._MAX_SQLITE_BYTES", db.stat().st_size + 100)
+    monkeypatch.setattr("annuli.extractors.codex._MAX_SQLITE_BYTES", db.stat().st_size + 100)
     _rollout(home, _one_session(home), "rollout-rev.jsonl")
 
     _, sessions = _extract(home)
@@ -307,13 +307,13 @@ def test_oversized_sidecar_disables_native_titles(home, monkeypatch):
 
 
 def test_title_field_sizes_and_row_count_are_bounded(home, monkeypatch):
-    monkeypatch.setattr("lore.extractors.codex._MAX_THREAD_ROWS", 5)
+    monkeypatch.setattr("annuli.extractors.codex._MAX_THREAD_ROWS", 5)
     rows = [(f"id-{i}", f"x/rollout-{i}.jsonl", "T" * 5000, None) for i in range(50)]
     rows.append(("sess-rev-01", "x/rollout-rev.jsonl", "Z" * 5000, None))
     _state_db(home, rows)
     _rollout(home, _one_session(home), "rollout-rev.jsonl")
 
-    from lore.extractors.codex import _load_thread_titles
+    from annuli.extractors.codex import _load_thread_titles
 
     titles = _load_thread_titles(home / ".codex")
 

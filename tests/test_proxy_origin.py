@@ -1,7 +1,7 @@
 """Proxy and origin validation behind a reverse proxy (#193).
 
 The browser's ``Origin`` must be accepted when it names an origin the operator
-configured (``LORE_PUBLIC_ORIGINS``) *and* the existing trusted-proxy flag is
+configured (``ANNULI_PUBLIC_ORIGINS``) *and* the existing trusted-proxy flag is
 set; loopback origins keep working without any configuration; everything else
 is rejected. While a proxy is supposedly in front, malformed ``X-Forwarded-*``
 headers on state-changing routes are rejected too, because that is exactly the
@@ -14,7 +14,7 @@ from typing import Dict
 
 import pytest
 
-from lore.interfaces import web, web_utils
+from annuli.interfaces import web, web_utils
 
 POST = "/api/cache/clear"  # state-changing route guarded by _check_local_origin
 
@@ -22,7 +22,7 @@ POST = "/api/cache/clear"  # state-changing route guarded by _check_local_origin
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("TRUSTED_PROXY", raising=False)
-    monkeypatch.delenv("LORE_PUBLIC_ORIGINS", raising=False)
+    monkeypatch.delenv("ANNULI_PUBLIC_ORIGINS", raising=False)
     web.app.config["TESTING"] = True
     return web.app.test_client()
 
@@ -35,7 +35,7 @@ def _trusted(monkeypatch: pytest.MonkeyPatch, origins: str) -> None:
     """Configure a proxied deployment: flag on, origins as given (``""`` = none)."""
     monkeypatch.setenv("TRUSTED_PROXY", "1")
     if origins:
-        monkeypatch.setenv("LORE_PUBLIC_ORIGINS", origins)
+        monkeypatch.setenv("ANNULI_PUBLIC_ORIGINS", origins)
 
 
 # ---------------------------------------------------------------------------
@@ -59,9 +59,9 @@ def test_direct_foreign_origin_is_rejected(client):
 
 
 def test_configured_origins_need_the_trusted_proxy_flag(client, monkeypatch):
-    """`LORE_PUBLIC_ORIGINS` alone changes nothing — the proxy flag gates it (#193)."""
-    monkeypatch.setenv("LORE_PUBLIC_ORIGINS", "https://lore.example:8443")
-    assert _post(client, {"Origin": "https://lore.example:8443"}).status_code == 403
+    """`ANNULI_PUBLIC_ORIGINS` alone changes nothing — the proxy flag gates it (#193)."""
+    monkeypatch.setenv("ANNULI_PUBLIC_ORIGINS", "https://annuli.example:8443")
+    assert _post(client, {"Origin": "https://annuli.example:8443"}).status_code == 403
 
 
 @pytest.mark.parametrize(
@@ -85,34 +85,34 @@ def test_malformed_origin_is_rejected(client, origin):
 
 
 def test_trusted_configured_origin_with_tls_and_non_default_port(client, monkeypatch):
-    _trusted(monkeypatch, "https://lore.example:8443, http://10.0.0.5:5000")
-    assert _post(client, {"Origin": "https://lore.example:8443"}).status_code != 403
+    _trusted(monkeypatch, "https://annuli.example:8443, http://10.0.0.5:5000")
+    assert _post(client, {"Origin": "https://annuli.example:8443"}).status_code != 403
     assert _post(client, {"Origin": "http://10.0.0.5:5000"}).status_code != 403
     assert _post(client, {"Origin": "http://localhost"}).status_code != 403
 
 
 def test_trusted_wrong_scheme_or_port_is_rejected(client, monkeypatch):
-    _trusted(monkeypatch, "https://lore.example:8443")
+    _trusted(monkeypatch, "https://annuli.example:8443")
     # scheme and port are part of an origin — none of these is the configured one
-    assert _post(client, {"Origin": "http://lore.example:8443"}).status_code == 403
-    assert _post(client, {"Origin": "https://lore.example"}).status_code == 403
-    assert _post(client, {"Origin": "https://lore.example:9443"}).status_code == 403
+    assert _post(client, {"Origin": "http://annuli.example:8443"}).status_code == 403
+    assert _post(client, {"Origin": "https://annuli.example"}).status_code == 403
+    assert _post(client, {"Origin": "https://annuli.example:9443"}).status_code == 403
 
 
 def test_trusted_unlisted_origin_is_rejected(client, monkeypatch):
-    _trusted(monkeypatch, "https://lore.example")
+    _trusted(monkeypatch, "https://annuli.example")
     assert _post(client, {"Origin": "https://other.example"}).status_code == 403
 
 
 def test_malformed_configured_entry_is_ignored(client, monkeypatch):
-    _trusted(monkeypatch, "not-a-url, https://lore.example")
+    _trusted(monkeypatch, "not-a-url, https://annuli.example")
     assert _post(client, {"Origin": "not-a-url"}).status_code == 403
-    assert _post(client, {"Origin": "https://lore.example"}).status_code != 403
+    assert _post(client, {"Origin": "https://annuli.example"}).status_code != 403
 
 
 def test_trusted_proxy_without_config_still_rejects_foreign_origin(client, monkeypatch):
     _trusted(monkeypatch, "")
-    assert _post(client, {"Origin": "https://lore.example"}).status_code == 403
+    assert _post(client, {"Origin": "https://annuli.example"}).status_code == 403
 
 
 # ---------------------------------------------------------------------------
@@ -126,26 +126,26 @@ def test_trusted_proxy_without_config_still_rejects_foreign_origin(client, monke
         {"X-Forwarded-Proto": "javascript"},
         {"X-Forwarded-Proto": "https, ftp"},
         {"X-Forwarded-Host": "evil..com"},
-        {"X-Forwarded-Host": "lore.example:8443:99"},
-        {"X-Forwarded-Host": "lore.example/x"},
+        {"X-Forwarded-Host": "annuli.example:8443:99"},
+        {"X-Forwarded-Host": "annuli.example/x"},
         {"X-Forwarded-For": "not-an-ip"},
         {"X-Forwarded-For": "1.2.3.4,, 5.6.7.8"},
     ],
 )
 def test_trusted_proxy_rejects_malformed_forwarded_headers(client, monkeypatch, header):
-    _trusted(monkeypatch, "https://lore.example")
-    resp = _post(client, {"Origin": "https://lore.example", **header})
+    _trusted(monkeypatch, "https://annuli.example")
+    resp = _post(client, {"Origin": "https://annuli.example", **header})
     assert resp.status_code == 400
 
 
 def test_trusted_proxy_accepts_well_formed_forwarded_headers(client, monkeypatch):
-    _trusted(monkeypatch, "https://lore.example")
+    _trusted(monkeypatch, "https://annuli.example")
     resp = _post(
         client,
         {
-            "Origin": "https://lore.example",
+            "Origin": "https://annuli.example",
             "X-Forwarded-Proto": "https",
-            "X-Forwarded-Host": "lore.example",
+            "X-Forwarded-Host": "annuli.example",
             "X-Forwarded-For": "203.0.113.7, 10.0.0.1",
         },
     )
@@ -153,7 +153,7 @@ def test_trusted_proxy_accepts_well_formed_forwarded_headers(client, monkeypatch
 
 
 def test_malformed_forwarded_headers_are_rejected_even_without_an_origin(client, monkeypatch):
-    _trusted(monkeypatch, "https://lore.example")
+    _trusted(monkeypatch, "https://annuli.example")
     assert _post(client, {"X-Forwarded-For": "nope"}).status_code == 400
 
 

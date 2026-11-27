@@ -10,10 +10,10 @@ from typing import Any
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.commandcode import CommandCodeExtractor
-from lore.extractors.factory import get_all_extractors
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.commandcode import CommandCodeExtractor
+from annuli.extractors.factory import get_all_extractors
+from annuli.utils.tooling import normalize_tool_name
 
 SESSION_ID = "00000000-aaaa-bbbb-cccc-000000000001"
 CWD = "/work/example-app"
@@ -339,7 +339,7 @@ def test_abandoned_branch_excluded(home):
 
 
 def test_print_entrypoint_exec_bypasses_prompt_floor(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")
     root = _projects_root(home)
     cid = "00000000-print-print-print-print000001"
     lines = [
@@ -489,7 +489,7 @@ def test_wrongly_typed_ids_are_ignored(home):
 
 
 def test_oversize_line_skipped(home, monkeypatch):
-    import lore.extractors.commandcode as cc_module
+    import annuli.extractors.commandcode as cc_module
 
     monkeypatch.setattr(cc_module, "_MAX_LINE_CHARS", 4096)
     records: list[Any] = [_header()] + _chain_v3(3)[:4]
@@ -730,7 +730,7 @@ def test_same_header_id_in_two_projects_gets_distinct_session_ids(home):
 
 
 def test_interactive_single_prompt_session_does_not_bypass_the_prompt_floor(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")  # conftest lowers it to 1
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")  # conftest lowers it to 1
     slug = home / ".commandcode" / "projects" / "home-example-app"
     slug.mkdir(parents=True)
     records = [

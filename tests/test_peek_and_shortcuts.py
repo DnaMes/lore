@@ -8,15 +8,15 @@ from html.parser import HTMLParser
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
-from lore.interfaces.web_formatting import format_message_content, format_tool_calls
-from lore.interfaces.web_services import enrich_session_for_detail
-from lore.services.summarize import SUMMARY_PROMPT_VERSION
-from lore.storage import initialise
-from lore.storage.summaries import save_summary, summary_fingerprint
-from lore.storage.writer import v2_db_path, write_sessions
-from lore.utils.text_processing import format_thinking
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
+from annuli.interfaces.web_formatting import format_message_content, format_tool_calls
+from annuli.interfaces.web_services import enrich_session_for_detail
+from annuli.services.summarize import SUMMARY_PROMPT_VERSION
+from annuli.storage import initialise
+from annuli.storage.summaries import save_summary, summary_fingerprint
+from annuli.storage.writer import v2_db_path, write_sessions
+from annuli.utils.text_processing import format_thinking
 
 _PEEK_ID = "peek0001-0001-0001-0001-000000000001"
 _PEEK_ID_2 = "peek0002-0002-0002-0002-000000000002"
@@ -45,7 +45,7 @@ def _meta(session_id: str = _PEEK_ID, **overrides) -> dict:
         "display_title": "Peek session title",
         "created": "2026-04-01T10:00:00",
         "updated": "2026-04-01T11:00:00",
-        "project": "/repo/lore",
+        "project": "/repo/annuli",
         "messages": 6,
         "prompts": 2,
         "tokens": 900,
@@ -63,7 +63,7 @@ def _session(
         session_id=session_id,
         created_at=datetime(2026, 4, 1, 10, 0, 0),
         last_updated=datetime(2026, 4, 1, 11, 0, 0),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title="Peek session title",
         messages=[
             UnifiedMessage(Role.USER, user_text, datetime(2026, 4, 1, 10, 0, 0)),
@@ -182,7 +182,7 @@ def test_list_page_has_peek_aside_and_media_query(list_client):
     assert 'aria-label="Session preview"' in html
     assert "@media (min-width: 1280px)" in html
     assert "lore.peek.v1" in html
-    assert re.search(r"lore\.peek\.v1.*['\"]on['\"]|['\"]off['\"]", html)
+    assert re.search(r"annuli\.peek\.v1.*['\"]on['\"]|['\"]off['\"]", html)
 
 
 def test_help_dialog_on_list_and_detail(list_client, peek_client):
@@ -199,15 +199,15 @@ def _script_sources(html: str) -> str:
     return "\n".join(re.findall(r"<script[^>]*>(.*?)</script>", html, flags=re.DOTALL))
 
 
-def test_shared_lore_key_guard_once(list_client, peek_client):
+def test_shared_annuli_key_guard_once(list_client, peek_client):
     list_src = _script_sources(list_client.get("/sessions").get_data(as_text=True))
     detail_src = _script_sources(
         peek_client.get(f"/session/{_PEEK_ID}?live=1").get_data(as_text=True)
     )
     combined = list_src + detail_src
-    assert list_src.count("function loreKeyGuard(") == 1
-    assert detail_src.count("function loreKeyGuard(") == 1
-    guard_chunk = combined.split("function loreKeyGuard(", 1)[1].split("};", 1)[0]
+    assert list_src.count("function annuliKeyGuard(") == 1
+    assert detail_src.count("function annuliKeyGuard(") == 1
+    guard_chunk = combined.split("function annuliKeyGuard(", 1)[1].split("};", 1)[0]
     for needle in (
         "ctrlKey",
         "metaKey",
@@ -243,7 +243,7 @@ def test_no_inline_event_handlers_on_list(list_client):
 def test_j_without_a_hash_selects_the_first_prompt():
     from pathlib import Path
 
-    base = Path("lore/templates/base.html").read_text(encoding="utf-8")
+    base = Path("annuli/templates/base.html").read_text(encoding="utf-8")
     assert "let idx = hash ? ids.indexOf(hash) : -1;" in base
     assert "if (idx < 0) idx = 0;" not in base  # that line made j skip the first prompt
     assert "Math.max(0, idx < 0 ? 0 : idx - 1)" in base

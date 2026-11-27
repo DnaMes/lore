@@ -8,9 +8,9 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
-from lore.interfaces.session_find import find_session_matches, visible_text_nodes_from_html
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
+from annuli.interfaces.session_find import find_session_matches, visible_text_nodes_from_html
 
 SESSION_ID = "abc12345-def6-7890-abcd-ef1234567890"
 NEEDLE = "zzfindneedlezz"
@@ -280,14 +280,14 @@ def test_detail_page_find_bar_markup(find_client):
 
 
 def test_matching_uses_lower_so_server_and_browser_agree():
-    from lore.interfaces.session_find import _occurrence_positions
+    from annuli.interfaces.session_find import _occurrence_positions
 
     assert _occurrence_positions("Straße xx", "ss") == []
     assert _occurrence_positions("Straße SS", "ss") == [7]
 
 
 def test_scan_budget_marks_the_result_truncated(monkeypatch):
-    import lore.interfaces.session_find as sf
+    import annuli.interfaces.session_find as sf
 
     class Msg:
         def __init__(self, content):
@@ -315,7 +315,7 @@ def test_scan_budget_marks_the_result_truncated(monkeypatch):
 def test_client_script_discards_stale_responses_and_discloses_truncation():
     from pathlib import Path
 
-    page = Path("lore/templates/session.html").read_text(encoding="utf-8")
+    page = Path("annuli/templates/session.html").read_text(encoding="utf-8")
     assert "mySeq !== requestSeq" in page
     assert "requestSeq += 1" in page
     assert "payload.truncated" in page
@@ -500,7 +500,7 @@ def test_find_dom_visible_text_matches_server(find_client):
 def test_client_script_tags_marks_by_index_message_occurrence():
     from pathlib import Path
 
-    page = Path("lore/templates/session.html").read_text(encoding="utf-8")
+    page = Path("annuli/templates/session.html").read_text(encoding="utf-8")
     assert "data-find-occurrence" in page
     assert "data-find-message" in page
     assert "match.occurrence" in page
@@ -536,7 +536,7 @@ def test_find_hidden_reasoning_still_advances_occurrence_numbers():
 
 
 def test_find_text_after_an_input_element_is_still_searched():
-    from lore.interfaces.session_find import visible_text_nodes_from_html
+    from annuli.interfaces.session_find import visible_text_nodes_from_html
 
     nodes = visible_text_nodes_from_html('<p><input type="checkbox"> after-input</p>')
     assert nodes == [" after-input"]

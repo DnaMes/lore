@@ -12,8 +12,8 @@ from html.parser import HTMLParser
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
 
 SESSION_IDS = ["session-1", 'a"b', "a'b", "a<b>c", "a&amp;b&c", "q\"'<&>x"]
 

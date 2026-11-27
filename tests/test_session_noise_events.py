@@ -5,16 +5,16 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_utils
-from lore.interfaces.routes import sessions as sessions_routes
-from lore.interfaces.web_formatting import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_utils
+from annuli.interfaces.routes import sessions as sessions_routes
+from annuli.interfaces.web_formatting import (
     _tool_group_row_html,
     format_message_content,
     format_tool_calls,
 )
-from lore.interfaces.web_services import enrich_session_for_detail
-from lore.utils.text_processing import format_thinking
+from annuli.interfaces.web_services import enrich_session_for_detail
+from annuli.utils.text_processing import format_thinking
 
 T0 = datetime(2026, 11, 10, 10, 0, tzinfo=timezone.utc)
 

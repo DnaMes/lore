@@ -1,4 +1,4 @@
-"""``lore export`` must not re-parse Claude transcripts that did not change.
+"""``annuli export`` must not re-parse Claude transcripts that did not change.
 
 Every lore-sync run used to parse every JSONL file again (1300 sessions,
 1.3 M JSON lines, ~20 CPU minutes). The existing index already records each
@@ -16,9 +16,9 @@ from pathlib import Path
 
 import pytest
 
-import lore_cli
-from lore.extractors.claude import ClaudeCodeExtractor
-from lore.utils.home_discovery import _discover_cached, discover_home_marker_paths
+import annuli_cli
+from annuli.extractors.claude import ClaudeCodeExtractor
+from annuli.utils.home_discovery import _discover_cached, discover_home_marker_paths
 
 
 def _records(session_id: str, extra: int = 0) -> list[dict]:
@@ -60,7 +60,7 @@ def env(tmp_path, monkeypatch):
         _write(project / f"{name}.jsonl", _records(name))
 
     extractor = ClaudeCodeExtractor()
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
 
     parsed: list[str] = []
     original = ClaudeCodeExtractor._parse_session
@@ -75,7 +75,7 @@ def env(tmp_path, monkeypatch):
 
 def _export(tmp_path: Path, *, full: bool = False) -> dict:
     out = tmp_path / "out"
-    lore_cli.cmd_export(Namespace(output_dir=str(out), tool=None, project=None, full=full))
+    annuli_cli.cmd_export(Namespace(output_dir=str(out), tool=None, project=None, full=full))
     return json.loads((out / "index.json").read_text(encoding="utf-8"))
 
 
@@ -187,7 +187,7 @@ def test_home_scan_survives_unreadable_entries(tmp_path, monkeypatch):
 
 def test_streaming_extractor_keeps_entries_skipped_after_its_first_yield(tmp_path, monkeypatch):
     """Codex yields lazily: a changed first rollout must not drop the skipped ones after it."""
-    from lore.extractors.codex import CodexExtractor
+    from annuli.extractors.codex import CodexExtractor
 
     monkeypatch.setenv("HOME", str(tmp_path))
     _discover_cached.cache_clear()
@@ -221,7 +221,7 @@ def test_streaming_extractor_keeps_entries_skipped_after_its_first_yield(tmp_pat
 
     paths = [rollout(name) for name in ("sess-a", "sess-b", "sess-c")]
     extractor = CodexExtractor()
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
 
     first = _export(tmp_path)
     assert _ids(first) == ["sess-a", "sess-b", "sess-c"]

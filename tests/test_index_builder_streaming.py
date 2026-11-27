@@ -14,8 +14,8 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
 
 
 def _session(session_id: str, *, n_messages: int = 3) -> UnifiedSession:
@@ -114,7 +114,7 @@ def test_v2_failure_midstream_leaves_legacy_index_complete(tmp_path, monkeypatch
     Inject a failure into the v2 streaming writer's add_full; the legacy
     index.json must still contain every session.
     """
-    from lore.storage import writer as writer_mod
+    from annuli.storage import writer as writer_mod
 
     calls = {"n": 0}
     original = writer_mod.StreamingV2Writer.add_full
@@ -215,7 +215,7 @@ def test_reused_ids_route_to_v2_only_and_preserve_json(tmp_path):
     assert data["sessions"][0]["title"] == "Reused One"  # verbatim prior dict
 
     # v2 got full message rows for BOTH r1 (reused) and fresh (#35 intact).
-    from lore.storage.writer import v2_db_path
+    from annuli.storage.writer import v2_db_path
 
     conn = sqlite3.connect(v2_db_path(tmp_path))
     try:
@@ -229,7 +229,7 @@ def test_reused_ids_route_to_v2_only_and_preserve_json(tmp_path):
 
 def test_reused_stream_preserves_existing_v2_messages(tmp_path):
     """A complete reused row keeps its stored messages during a later sync."""
-    from lore.storage import v2_db_path
+    from annuli.storage import v2_db_path
 
     IndexBuilder(tmp_path).build_index([_session("reused", n_messages=2)], {})
     prior = {

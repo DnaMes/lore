@@ -16,12 +16,12 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import message_vectors, v2_db_path, write_sessions
-from lore.storage import schema as schema_module
-from lore.storage.embeddings import EMBEDDING_DIM, sqlite_vec_available
-from lore.storage.message_vectors import embed_messages, message_key, pending_messages
-from lore.storage.schema import MIGRATIONS, apply_migrations, initialise
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import message_vectors, v2_db_path, write_sessions
+from annuli.storage import schema as schema_module
+from annuli.storage.embeddings import EMBEDDING_DIM, sqlite_vec_available
+from annuli.storage.message_vectors import embed_messages, message_key, pending_messages
+from annuli.storage.schema import MIGRATIONS, apply_migrations, initialise
 
 requires_vec = pytest.mark.skipif(
     not sqlite_vec_available(),
@@ -327,8 +327,8 @@ def test_search_does_not_return_a_vector_with_a_stale_hash(store, fake_embedder,
     The KNN path must not surface a hit whose stored content hash differs from
     the hash of the message's current body.
     """
-    from lore.storage import message_search
-    from lore.storage.message_search import search_messages
+    from annuli.storage import message_search
+    from annuli.storage.message_search import search_messages
 
     conn = _conn(store)
     try:
@@ -384,7 +384,7 @@ def test_pass_does_not_hold_the_write_lock_while_embedding(tmp_path, monkeypatch
     """A memory write must not wait out a whole embedding pass.
 
     The worker child runs for up to its budget on a throttled CPU; one
-    transaction around the whole pass locked ``lore memory add`` out with
+    transaction around the whole pass locked ``annuli memory add`` out with
     "database is busy" and lost every vector when the child was killed.
     """
     db = v2_db_path(tmp_path)

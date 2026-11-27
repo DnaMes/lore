@@ -1,4 +1,4 @@
-"""`lore knowledge` must send the real conversation to the LLM (#197, task 1)."""
+"""`annuli knowledge` must send the real conversation to the LLM (#197, task 1)."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import json
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse
-from lore.llm.tasks.knowledge import KnowledgeEntry, KnowledgeExtractor
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse
+from annuli.llm.tasks.knowledge import KnowledgeEntry, KnowledgeExtractor
 
 VALID_JSON = json.dumps(
     {

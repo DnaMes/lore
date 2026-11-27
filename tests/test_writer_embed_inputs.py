@@ -11,9 +11,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage.session_vectors import _MAX_EMBED_CHARS
-from lore.storage.writer import StreamingV2Writer
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage.session_vectors import _MAX_EMBED_CHARS
+from annuli.storage.writer import StreamingV2Writer
 
 
 def _big_session(session_id: str, chars: int) -> UnifiedSession:

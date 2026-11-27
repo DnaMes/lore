@@ -1,7 +1,7 @@
 import base64
 from email.message import Message
 
-from lore.interfaces.live_probe import (
+from annuli.interfaces.live_probe import (
     ProbeCase,
     build_basic_auth_header,
     evaluate_probe_result,
@@ -50,7 +50,7 @@ def test_run_probe_case_handles_timeout_without_crashing(monkeypatch):
     def _boom(*_args, **_kwargs):
         raise TimeoutError
 
-    monkeypatch.setattr("lore.interfaces.live_probe.urlopen", _boom)
+    monkeypatch.setattr("annuli.interfaces.live_probe.urlopen", _boom)
 
     result = run_probe_case(
         "https://example.com",
@@ -90,7 +90,7 @@ def test_run_probe_case_uses_head_fallback_after_timeout(monkeypatch):
             raise TimeoutError
         return _FakeResponse(404)
 
-    monkeypatch.setattr("lore.interfaces.live_probe.urlopen", _urlopen)
+    monkeypatch.setattr("annuli.interfaces.live_probe.urlopen", _urlopen)
 
     result = run_probe_case(
         "https://example.com",
@@ -113,7 +113,7 @@ def test_fetch_build_info_parses_revision_and_module(monkeypatch):
             return 200
 
         def read(self):
-            return b'{"revision":"rev-1","module":"lore.interfaces.web"}'
+            return b'{"revision":"rev-1","module":"annuli.interfaces.web"}'
 
         def __enter__(self):
             return self
@@ -122,7 +122,7 @@ def test_fetch_build_info_parses_revision_and_module(monkeypatch):
             return None
 
     monkeypatch.setattr(
-        "lore.interfaces.live_probe.urlopen",
+        "annuli.interfaces.live_probe.urlopen",
         lambda *_args, **_kwargs: _FakeResponse(),
     )
 
@@ -134,22 +134,22 @@ def test_fetch_build_info_parses_revision_and_module(monkeypatch):
 
     assert result["status"] == 200
     assert result["revision"] == "rev-1"
-    assert result["module"] == "lore.interfaces.web"
+    assert result["module"] == "annuli.interfaces.web"
 
 
 def test_run_probe_matrix_includes_build_info(monkeypatch):
     monkeypatch.setattr(
-        "lore.interfaces.live_probe.fetch_build_info",
+        "annuli.interfaces.live_probe.fetch_build_info",
         lambda **_kwargs: {
             "url": "https://example.com/api/build-info",
             "status": 200,
             "detail": "ok",
             "revision": "rev-1",
-            "module": "lore.interfaces.web",
+            "module": "annuli.interfaces.web",
         },
     )
     monkeypatch.setattr(
-        "lore.interfaces.live_probe.run_probe_case",
+        "annuli.interfaces.live_probe.run_probe_case",
         lambda *_args, **_kwargs: {
             "path": "/session/bad;id",
             "url": "https://example.com/session/bad;id",

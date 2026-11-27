@@ -1,4 +1,4 @@
-"""``lore memory import-claude``: dry run, idempotent apply, supersede, redaction (#44)."""
+"""``annuli memory import-claude``: dry run, idempotent apply, supersede, redaction (#44)."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from typing import Optional
 
 import pytest
 
-import lore.storage.embeddings as emb
-import lore_cli
-from lore.services.claude_memory_import import import_claude_memory
-from lore.storage import get_memory, list_memory
-from lore.storage.writer import v2_db_path
+import annuli.storage.embeddings as emb
+import annuli_cli
+from annuli.services.claude_memory_import import import_claude_memory
+from annuli.storage import get_memory, list_memory
+from annuli.storage.writer import v2_db_path
 
 AWS_KEY = "AKIA" + "ABCDEFGHIJKLMNOP"
 
@@ -77,7 +77,7 @@ def _store(tmp_path: Path) -> Path:
 
 def test_dry_run_writes_nothing(tmp_path, capsys):
     root = _make_tree(tmp_path)
-    lore_cli.cmd_memory(_args(tmp_path, root, apply=False))
+    annuli_cli.cmd_memory(_args(tmp_path, root, apply=False))
 
     assert not v2_db_path(_store(tmp_path)).exists()
     out = capsys.readouterr().out
@@ -213,6 +213,6 @@ def test_unknown_type_becomes_candidate(tmp_path):
 
 def test_missing_root_is_an_error(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
-        lore_cli.cmd_memory(_args(tmp_path, tmp_path / "nope", apply=False))
+        annuli_cli.cmd_memory(_args(tmp_path, tmp_path / "nope", apply=False))
     assert exc.value.code == 1
     assert "no Claude projects directory" in capsys.readouterr().err

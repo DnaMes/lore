@@ -6,7 +6,7 @@ start the WSGI app in a background thread, talk JSON-RPC to it with
 bearer token, body and concurrency caps, request deadline) plus the fact that
 stdio remains the default and unchanged.
 
-There is no MCP SDK in this project — ``lore.interfaces.server.MCPServer`` is
+There is no MCP SDK in this project — ``annuli.interfaces.server.MCPServer`` is
 the hand-written stdio implementation — so the HTTP transport is hand-written
 too and these tests drive it directly instead of through an SDK test client.
 """
@@ -26,10 +26,10 @@ from pathlib import Path
 import pytest
 from werkzeug.serving import make_server
 
-from lore.cli import mcp as mcp_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.interfaces import mcp, mcp_http
+from annuli.cli import mcp as mcp_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.interfaces import mcp, mcp_http
 
 REPO = Path(__file__).resolve().parent.parent
 TOKEN = "correct-horse-battery-staple"
@@ -131,7 +131,7 @@ def test_initialize_tools_list_and_read_only_call_over_http(serve, tool_server):
     status, headers, initialized = _rpc(port, INITIALIZE)
     assert status == 200
     assert headers["Content-Type"].startswith("application/json")
-    assert initialized["result"]["serverInfo"]["name"] == "lore"
+    assert initialized["result"]["serverInfo"]["name"] == "annuli"
     assert initialized["result"]["capabilities"]["tools"] == {}
 
     # A notification is accepted with no body, as streamable HTTP asks.
@@ -199,7 +199,7 @@ def test_missing_and_incorrect_token_are_refused(serve, tool_server):
         port, INITIALIZE, headers={"Authorization": f"Bearer {TOKEN}"}
     )
     assert status == 200
-    assert initialized["result"]["serverInfo"]["name"] == "lore"
+    assert initialized["result"]["serverInfo"]["name"] == "annuli"
 
 
 def test_token_is_never_logged(tool_server, caplog):
@@ -227,8 +227,8 @@ def test_non_loopback_bind_without_token_does_not_start(tool_server):
 
 
 def test_cli_refuses_non_loopback_bind_without_token(monkeypatch, capsys):
-    monkeypatch.delenv("LORE_MCP_HTTP_TOKEN", raising=False)
-    monkeypatch.delenv("LORE_MCP_HTTP_TOKEN_FILE", raising=False)
+    monkeypatch.delenv("ANNULI_MCP_HTTP_TOKEN", raising=False)
+    monkeypatch.delenv("ANNULI_MCP_HTTP_TOKEN_FILE", raising=False)
 
     def must_not_bind(*_args, **_kwargs):
         raise AssertionError("the HTTP transport must refuse to bind without a token")
@@ -242,8 +242,8 @@ def test_cli_accepts_a_non_loopback_bind_with_a_token_file(monkeypatch, tmp_path
     """The opt-in path: a token from a file gets past the refusal (the server itself is stubbed)."""
     token_file = tmp_path / "mcp-token"
     token_file.write_text(TOKEN + "\n", encoding="utf-8")
-    monkeypatch.delenv("LORE_MCP_HTTP_TOKEN", raising=False)
-    monkeypatch.delenv("LORE_MCP_HTTP_TOKEN_FILE", raising=False)
+    monkeypatch.delenv("ANNULI_MCP_HTTP_TOKEN", raising=False)
+    monkeypatch.delenv("ANNULI_MCP_HTTP_TOKEN_FILE", raising=False)
     seen = {}
 
     def fake_run(server, **kwargs):
@@ -258,10 +258,10 @@ def test_cli_accepts_a_non_loopback_bind_with_a_token_file(monkeypatch, tmp_path
 
 
 def test_resolve_http_token_sources(monkeypatch, tmp_path):
-    monkeypatch.delenv("LORE_MCP_HTTP_TOKEN", raising=False)
+    monkeypatch.delenv("ANNULI_MCP_HTTP_TOKEN", raising=False)
     assert mcp_http.resolve_http_token() is None
 
-    monkeypatch.setenv("LORE_MCP_HTTP_TOKEN", "  from-env  ")
+    monkeypatch.setenv("ANNULI_MCP_HTTP_TOKEN", "  from-env  ")
     assert mcp_http.resolve_http_token() == "from-env"
 
     token_file = tmp_path / "token"
@@ -361,11 +361,11 @@ def test_get_and_malformed_bodies_are_rejected(serve, tool_server):
 
 def test_parser_defaults_keep_stdio_and_describe_http(monkeypatch):
     for name in (
-        "LORE_MCP_HTTP_HOST",
-        "LORE_MCP_HTTP_PORT",
-        "LORE_MCP_HTTP_PATH",
-        "LORE_MCP_HTTP_TOKEN_FILE",
-        "LORE_MCP_HTTP_TIMEOUT",
+        "ANNULI_MCP_HTTP_HOST",
+        "ANNULI_MCP_HTTP_PORT",
+        "ANNULI_MCP_HTTP_PATH",
+        "ANNULI_MCP_HTTP_TOKEN_FILE",
+        "ANNULI_MCP_HTTP_TIMEOUT",
     ):
         monkeypatch.delenv(name, raising=False)
 
@@ -390,7 +390,7 @@ def test_stdio_transport_is_unchanged():
         [
             sys.executable,
             "-c",
-            "from lore.cli.mcp import main_sync; raise SystemExit(main_sync())",
+            "from annuli.cli.mcp import main_sync; raise SystemExit(main_sync())",
         ],
         cwd=REPO,
         input=json.dumps(INITIALIZE).encode("utf-8") + b"\n",
@@ -401,4 +401,4 @@ def test_stdio_transport_is_unchanged():
     assert proc.returncode == 0, proc.stderr.decode()[-2000:]
     lines = [line for line in proc.stdout.decode("utf-8").splitlines() if line.strip()]
     response = json.loads(lines[-1])
-    assert response["result"]["serverInfo"]["name"] == "lore"
+    assert response["result"]["serverInfo"]["name"] == "annuli"

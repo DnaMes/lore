@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from lore.core.models import Tool, UnifiedSession
-from lore_cli import _merge_sessions_with_existing_index
+from annuli.core.models import Tool, UnifiedSession
+from annuli_cli import _merge_sessions_with_existing_index
 
 
 def _session(session_id: str, tool: Tool) -> UnifiedSession:

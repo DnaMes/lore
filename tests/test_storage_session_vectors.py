@@ -12,11 +12,11 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import session_vectors, v2_db_path, write_sessions
-from lore.storage.embeddings import embeddings_available, sqlite_vec_available
-from lore.storage.schema import initialise
-from lore.storage.session_vectors import embed_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import session_vectors, v2_db_path, write_sessions
+from annuli.storage.embeddings import embeddings_available, sqlite_vec_available
+from annuli.storage.schema import initialise
+from annuli.storage.session_vectors import embed_sessions
 
 requires_vectors = pytest.mark.skipif(
     not (sqlite_vec_available() and embeddings_available()),
@@ -158,11 +158,11 @@ def test_budget_zero_stops_before_any_embed(tmp_path):
 
 
 def test_env_budget_parsing(monkeypatch):
-    monkeypatch.setenv("LORE_EMBED_BUDGET_SECONDS", "0")
+    monkeypatch.setenv("ANNULI_EMBED_BUDGET_SECONDS", "0")
     assert session_vectors._embed_budget_seconds() is None  # 0 = unlimited
-    monkeypatch.setenv("LORE_EMBED_BUDGET_SECONDS", "45")
+    monkeypatch.setenv("ANNULI_EMBED_BUDGET_SECONDS", "45")
     assert session_vectors._embed_budget_seconds() == 45.0
-    monkeypatch.setenv("LORE_EMBED_BUDGET_SECONDS", "garbage")
+    monkeypatch.setenv("ANNULI_EMBED_BUDGET_SECONDS", "garbage")
     assert session_vectors._embed_budget_seconds() == 60.0
 
 
@@ -231,7 +231,7 @@ def test_write_sessions_reused_entries_keep_vectors(tmp_path):
 
 
 def test_write_sessions_succeeds_without_backend(tmp_path, monkeypatch):
-    monkeypatch.setattr("lore.storage.writer.embed_sessions", lambda conn, items: 0)
+    monkeypatch.setattr("annuli.storage.writer.embed_sessions", lambda conn, items: 0)
     db = v2_db_path(tmp_path)
     count = write_sessions(db, [_session("a", title="Findable")])
     assert count == 1
@@ -246,7 +246,7 @@ def test_write_sessions_survives_embed_exception(tmp_path, monkeypatch):
     def boom(conn, items):
         raise RuntimeError("embed exploded")
 
-    monkeypatch.setattr("lore.storage.writer.embed_sessions", boom)
+    monkeypatch.setattr("annuli.storage.writer.embed_sessions", boom)
     db = v2_db_path(tmp_path)
     count = write_sessions(db, [_session("a")])
     assert count == 1  # index still committed

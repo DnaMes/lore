@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from lore.interfaces import web
-from lore.interfaces.session_view_prep import render_message_body
-from lore.interfaces.web_formatting import format_message_content, format_tool_calls
+from annuli.interfaces import web
+from annuli.interfaces.session_view_prep import render_message_body
+from annuli.interfaces.web_formatting import format_message_content, format_tool_calls
 
 
 def _call(tool: str, **kwargs):
@@ -130,9 +130,9 @@ def test_two_failed_shows_count_failed():
 def detail_client(monkeypatch):
     from datetime import datetime
 
-    from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-    from lore.interfaces.web_services import enrich_session_for_detail
-    from lore.utils.text_processing import format_thinking
+    from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+    from annuli.interfaces.web_services import enrich_session_for_detail
+    from annuli.utils.text_processing import format_thinking
 
     sid = "sess-b55-view"
     entry = {
@@ -193,8 +193,8 @@ def test_detail_page_has_merged_view_controls(detail_client):
 
 
 def test_old_view_toggle_ids_removed_from_templates():
-    base = Path("lore/templates/base.html").read_text(encoding="utf-8")
-    session = Path("lore/templates/session.html").read_text(encoding="utf-8")
+    base = Path("annuli/templates/base.html").read_text(encoding="utf-8")
+    session = Path("annuli/templates/session.html").read_text(encoding="utf-8")
     for old_id in (
         "cleanToggle",
         "ultraCleanToggle",
@@ -207,7 +207,7 @@ def test_old_view_toggle_ids_removed_from_templates():
 
 
 def test_view_migration_script_references_legacy_keys():
-    base = Path("lore/templates/base.html").read_text(encoding="utf-8")
+    base = Path("annuli/templates/base.html").read_text(encoding="utf-8")
     assert "lore.view.v2" in base
     for legacy in (
         "aihistory-density",
@@ -232,7 +232,7 @@ def test_body_default_view_data_attributes(detail_client):
 def test_render_message_body_groups_consecutive_tools():
     from datetime import datetime
 
-    from lore.core.models import Role, UnifiedMessage
+    from annuli.core.models import Role, UnifiedMessage
 
     msg = UnifiedMessage(
         Role.ASSISTANT,
@@ -250,7 +250,7 @@ def test_render_message_body_groups_consecutive_tools():
 
 
 def test_group_without_confirmed_success_is_not_labelled_all_ok():
-    from lore.interfaces.web_formatting import format_tool_calls
+    from annuli.interfaces.web_formatting import format_tool_calls
 
     calls = [{"tool": "Bash", "input": {"cmd": "ls"}}, {"tool": "Read", "input": {"path": "/a"}}]
 
@@ -261,7 +261,7 @@ def test_group_without_confirmed_success_is_not_labelled_all_ok():
 
 
 def test_error_flag_on_the_call_counts_even_when_the_event_has_none():
-    from lore.interfaces.web_formatting import format_tool_calls
+    from annuli.interfaces.web_formatting import format_tool_calls
 
     calls = [
         {"tool": "Bash", "input": {}, "is_error": True},
@@ -281,7 +281,7 @@ def test_error_flag_on_the_call_counts_even_when_the_event_has_none():
 def test_view_state_javascript_validates_stored_values_and_does_not_promote_open_groups():
     from pathlib import Path
 
-    source = Path("lore/templates/base.html").read_text(encoding="utf-8")
+    source = Path("annuli/templates/base.html").read_text(encoding="utf-8")
     assert "['hide', 'fold', 'open']" in source
     assert "['comfortable', 'compact']" in source
     assert "setAttribute('data-default-open', '1')" not in source

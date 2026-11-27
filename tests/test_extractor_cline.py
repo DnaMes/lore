@@ -11,15 +11,15 @@ from typing import Any
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.cline import (
+from annuli.core.models import Role, Tool
+from annuli.extractors.cline import (
     PARSER_VERSION,
     ClineExtractor,
     KiloCodeExtractor,
     RooCodeExtractor,
 )
-from lore.extractors.factory import get_all_extractors
-from lore.utils.tooling import normalize_tool_name
+from annuli.extractors.factory import get_all_extractors
+from annuli.utils.tooling import normalize_tool_name
 
 TASK_ID = "1740000000000"
 CLINE_EXT = "saoudrizwan.claude-dev"
@@ -334,7 +334,7 @@ def test_hostile_timestamp_and_types_do_not_abort(home):
 
 
 def test_oversize_file_skipped(home, monkeypatch):
-    import lore.extractors.cline as cline_mod
+    import annuli.extractors.cline as cline_mod
 
     monkeypatch.setattr(cline_mod, "_MAX_FILE_BYTES", 32)
     task = _editor_tasks(home, "Code", CLINE_EXT)
@@ -394,7 +394,7 @@ def test_parser_version_is_one():
 
 def test_secret_named_tool_inputs_are_not_rendered(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     task = tmp_path / ".config/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/111"
     task.mkdir(parents=True)
     history = [
@@ -422,7 +422,7 @@ def test_secret_named_tool_inputs_are_not_rendered(tmp_path, monkeypatch):
 
 def test_unclosed_environment_details_and_empty_wrapper_turns(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     task = tmp_path / ".config/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/222"
     task.mkdir(parents=True)
     history = [
@@ -443,7 +443,7 @@ def test_unclosed_environment_details_and_empty_wrapper_turns(tmp_path, monkeypa
 
 def test_oversized_title_and_content_are_capped(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     task = tmp_path / ".config/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/333"
     task.mkdir(parents=True)
     history = [

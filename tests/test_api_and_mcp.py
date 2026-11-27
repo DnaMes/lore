@@ -2,8 +2,8 @@ import asyncio
 import json
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import mcp, web
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import mcp, web
 
 
 def _build_live_session(session_id: str = "session-1", thread_id: str = "thread-1"):
@@ -219,7 +219,7 @@ def test_api_v1_index_summary_returns_metadata(monkeypatch):
 def test_load_index_summary_derives_counts_from_cached_index(monkeypatch, tmp_path):
     import json
 
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     # Write a minimal index.json into a temp dir
     index_file = tmp_path / "index.json"
@@ -307,9 +307,9 @@ def test_mcp_server_returns_structured_json_for_new_tools(monkeypatch):
 
 
 def test_mcp_initialize_reports_package_version():
-    """serverInfo.version must track lore.__version__, not a hardcoded literal."""
-    import lore
-    from lore.interfaces import mcp
+    """serverInfo.version must track annuli.__version__, not a hardcoded literal."""
+    import annuli
+    from annuli.interfaces import mcp
 
     server = mcp.create_server()
     response = asyncio.run(
@@ -323,8 +323,8 @@ def test_mcp_initialize_reports_package_version():
         )
     )
     info = response["result"]["serverInfo"]
-    assert info["name"] == "lore"
-    assert info["version"] == lore.__version__
+    assert info["name"] == "annuli"
+    assert info["version"] == annuli.__version__
 
 
 def test_dev_extra_declares_test_tooling():

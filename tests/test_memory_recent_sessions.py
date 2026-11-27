@@ -1,4 +1,4 @@
-"""Tests for the "Recently in this project" block of ``lore memory context`` (B4)."""
+"""Tests for the "Recently in this project" block of ``annuli memory context`` (B4)."""
 
 from __future__ import annotations
 
@@ -9,17 +9,17 @@ from datetime import datetime, timezone
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import mcp
-from lore.services.memory_context import (
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import mcp
+from annuli.services.memory_context import (
     build_memory_context,
     select_recent_sessions,
 )
-from lore.storage import add_memory, initialise, open_connection
-from lore.storage.reader import recent_project_sessions
-from lore.storage.summaries import save_summary
-from lore.storage.writer import v2_db_path, write_sessions
+from annuli.storage import add_memory, initialise, open_connection
+from annuli.storage.reader import recent_project_sessions
+from annuli.storage.summaries import save_summary
+from annuli.storage.writer import v2_db_path, write_sessions
 
 PROJECT = "/home/dnames/projects/demo-app"
 _T_BASE = datetime(2026, 11, 1, 9, 0, 0, tzinfo=timezone.utc)
@@ -29,7 +29,7 @@ DEFAULT_URL = "https://lore.local.erdlabs.com"
 @pytest.fixture
 def recent_env(monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
-    monkeypatch.delenv("LORE_WEB_URL", raising=False)
+    monkeypatch.delenv("ANNULI_WEB_URL", raising=False)
 
 
 def _context_args(tmp_path, **overrides) -> Namespace:
@@ -140,16 +140,16 @@ def test_recent_empty_without_store_or_project(tmp_path, recent_env):
     assert select_recent_sessions(tmp_path, scope_project=None) == []
 
 
-def test_recent_link_uses_lore_web_url_env(tmp_path, recent_env, monkeypatch):
+def test_recent_link_uses_annuli_web_url_env(tmp_path, recent_env, monkeypatch):
     _store_session(tmp_path, "s1", day=1)
     row = select_recent_sessions(tmp_path, scope_project=PROJECT)[0]
     assert row["url"] == f"{DEFAULT_URL}/session/s1"
 
-    monkeypatch.setenv("LORE_WEB_URL", "http://lore.test:5000/")
+    monkeypatch.setenv("ANNULI_WEB_URL", "http://annuli.test:5000/")
     row = select_recent_sessions(tmp_path, scope_project=PROJECT)[0]
-    assert row["url"] == "http://lore.test:5000/session/s1"
+    assert row["url"] == "http://annuli.test:5000/session/s1"
 
-    monkeypatch.setenv("LORE_WEB_URL", "")
+    monkeypatch.setenv("ANNULI_WEB_URL", "")
     row = select_recent_sessions(tmp_path, scope_project=PROJECT)[0]
     assert row["url"] is None
 
@@ -238,9 +238,9 @@ def test_json_recent_field_is_empty_list_when_disabled(tmp_path, recent_env):
 
 def test_cli_context_no_recent_flag(tmp_path, recent_env, capsys):
     _store_session(tmp_path, "s1", day=1, prompt="fix login")
-    lore_cli.cmd_memory(_context_args(tmp_path, no_recent=True))
+    annuli_cli.cmd_memory(_context_args(tmp_path, no_recent=True))
     assert capsys.readouterr().out == ""
-    lore_cli.cmd_memory(_context_args(tmp_path))
+    annuli_cli.cmd_memory(_context_args(tmp_path))
     assert "Recently in this project:" in capsys.readouterr().out
 
 
@@ -295,7 +295,7 @@ def test_mcp_list_recent_sessions_without_session_summaries_table(
     tmp_path, recent_env, monkeypatch
 ):
     monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     _store_session(tmp_path, "pre18", day=1, title="Before migration 18")
     db = v2_db_path(tmp_path)
     conn = open_connection(db)
@@ -317,7 +317,7 @@ def test_mcp_list_recent_sessions_without_session_summaries_table(
 
 def test_mcp_list_recent_sessions_includes_summary_when_present(tmp_path, recent_env, monkeypatch):
     monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     server = mcp.create_server()
     _store_session(tmp_path, "with", day=2)
     _store_session(tmp_path, "without", day=1)
@@ -333,7 +333,7 @@ def test_mcp_list_recent_sessions_includes_summary_when_present(tmp_path, recent
 def test_text_line_uses_title_alone_when_no_summary():
     """Without a stored summary the title already names the session; the raw first prompt
     is often injected boilerplate (skill bodies, slash-command text), so it stays out."""
-    from lore.services.memory_context import _recent_line
+    from annuli.services.memory_context import _recent_line
 
     rec = {
         "date": "2026-11-04",
@@ -356,10 +356,10 @@ def test_mcp_list_recent_sessions_survives_an_unreadable_store(tmp_path, recent_
     """A store that cannot be opened for the summary check still lists the sessions."""
     import sqlite3
 
-    from lore.storage import schema
+    from annuli.storage import schema
 
     monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     _store_session(tmp_path, "s1", day=1)
     server = mcp.create_server()
     handler = server.tools["list_recent_sessions"]["handler"]

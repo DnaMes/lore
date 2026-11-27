@@ -1,4 +1,4 @@
-"""lore-web must not wait for a reverse DNS lookup when it binds its socket.
+"""annuli-web must not wait for a reverse DNS lookup when it binds its socket.
 
 On GitHub's macOS runners the first request took ~35 s because HTTPServer.server_bind calls
 socket.getfqdn(); Linux and Windows answered in about a second.
@@ -12,7 +12,7 @@ import urllib.request
 import pytest
 from werkzeug import serving
 
-from lore.interfaces.fast_bind import skip_reverse_dns_on_bind
+from annuli.interfaces.fast_bind import skip_reverse_dns_on_bind
 
 
 def test_bind_makes_no_reverse_lookup(monkeypatch: pytest.MonkeyPatch) -> None:

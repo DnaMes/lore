@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, TitleSource, Tool, UnifiedSession
-from lore.extractors.claude import _MAX_REASONING_CHARS, ClaudeCodeExtractor
-from lore.storage.reader import load_session_messages_v2
-from lore.storage.writer import write_sessions
+from annuli.core.models import Role, TitleSource, Tool, UnifiedSession
+from annuli.extractors.claude import _MAX_REASONING_CHARS, ClaudeCodeExtractor
+from annuli.storage.reader import load_session_messages_v2
+from annuli.storage.writer import write_sessions
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -61,7 +61,7 @@ def _import_gate(sid: str = "sess-enrich") -> list[dict]:
 @pytest.fixture
 def home(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     return tmp_path
 
 
@@ -362,7 +362,7 @@ def test_reasoning_is_capped_while_collecting_not_after_joining():
     """A huge thinking block is never joined in full: collection stops at the cap."""
     import tracemalloc
 
-    from lore.extractors import claude as claude_mod
+    from annuli.extractors import claude as claude_mod
 
     big = "t" * 3_000_000
     blocks = [{"type": "thinking", "thinking": big}, {"type": "thinking", "thinking": big}]

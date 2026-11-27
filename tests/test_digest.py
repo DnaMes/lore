@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from lore.digest import Digest, build_digest, format_digest
+from annuli.digest import Digest, build_digest, format_digest
 
 NOW = datetime(2026, 5, 17, 12, 0, 0)
 

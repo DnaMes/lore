@@ -6,11 +6,11 @@ import json
 import sqlite3
 from pathlib import Path
 
-from lore.core.models import Role, Tool
-from lore.extractors.opencode import OpenCodeExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.opencode import OpenCodeExtractor
 
 _SENTINEL = "SENTINEL_MUST_NOT_LEAK_7f3a"
-_FAKE_HOME = "/tmp/opencode/lore-test-home"
+_FAKE_HOME = "/tmp/opencode/annuli-test-home"
 _PROJECT = "/tmp/fake-project/repo"
 
 
@@ -431,8 +431,8 @@ def test_hostile_data_does_not_raise(monkeypatch, tmp_path):
 
 
 def test_injected_context_not_counted_as_user_prompts(monkeypatch, tmp_path):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")
-    monkeypatch.delenv("LORE_IMPORT_PROFILE", raising=False)
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")
+    monkeypatch.delenv("ANNULI_IMPORT_PROFILE", raising=False)
     db = tmp_path / "prompts.db"
     conn = _create_v2_db(db)
     _insert_session(conn, "ses_prompt")

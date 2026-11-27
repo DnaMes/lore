@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from lore.core.models import Tool, UnifiedSession
-from lore.exporters.markdown import MarkdownExporter
+from annuli.core.models import Tool, UnifiedSession
+from annuli.exporters.markdown import MarkdownExporter
 
 
 def _session(session_id: str, title: str) -> UnifiedSession:

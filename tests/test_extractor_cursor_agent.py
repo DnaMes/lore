@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Tool
-from lore.extractors.cursor import CursorExtractor
+from annuli.core.models import Tool
+from annuli.extractors.cursor import CursorExtractor
 
 
 def _projects(home: Path) -> Path:
@@ -157,7 +157,7 @@ def test_legacy_plain_text_format(home):
 
 
 def test_below_prompt_floor_skipped_and_counted(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")
     _agent_jsonl(
         home,
         "slug-f",
@@ -224,7 +224,7 @@ def test_flat_jsonl_path_tolerated(home):
 
 
 def test_hostile_input_does_not_abort(home, monkeypatch):
-    import lore.extractors.cursor_agent as ca
+    import annuli.extractors.cursor_agent as ca
 
     monkeypatch.setattr(ca, "_MAX_LINE_CHARS", 1024)
     long_line = "x" * 9000
@@ -289,7 +289,7 @@ def test_never_opens_cursor_secrets(home, monkeypatch):
 
 
 def test_oversized_first_record_is_skipped_not_misread_as_legacy(home, monkeypatch):
-    import lore.extractors.cursor_agent as ca
+    import annuli.extractors.cursor_agent as ca
 
     monkeypatch.setattr(ca, "_MAX_LINE_CHARS", 1024)
     big = json.dumps({"role": "user", "message": {"content": "x" * 5000}})
@@ -303,7 +303,7 @@ def test_oversized_first_record_is_skipped_not_misread_as_legacy(home, monkeypat
 
 
 def test_message_cap_bounds_parsed_messages(home, monkeypatch):
-    import lore.extractors.cursor_agent as ca
+    import annuli.extractors.cursor_agent as ca
 
     monkeypatch.setattr(ca, "_MAX_MESSAGES", 3)
     lines = [{"role": "user", "message": {"content": f"prompt {i}"}} for i in range(10)]
@@ -328,7 +328,7 @@ def test_same_slug_nested_and_flat_copy_keeps_one_session(home):
 
 
 def test_symlink_swapped_in_after_check_is_not_read(home, monkeypatch):
-    import lore.extractors.cursor_agent as ca
+    import annuli.extractors.cursor_agent as ca
 
     secret = home / ".cursor" / "mcp.json"
     secret.parent.mkdir(parents=True, exist_ok=True)

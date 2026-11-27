@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lore local container install matrix: build the wheel ONCE in a throwaway
+# Annuli local container install matrix: build the wheel ONCE in a throwaway
 # container, then run scripts/smoke_install.py against a fleet of images in
 # parallel. No Python needed on the host, only docker.
 #
@@ -20,7 +20,7 @@ usage() {
   printf '  --worktree      export the working tree (git ls-files --cached --others --exclude-standard)\n'
   printf '                  instead of HEAD\n'
   printf '  --no-arm        skip the linux/arm64 target\n'
-  printf '  --keep          keep temp workdir and lore-matrix-* images (skip cleanup)\n'
+  printf '  --keep          keep temp workdir and annuli-matrix-* images (skip cleanup)\n'
   printf 'env: JOBS (default 4)  parallel smoke runs\n'
   printf '     ONLY=name,name    run only these target names\n'
   printf 'targets: py311 py312 py313 py314 py312-semantic alpine313 debian12 ubuntu24 fedora arm64-py313\n'
@@ -61,10 +61,10 @@ cleanup() {
   local rc=$?
   if [[ "$keep" == 1 ]]; then
     printf 'kept workdir: %s\n' "$WORK"
-    printf 'kept images; clean with: docker image prune -af --filter label=lore-matrix=1\n'
+    printf 'kept images; clean with: docker image prune -af --filter label=annuli-matrix=1\n'
   else
     # label filter only; never a bare prune
-    docker image prune -af --filter label=lore-matrix=1 >/dev/null 2>&1 || true
+    docker image prune -af --filter label=annuli-matrix=1 >/dev/null 2>&1 || true
     rm -rf "$WORK"
   fi
   exit "$rc"
@@ -143,10 +143,10 @@ chmod +x "$RUNNER"
 # --- 4. distro images that need root for package install: built via stdin --
 build_image() {
   local name="$1" df="$2"
-  printf 'building lore-matrix-%s ...\n' "$name"
+  printf 'building annuli-matrix-%s ...\n' "$name"
   if ! printf '%s\n' "$df" |
-    docker build -q --label lore-matrix=1 -t "lore-matrix-$name" - >/dev/null; then
-    printf 'error: image build failed for lore-matrix-%s\n' "$name" >&2
+    docker build -q --label annuli-matrix=1 -t "annuli-matrix-$name" - >/dev/null; then
+    printf 'error: image build failed for annuli-matrix-%s\n' "$name" >&2
     return 1
   fi
 }
@@ -192,17 +192,17 @@ fi
 if want debian12 && image_available debian:12 >/dev/null 2>&1; then
   build_image debian12 'FROM debian:12
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-venv python3-pip pipx && rm -rf /var/lib/apt/lists/*'
-  add_target debian12 "3 (apt pipx)" "lore-matrix-debian12" pipx ""
+  add_target debian12 "3 (apt pipx)" "annuli-matrix-debian12" pipx ""
 fi
 if want ubuntu24 && image_available ubuntu:24.04 >/dev/null 2>&1; then
   build_image ubuntu24 'FROM ubuntu:24.04
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends python3 python3-venv python3-pip pipx && rm -rf /var/lib/apt/lists/*'
-  add_target ubuntu24 "3 (apt pipx)" "lore-matrix-ubuntu24" pipx ""
+  add_target ubuntu24 "3 (apt pipx)" "annuli-matrix-ubuntu24" pipx ""
 fi
 if want fedora && image_available fedora:latest >/dev/null 2>&1; then
   build_image fedora 'FROM fedora:latest
 RUN dnf -y install python3 python3-pip pipx && dnf clean all'
-  add_target fedora "3 (dnf pipx)" "lore-matrix-fedora" pipx ""
+  add_target fedora "3 (dnf pipx)" "annuli-matrix-fedora" pipx ""
 fi
 
 if [[ "${#TARGETS[@]}" -eq 0 ]]; then

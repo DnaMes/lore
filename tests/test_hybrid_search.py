@@ -12,11 +12,11 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.services import index as index_service
-from lore.services.index import search_index
-from lore.storage import semantic_search_sessions, v2_db_path, write_sessions
-from lore.storage.embeddings import embeddings_available, sqlite_vec_available
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.services import index as index_service
+from annuli.services.index import search_index
+from annuli.storage import semantic_search_sessions, v2_db_path, write_sessions
+from annuli.storage.embeddings import embeddings_available, sqlite_vec_available
 
 requires_vectors = pytest.mark.skipif(
     not (sqlite_vec_available() and embeddings_available()),
@@ -91,8 +91,8 @@ def test_semantic_ignored_ids_excluded_before_limit(tmp_path, monkeypatch):
     """
     import json
 
-    from lore.storage.embeddings import EMBEDDING_DIM, pack_vector, sqlite_vec_available
-    from lore.storage.schema import ensure_session_vec_table, open_connection
+    from annuli.storage.embeddings import EMBEDDING_DIM, pack_vector, sqlite_vec_available
+    from annuli.storage.schema import ensure_session_vec_table, open_connection
 
     if not sqlite_vec_available():
         pytest.skip("needs sqlite-vec")
@@ -132,8 +132,8 @@ def test_semantic_ignored_ids_excluded_before_limit(tmp_path, monkeypatch):
     (tmp_path / "ignored.json").write_text(
         json.dumps([f"drop-{i}" for i in range(4)]), encoding="utf-8"
     )
-    monkeypatch.setattr("lore.storage.embeddings.embed_text", lambda _text: query)
-    monkeypatch.setenv("LORE_SEMANTIC_MAX_DISTANCE", "0")  # disable cutoff
+    monkeypatch.setattr("annuli.storage.embeddings.embed_text", lambda _text: query)
+    monkeypatch.setenv("ANNULI_SEMANTIC_MAX_DISTANCE", "0")  # disable cutoff
     hits = semantic_search_sessions(tmp_path, "anything", limit=1)
     assert [h["session"]["id"] for h in hits] == ["keep"]
 
@@ -151,7 +151,7 @@ def test_hybrid_surfaces_semantic_only_match(tmp_path):
         [_session("orch", title="Container orchestration", body="scaling pods and nodes")],
     )
     # 'kubernetes' appears nowhere in the text — FTS alone finds nothing.
-    from lore.storage import search_sessions
+    from annuli.storage import search_sessions
 
     assert search_sessions(tmp_path, "kubernetes") == []
     # Hybrid should still surface it via the vector pass.
@@ -160,8 +160,8 @@ def test_hybrid_surfaces_semantic_only_match(tmp_path):
 
 
 def test_hybrid_disabled_by_env(tmp_path, monkeypatch):
-    """LORE_HYBRID_SEARCH=0 keeps search keyword-only (no vector pass)."""
-    monkeypatch.setenv("LORE_HYBRID_SEARCH", "0")
+    """ANNULI_HYBRID_SEARCH=0 keeps search keyword-only (no vector pass)."""
+    monkeypatch.setenv("ANNULI_HYBRID_SEARCH", "0")
     called = {"n": 0}
 
     def spy(*a, **k):
@@ -176,7 +176,7 @@ def test_hybrid_disabled_by_env(tmp_path, monkeypatch):
 
 def test_hybrid_keeps_fts_when_semantic_empty(tmp_path, monkeypatch):
     """When the vector pass returns nothing, FTS results pass through unchanged."""
-    monkeypatch.setattr("lore.storage.semantic_search_sessions", lambda *a, **k: [])
+    monkeypatch.setattr("annuli.storage.semantic_search_sessions", lambda *a, **k: [])
     index_path = _build(tmp_path, [_session("a", body="unique keyword zebra")])
     results = search_index(index_path, "zebra", deleted=set(), limit=5)
     assert any(r["session"]["id"] == "a" for r in results)
@@ -207,7 +207,7 @@ _DISTANCE_SQL = (
 
 def _rows_with_distances(tmp_path, distances):
     """Real ``sessions`` rows carrying a chosen vec distance in ``score``."""
-    from lore.storage.schema import open_connection
+    from annuli.storage.schema import open_connection
 
     conn = open_connection(v2_db_path(tmp_path))
     try:
@@ -232,17 +232,17 @@ def _rows_with_distances(tmp_path, distances):
     ],
 )
 def test_semantic_max_distance_env_parsing(monkeypatch, raw, expected):
-    from lore.storage.search import semantic_max_distance
+    from annuli.storage.search import semantic_max_distance
 
     if raw is None:
-        monkeypatch.delenv("LORE_SEMANTIC_MAX_DISTANCE", raising=False)
+        monkeypatch.delenv("ANNULI_SEMANTIC_MAX_DISTANCE", raising=False)
     else:
-        monkeypatch.setenv("LORE_SEMANTIC_MAX_DISTANCE", raw)
+        monkeypatch.setenv("ANNULI_SEMANTIC_MAX_DISTANCE", raw)
     assert semantic_max_distance() == expected
 
 
 def test_semantic_cutoff_drops_far_neighbours(tmp_path):
-    from lore.storage.search import _filter_semantic_rows
+    from annuli.storage.search import _filter_semantic_rows
 
     _build(tmp_path, [_session("near"), _session("far")])
     rows = _rows_with_distances(tmp_path, {"near": 0.70, "far": 1.10})
@@ -253,7 +253,7 @@ def test_semantic_cutoff_drops_far_neighbours(tmp_path):
 
 
 def test_semantic_cutoff_keeps_everything_when_disabled(tmp_path):
-    from lore.storage.search import _filter_semantic_rows
+    from annuli.storage.search import _filter_semantic_rows
 
     _build(tmp_path, [_session("near"), _session("far")])
     rows = _rows_with_distances(tmp_path, {"near": 0.70, "far": 1.10})
@@ -265,21 +265,21 @@ def test_semantic_cutoff_keeps_everything_when_disabled(tmp_path):
 
 def test_semantic_search_sessions_applies_the_configured_cutoff(tmp_path, monkeypatch):
     """The cutoff runs before RRF fusion — the vector pass itself must drop far hits (#92)."""
-    from lore.storage.search import _filter_semantic_rows  # noqa: F401 - documents the path
+    from annuli.storage.search import _filter_semantic_rows  # noqa: F401 - documents the path
 
     _build(tmp_path, [_session("near"), _session("far")])
     rows = _rows_with_distances(tmp_path, {"near": 0.70, "far": 1.10})
-    monkeypatch.setattr("lore.storage.embeddings.sqlite_vec_available", lambda: True)
-    monkeypatch.setattr("lore.storage.embeddings.embed_text", lambda _t: [0.0, 0.0, 0.0, 0.0])
+    monkeypatch.setattr("annuli.storage.embeddings.sqlite_vec_available", lambda: True)
+    monkeypatch.setattr("annuli.storage.embeddings.embed_text", lambda _t: [0.0, 0.0, 0.0, 0.0])
     monkeypatch.setattr(
-        "lore.storage.search._knn_rows",
+        "annuli.storage.search._knn_rows",
         lambda _conn, _packed, _k, **_kw: rows,
     )
 
     hits = semantic_search_sessions(tmp_path, "anything")
     assert [h["session"]["id"] for h in hits] == ["near"]
 
-    monkeypatch.setenv("LORE_SEMANTIC_MAX_DISTANCE", "1.5")
+    monkeypatch.setenv("ANNULI_SEMANTIC_MAX_DISTANCE", "1.5")
     hits = semantic_search_sessions(tmp_path, "anything")
     assert {h["session"]["id"] for h in hits} == {"near", "far"}
 
@@ -288,9 +288,9 @@ def test_hybrid_annotates_only_the_returned_page(tmp_path, monkeypatch):
     """The fused window is wide (_HYBRID_WINDOW), but snippets and message evidence
     are only built for the page that is returned: building them for the whole window
     made a 10-hit web search take ~8 s on a real store."""
-    from lore.storage import search as storage_search
+    from annuli.storage import search as storage_search
 
-    monkeypatch.setattr("lore.storage.semantic_search_sessions", lambda *a, **k: [])
+    monkeypatch.setattr("annuli.storage.semantic_search_sessions", lambda *a, **k: [])
     seen = []
     real = storage_search.message_evidence_for_sessions
 

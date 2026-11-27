@@ -1,4 +1,4 @@
-"""Extended tests for lore/utils/security.py to raise coverage above 80%."""
+"""Extended tests for annuli/utils/security.py to raise coverage above 80%."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 import pytest
 
-from lore.utils.security import (
+from annuli.utils.security import (
     get_safe_executable,
     sanitize_filename,
     sanitize_path,
@@ -54,7 +54,7 @@ def test_sanitize_path_logs_suspicious_pattern(tmp_path, caplog):
     # Path contains ".." in name - should log warning but still return if valid
     # We test the logging path by using a path with a parent traversal
     # that doesn't actually escape but triggers the suspicious-pattern log
-    with caplog.at_level(logging.WARNING, logger="lore.utils.security"):
+    with caplog.at_level(logging.WARNING, logger="annuli.utils.security"):
         try:
             sanitize_path("../child", tmp_path)
         except ValueError:

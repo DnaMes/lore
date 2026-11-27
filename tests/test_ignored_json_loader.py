@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.storage import reader
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.storage import reader
 
 WARNING_PREFIX = "Warning: could not read ignored.json ("
 WARNING_SUFFIX = "); pruned sessions may be visible again.\n"

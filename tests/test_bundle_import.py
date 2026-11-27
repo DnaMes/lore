@@ -20,9 +20,9 @@ from pathlib import Path
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import (
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import (
     BackupError,
     add_memory,
     add_session_tag,
@@ -33,24 +33,24 @@ from lore.storage import (
     save_session_knowledge,
     write_sessions,
 )
-from lore.storage.backup import DB_MEMBER, MANIFEST_NAME
-from lore.storage.freshness import store_freshness
-from lore.storage.portable import (
+from annuli.storage.backup import DB_MEMBER, MANIFEST_NAME
+from annuli.storage.freshness import store_freshness
+from annuli.storage.portable import (
     PORTABLE_FORMAT,
     PORTABLE_FORMAT_VERSION,
     create_portable_bundle,
     import_bundle,
     verify_portable_bundle,
 )
-from lore.storage.reader import v2_is_available
-from lore.storage.schema import SCHEMA_VERSION
-from lore.storage.source_health import record_source_state
-from lore.storage.source_revisions import (
+from annuli.storage.reader import v2_is_available
+from annuli.storage.schema import SCHEMA_VERSION
+from annuli.storage.source_health import record_source_state
+from annuli.storage.source_revisions import (
     capture_source_revision,
     read_source_revision,
     source_identity_for,
 )
-from lore.storage.writer import v2_db_path
+from annuli.storage.writer import v2_db_path
 
 T0 = datetime(2026, 1, 8, 9, 30, tzinfo=timezone.utc)
 NEEDLE = "haystackneedle"  # one FTS token, so MATCH needs no quoting
@@ -59,15 +59,15 @@ NEEDLE = "haystackneedle"  # one FTS token, so MATCH needs no quoting
 @contextmanager
 def _namespace(scope: str):
     """Set the source namespace a store is written under (machine scope)."""
-    saved = os.environ.get("LORE_SOURCE_NAMESPACE")
-    os.environ["LORE_SOURCE_NAMESPACE"] = scope
+    saved = os.environ.get("ANNULI_SOURCE_NAMESPACE")
+    os.environ["ANNULI_SOURCE_NAMESPACE"] = scope
     try:
         yield
     finally:
         if saved is None:
-            os.environ.pop("LORE_SOURCE_NAMESPACE", None)
+            os.environ.pop("ANNULI_SOURCE_NAMESPACE", None)
         else:
-            os.environ["LORE_SOURCE_NAMESPACE"] = saved
+            os.environ["ANNULI_SOURCE_NAMESPACE"] = saved
 
 
 def _session(session_id: str, *texts: str) -> UnifiedSession:
@@ -255,7 +255,7 @@ def test_bundle_records_format_provenance_and_evidence(machine_a: Path, tmp_path
     assert manifest["provenance"]["namespace"] == "machine-a"
     assert manifest["provenance"]["machine_scope"]
     assert manifest["provenance"]["created_at"]
-    assert manifest["provenance"]["lore_version"]
+    assert manifest["provenance"]["annuli_version"]
     assert manifest["schema"]["version"] == SCHEMA_VERSION
     assert manifest["evidence"]["source_revisions"] == 1
     assert len(manifest["evidence"]["digest"]) == 64
@@ -656,9 +656,9 @@ def test_cli_exports_and_imports(machine_a: Path, tmp_path: Path, monkeypatch, c
     shutil.copytree(machine_a, source)
 
     monkeypatch.setattr(
-        sys, "argv", ["lore", "--output-dir", str(source), "bundle", "export", str(bundle)]
+        sys, "argv", ["annuli", "--output-dir", str(source), "bundle", "export", str(bundle)]
     )
-    lore_cli.main()
+    annuli_cli.main()
     written = capsys.readouterr().out
     assert f"Bundle written: {bundle}" in written
     assert f"{PORTABLE_FORMAT} v{PORTABLE_FORMAT_VERSION}" in written
@@ -668,18 +668,18 @@ def test_cli_exports_and_imports(machine_a: Path, tmp_path: Path, monkeypatch, c
     monkeypatch.setattr(
         sys,
         "argv",
-        ["lore", "--output-dir", str(target), "bundle", "import", str(bundle), "--dry-run"],
+        ["annuli", "--output-dir", str(target), "bundle", "import", str(bundle), "--dry-run"],
     )
-    lore_cli.main()
+    annuli_cli.main()
     dry = capsys.readouterr().out
     assert "Would import" in dry
     assert "Dry run: nothing was written." in dry
     assert not v2_db_path(target).exists()
 
     monkeypatch.setattr(
-        sys, "argv", ["lore", "--output-dir", str(target), "bundle", "import", str(bundle)]
+        sys, "argv", ["annuli", "--output-dir", str(target), "bundle", "import", str(bundle)]
     )
-    lore_cli.main()
+    annuli_cli.main()
     imported = capsys.readouterr().out
     assert "Imported" in imported
     assert "origins:    claude-code:machine-a: sessions=1 revisions=1" in imported

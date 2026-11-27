@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from lore import __version__
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
-from lore.storage import v2_db_path, write_sessions
+from annuli import __version__
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
+from annuli.storage import v2_db_path, write_sessions
 
 
 def _make_session(sid: str = "s-status-1") -> UnifiedSession:
@@ -35,7 +35,7 @@ def _make_session(sid: str = "s-status-1") -> UnifiedSession:
 @pytest.fixture()
 def status_client(tmp_path: Path, monkeypatch):
     """Flask test client backed by a fresh temporary store."""
-    output_dir = tmp_path / "lore-out"
+    output_dir = tmp_path / "annuli-out"
     output_dir.mkdir(parents=True, exist_ok=True)
     index_path = output_dir / "index.json"
 
@@ -102,7 +102,7 @@ def test_api_status_returns_200_and_all_documented_keys(status_client):
 def test_api_status_never_leaks_api_keys(status_client, monkeypatch):
     client, _ = status_client
     monkeypatch.setenv("OPENROUTER_API_KEY", "secret123")
-    monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "openrouter")
+    monkeypatch.setenv("ANNULI_SUMMARY_PROVIDER", "openrouter")
 
     resp = client.get("/api/status")
     assert resp.status_code == 200
@@ -140,7 +140,7 @@ def test_api_status_worker_ok_and_stale_states(status_client, monkeypatch):
     (worker_dir / "state.json").write_text("{}", encoding="utf-8")
     hb = worker_dir / "heartbeat"
     hb.write_text("ok", encoding="utf-8")
-    monkeypatch.setenv("LORE_WORKER_INTERVAL", "10")
+    monkeypatch.setenv("ANNULI_WORKER_INTERVAL", "10")
 
     resp_ok = client.get("/api/status")
     assert resp_ok.status_code == 200

@@ -10,11 +10,11 @@ from typing import List, Optional
 
 import pytest
 
-import lore.storage.embeddings as emb
-import lore.storage.memory as memory_mod
-import lore_cli
-from lore.interfaces import mcp
-from lore.storage import (
+import annuli.storage.embeddings as emb
+import annuli.storage.memory as memory_mod
+import annuli_cli
+from annuli.interfaces import mcp
+from annuli.storage import (
     add_memory,
     delete_memory,
     get_memory,
@@ -23,7 +23,7 @@ from lore.storage import (
     record_feedback,
     supersede_memory,
 )
-from lore.storage.memory import find_similar_memories, set_memory_status, similarity_threshold
+from annuli.storage.memory import find_similar_memories, set_memory_status, similarity_threshold
 
 TOPICS = (("postgres", "database"), ("sourdough", "bread"))
 
@@ -40,7 +40,7 @@ def _fake_embed(text: str) -> Optional[List[float]]:
 def fake(monkeypatch) -> None:
     monkeypatch.setattr(emb, "embed_text", _fake_embed)
     monkeypatch.setattr(emb, "embeddings_available", lambda: True)
-    monkeypatch.delenv("LORE_SIMILARITY_THRESHOLD", raising=False)
+    monkeypatch.delenv("ANNULI_SIMILARITY_THRESHOLD", raising=False)
 
 
 @pytest.fixture
@@ -112,7 +112,7 @@ def test_similar_respects_threshold_env(tmp_path, fake, monkeypatch):
     add_memory(tmp_path, "fact", "Sourdough", "bread")
     # Orthogonal fake vectors: similarity is 0.0, so only a threshold of 0 matches.
     assert find_similar_memories(tmp_path, "postgres", scope_project=None) == []
-    monkeypatch.setenv("LORE_SIMILARITY_THRESHOLD", "0")
+    monkeypatch.setenv("ANNULI_SIMILARITY_THRESHOLD", "0")
     assert len(find_similar_memories(tmp_path, "postgres", scope_project=None) or []) == 1
 
 
@@ -122,9 +122,9 @@ def test_similar_respects_threshold_env(tmp_path, fake, monkeypatch):
 )
 def test_threshold_env_parsing(monkeypatch, raw, expected):
     if raw is None:
-        monkeypatch.delenv("LORE_SIMILARITY_THRESHOLD", raising=False)
+        monkeypatch.delenv("ANNULI_SIMILARITY_THRESHOLD", raising=False)
     else:
-        monkeypatch.setenv("LORE_SIMILARITY_THRESHOLD", raw)
+        monkeypatch.setenv("ANNULI_SIMILARITY_THRESHOLD", raw)
     assert similarity_threshold() == expected
 
 
@@ -313,26 +313,26 @@ def _add_args(tmp_path, **overrides) -> Namespace:
 
 def test_cli_add_prints_similar_and_supersedes(tmp_path, fake, capsys):
     old = add_memory(tmp_path, "fact", "Postgres 15", "relational")
-    lore_cli.cmd_memory(_add_args(tmp_path))
+    annuli_cli.cmd_memory(_add_args(tmp_path))
     out = capsys.readouterr().out
     assert "Stored memory #" in out
     assert f"Similar existing memories: #{old} Postgres 15 (1.00)" in out
 
-    lore_cli.cmd_memory(_add_args(tmp_path, title="Postgres 17", supersedes=old))
+    annuli_cli.cmd_memory(_add_args(tmp_path, title="Postgres 17", supersedes=old))
     entry = get_memory(tmp_path, old)
     assert entry is not None and entry.superseded_by is not None
 
 
 def test_cli_add_supersedes_violation_exits_1(tmp_path, no_backend, capsys):
     with pytest.raises(SystemExit) as exc:
-        lore_cli.cmd_memory(_add_args(tmp_path, supersedes=4242))
+        annuli_cli.cmd_memory(_add_args(tmp_path, supersedes=4242))
     assert exc.value.code == 1
     assert "does not exist" in capsys.readouterr().err
     assert list_memory(tmp_path, status=None) == []
 
 
 def test_cli_add_without_backend_prints_no_similar_line(tmp_path, no_backend, capsys):
-    lore_cli.cmd_memory(_add_args(tmp_path))
+    annuli_cli.cmd_memory(_add_args(tmp_path))
     out = capsys.readouterr().out
     assert "Stored memory #" in out and "Similar" not in out
 
@@ -430,7 +430,7 @@ def test_cli_rate_out_of_range_id_exits_one(tmp_path, no_backend, capsys):
         output_dir=str(tmp_path), memory_action="rate", memory_id=2**63, score=3, rater="a"
     )
     with pytest.raises(SystemExit) as exc:
-        lore_cli.cmd_memory(args)
+        annuli_cli.cmd_memory(args)
     assert exc.value.code == 1
     assert "Could not rate memory" in capsys.readouterr().err
 
@@ -438,8 +438,8 @@ def test_cli_rate_out_of_range_id_exits_one(tmp_path, no_backend, capsys):
 @pytest.fixture
 def locked_db(tmp_path, no_backend, monkeypatch):
     """The v2 DB with another connection holding the write lock; busy timeout 50 ms."""
-    import lore.storage.feedback as feedback_mod
-    from lore.storage.writer import v2_db_path
+    import annuli.storage.feedback as feedback_mod
+    from annuli.storage.writer import v2_db_path
 
     add_memory(tmp_path, "fact", "Existing", "x")  # creates and migrates the DB
     for module in (memory_mod, feedback_mod):
@@ -473,13 +473,13 @@ def test_mcp_feedback_on_locked_database_is_a_plain_string(locked_db):
 
 def test_cli_add_and_rate_on_locked_database_exit_one(locked_db, capsys):
     with pytest.raises(SystemExit) as exc:
-        lore_cli.cmd_memory(_add_args(locked_db))
+        annuli_cli.cmd_memory(_add_args(locked_db))
     assert exc.value.code == 1
     rate = Namespace(
         output_dir=str(locked_db), memory_action="rate", memory_id=1, score=3, rater="a"
     )
     with pytest.raises(SystemExit) as exc:
-        lore_cli.cmd_memory(rate)
+        annuli_cli.cmd_memory(rate)
     assert exc.value.code == 1
     err = capsys.readouterr().err
     assert err.count("Could not write memory: database is busy, try again") == 2
@@ -504,5 +504,5 @@ def test_mcp_supersedes_does_not_list_the_target_as_similar(tmp_path, fake):
 
 def test_cli_supersedes_does_not_list_the_target_as_similar(tmp_path, fake, capsys):
     old = add_memory(tmp_path, "fact", "Postgres 15", "relational")
-    lore_cli.cmd_memory(_add_args(tmp_path, title="Postgres 17", supersedes=old))
+    annuli_cli.cmd_memory(_add_args(tmp_path, title="Postgres 17", supersedes=old))
     assert "Similar" not in capsys.readouterr().out

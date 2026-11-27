@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from lore.interfaces import web
+from annuli.interfaces import web
 
 
 def _index() -> dict:

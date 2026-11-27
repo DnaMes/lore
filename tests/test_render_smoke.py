@@ -41,7 +41,7 @@ def _free_port() -> int:
 @pytest.fixture(scope="module")
 def live_server():
     """Run the Flask app in a background thread on a free port."""
-    from lore.interfaces.web import app
+    from annuli.interfaces.web import app
 
     port = _free_port()
 
@@ -103,4 +103,4 @@ def test_dashboard_renders_styled(live_server):
     output = _render(live_server + "/")
     # The dashboard's known content must be present in the rendered DOM.
     assert "Overview" in output
-    assert "lore v" in output  # version footer rendered
+    assert "annuli v" in output  # version footer rendered

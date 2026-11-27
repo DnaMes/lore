@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from lore.storage import (
+from annuli.storage import (
     add_session_tag,
     get_session_tags,
     get_tags_for_sessions,
@@ -71,7 +71,7 @@ def test_tags_survive_across_connections(tmp_path):
 
 
 def _client(monkeypatch, tmp_path):
-    from lore.interfaces import web
+    from annuli.interfaces import web
 
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
     # Local-origin guard: tests post from the test client (no Origin header) → allowed.
@@ -123,7 +123,7 @@ def test_mcp_get_session_includes_user_tags(monkeypatch, tmp_path):
     import asyncio
     import json
 
-    from lore.interfaces import mcp
+    from annuli.interfaces import mcp
 
     add_session_tag(tmp_path, "session-1", "flagged")
 

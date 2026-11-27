@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from lore.exporters.index import is_low_quality_title
+from annuli.exporters.index import is_low_quality_title
 
 _BOILERPLATE_TITLES = [
     "Base directory for this skill: /home/dnames/.agents/skills/using-superpowers",

@@ -10,16 +10,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage.evidence import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage.evidence import (
     identity_for_message,
     repair_evidence_rowids,
     resolve_evidence,
     unresolved_evidence_links,
 )
-from lore.storage.memory import add_memory, link_memory_to_session, list_memory_sources
-from lore.storage.schema import apply_migrations, current_version, initialise
-from lore.storage.writer import write_sessions
+from annuli.storage.memory import add_memory, link_memory_to_session, list_memory_sources
+from annuli.storage.schema import apply_migrations, current_version, initialise
+from annuli.storage.writer import write_sessions
 
 
 def _session(texts=("alpha", "beta", "gamma"), sid: str = "s-evidence") -> UnifiedSession:

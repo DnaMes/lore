@@ -12,10 +12,10 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import source_revisions
-from lore.storage.schema import apply_migrations, current_version, initialise
-from lore.storage.source_revisions import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import source_revisions
+from annuli.storage.schema import apply_migrations, current_version, initialise
+from annuli.storage.source_revisions import (
     artifacts_for_revision,
     capture_artifact,
     capture_session_source,
@@ -28,7 +28,7 @@ from lore.storage.source_revisions import (
     source_identity_for,
     undecoded_revisions,
 )
-from lore.storage.writer import write_sessions
+from annuli.storage.writer import write_sessions
 
 
 def _db(tmp_path):

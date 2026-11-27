@@ -10,15 +10,15 @@ from typing import Any
 
 import pytest
 
-import lore.llm
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_jobs
-from lore.interfaces.session_view_prep import at_a_glance
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse
-from lore.services.summarize import SUMMARY_PROMPT_VERSION
-from lore.storage import initialise
-from lore.storage.summaries import save_summary, summary_fingerprint
-from lore.storage.writer import v2_db_path, write_sessions
+import annuli.llm
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_jobs
+from annuli.interfaces.session_view_prep import at_a_glance
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse
+from annuli.services.summarize import SUMMARY_PROMPT_VERSION
+from annuli.storage import initialise
+from annuli.storage.summaries import save_summary, summary_fingerprint
+from annuli.storage.writer import v2_db_path, write_sessions
 
 T0 = datetime(2026, 4, 1, 10, 0, 0, tzinfo=timezone.utc)
 SID = "b54-card-0001-0001-0001-0001-000000000001"
@@ -35,7 +35,7 @@ def _index_entry(*extra_sessions: dict) -> dict:
         "display_title": "Summary card session",
         "created": "2026-04-01T10:00:00",
         "updated": "2026-04-01T10:05:00",
-        "project": "/repo/lore",
+        "project": "/repo/annuli",
         "messages": 3,
         "prompts": 1,
     }
@@ -66,7 +66,7 @@ def _session(*, with_tools: bool = False, user_text: str = "Fix the bug please")
         session_id=SID,
         created_at=T0,
         last_updated=datetime(2026, 4, 1, 10, 5, 0, tzinfo=timezone.utc),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title="Summary card session",
         messages=[
             UnifiedMessage(Role.USER, user_text, T0),
@@ -81,9 +81,9 @@ def _session(*, with_tools: bool = False, user_text: str = "Fix the bug please")
 
 
 def _enriched(session: UnifiedSession | None = None):
-    from lore.interfaces.web_formatting import format_message_content, format_tool_calls
-    from lore.interfaces.web_services import enrich_session_for_detail
-    from lore.utils.text_processing import format_thinking
+    from annuli.interfaces.web_formatting import format_message_content, format_tool_calls
+    from annuli.interfaces.web_services import enrich_session_for_detail
+    from annuli.utils.text_processing import format_thinking
 
     session = session or _session()
     enrich_session_for_detail(
@@ -193,7 +193,7 @@ def test_at_a_glance_tools_and_files():
 
 
 def test_card_renders_stored_summary_fields(detail_client, tmp_path, monkeypatch):
-    from lore.storage.summaries import get_summary
+    from annuli.storage.summaries import get_summary
 
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
     initialise(v2_db_path(tmp_path))
@@ -216,7 +216,7 @@ def test_card_stale_badge(detail_client, tmp_path, monkeypatch):
     initialise(v2_db_path(tmp_path))
     write_sessions(v2_db_path(tmp_path), [_session()])
     _save_row(tmp_path, _stored_payload())
-    monkeypatch.setattr("lore.interfaces.web_summary.is_summary_stale", lambda *_a, **_k: True)
+    monkeypatch.setattr("annuli.interfaces.web_summary.is_summary_stale", lambda *_a, **_k: True)
     html = detail_client.get(f"/session/{SID}?live=1").get_data(as_text=True)
     assert "STALE" in html
     assert "Session changed since this summary" in html
@@ -244,7 +244,7 @@ def test_absent_summary_renders_at_a_glance_without_provider(detail_client, tmp_
         raise AssertionError("provider touched")
 
     monkeypatch.setattr(
-        "lore.services.summarize_cli.build_mcp_summarize_provider",
+        "annuli.services.summarize_cli.build_mcp_summarize_provider",
         _boom,
     )
     html = detail_client.get(f"/session/{SID}?live=1").get_data(as_text=True)
@@ -255,17 +255,17 @@ def test_absent_summary_renders_at_a_glance_without_provider(detail_client, tmp_
 
 def test_generate_disabled_shows_cli_without_env(detail_client, tmp_path, monkeypatch):
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
-    monkeypatch.delenv("LORE_SUMMARY_PROVIDER", raising=False)
+    monkeypatch.delenv("ANNULI_SUMMARY_PROVIDER", raising=False)
     html = detail_client.get(f"/session/{SID}?live=1").get_data(as_text=True)
     assert "aria-disabled" in html or "disabled" in html
-    assert f"lore summarize --session {SID}" in html
-    assert "LORE_SUMMARY_PROVIDER=ollama" in html
+    assert f"annuli summarize --session {SID}" in html
+    assert "ANNULI_SUMMARY_PROVIDER=ollama" in html
 
 
 def test_generate_enabled_with_local_ollama(detail_client, tmp_path, monkeypatch):
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
 
-    monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "ollama")
+    monkeypatch.setenv("ANNULI_SUMMARY_PROVIDER", "ollama")
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
     html = detail_client.get(f"/session/{SID}?live=1").get_data(as_text=True)
     assert 'data-action="generate-session-summary"' in html
@@ -275,16 +275,16 @@ def test_generate_enabled_with_local_ollama(detail_client, tmp_path, monkeypatch
 
 def test_generate_disabled_with_remote_ollama_host(detail_client, tmp_path, monkeypatch):
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
-    monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "ollama")
+    monkeypatch.setenv("ANNULI_SUMMARY_PROVIDER", "ollama")
     monkeypatch.setenv("OLLAMA_HOST", "http://192.168.1.50:11434")
     html = detail_client.get(f"/session/{SID}?live=1").get_data(as_text=True)
     assert "disabled" in html
-    assert "LORE_SUMMARY_PROVIDER=ollama" not in html or "loopback" in html.lower()
+    assert "ANNULI_SUMMARY_PROVIDER=ollama" not in html or "loopback" in html.lower()
 
 
 def test_post_summary_rejects_provider_params(detail_client, tmp_path, monkeypatch):
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
-    monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "ollama")
+    monkeypatch.setenv("ANNULI_SUMMARY_PROVIDER", "ollama")
     resp = detail_client.post(f"/session/{SID}/summary?provider=gemini")
     assert resp.status_code == 400
 
@@ -292,7 +292,7 @@ def test_post_summary_rejects_provider_params(detail_client, tmp_path, monkeypat
 @pytest.fixture()
 def use_provider(monkeypatch):
     def install(provider: FakeProvider):
-        monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
+        monkeypatch.setattr(annuli.llm, "get_provider", lambda **kwargs: provider)
         return provider
 
     return install
@@ -303,17 +303,17 @@ def test_post_summary_starts_job_and_writes_row(detail_client, tmp_path, monkeyp
     # The job imports OUTPUT_DIR from web_data at call time; patch it there too,
     # otherwise the worker writes its row into the real output directory and
     # leaks state into every later test (#197).
-    monkeypatch.setattr("lore.interfaces.web_data.OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("annuli.interfaces.web_data.OUTPUT_DIR", tmp_path)
     initialise(v2_db_path(tmp_path))
     write_sessions(v2_db_path(tmp_path), [_session()])
-    monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "ollama")
+    monkeypatch.setenv("ANNULI_SUMMARY_PROVIDER", "ollama")
     use_provider(FakeProvider())
 
     def fake_run(provider, output_dir, session_id, **kwargs):
         _save_row(output_dir, _stored_payload(one_liner="From job"), session_id=session_id)
         return "written"
 
-    monkeypatch.setattr("lore.services.summarize.summarize_session", fake_run)
+    monkeypatch.setattr("annuli.services.summarize.summarize_session", fake_run)
 
     real_thread = threading.Thread
 
@@ -389,11 +389,11 @@ def test_list_summaries_called_once(monkeypatch, tmp_path):
 
     def spy(output_dir, level=None, session_ids=None):
         calls.append(list(session_ids or []))
-        from lore.storage.summaries import list_summaries as real
+        from annuli.storage.summaries import list_summaries as real
 
         return real(output_dir, level=level, session_ids=session_ids)
 
-    monkeypatch.setattr("lore.interfaces.web_summary.list_summaries", spy)
+    monkeypatch.setattr("annuli.interfaces.web_summary.list_summaries", spy)
     monkeypatch.setattr(
         web,
         "load_index",
@@ -407,7 +407,7 @@ def test_list_summaries_called_once(monkeypatch, tmp_path):
 def test_concurrent_summary_job_requests_share_one_job(monkeypatch):
     import threading
 
-    from lore.interfaces import web_jobs
+    from annuli.interfaces import web_jobs
 
     started: list[str] = []
     gate = threading.Event()
@@ -443,17 +443,17 @@ def test_concurrent_summary_job_requests_share_one_job(monkeypatch):
 
 
 def test_job_error_message_does_not_leak_exception_text(monkeypatch):
-    from lore.interfaces import web_jobs
+    from annuli.interfaces import web_jobs
 
     web_jobs.RELOAD_JOBS.clear()
     monkeypatch.setattr(
-        "lore.services.summarize_cli.web_summarize_enabled", lambda: True, raising=False
+        "annuli.services.summarize_cli.web_summarize_enabled", lambda: True, raising=False
     )
 
     def boom():
         raise RuntimeError("/home/secret/path prompt: sk-" + "a" * 24)
 
-    monkeypatch.setattr("lore.services.summarize_cli.build_mcp_summarize_provider", boom)
+    monkeypatch.setattr("annuli.services.summarize_cli.build_mcp_summarize_provider", boom)
     job_id = web_jobs._start_session_summary_job("sess-err")
     for _ in range(200):
         state = web_jobs.RELOAD_JOBS.get(job_id, {})
@@ -470,8 +470,8 @@ def test_job_error_message_does_not_leak_exception_text(monkeypatch):
 
 
 def test_list_one_liner_marks_outdated_and_hides_deleted(tmp_path):
-    from lore.interfaces.web_summary import session_summary_lines
-    from lore.storage.summaries import save_summary
+    from annuli.interfaces.web_summary import session_summary_lines
+    from annuli.storage.summaries import save_summary
 
     for sid in ("fresh", "stale", "gone"):
         save_summary(

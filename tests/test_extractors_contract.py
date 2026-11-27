@@ -1,9 +1,9 @@
 import json
 
-from lore.core.models import Role, Tool
-from lore.extractors.claude import ClaudeCodeExtractor
-from lore.extractors.codex import CodexExtractor
-from lore.extractors.gemini import GeminiCLIExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.claude import ClaudeCodeExtractor
+from annuli.extractors.codex import CodexExtractor
+from annuli.extractors.gemini import GeminiCLIExtractor
 
 
 def test_claude_parse_session_contract(tmp_path):

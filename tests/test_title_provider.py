@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.titles.generator import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.titles.generator import (
     TITLE_PROMPT_VERSION,
     TitleGenerator,
     TitleStrategy,
@@ -60,7 +60,7 @@ def calls(monkeypatch: pytest.MonkeyPatch) -> dict:
         "_generate_llm_ollama",
         lambda self, session: seen.__setitem__("local", seen["local"] + 1) or "Ollama Title",
     )
-    monkeypatch.setattr("lore.titles.generator.OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr("annuli.titles.generator.OLLAMA_AVAILABLE", True)
     return seen
 
 

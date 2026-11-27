@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from lore.storage import (
+from annuli.storage import (
     add_memory,
     delete_memory,
     get_memory,
@@ -236,7 +236,7 @@ def test_add_memory_truncates_long_author(tmp_path):
 
 
 def test_add_memory_links_source_session(tmp_path):
-    from lore.storage import list_memory_sources
+    from annuli.storage import list_memory_sources
 
     mid = add_memory(
         tmp_path,
@@ -251,14 +251,14 @@ def test_add_memory_links_source_session(tmp_path):
 
 
 def test_add_memory_without_source_has_no_links(tmp_path):
-    from lore.storage import list_memory_sources
+    from annuli.storage import list_memory_sources
 
     mid = add_memory(tmp_path, "fact", "No provenance", "body")
     assert list_memory_sources(tmp_path, mid) == []
 
 
 def test_link_memory_to_session_after_creation(tmp_path):
-    from lore.storage import list_memory_sources
+    from annuli.storage import list_memory_sources
 
     mid = add_memory(tmp_path, "note", "Late-linked memory", "body")
     link_memory_to_session(tmp_path, mid, "sess-later", note="linked afterwards")
@@ -271,7 +271,7 @@ def test_memory_sources_cascade_on_delete(tmp_path):
     """Deleting a memory removes its memory_sources rows (FK cascade)."""
     import sqlite3
 
-    from lore.storage import v2_db_path
+    from annuli.storage import v2_db_path
 
     mid = add_memory(tmp_path, "fact", "Soon deleted", "body", source_session="s1")
     delete_memory(tmp_path, mid)

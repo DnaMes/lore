@@ -1,0 +1,69 @@
+"""Interface-agnostic service layer.
+
+This package holds shared, framework-free logic that both the web
+interface (``annuli.interfaces.web``) and the MCP server
+(``annuli.interfaces.mcp``) depend on.
+
+It exists to kill code duplication (the "iterate extractors -> build
+index" routine used to be copied into ~4 places) and to fix a layering
+inversion: the MCP server previously imported from ``web_data``, but the
+web app and the MCP server are *sibling* interfaces and neither should
+depend on the other. Shared logic belongs here instead.
+
+Nothing in this package may import Flask or any ``annuli.interfaces``
+module.
+"""
+
+from .cache import threadsafe_lru_cache
+from .extraction import (
+    ActionJobCancelledError,
+    build_index_if_missing,
+    build_search_index,
+    collect_sessions,
+    find_live_session,
+    select_extractors,
+)
+from .index import (
+    annotate_display_titles,
+    apply_deleted_filter,
+    apply_deleted_filter_to_results,
+    automated_hidden_line,
+    clear_index_cache,
+    filter_automated,
+    filter_automated_payload,
+    filter_automated_results,
+    load_deleted_session_ids,
+    load_index,
+    load_index_summary,
+    remember_deleted_session_id,
+    save_deleted_session_ids,
+    search_index,
+    thread_hidden_count,
+    thread_sessions,
+)
+
+__all__ = [
+    "threadsafe_lru_cache",
+    "ActionJobCancelledError",
+    "build_index_if_missing",
+    "build_search_index",
+    "collect_sessions",
+    "find_live_session",
+    "select_extractors",
+    "annotate_display_titles",
+    "apply_deleted_filter",
+    "apply_deleted_filter_to_results",
+    "automated_hidden_line",
+    "clear_index_cache",
+    "filter_automated",
+    "filter_automated_payload",
+    "filter_automated_results",
+    "load_deleted_session_ids",
+    "load_index",
+    "load_index_summary",
+    "remember_deleted_session_id",
+    "save_deleted_session_ids",
+    "search_index",
+    "thread_hidden_count",
+    "thread_sessions",
+]

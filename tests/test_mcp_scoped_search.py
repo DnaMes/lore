@@ -11,9 +11,9 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.storage import search_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.storage import search_sessions
 
 
 def _session(sid, *, user="", assistant="", tool_msg="", title="Generic session title"):
@@ -129,10 +129,10 @@ def test_scope_preserves_result_shape(tmp_path):
 
 
 def test_web_search_index_scope_v2(tmp_path, monkeypatch):
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     _build(tmp_path)
@@ -141,10 +141,10 @@ def test_web_search_index_scope_v2(tmp_path, monkeypatch):
 
 
 def test_web_search_index_invalid_scope_raises(tmp_path, monkeypatch):
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     _build(tmp_path)
@@ -154,10 +154,10 @@ def test_web_search_index_invalid_scope_raises(tmp_path, monkeypatch):
 
 def test_web_search_index_legacy_scope_is_noop(tmp_path, monkeypatch):
     """Legacy SearchEngine has no per-message rows: scope is a documented no-op."""
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     _build(tmp_path)
@@ -168,10 +168,10 @@ def test_web_search_index_legacy_scope_is_noop(tmp_path, monkeypatch):
 
 
 def test_web_search_index_legacy_rejects_invalid_scope(tmp_path, monkeypatch):
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     _build(tmp_path)
@@ -191,11 +191,11 @@ def _run(coro):
 
 
 def test_mcp_search_history_scope(tmp_path, monkeypatch):
-    from lore.interfaces import mcp, web_data
+    from annuli.interfaces import mcp, web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
     monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     _build(tmp_path)
@@ -208,11 +208,11 @@ def test_mcp_search_history_scope(tmp_path, monkeypatch):
 
 
 def test_mcp_search_history_default_scope_all(tmp_path, monkeypatch):
-    from lore.interfaces import mcp, web_data
+    from annuli.interfaces import mcp, web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
     monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     _build(tmp_path)
@@ -225,11 +225,11 @@ def test_mcp_search_history_default_scope_all(tmp_path, monkeypatch):
 
 
 def test_mcp_search_history_invalid_scope(tmp_path, monkeypatch):
-    from lore.interfaces import mcp, web_data
+    from annuli.interfaces import mcp, web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
     monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     _build(tmp_path)
@@ -241,7 +241,7 @@ def test_mcp_search_history_invalid_scope(tmp_path, monkeypatch):
 
 
 def test_mcp_search_history_schema_exposes_scope(tmp_path, monkeypatch):
-    from lore.interfaces import mcp, web_data
+    from annuli.interfaces import mcp, web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
     monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")

@@ -11,16 +11,16 @@ import os
 from contextlib import contextmanager
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage.identity import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage.identity import (
     canonical_content_hash,
     copies_of,
     resolve_session_id,
     source_namespace_for,
 )
-from lore.storage.reader import load_session_messages_v2
-from lore.storage.schema import apply_migrations, current_version, initialise
-from lore.storage.writer import write_sessions
+from annuli.storage.reader import load_session_messages_v2
+from annuli.storage.schema import apply_migrations, current_version, initialise
+from annuli.storage.writer import write_sessions
 
 
 def _session(
@@ -50,15 +50,15 @@ def _write(tmp_path, *sessions):
 @contextmanager
 def _namespace(value):
     """Run a write as if it came from another machine/home scope."""
-    previous = os.environ.get("LORE_SOURCE_NAMESPACE")
-    os.environ["LORE_SOURCE_NAMESPACE"] = value
+    previous = os.environ.get("ANNULI_SOURCE_NAMESPACE")
+    os.environ["ANNULI_SOURCE_NAMESPACE"] = value
     try:
         yield
     finally:
         if previous is None:
-            os.environ.pop("LORE_SOURCE_NAMESPACE", None)
+            os.environ.pop("ANNULI_SOURCE_NAMESPACE", None)
         else:
-            os.environ["LORE_SOURCE_NAMESPACE"] = previous
+            os.environ["ANNULI_SOURCE_NAMESPACE"] = previous
 
 
 def _write_ns(tmp_path, namespace, *sessions):
@@ -94,7 +94,7 @@ def test_identical_sessions_hash_equal_and_a_changed_message_does_not():
 def test_namespace_is_tool_scoped_and_env_overridable(monkeypatch):
     session = _session()
     assert source_namespace_for(session) == "claude-code:local"
-    monkeypatch.setenv("LORE_SOURCE_NAMESPACE", "desktop-2")
+    monkeypatch.setenv("ANNULI_SOURCE_NAMESPACE", "desktop-2")
     assert source_namespace_for(session) == "claude-code:desktop-2"
 
 
@@ -266,7 +266,7 @@ def test_store_survives_a_legacy_row_without_a_hash(tmp_path):
     conn.commit()
 
     # Refreshing a legacy row must not create a phantom copy.
-    from lore.storage.writer import write_sessions as write
+    from annuli.storage.writer import write_sessions as write
 
     write(tmp_path / "index_v2.sqlite", [_session(text="legacy")])
     conn = initialise(tmp_path / "index_v2.sqlite")

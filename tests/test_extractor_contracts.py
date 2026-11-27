@@ -9,28 +9,28 @@ from __future__ import annotations
 
 import pytest
 
-from lore.core.models import Tool, UnifiedSession
-from lore.extractors.aider import AiderExtractor
-from lore.extractors.antigravity import AntigravityExtractor
-from lore.extractors.base import BaseExtractor
-from lore.extractors.claude import ClaudeCodeExtractor
-from lore.extractors.cline import ClineExtractor, KiloCodeExtractor, RooCodeExtractor
-from lore.extractors.codex import CodexExtractor
-from lore.extractors.commandcode import CommandCodeExtractor
-from lore.extractors.copilot import CopilotCLIExtractor
-from lore.extractors.crush import CrushExtractor
-from lore.extractors.cursor import CursorExtractor
-from lore.extractors.factory_droid import FactoryDroidExtractor
-from lore.extractors.gemini import GeminiCLIExtractor
-from lore.extractors.goose import GooseExtractor
-from lore.extractors.hermes import HermesExtractor
-from lore.extractors.kimi import KimiExtractor
-from lore.extractors.opencode import OpenCodeExtractor
-from lore.extractors.pi import PiExtractor
-from lore.extractors.qwen import QwenExtractor
-from lore.extractors.visual_studio import VisualStudioCopilotExtractor
-from lore.extractors.vscode import VSCodeCopilotExtractor
-from lore.extractors.zed import ZedExtractor
+from annuli.core.models import Tool, UnifiedSession
+from annuli.extractors.aider import AiderExtractor
+from annuli.extractors.antigravity import AntigravityExtractor
+from annuli.extractors.base import BaseExtractor
+from annuli.extractors.claude import ClaudeCodeExtractor
+from annuli.extractors.cline import ClineExtractor, KiloCodeExtractor, RooCodeExtractor
+from annuli.extractors.codex import CodexExtractor
+from annuli.extractors.commandcode import CommandCodeExtractor
+from annuli.extractors.copilot import CopilotCLIExtractor
+from annuli.extractors.crush import CrushExtractor
+from annuli.extractors.cursor import CursorExtractor
+from annuli.extractors.factory_droid import FactoryDroidExtractor
+from annuli.extractors.gemini import GeminiCLIExtractor
+from annuli.extractors.goose import GooseExtractor
+from annuli.extractors.hermes import HermesExtractor
+from annuli.extractors.kimi import KimiExtractor
+from annuli.extractors.opencode import OpenCodeExtractor
+from annuli.extractors.pi import PiExtractor
+from annuli.extractors.qwen import QwenExtractor
+from annuli.extractors.visual_studio import VisualStudioCopilotExtractor
+from annuli.extractors.vscode import VSCodeCopilotExtractor
+from annuli.extractors.zed import ZedExtractor
 
 # ---------------------------------------------------------------------------
 # All concrete extractor classes under test
@@ -253,7 +253,7 @@ def test_tool_calls_are_well_shaped(extractor_cls):
     Skips extractors that aren't available on this machine — this asserts the
     shape contract only where there's real data to check.
     """
-    from lore.core.models import normalize_tool_call
+    from annuli.core.models import normalize_tool_call
 
     instance = extractor_cls()
     if not instance.is_available():

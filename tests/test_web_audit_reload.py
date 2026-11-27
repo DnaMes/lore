@@ -1,6 +1,6 @@
 import time
 
-from lore.interfaces import web, web_jobs
+from annuli.interfaces import web, web_jobs
 
 
 def test_api_audit_index_returns_uniformity_payload(monkeypatch):

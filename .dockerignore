@@ -19,9 +19,9 @@ build/**
 HANDOFF.md
 node_modules
 node_modules/**
-lore-data
-lore-data/**
-.lore-data
+annuli-data
+annuli-data/**
+.annuli-data
 .parachute
 .parachute/**
 *.md

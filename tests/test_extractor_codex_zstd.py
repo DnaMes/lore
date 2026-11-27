@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from lore.extractors.codex import CodexExtractor
+from annuli.extractors.codex import CodexExtractor
 
 
 def _meta(session_id: str) -> dict:
@@ -76,7 +76,7 @@ def test_missing_zstandard_skips_with_one_warning_per_run(home, monkeypatch, cap
     monkeypatch.setattr(importlib, "import_module", _block_zstd)
 
     extractor = CodexExtractor()
-    with caplog.at_level(logging.WARNING, logger="lore.extractors.codex"):
+    with caplog.at_level(logging.WARNING, logger="annuli.extractors.codex"):
         sessions = list(extractor.extract_sessions())
 
     assert sessions == []
@@ -84,10 +84,10 @@ def test_missing_zstandard_skips_with_one_warning_per_run(home, monkeypatch, cap
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1
     assert "zstandard" in warnings[0].getMessage()
-    assert "lore[" not in warnings[0].getMessage()
+    assert "annuli[" not in warnings[0].getMessage()
 
     # A second run resets the counter, so the warning is emitted once again.
     caplog.clear()
-    with caplog.at_level(logging.WARNING, logger="lore.extractors.codex"):
+    with caplog.at_level(logging.WARNING, logger="annuli.extractors.codex"):
         list(extractor.extract_sessions())
     assert len([r for r in caplog.records if r.levelno == logging.WARNING]) == 1

@@ -14,19 +14,19 @@ from types import SimpleNamespace
 
 import pytest
 
-from lore.llm import CloudOptInRequired, LLMConfig
-from lore.llm.factory import get_provider
-from lore.llm.gemini import GeminiProvider
-from lore.llm.openrouter import OpenRouterProvider
-from lore.titles.generator import TitleGenerator, TitleStrategy
-from lore.utils.redact import redact
+from annuli.llm import CloudOptInRequired, LLMConfig
+from annuli.llm.factory import get_provider
+from annuli.llm.gemini import GeminiProvider
+from annuli.llm.openrouter import OpenRouterProvider
+from annuli.titles.generator import TitleGenerator, TitleStrategy
+from annuli.utils.redact import redact
 
 TOKEN = "ghp_" + "z" * 36  # matches the redact() github_token pattern
 
 
 @pytest.fixture(autouse=True)
 def _no_cloud_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
 
 
 @pytest.mark.parametrize("provider", ["gemini", "openrouter", "jev"])
@@ -34,12 +34,12 @@ def test_get_provider_cloud_without_optin_raises(provider: str) -> None:
     with pytest.raises(CloudOptInRequired) as exc_info:
         get_provider(provider)
     assert "--allow-cloud" in str(exc_info.value)
-    assert "LORE_ALLOW_CLOUD=1" in str(exc_info.value)
+    assert "ANNULI_ALLOW_CLOUD=1" in str(exc_info.value)
 
 
 def test_get_provider_optin_via_arg_or_env(monkeypatch: pytest.MonkeyPatch) -> None:
     assert isinstance(get_provider("gemini", allow_cloud=True), GeminiProvider)
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
     assert isinstance(get_provider("openrouter"), OpenRouterProvider)
 
 
@@ -67,20 +67,20 @@ def test_get_provider_unknown_provider_still_valueerror() -> None:
 def test_run_improve_gemini_without_optin_never_constructs_a_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("LORE_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANNULI_LLM_PROVIDER", raising=False)
 
     def _boom(self, config):  # noqa: ANN001
         raise AssertionError("provider must not be constructed without cloud opt-in")
 
     monkeypatch.setattr(GeminiProvider, "__init__", _boom)
     with pytest.raises(CloudOptInRequired):
-        lore_cli_improve(tmp_path)
+        annuli_cli_improve(tmp_path)
     assert (tmp_path / "knowledge").exists() is False
 
 
-def lore_cli_improve(output_dir: Path):
+def annuli_cli_improve(output_dir: Path):
     """Library entry exactly as the task pins it (no CLI gate in front)."""
-    from lore.services.improve import run_improve
+    from annuli.services.improve import run_improve
 
     return run_improve(
         output_dir,
@@ -94,7 +94,7 @@ def lore_cli_improve(output_dir: Path):
 def test_run_improve_optin_via_arg_reaches_get_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("LORE_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANNULI_LLM_PROVIDER", raising=False)
     seen: list[dict] = []
 
     def fake_get_provider(**kwargs):
@@ -113,10 +113,10 @@ def test_run_improve_optin_via_arg_reaches_get_provider(
             redactions=0,
         )
 
-    monkeypatch.setattr("lore.services.improve.get_provider", fake_get_provider)
-    monkeypatch.setattr("lore.services.improve.run_extraction", fake_run_extraction)
+    monkeypatch.setattr("annuli.services.improve.get_provider", fake_get_provider)
+    monkeypatch.setattr("annuli.services.improve.run_extraction", fake_run_extraction)
 
-    from lore.services.improve import run_improve
+    from annuli.services.improve import run_improve
 
     results = run_improve(
         tmp_path,
@@ -135,7 +135,7 @@ def test_run_improve_optin_via_arg_reaches_get_provider(
 def test_run_improve_loopback_ollama_needs_no_optin(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv("LORE_LLM_PROVIDER", raising=False)
+    monkeypatch.delenv("ANNULI_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
     seen: list[dict] = []
 
@@ -146,15 +146,15 @@ def test_run_improve_loopback_ollama_needs_no_optin(
             config=LLMConfig.for_transcripts(provider="ollama", model="llama3.2"),
         )
 
-    monkeypatch.setattr("lore.services.improve.get_provider", fake_get_provider)
+    monkeypatch.setattr("annuli.services.improve.get_provider", fake_get_provider)
     monkeypatch.setattr(
-        "lore.services.improve.run_extraction",
+        "annuli.services.improve.run_extraction",
         lambda *_a: SimpleNamespace(
             extracted=0, unchanged=0, skipped_no_messages=0, failed=0, redactions=0
         ),
     )
 
-    from lore.services.improve import run_improve
+    from annuli.services.improve import run_improve
 
     results = run_improve(
         tmp_path,
@@ -173,7 +173,7 @@ def test_run_improve_loopback_ollama_needs_no_optin(
 
 
 def _session():
-    from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+    from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
 
     turns = [
         UnifiedMessage(
@@ -196,8 +196,8 @@ def _session():
 
 @pytest.fixture()
 def _title_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("lore.titles.generator.OLLAMA_AVAILABLE", True)
-    monkeypatch.setattr("lore.titles.generator.lore_home", lambda: tmp_path / "lore_home")
+    monkeypatch.setattr("annuli.titles.generator.OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr("annuli.titles.generator.annuli_home", lambda: tmp_path / "annuli_home")
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
 
 
@@ -228,7 +228,7 @@ def _install_subprocess_capture(monkeypatch: pytest.MonkeyPatch) -> list:
 def test_gemini_cli_title_env_optin_sends_redacted_prompt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _title_env
 ) -> None:
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
     calls = _install_subprocess_capture(monkeypatch)
     generator = TitleGenerator(strategy=TitleStrategy.SMART, provider="gemini-cli")
 
@@ -260,7 +260,7 @@ def test_gemini_cli_title_arg_optin_sends_redacted_prompt(
 def test_local_title_provider_still_works_without_optin(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, _title_env
 ) -> None:
-    import lore.titles.generator as gen_mod
+    import annuli.titles.generator as gen_mod
 
     captured: list = []
 
@@ -285,15 +285,15 @@ def test_local_title_provider_still_works_without_optin(
 def test_run_summarize_command_gemini_without_optin_never_constructs_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
-    from lore.services.summarize_cli import run_summarize_command
+    from annuli.services.summarize_cli import run_summarize_command
 
     def _boom(*_a, **_k):
         raise AssertionError("provider must not be constructed without cloud opt-in")
 
-    monkeypatch.setattr("lore.llm.get_provider", _boom)
+    monkeypatch.setattr("annuli.llm.get_provider", _boom)
     # Candidate collection needs a store; the gate must fire before any provider work.
     monkeypatch.setattr(
-        "lore.services.summarize_cli._collect_candidates",
+        "annuli.services.summarize_cli._collect_candidates",
         lambda _args, _out: (None, [SimpleNamespace(session_id="s1")]),
     )
     args = Namespace(
@@ -320,4 +320,4 @@ def test_run_summarize_command_gemini_without_optin_never_constructs_provider(
     assert rc == 2
     err = capsys.readouterr().err
     assert "--allow-cloud" in err
-    assert "LORE_ALLOW_CLOUD" in err
+    assert "ANNULI_ALLOW_CLOUD" in err

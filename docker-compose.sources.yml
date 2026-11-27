@@ -1,4 +1,4 @@
-# Opt-in override: mount host AI tool history directories read-only so Lore can
+# Opt-in override: mount host AI tool history directories read-only so Annuli can
 # extract sessions. Use only when those paths exist on the host — Docker may
 # otherwise create empty root-owned directories for missing bind sources.
 #
@@ -17,9 +17,9 @@
 #   ~/.local/share/opencode/storage    → /home/ai/.local/share/opencode/storage
 services:
   worker:
-    user: ${LORE_UID:-10001}:${LORE_GID:-10001}
+    user: ${ANNULI_UID:-${LORE_UID:-10001}}:${ANNULI_GID:-${LORE_GID:-10001}}
     volumes:
-      - ${LORE_DATA_DIR:-./lore-data}:/home/ai/.lore
+      - ${ANNULI_DATA_DIR:-${LORE_DATA_DIR:-./lore-data}}:/home/ai/.annuli
       - ${HOME}/.claude:/home/ai/.claude:ro
       - ${HOME}/.gemini:/home/ai/.gemini:ro
       - ${HOME}/.codex:/home/ai/.codex:ro
@@ -32,12 +32,12 @@ services:
 
   app:
     # Host history dirs are often 0700; uid 10001 cannot read them.
-    # export LORE_UID=$(id -u) LORE_GID=$(id -g)
-    user: ${LORE_UID:-10001}:${LORE_GID:-10001}
+    # export ANNULI_UID=$(id -u) ANNULI_GID=$(id -g)
+    user: ${ANNULI_UID:-${LORE_UID:-10001}}:${ANNULI_GID:-${LORE_GID:-10001}}
     volumes:
       # Host uid cannot write the named volume (owned by 10001); bind-mount instead.
-      # Host path must be writable by the chosen uid (export LORE_DATA_DIR if needed).
-      - ${LORE_DATA_DIR:-./lore-data}:/home/ai/.lore
+      # Host path must be writable by the chosen uid (export ANNULI_DATA_DIR if needed).
+      - ${ANNULI_DATA_DIR:-${LORE_DATA_DIR:-./lore-data}}:/home/ai/.annuli
       - ${HOME}/.claude:/home/ai/.claude:ro
       - ${HOME}/.gemini:/home/ai/.gemini:ro
       - ${HOME}/.codex:/home/ai/.codex:ro

@@ -1,10 +1,10 @@
-from lore.interfaces import web
-from lore.interfaces.web_formatting import (
+from annuli.interfaces import web
+from annuli.interfaces.web_formatting import (
     _format_message_content_cached,
     format_message_content,
     format_tool_calls,
 )
-from lore.utils.text_processing import (
+from annuli.utils.text_processing import (
     format_duration_ms,
     format_tool_display,
     format_tool_result,

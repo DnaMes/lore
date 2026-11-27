@@ -1,7 +1,7 @@
 """Tests for the v2 SQLite reader (issue #44, PR 3).
 
 `load_index_v2` reads the v2 store back into the legacy index dict shape;
-`load_index()` prefers it over index.json behind the LORE_USE_V2 flag,
+`load_index()` prefers it over index.json behind the ANNULI_USE_V2 flag,
 falling back to JSON transparently. These tests cover both.
 """
 
@@ -11,9 +11,9 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.storage import load_index_v2, v2_is_available
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.storage import load_index_v2, v2_is_available
 
 
 def _session(
@@ -120,11 +120,11 @@ def test_load_index_v2_carries_prompt_outline(tmp_path):
 
 
 def test_load_index_uses_v2_when_available(tmp_path, monkeypatch):
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     IndexBuilder(tmp_path).build_index([_session("v2only", title="From V2")], {})
@@ -134,11 +134,11 @@ def test_load_index_uses_v2_when_available(tmp_path, monkeypatch):
 
 
 def test_load_index_falls_back_to_json_when_flag_off(tmp_path, monkeypatch):
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     IndexBuilder(tmp_path).build_index([_session("j", title="From JSON")], {})
@@ -150,11 +150,11 @@ def test_load_index_falls_back_to_json_when_flag_off(tmp_path, monkeypatch):
 
 def test_load_index_falls_back_when_v2_missing(tmp_path, monkeypatch):
     """v2 enabled but no DB yet — must transparently use index.json."""
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     # Write only a JSON index — no v2 db.
@@ -170,7 +170,7 @@ def test_load_index_falls_back_when_v2_missing(tmp_path, monkeypatch):
 
 def test_v2_and_json_agree_on_session_ids(tmp_path, monkeypatch):
     """The v2 reader and the JSON reader must surface the same sessions."""
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
@@ -178,11 +178,11 @@ def test_v2_and_json_agree_on_session_ids(tmp_path, monkeypatch):
     sessions = [_session("a"), _session("b"), _session("c")]
     IndexBuilder(tmp_path).build_index(sessions, {})
 
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
     v2_ids = sorted(s["id"] for s in web_data.load_index()["sessions"])
 
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
     json_ids = sorted(s["id"] for s in web_data.load_index()["sessions"])
 
@@ -225,11 +225,11 @@ def test_load_index_falls_back_when_v2_stale(tmp_path, monkeypatch):
     """load_index() must serve JSON when the v2 store is stale."""
     import time
 
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     IndexBuilder(tmp_path).build_index([_session("v2sess", title="From V2 store")], {})
@@ -253,7 +253,7 @@ def test_load_index_falls_back_when_v2_stale(tmp_path, monkeypatch):
 
 
 def test_load_session_messages_v2_roundtrips_tokens_and_model(tmp_path):
-    from lore.storage import load_session_messages_v2
+    from annuli.storage import load_session_messages_v2
 
     session = UnifiedSession(
         tool=Tool.OPENCODE,
@@ -289,14 +289,14 @@ def test_load_session_messages_v2_roundtrips_tokens_and_model(tmp_path):
 
 
 def test_load_session_messages_v2_none_for_missing_session(tmp_path):
-    from lore.storage import load_session_messages_v2
+    from annuli.storage import load_session_messages_v2
 
     IndexBuilder(tmp_path).build_index([_session("present")], {})
     assert load_session_messages_v2(tmp_path, "absent") is None
 
 
 def test_load_session_messages_v2_none_when_no_db(tmp_path):
-    from lore.storage import load_session_messages_v2
+    from annuli.storage import load_session_messages_v2
 
     assert load_session_messages_v2(tmp_path, "anything") is None
 
@@ -307,7 +307,7 @@ def test_load_session_messages_v2_none_when_no_db(tmp_path):
 
 
 def test_backfill_v2_message_tokens_fills_matching_count(monkeypatch, tmp_path):
-    from lore.interfaces import web
+    from annuli.interfaces import web
 
     served = UnifiedSession(
         tool=Tool.OPENCODE,
@@ -324,7 +324,7 @@ def test_backfill_v2_message_tokens_fills_matching_count(monkeypatch, tmp_path):
         UnifiedMessage(Role.ASSISTANT, "a", datetime(2026, 1, 1), model="m1", tokens={"total": 99}),
     ]
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
-    monkeypatch.setattr("lore.storage.load_session_messages_v2", lambda _dir, _sid: v2_msgs)
+    monkeypatch.setattr("annuli.storage.load_session_messages_v2", lambda _dir, _sid: v2_msgs)
 
     web._backfill_v2_message_tokens("s1", served)
 
@@ -333,7 +333,7 @@ def test_backfill_v2_message_tokens_fills_matching_count(monkeypatch, tmp_path):
 
 
 def test_backfill_v2_message_tokens_skips_on_count_mismatch(monkeypatch, tmp_path):
-    from lore.interfaces import web
+    from annuli.interfaces import web
 
     served = UnifiedSession(
         tool=Tool.OPENCODE,
@@ -347,7 +347,7 @@ def test_backfill_v2_message_tokens_skips_on_count_mismatch(monkeypatch, tmp_pat
         UnifiedMessage(Role.ASSISTANT, "a", datetime(2026, 1, 1), tokens={"total": 99}),
     ]
     monkeypatch.setattr(web, "OUTPUT_DIR", tmp_path)
-    monkeypatch.setattr("lore.storage.load_session_messages_v2", lambda _dir, _sid: v2_msgs)
+    monkeypatch.setattr("annuli.storage.load_session_messages_v2", lambda _dir, _sid: v2_msgs)
 
     web._backfill_v2_message_tokens("s1", served)
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces.web_services import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces.web_services import (
     enrich_session_for_detail,
     normalize_session_messages_for_display,
 )
@@ -184,7 +184,7 @@ def test_claude_display_formatter_strips_caveat_prefix_for_user():
 
 def test_claude_command_only_message_is_folded_away():
     """#68 — a message that is only command bookkeeping renders empty, not a prompt card."""
-    from lore.interfaces.web_services import _format_message_for_tool
+    from annuli.interfaces.web_services import _format_message_for_tool
 
     rendered = _format_message_for_tool(
         "claude-code",
@@ -198,7 +198,7 @@ def test_claude_command_only_message_is_folded_away():
 
 
 def test_is_command_only_noise_detects_artifacts():
-    from lore.interfaces.web_services import _is_command_only_noise
+    from annuli.interfaces.web_services import _is_command_only_noise
 
     assert _is_command_only_noise("[command: /exit]\n[exit]\n()")
     assert _is_command_only_noise("[command: /clear]")

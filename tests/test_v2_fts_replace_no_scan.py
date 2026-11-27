@@ -12,9 +12,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import List
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import open_connection
-from lore.storage.writer import StreamingV2Writer, v2_db_path
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import open_connection
+from annuli.storage.writer import StreamingV2Writer, v2_db_path
 
 T0 = datetime(2026, 1, 1)
 

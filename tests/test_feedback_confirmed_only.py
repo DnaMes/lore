@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from lore.storage import (
+from annuli.storage import (
     add_memory,
     feedback_weight,
     recall_memory,
     record_feedback,
 )
-from lore.storage.memory import set_memory_status
+from annuli.storage.memory import set_memory_status
 
 
 def test_record_feedback_rejects_candidate(tmp_path):
@@ -38,10 +38,10 @@ def test_record_feedback_confirmed_works(tmp_path):
 
 
 def test_rejected_after_rating_keeps_rows_but_not_in_recall(tmp_path, monkeypatch):
-    from lore.storage.schema import open_v2_connection
-    from lore.storage.writer import v2_db_path
+    from annuli.storage.schema import open_v2_connection
+    from annuli.storage.writer import v2_db_path
 
-    monkeypatch.setenv("LORE_FEEDBACK_INFLUENCE", "1")
+    monkeypatch.setenv("ANNULI_FEEDBACK_INFLUENCE", "1")
     low = add_memory(tmp_path, "note", "low rated", "alpha beta gamma")
     high = add_memory(tmp_path, "note", "high rated", "alpha beta gamma")
     record_feedback(tmp_path, low, "r", 1)

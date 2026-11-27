@@ -1,12 +1,12 @@
-"""Tests for lore/extractors/claude.py."""
+"""Tests for annuli/extractors/claude.py."""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from lore.core.models import Role, Tool
-from lore.extractors.claude import ClaudeCodeExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.claude import ClaudeCodeExtractor
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -750,7 +750,7 @@ def test_decode_project_name_no_disk_match_logs_heuristic(tmp_path, caplog):
     extractor = ClaudeCodeExtractor.__new__(ClaudeCodeExtractor)
     encoded = "-no-such-root-xyz"
 
-    with caplog.at_level(logging.DEBUG, logger="lore.extractors.claude"):
+    with caplog.at_level(logging.DEBUG, logger="annuli.extractors.claude"):
         decoded = extractor._decode_project_name(encoded)
 
     assert decoded == "/no-such-root-xyz"

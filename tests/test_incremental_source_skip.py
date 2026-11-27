@@ -17,10 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.extractors.base import REEXTRACT_BUDGET_ENV, BaseExtractor
-from lore.services import extraction
-from lore.storage.writer import v2_db_path
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.extractors.base import REEXTRACT_BUDGET_ENV, BaseExtractor
+from annuli.services import extraction
+from annuli.storage.writer import v2_db_path
 
 
 def _session(sid: str, *, body: str, source_path: str | None = None) -> UnifiedSession:

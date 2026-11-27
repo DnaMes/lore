@@ -8,10 +8,12 @@ include CONTRIBUTING.md
 include SECURITY.md
 include CODE_OF_CONDUCT.md
 include pyproject.toml
+include annuli_cli.py
+include annuli_session_cli.py
 include lore_cli.py
 include lore_session_cli.py
 
-graft lore
+graft annuli
 graft tests
 graft docs
 graft tools
