@@ -23,10 +23,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
 
-TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "lore" / "templates"
+TEMPLATE_DIR = Path(__file__).resolve().parents[1] / "annuli" / "templates"
 
 FORM_TAGS = {"input", "select", "textarea"}
 NON_LABELLED_INPUT_TYPES = {"hidden", "submit", "button", "reset", "image"}

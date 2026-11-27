@@ -8,14 +8,14 @@
 #     scripts/build_tailwind.sh
 #
 # Requires node/npx (build time only — the running app stays Python-only
-# and air-gapped: the compiled CSS is checked into lore/interfaces/static/).
+# and air-gapped: the compiled CSS is checked into annuli/interfaces/static/).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 npx --yes tailwindcss@3.4.16 \
   -c tailwind.config.js \
   -i tailwind.input.css \
-  -o lore/interfaces/static/tailwind-compiled.min.css \
+  -o annuli/interfaces/static/tailwind-compiled.min.css \
   --minify
 
-echo "wrote lore/interfaces/static/tailwind-compiled.min.css"
+echo "wrote annuli/interfaces/static/tailwind-compiled.min.css"

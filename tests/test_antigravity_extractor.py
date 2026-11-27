@@ -1,4 +1,4 @@
-"""Tests for lore/extractors/antigravity.py.
+"""Tests for annuli/extractors/antigravity.py.
 
 Antigravity stores each session as a directory under
 ``~/.gemini/antigravity/brain/<session-id>/`` containing:
@@ -13,8 +13,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from lore.core.models import Role, Tool
-from lore.extractors.antigravity import AntigravityExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.antigravity import AntigravityExtractor
 
 
 def _brain_dir(home: Path) -> Path:
@@ -262,7 +262,7 @@ def test_no_task_md_dir_is_recorded_as_skip_not_silent(monkeypatch, tmp_path):
     brain = _brain_dir(tmp_path)
     (brain / "empty-session").mkdir(parents=True)  # no task.md
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")
 
     extractor = AntigravityExtractor()
     imported = list(extractor.extract_sessions())
@@ -275,7 +275,7 @@ def test_short_session_recorded_as_too_few_prompts(monkeypatch, tmp_path):
     """#69 — a real but too-short session is filtered and counted, not a silent 0."""
     _make_session(tmp_path, "short-session")  # single user prompt
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")
 
     extractor = AntigravityExtractor()
     imported = list(extractor.extract_sessions())
@@ -298,15 +298,15 @@ def test_check_deep_reports_coverage_for_an_undecodable_tree(monkeypatch, tmp_pa
     """#158 — the diagnostic says which artifacts it could not use."""
     import argparse
 
-    import lore_cli
+    import annuli_cli
 
     brain = _brain_dir(tmp_path)
     session_dir = brain / "opaque"
     (session_dir / "conversations").mkdir(parents=True)
     (session_dir / "conversations" / "x.pb").write_bytes(b"\x00bin")
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [AntigravityExtractor()])
-    lore_cli.cmd_check(argparse.Namespace(deep=True, output_dir=str(tmp_path / ".annuli")))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [AntigravityExtractor()])
+    annuli_cli.cmd_check(argparse.Namespace(deep=True, output_dir=str(tmp_path / ".annuli")))
     out = capsys.readouterr().out
     assert "data directory present, no readable input" in out
     assert "Coverage: unsupported_artifacts=1" in out

@@ -1,34 +1,34 @@
 # Privacy and data locations
 
-This document describes how Lore handles session data, where local data is read and written, when data leaves the machine, and how sensitive information is protected.
+This document describes how Annuli handles session data, where local data is read and written, when data leaves the machine, and how sensitive information is protected.
 
 ## Principle
 
-Lore operates as a local-first archive and manager for AI coding assistant sessions. It reads session histories from the directories where tools write them on the local filesystem and writes its own unified archive under `~/.lore` (customizable via the `--output-dir` option).
+Annuli operates as a local-first archive and manager for AI coding assistant sessions. It reads session histories from the directories where tools write them on the local filesystem and writes its own unified archive under `~/.annuli` (customizable via the `--output-dir` option).
 
-By default, Lore uploads nothing. Core features run entirely on the local machine without internet access:
+By default, Annuli uploads nothing. Core features run entirely on the local machine without internet access:
 - Indexing and archiving session transcripts
 - Full-text search (SQLite FTS5)
-- Local web interface (`lore-web`)
+- Local web interface (`annuli-web`)
 - Cross-tool memory store and vector retrieval
 - Session export (Markdown, JSON, HTML)
 
 ## Read sources
 
-Lore inspects local session files and SQLite databases created by supported AI assistant tools. All reads are strictly read-only.
+Annuli inspects local session files and SQLite databases created by supported AI assistant tools. All reads are strictly read-only.
 
-For SQLite stores, Lore never directly connects to the active database in place. Instead, it creates a temporary scratch copy using `copy_sqlite_with_sidecars` (in `lore/utils/sqlite_copy.py`) or `safe_copy_db` (in `lore/utils/paths.py`). The copy includes any associated write-ahead log (`-wal`) and shared memory (`-shm`) sidecars. The scratch copy is then opened strictly in read-only mode using SQLite URI parameters (`?mode=ro`).
+For SQLite stores, Annuli never directly connects to the active database in place. Instead, it creates a temporary scratch copy using `copy_sqlite_with_sidecars` (in `annuli/utils/sqlite_copy.py`) or `safe_copy_db` (in `annuli/utils/paths.py`). The copy includes any associated write-ahead log (`-wal`) and shared memory (`-shm`) sidecars. The scratch copy is then opened strictly in read-only mode using SQLite URI parameters (`?mode=ro`).
 
-A code audit of `lore/extractors/` confirms this architecture:
-- `lore/extractors/antigravity.py`: Opens scratch copy with `file:{copy_path}?mode=ro`
-- `lore/extractors/hermes.py`: Opens scratch copy with `file:{copy_path}?mode=ro`
-- `lore/extractors/cursor.py`: Opens scratch copy with `file:{work_db_path}?mode=ro`
-- `lore/extractors/opencode.py`: Opens databases with `file:{db_path}?mode=ro`
-- `lore/extractors/opencode_v2.py`: Opens scratch copy with `file:{copy_path}?mode=ro`
-- `lore/extractors/sqlite_common.py`: Shared by Goose, Crush, and Zed extractors via `open_readonly_copy()`, connecting with `file:{copy_path}?mode=ro`
-- `lore/extractors/codex.py`: Opens scratch copy with `file:{copy_path}?mode=ro`
+A code audit of `annuli/extractors/` confirms this architecture:
+- `annuli/extractors/antigravity.py`: Opens scratch copy with `file:{copy_path}?mode=ro`
+- `annuli/extractors/hermes.py`: Opens scratch copy with `file:{copy_path}?mode=ro`
+- `annuli/extractors/cursor.py`: Opens scratch copy with `file:{work_db_path}?mode=ro`
+- `annuli/extractors/opencode.py`: Opens databases with `file:{db_path}?mode=ro`
+- `annuli/extractors/opencode_v2.py`: Opens scratch copy with `file:{copy_path}?mode=ro`
+- `annuli/extractors/sqlite_common.py`: Shared by Goose, Crush, and Zed extractors via `open_readonly_copy()`, connecting with `file:{copy_path}?mode=ro`
+- `annuli/extractors/codex.py`: Opens scratch copy with `file:{copy_path}?mode=ro`
 
-JSON and JSONL sources are opened using standard Python read-only file streams. Lore never writes to, modifies, or deletes files inside any AI tool directory.
+JSON and JSONL sources are opened using standard Python read-only file streams. Annuli never writes to, modifies, or deletes files inside any AI tool directory.
 
 ### Tool read locations
 
@@ -39,7 +39,7 @@ JSON and JSONL sources are opened using standard Python read-only file streams. 
 | `codex` | `~/.codex/sessions/*/*/*/rollout-*.jsonl`, `~/.codex/archived_sessions/**/rollout-*.jsonl[.zst]`, scratch copy of `~/.codex/state_5.sqlite` |
 | `cursor` | Scratch copy of `~/.config/Cursor/User/globalStorage/state.vscdb` (`cursorDiskKV` rows `composerData:*` and sidebar chat data); `~/.cursor/projects/*/agent-transcripts/**/*.jsonl` |
 | `vscode-copilot` | `~/.config/Code/User/workspaceStorage/*/chatSessions/*.json`, `~/.config/Code/User/workspaceStorage/*/chatSessions/*.jsonl` |
-| `visual-studio-copilot` | Read-only MessagePack files at `<project>/.vs/<solution>/copilot-chat/*/sessions/*`, discovered below `~/source/repos`, extra profiles, the current project and `LORE_VISUAL_STUDIO_PROJECT_PATHS` |
+| `visual-studio-copilot` | Read-only MessagePack files at `<project>/.vs/<solution>/copilot-chat/*/sessions/*`, discovered below `~/source/repos`, extra profiles, the current project and `ANNULI_VISUAL_STUDIO_PROJECT_PATHS` |
 | `copilot-cli` | `~/.copilot/session-state/*.jsonl` |
 | `opencode` | `~/.local/share/opencode/storage/session/**/ses_*.json`, `~/.opencode/storage/session/**/ses_*.json`, read-only `~/.local/share/opencode/opencode.db` and `~/.opencode/opencode.db` |
 | `antigravity` | `~/.gemini/antigravity{,-cli,-ide}/brain/*/.system_generated/logs/transcript_full.jsonl` (or `transcript.jsonl`); scratch copy of `conversation_summaries.db`; fallback `task.md` / `walkthrough.md` |
@@ -57,9 +57,9 @@ JSON and JSONL sources are opened using standard Python read-only file streams. 
 | `zed` | Scratch copy of `~/.local/share/zed/threads/threads.db`, `$XDG_DATA_HOME/zed/threads/threads.db` (zstd decompression requires optional `zstandard`) |
 | `factory-droid` | `~/.factory/sessions/<project-slug>/<session-uuid>.jsonl` and `<session-uuid>.settings.json` |
 
-## Data directory ~/.lore
+## Data directory ~/.annuli
 
-All files created by Lore are stored under `~/.lore` unless overridden with `--output-dir`.
+All files created by Annuli are stored under `~/.annuli` unless overridden with `--output-dir`.
 
 ### Files and directories
 
@@ -77,105 +77,105 @@ All files created by Lore are stored under `~/.lore` unless overridden with `--o
 - `llm_cache/`: On-disk response cache for LLM API calls, keyed by prompt content.
 - `title_cache/`: Cache for titles generated by LLM title generation.
 - `cache/`: Internal extractor scratch cache used to store modification times and incremental synchronization markers.
-- `handoff/`: Session-handoff context files for `lore-session switch` / `continue` (`context-<id>.md`, mode 0600). A file is removed after the launched tool exits (kept for the manual tools, since the block is pasted from it), and stale files older than 24 hours are removed.
+- `handoff/`: Session-handoff context files for `annuli-session switch` / `continue` (`context-<id>.md`, mode 0600). A file is removed after the launched tool exits (kept for the manual tools, since the block is pasted from it), and stale files older than 24 hours are removed.
 
 ### File permissions and multi-user isolation
 
-Lore enforces strict owner-only permissions on POSIX systems via utility functions in `lore/utils/paths.py`:
+Annuli enforces strict owner-only permissions on POSIX systems via utility functions in `annuli/utils/paths.py`:
 - `secure_dir(path: Path)`: Creates directories with mode `0700` (`rwx------`), preventing other local users from listing or accessing session files.
 - `restrict_file(path: Path)`: Sets file permissions to mode `0600` (`rw-------`), ensuring only the file owner can read or modify databases, json indices, and tombstones.
 
 ## Outbound network and provider data sharing
 
-By default, Lore does not make outbound network connections. External network requests occur only when a user explicitly invokes an LLM command and selects a provider.
+By default, Annuli does not make outbound network connections. External network requests occur only when a user explicitly invokes an LLM command and selects a provider.
 
-Every non-local provider (gemini, gemini-cli, openrouter, jev, and ollama when `OLLAMA_HOST` resolves off-host) requires an explicit cloud opt-in: `--allow-cloud` or `LORE_ALLOW_CLOUD=1` (also `true` or `yes`). The gate is `require_cloud_opt_in` in `lore/services/summarize_cli.py`; the same refusal is enforced again in the library layer, so programmatic users cannot bypass it: `get_provider()` in `lore/llm/factory.py`, `run_improve` in `lore/services/improve.py` and `TitleGenerator` in `lore/titles/generator.py` raise `CloudOptInRequired` for a non-local provider without the opt-in. `ollama` counts as local only on a loopback host. The CLI gate runs in `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles`, and in the session handoff (`lore-session switch`, `lore-session continue` and the MCP `switch_to_tool` when the target tool is `gemini` or `codex`), so every path that can send session text to a non-local provider requires the opt-in. Without it the command prints an error naming both options and exits with code 2 before anything is sent. `--dry-run` sends nothing and is not gated.
+Every non-local provider (gemini, gemini-cli, openrouter, jev, and ollama when `OLLAMA_HOST` resolves off-host) requires an explicit cloud opt-in: `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` (also `true` or `yes`). The gate is `require_cloud_opt_in` in `annuli/services/summarize_cli.py`; the same refusal is enforced again in the library layer, so programmatic users cannot bypass it: `get_provider()` in `annuli/llm/factory.py`, `run_improve` in `annuli/services/improve.py` and `TitleGenerator` in `annuli/titles/generator.py` raise `CloudOptInRequired` for a non-local provider without the opt-in. `ollama` counts as local only on a loopback host. The CLI gate runs in `analyze`, `knowledge`, `format`, `summarize`, `improve` and `generate-titles`, and in the session handoff (`annuli-session switch`, `annuli-session continue` and the MCP `switch_to_tool` when the target tool is `gemini` or `codex`), so every path that can send session text to a non-local provider requires the opt-in. Without it the command prints an error naming both options and exits with code 2 before anything is sent. `--dry-run` sends nothing and is not gated.
 
 ### Cloud behaviour by command
 
-- `lore knowledge` has no default provider. Without `--provider` it exits with code 2 and sends nothing. A cloud provider also needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`.
-- `lore analyze` and `lore format` default to `gemini`, a cloud provider. Without the opt-in they exit with code 2 and send nothing. `analyze --no-llm` sends nothing at all. `format` has no `--no-llm` flag; use `--provider ollama` to stay local.
-- `lore summarize` defaults to `ollama` (local). A cloud provider, or an off-host Ollama endpoint, needs the opt-in. `--dry-run` exits before any provider is contacted.
-- `lore improve` sends conversation text only to the provider named by `--provider` or `LORE_LLM_PROVIDER`, and only in the `extract_knowledge` stage. A non-local provider needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; without it the command exits with code 2 and sends nothing. With the opt-in, a notice naming the provider is printed to stderr before the run. Leave both unset to keep it local (the stage is skipped). `--dry-run` sends nothing and is not gated.
-- `lore generate-titles` uses the local provider by default and needs no opt-in. `--provider gemini-cli` is the cloud choice and needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1` as well; without it the command exits with code 2 and sends nothing. Titles send a transcript excerpt per title; the excerpt is redacted with the same secret redactor as the other paths before it leaves the process.
-- The session handoff (`lore-session switch`, `lore-session continue`, MCP `switch_to_tool`): `gemini` and `codex` receive the session context as a referenced file (the process argument holds only its path), so they are cloud targets and need `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; without it the handoff refuses and exits with code 2. The context is redacted before it is written or passed, and lives in a unique mode-0600 file `~/.lore/handoff/context-<id>.md` (no longer the fixed `/tmp/ai-session-context.md`), removed after the launched tool exits; stale files older than 24 hours are removed the next time a handoff file is written. `claude` is continued with `--continue`, and the manual tools (`cursor`, `vscode`) only print a block for you to paste; neither sends anything.
+- `annuli knowledge` has no default provider. Without `--provider` it exits with code 2 and sends nothing. A cloud provider also needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`.
+- `annuli analyze` and `annuli format` default to `gemini`, a cloud provider. Without the opt-in they exit with code 2 and send nothing. `analyze --no-llm` sends nothing at all. `format` has no `--no-llm` flag; use `--provider ollama` to stay local.
+- `annuli summarize` defaults to `ollama` (local). A cloud provider, or an off-host Ollama endpoint, needs the opt-in. `--dry-run` exits before any provider is contacted.
+- `annuli improve` sends conversation text only to the provider named by `--provider` or `ANNULI_LLM_PROVIDER`, and only in the `extract_knowledge` stage. A non-local provider needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`; without it the command exits with code 2 and sends nothing. With the opt-in, a notice naming the provider is printed to stderr before the run. Leave both unset to keep it local (the stage is skipped). `--dry-run` sends nothing and is not gated.
+- `annuli generate-titles` uses the local provider by default and needs no opt-in. `--provider gemini-cli` is the cloud choice and needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` as well; without it the command exits with code 2 and sends nothing. Titles send a transcript excerpt per title; the excerpt is redacted with the same secret redactor as the other paths before it leaves the process.
+- The session handoff (`annuli-session switch`, `annuli-session continue`, MCP `switch_to_tool`): `gemini` and `codex` receive the session context as a referenced file (the process argument holds only its path), so they are cloud targets and need `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`; without it the handoff refuses and exits with code 2. The context is redacted before it is written or passed, and lives in a unique mode-0600 file `~/.lore/handoff/context-<id>.md` (no longer the fixed `/tmp/ai-session-context.md`), removed after the launched tool exits; stale files older than 24 hours are removed the next time a handoff file is written. `claude` is continued with `--continue`, and the manual tools (`cursor`, `vscode`) only print a block for you to paste; neither sends anything.
 
 | Provider | Used by | Data sent | Opt-in |
 | :--- | :--- | :--- | :--- |
 | `none` (default) | `archive`, `search`, `web UI`, `memory`, `export` | Nothing | Not applicable |
-| `ollama` | `summarize`, `improve`, `generate-titles` | Transcript text sent to the configured Ollama HTTP endpoint | Local by default (loopback). If `OLLAMA_HOST` resolves off-host, it is treated as a remote provider and requires `--allow-cloud` or `LORE_ALLOW_CLOUD=1` (enforced via `provider_locality` in `lore/services/summarize_cli.py`). |
-| `gemini` (Google, `google-generativeai`) | `analyze`, `format` (default provider for both); `knowledge` (no default, needs `--provider gemini`); `summarize` and `improve` (when chosen) | Conversation text sent to Google Generative AI API | Opt-in required. gemini is a cloud provider and needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1` like the others. Once opted in, `analyze`, `knowledge` and `format` send conversation text to Google. Without the opt-in the command refuses and exits with code 2; users who require zero cloud egress can pass `--no-llm` to `analyze` or select `--provider ollama`. |
-| `gemini-cli` | `generate-titles` | Transcript excerpt sent via the local `gemini` CLI executable (through its standard input, not its arguments) | `--provider gemini-cli` plus `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. Choosing the provider alone exits with code 2. |
-| `openrouter` (`openrouter.ai`) | `summarize`, `analyze`, `knowledge`, `format`, `improve` | Session text sent to OpenRouter API | Opt-in via `--allow-cloud` or `LORE_ALLOW_CLOUD=1` in all five commands. Non-free models are refused unless `LORE_OPENROUTER_ALLOW_PAID=1` is set in the environment. |
-| `jev` | `summarize`, `analyze`, `knowledge`, `format`, `improve` | Session text sent to maintainer's internal delegate broker | Opt-in via `--allow-cloud` or `LORE_ALLOW_CLOUD=1` in all five commands. |
-| `gemini` / `codex` via the session handoff | `lore-session switch`, `lore-session continue`, MCP `switch_to_tool` | The redacted session context, passed to the launched tool as a referenced file (`gemini`, `codex`); `claude --continue` and the manual tools `cursor`/`vscode` send nothing | Opt-in via `--allow-cloud` or `LORE_ALLOW_CLOUD=1` when the target is `gemini` or `codex`; without it the handoff exits with code 2. The context is written to a private mode-0600 file under `~/.lore/handoff/`, removed after the tool exits (kept for manual tools), and stale files older than 24 hours are cleaned up at the next handoff. |
+| `ollama` | `summarize`, `improve`, `generate-titles` | Transcript text sent to the configured Ollama HTTP endpoint | Local by default (loopback). If `OLLAMA_HOST` resolves off-host, it is treated as a remote provider and requires `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` (enforced via `provider_locality` in `annuli/services/summarize_cli.py`). |
+| `gemini` (Google, `google-generativeai`) | `analyze`, `format` (default provider for both); `knowledge` (no default, needs `--provider gemini`); `summarize` and `improve` (when chosen) | Conversation text sent to Google Generative AI API | Opt-in required. gemini is a cloud provider and needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` like the others. Once opted in, `analyze`, `knowledge` and `format` send conversation text to Google. Without the opt-in the command refuses and exits with code 2; users who require zero cloud egress can pass `--no-llm` to `analyze` or select `--provider ollama`. |
+| `gemini-cli` | `generate-titles` | Transcript excerpt sent via the local `gemini` CLI executable (through its standard input, not its arguments) | `--provider gemini-cli` plus `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`. Choosing the provider alone exits with code 2. |
+| `openrouter` (`openrouter.ai`) | `summarize`, `analyze`, `knowledge`, `format`, `improve` | Session text sent to OpenRouter API | Opt-in via `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` in all five commands. Non-free models are refused unless `ANNULI_OPENROUTER_ALLOW_PAID=1` is set in the environment. |
+| `jev` | `summarize`, `analyze`, `knowledge`, `format`, `improve` | Session text sent to maintainer's internal delegate broker | Opt-in via `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` in all five commands. |
+| `gemini` / `codex` via the session handoff | `annuli-session switch`, `annuli-session continue`, MCP `switch_to_tool` | The redacted session context, passed to the launched tool as a referenced file (`gemini`, `codex`); `claude --continue` and the manual tools `cursor`/`vscode` send nothing | Opt-in via `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` when the target is `gemini` or `codex`; without it the handoff exits with code 2. The context is written to a private mode-0600 file under `~/.lore/handoff/`, removed after the tool exits (kept for manual tools), and stale files older than 24 hours are cleaned up at the next handoff. |
 
 ## Network check and telemetry audit
 
-A code check across all Python sources (`lore/**/*.py`) for network primitives and telemetry terms reveals:
+A code check across all Python sources (`annuli/**/*.py`) for network primitives and telemetry terms reveals:
 
 ```bash
-$ grep -rn "urlopen\|requests\.\|httpx\|telemetry" lore --include=*.py | head -20
-lore/extractors/base.py:150:        """Per-run source telemetry, reset at the start of every ``extract_sessions()``.
-lore/extractors/gemini.py:134:        # Replay telemetry: malformed_lines, unknown_records, unmatched_ids.
-lore/extractors/claude.py:85:    # 4: titles, thinking, model, compaction/meta kinds, known-record telemetry.
-lore/interfaces/live_probe.py:10:from urllib.request import Request, urlopen
-lore/interfaces/live_probe.py:91:            with urlopen(request, timeout=timeout_seconds) as response:
-lore/interfaces/live_probe.py:119:            with urlopen(head_request, timeout=timeout_seconds) as response:
-lore/interfaces/live_probe.py:161:        with urlopen(request, timeout=timeout_seconds) as response:
-lore/interfaces/web.py:263:    Browsers always send Origin on cross-origin requests. curl/MCP clients
-lore/llm/openrouter.py:18:from urllib.request import Request, urlopen
-lore/llm/openrouter.py:219:                with urlopen(request, timeout=self.config.timeout) as response:
-lore/services/discovery.py:1:"""Per-tool discovery telemetry: record it at sync time, read it back for ``lore check``.
-lore/services/discovery.py:56:        logger.warning("Could not record discovery telemetry: %s", type(exc).__name__)
+$ grep -rn "urlopen\|requests\.\|httpx\|telemetry" annuli --include=*.py | head -20
+annuli/extractors/base.py:150:        """Per-run source telemetry, reset at the start of every ``extract_sessions()``.
+annuli/extractors/gemini.py:134:        # Replay telemetry: malformed_lines, unknown_records, unmatched_ids.
+annuli/extractors/claude.py:85:    # 4: titles, thinking, model, compaction/meta kinds, known-record telemetry.
+annuli/interfaces/live_probe.py:10:from urllib.request import Request, urlopen
+annuli/interfaces/live_probe.py:91:            with urlopen(request, timeout=timeout_seconds) as response:
+annuli/interfaces/live_probe.py:119:            with urlopen(head_request, timeout=timeout_seconds) as response:
+annuli/interfaces/live_probe.py:161:        with urlopen(request, timeout=timeout_seconds) as response:
+annuli/interfaces/web.py:263:    Browsers always send Origin on cross-origin requests. curl/MCP clients
+annuli/llm/openrouter.py:18:from urllib.request import Request, urlopen
+annuli/llm/openrouter.py:219:                with urlopen(request, timeout=self.config.timeout) as response:
+annuli/services/discovery.py:1:"""Per-tool discovery telemetry: record it at sync time, read it back for ``annuli check``.
+annuli/services/discovery.py:56:        logger.warning("Could not record discovery telemetry: %s", type(exc).__name__)
 ```
 
 Analysis of matches:
-1. `urlopen`: Used only in `lore/interfaces/live_probe.py` for healthcheck probing of configured local or target endpoints in diagnostic tooling, and in `lore/llm/openrouter.py` when sending API requests to OpenRouter.
-2. `requests.` and `httpx`: No imports exist anywhere in the `lore` package.
-3. `telemetry`: The word is used strictly to refer to in-memory counters and local diagnostic records (tracking malformed transcript lines, unknown message types, and per-tool scan counts saved to `last_discovery.json` for display in `lore check`).
+1. `urlopen`: Used only in `annuli/interfaces/live_probe.py` for healthcheck probing of configured local or target endpoints in diagnostic tooling, and in `annuli/llm/openrouter.py` when sending API requests to OpenRouter.
+2. `requests.` and `httpx`: No imports exist anywhere in the `annuli` package.
+3. `telemetry`: The word is used strictly to refer to in-memory counters and local diagnostic records (tracking malformed transcript lines, unknown message types, and per-tool scan counts saved to `last_discovery.json` for display in `annuli check`).
 
-Verification: Lore contains no telemetry collectors, usage metrics reporting, tracking beacons, crash uploaders, or phone-home routines.
+Verification: Annuli contains no telemetry collectors, usage metrics reporting, tracking beacons, crash uploaders, or phone-home routines.
 
 ## Semantic search model (fastembed)
 
-Lore provides optional vector embeddings for semantic search over agent memory entries (`lore[semantic]` extra). This implementation is located in `lore/storage/embeddings.py`.
+Annuli provides optional vector embeddings for semantic search over agent memory entries (`annuli[semantic]` extra). This implementation is located in `annuli/storage/embeddings.py`.
 
 - Default model: `BAAI/bge-small-en-v1.5` (producing 384-dimensional float vectors).
 - Network download: The model is initialized via `fastembed.TextEmbedding(model_name=DEFAULT_MODEL)`. On first use, `fastembed` downloads the model weights from the Hugging Face Hub (`https://huggingface.co/` repository `qdrant/bge-small-en-v1.5` / `BAAI/bge-small-en-v1.5`).
 - Local cache: Downloaded model weights are stored by `fastembed` in a local cache directory, defaulting to `/tmp/fastembed_cache` (or configured via the `FASTEMBED_CACHE_PATH` environment variable).
-- Offline fallback: If `fastembed` is not installed or unable to download the model, `embeddings_available()` returns `False` and Lore automatically falls back to SQLite FTS5 lexical search.
+- Offline fallback: If `fastembed` is not installed or unable to download the model, `embeddings_available()` returns `False` and Annuli automatically falls back to SQLite FTS5 lexical search.
 
 ## Redaction and input validation
 
-Lore includes automated redaction mechanisms to prevent secrets from being leaked in exports or sent to external LLMs.
+Annuli includes automated redaction mechanisms to prevent secrets from being leaked in exports or sent to external LLMs.
 
 ### Export redaction
 
 The export commands support secret redaction:
-- `lore export --redact`: Redacts secret-shaped tokens in exported markdown (requires specifying a non-default `--output-dir` to prevent overwriting the canonical archive).
-- `lore export-html --redact <session-id>`: Redacts secret-shaped patterns before generating HTML output.
+- `annuli export --redact`: Redacts secret-shaped tokens in exported markdown (requires specifying a non-default `--output-dir` to prevent overwriting the canonical archive).
+- `annuli export-html --redact <session-id>`: Redacts secret-shaped patterns before generating HTML output.
 
 ### Redaction functions
 
-Implemented in `lore/utils/redact.py`:
+Implemented in `annuli/utils/redact.py`:
 - `redact(text: str) -> RedactionResult`: Replaces detected API keys, bearer tokens, private keys (PEM blocks), and high-entropy secrets with redaction placeholders. Returns the redacted text and the replacement count.
 - `redact_value(key: object, value: str) -> RedactionResult`: Context-aware redaction for key-value structures.
 - `redact_many(texts: Iterable[str]) -> tuple[list[str], int]`: Batch redaction across multiple text blocks.
 
-Prompt preparation in `lore/llm/base.py`:
+Prompt preparation in `annuli/llm/base.py`:
 - `prepare_prompt(text: str) -> tuple[str, int]`: Automatically runs `redact(text)` on user prompt inputs before passing text to any external LLM provider, stripping secret-shaped tokens prior to transmission.
 
 Other send paths:
-- Title generation (`lore/titles/generator.py`): the transcript excerpt built for a title is run through `redact(text)` before it is sent to the configured provider, including the `gemini-cli` cloud choice.
-- `lore memory context` (`lore/services/memory_context.py`): the rendered memory block passes through `redact(text)`. This is output-side cleaning only; the block stays on the machine.
-- `lore memory import-claude` (`lore/services/claude_memory_import.py`): titles and bodies are redacted before they are written to the memory store.
-- `lore improve` (`lore/services/improve.py`): knowledge extracted for the memory candidates is redacted, and the redaction count is reported with the result.
-- `lore summarize` (`lore/services/summarize.py`): the artifacts payload stored with a summary is redacted before use, and summary output is refused when it contains a secret-shaped string.
+- Title generation (`annuli/titles/generator.py`): the transcript excerpt built for a title is run through `redact(text)` before it is sent to the configured provider, including the `gemini-cli` cloud choice.
+- `annuli memory context` (`annuli/services/memory_context.py`): the rendered memory block passes through `redact(text)`. This is output-side cleaning only; the block stays on the machine.
+- `annuli memory import-claude` (`annuli/services/claude_memory_import.py`): titles and bodies are redacted before they are written to the memory store.
+- `annuli improve` (`annuli/services/improve.py`): knowledge extracted for the memory candidates is redacted, and the redaction count is reported with the result.
+- `annuli summarize` (`annuli/services/summarize.py`): the artifacts payload stored with a summary is redacted before use, and summary output is refused when it contains a secret-shaped string.
 
 ### Input sanitization and validation
 
-Security validation functions in `lore/utils/security.py` guard file operations and queries:
+Security validation functions in `annuli/utils/security.py` guard file operations and queries:
 - `sanitize_path(user_path: str, base_dir: Path, allow_absolute: bool = False) -> Path`: Enforces directory boundaries and prevents directory traversal attacks.
 - `sanitize_filename(filename: str, max_length: int = 255) -> str`: Normalizes filenames and strips unsafe characters.
 - `validate_tool_executable(tool: str, executable_path: str) -> bool` and `get_safe_executable(tool: str) -> Optional[str]`: Restricts external CLI invocations to known paths.
@@ -187,23 +187,23 @@ Security validation functions in `lore/utils/security.py` guard file operations 
 
 Claude Code applies an automated deletion policy to transcripts in `~/.claude/projects/` after its retention period expires (default is 30 days).
 
-Lore checks this configuration in `lore/utils/claude_retention.py` and reports it during `lore check`:
+Annuli checks this configuration in `annuli/utils/claude_retention.py` and reports it during `annuli check`:
 - Reads `cleanupPeriodDays` from `~/.claude/settings.json` or `~/.claude/settings.local.json`.
-- If `cleanupPeriodDays` is unset or set to 30 days or less, `lore check` prints a notice warning that Claude Code deletes transcripts and shows how to increase retention:
+- If `cleanupPeriodDays` is unset or set to 30 days or less, `annuli check` prints a notice warning that Claude Code deletes transcripts and shows how to increase retention:
   ```json
   {"cleanupPeriodDays": 365}
   ```
-- Lore archives transcripts when it syncs. If transcripts are deleted by Claude before Lore has run a sync, Lore cannot recover unindexed files.
+- Annuli archives transcripts when it syncs. If transcripts are deleted by Claude before Annuli has run a sync, Annuli cannot recover unindexed files.
 
-## Deleting ~/.lore and data isolation
+## Deleting ~/.annuli and data isolation
 
-Deleting the `~/.lore` directory (e.g. `rm -rf ~/.lore`) permanently purges:
+Deleting the `~/.annuli` directory (e.g. `rm -rf ~/.annuli`) permanently purges:
 - All indexed session records and message archives
 - The SQLite primary store (`index_v2.sqlite`) and legacy indices
 - All cross-tool memories and vector embeddings
 - Extracted knowledge bases and cached LLM responses
 
-Deleting `~/.lore` has no effect on original tool session files. Lore never writes to or removes data from source directories (`~/.claude`, `~/.codex`, `~/.gemini`, `~/.config/Cursor`, etc.).
+Deleting `~/.annuli` has no effect on original tool session files. Annuli never writes to or removes data from source directories (`~/.claude`, `~/.codex`, `~/.gemini`, `~/.config/Cursor`, etc.).
 
 ## Related documentation
 

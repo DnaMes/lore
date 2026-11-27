@@ -62,7 +62,7 @@ echo "==> verifying offline embed via --network none (image=$IMAGE)"
 docker run --rm --network none \
     -e FLASK_SECRET_KEY=verify-offline-image \
     "$IMAGE" \
-    python -c 'from lore.storage.embeddings import embed_text; v = embed_text("x"); assert v is not None and len(v) == 384, f"embed failed: {v!r}"; print("offline embed OK: dim=", len(v))'
+    python -c 'from annuli.storage.embeddings import embed_text; v = embed_text("x"); assert v is not None and len(v) == 384, f"embed failed: {v!r}"; print("offline embed OK: dim=", len(v))'
 
 echo "==> verifying /api/build-info reports semantic backends as available"
 # 4. Spin up gunicorn in the background, hit /api/build-info, then stop.
@@ -71,7 +71,7 @@ echo "==> verifying /api/build-info reports semantic backends as available"
 CID=$(docker run --rm -d --network none \
     -e FLASK_SECRET_KEY=verify-offline-image \
     "$IMAGE" \
-    gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 lore.interfaces.web:app)
+    gunicorn --workers 1 --threads 4 --bind 127.0.0.1:5000 annuli.interfaces.web:app)
 cleanup() {
     docker rm -f "$CID" >/dev/null 2>&1 || true
 }
@@ -79,7 +79,7 @@ trap cleanup EXIT
 
 # Poll for readiness (gunicorn needs a moment under --network none).
 # The python:3.11-slim base image ships curl-less, so drive the probe with
-# the same urllib that's already inside the lore image.
+# the same urllib that's already inside the annuli image.
 build_info=""
 for _ in $(seq 1 30); do
     if build_info=$(docker exec "$CID" python -c '
@@ -100,7 +100,7 @@ if [ -z "$build_info" ]; then
 fi
 
 # Parse + assert in one tiny Python call so we don't need jq. The expected
-# payload shape is documented in lore/interfaces/web.py::_build_info_payload:
+# payload shape is documented in annuli/interfaces/web.py::_build_info_payload:
 #   { "semantic": { "embeddings_available": bool, "sqlite_vec_available": bool }, ... }
 python3 - "$build_info" <<'PY'
 import json, sys

@@ -1,4 +1,4 @@
-/** Tailwind build config for lore's precompiled UI stylesheet (#129).
+/** Tailwind build config for annuli's precompiled UI stylesheet (#129).
  *
  * The Play-CDN JIT runtime (`tailwind-3.4.16.min.js`) was replaced by a
  * build-time compiled sheet (issue #129). Rebuild after template changes:
@@ -13,9 +13,9 @@
 module.exports = {
   darkMode: "class",
   content: [
-    "./lore/templates/**/*.html",
-    "./lore/interfaces/*.py",
-    "./lore/utils/*.py",
+    "./annuli/templates/**/*.html",
+    "./annuli/interfaces/*.py",
+    "./annuli/utils/*.py",
   ],
   theme: {
     extend: {

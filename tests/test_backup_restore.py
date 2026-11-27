@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import (
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import (
     BackupError,
     add_memory,
     add_session_tag,
@@ -29,12 +29,12 @@ from lore.storage import (
     restore_backup,
     verify_bundle,
 )
-from lore.storage.backup import BUNDLE_FORMAT_VERSION, DB_MEMBER, MANIFEST_NAME
-from lore.storage.freshness import store_freshness
-from lore.storage.reader import v2_is_available
-from lore.storage.schema import MIGRATIONS, SCHEMA_VERSION
-from lore.storage.writer import v2_db_path, write_sessions
-from lore.utils.paths import lore_home
+from annuli.storage.backup import BUNDLE_FORMAT_VERSION, DB_MEMBER, MANIFEST_NAME
+from annuli.storage.freshness import store_freshness
+from annuli.storage.reader import v2_is_available
+from annuli.storage.schema import MIGRATIONS, SCHEMA_VERSION
+from annuli.storage.writer import v2_db_path, write_sessions
+from annuli.utils.paths import annuli_home
 
 T0 = datetime(2026, 1, 8, 9, 30, tzinfo=timezone.utc)
 NEEDLE = "haystackneedle"  # one FTS token, so MATCH needs no quoting
@@ -145,7 +145,7 @@ def test_backup_writes_a_zip_with_a_format_version_marker(store: Path, tmp_path:
 
     assert manifest["format"] == "lore-backup"
     assert manifest["format_version"] == BUNDLE_FORMAT_VERSION
-    assert manifest["lore_version"]
+    assert manifest["annuli_version"]
     assert manifest["created_at"]
     assert manifest["schema"]["version"] == SCHEMA_VERSION
     assert manifest["schema"]["expected_version"] == SCHEMA_VERSION
@@ -218,7 +218,7 @@ def test_snapshot_includes_commits_still_in_the_wal(store: Path, tmp_path: Path)
 
 
 def test_round_trip_restores_every_row_in_an_isolated_home(built_store: Path, tmp_path: Path):
-    live = lore_home()
+    live = annuli_home()
     shutil.copytree(built_store, live)
     result = create_backup(live, tmp_path / "bundle.zip")
     assert verify_bundle(result.bundle).ok
@@ -376,7 +376,7 @@ def test_verify_rejects_a_newer_bundle_format(store: Path, tmp_path: Path):
     report = verify_bundle(bundle)
 
     assert not report.ok
-    assert any("newer than this Lore" in problem for problem in report.problems)
+    assert any("newer than this Annuli" in problem for problem in report.problems)
 
 
 def test_verify_rejects_a_bundle_without_a_manifest(store: Path, tmp_path: Path):
@@ -402,7 +402,7 @@ def test_bundle_from_a_newer_schema_is_refused(store: Path, tmp_path: Path):
     try:
         conn.execute(
             "INSERT INTO schema_version(version, description, applied_at) VALUES (?, ?, ?)",
-            (SCHEMA_VERSION + 1, "a migration this Lore does not have", T0.isoformat()),
+            (SCHEMA_VERSION + 1, "a migration this Annuli does not have", T0.isoformat()),
         )
         conn.commit()
     finally:
@@ -413,8 +413,8 @@ def test_bundle_from_a_newer_schema_is_refused(store: Path, tmp_path: Path):
 
     report = verify_bundle(result.bundle)
     assert not report.ok
-    assert any("newer than this Lore" in problem for problem in report.problems)
-    with pytest.raises(BackupError, match="newer than this Lore"):
+    assert any("newer than this Annuli" in problem for problem in report.problems)
+    with pytest.raises(BackupError, match="newer than this Annuli"):
         restore_backup(result.bundle, tmp_path / "restored")
     assert not v2_db_path(tmp_path / "restored").exists()
 
@@ -462,7 +462,7 @@ def test_a_failed_stamp_leaves_the_existing_store_untouched(
     def refuse(conn):
         raise RuntimeError("stamp failed")
 
-    monkeypatch.setattr("lore.storage.backup.stamp_store", refuse)
+    monkeypatch.setattr("annuli.storage.backup.stamp_store", refuse)
 
     with pytest.raises(RuntimeError, match="stamp failed"):
         restore_backup(bundle, live, force=True)
@@ -481,7 +481,7 @@ def test_bundle_carries_no_credentials(built_store: Path, tmp_path: Path, monkey
     for name in ("OPENROUTER_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY", "FLASK_SECRET_KEY"):
         monkeypatch.setenv(name, secret)
 
-    live = lore_home()
+    live = annuli_home()
     shutil.copytree(built_store, live)
     provider_cache = live / "llm_cache"
     provider_cache.mkdir()
@@ -504,12 +504,12 @@ def test_bundle_carries_no_credentials(built_store: Path, tmp_path: Path, monkey
 
 
 def _run_cli(monkeypatch, *argv: str) -> None:
-    monkeypatch.setattr(sys, "argv", ["lore", *argv])
-    lore_cli.main()
+    monkeypatch.setattr(sys, "argv", ["annuli", *argv])
+    annuli_cli.main()
 
 
 def test_cli_backup_verify_and_restore(built_store: Path, tmp_path: Path, monkeypatch, capsys):
-    live = lore_home()
+    live = annuli_home()
     shutil.copytree(built_store, live)
     bundle = tmp_path / "cli.zip"
 
@@ -558,4 +558,4 @@ def test_cli_backup_without_a_path_prints_usage(tmp_path: Path, monkeypatch, cap
         _run_cli(monkeypatch, "backup", "verify")
 
     assert exit_info.value.code == 1
-    assert "usage: lore backup [verify] <path>" in capsys.readouterr().err
+    assert "usage: annuli backup [verify] <path>" in capsys.readouterr().err

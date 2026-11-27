@@ -15,10 +15,10 @@ from pathlib import Path
 
 import pytest
 
-import lore_cli
-from lore.extractors.claude import ClaudeCodeExtractor
-from lore.services.extraction import preserve_unobserved_index_entries
-from lore.utils.home_discovery import _discover_cached
+import annuli_cli
+from annuli.extractors.claude import ClaudeCodeExtractor
+from annuli.services.extraction import preserve_unobserved_index_entries
+from annuli.utils.home_discovery import _discover_cached
 from tests.test_incremental_export import _records, _write
 
 
@@ -31,13 +31,13 @@ def env(tmp_path, monkeypatch):
     for name in ("sess-a", "sess-b", "sess-c"):
         _write(project / f"{name}.jsonl", _records(name))
     extractor = ClaudeCodeExtractor()
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
     return tmp_path, project
 
 
 def _export(tmp_path: Path, *, tool: str | None = None) -> dict:
     out = tmp_path / "out"
-    lore_cli.cmd_export(Namespace(output_dir=str(out), tool=tool, project=None, full=False))
+    annuli_cli.cmd_export(Namespace(output_dir=str(out), tool=tool, project=None, full=False))
     return json.loads((out / "index.json").read_text(encoding="utf-8"))
 
 

@@ -3,7 +3,7 @@
 
 The web UI loads no third-party CDNs so it works in air-gapped installs
 (issue #19). This script (re-)downloads the pinned asset versions into
-``lore/interfaces/static/`` and verifies their SHA-256 hashes against
+``annuli/interfaces/static/`` and verifies their SHA-256 hashes against
 the manifest below.
 
 Tailwind is NOT downloaded here anymore: since issue #129 the UI ships a
@@ -26,7 +26,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-STATIC_DIR = Path(__file__).resolve().parent.parent / "lore" / "interfaces" / "static"
+STATIC_DIR = Path(__file__).resolve().parent.parent / "annuli" / "interfaces" / "static"
 
 # filename -> (download URL, expected SHA-256)
 ASSETS: dict[str, tuple[str, str]] = {
