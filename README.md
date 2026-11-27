@@ -44,7 +44,7 @@ Prerequisites: Git, `pipx`, and a `PATH` that includes pipx's binary directory
 (run `pipx ensurepath` once and restart the shell if needed).
 
 ```bash
-pipx install git+https://github.com/DnaMes/lore
+pipx install git+https://github.com/DnaMes/annuli
 annuli --version
 annuli check
 annuli export --all

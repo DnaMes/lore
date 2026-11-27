@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to this project are documented here.
-The version is the single source of truth in `lore/__init__.py`.
+The version is the single source of truth in `annuli/__init__.py`.
 
 ## [Unreleased]
 

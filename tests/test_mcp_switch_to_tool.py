@@ -13,7 +13,7 @@ from annuli.interfaces.mcp_tools import sessions
 
 MISSING_MSG = (
     "annuli-session command not found. "
-    "Install it with: pipx install git+https://github.com/DnaMes/lore"
+    "Install it with: pipx install git+https://github.com/DnaMes/annuli"
 )
 
 
@@ -69,5 +69,5 @@ def test_switch_to_tool_reports_missing_annuli_session(monkeypatch: pytest.Monke
 
     assert result == MISSING_MSG
     assert "annuli-session" in result
-    assert "pipx install git+https://github.com/DnaMes/lore" in result
+    assert "pipx install git+https://github.com/DnaMes/annuli" in result
     assert run_calls == []

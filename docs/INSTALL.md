@@ -55,7 +55,7 @@ The package name `annuli` on PyPI is registered to an unrelated machine learning
 Using `pipx` installs Annuli into an isolated environment and exposes its command-line entry points:
 
 ```bash
-pipx install git+https://github.com/DnaMes/lore
+pipx install git+https://github.com/DnaMes/annuli
 ```
 
 ### Alternative: uv tool
@@ -63,7 +63,7 @@ pipx install git+https://github.com/DnaMes/lore
 If you use `uv`, install Annuli via `uv tool`:
 
 ```bash
-uv tool install git+https://github.com/DnaMes/lore
+uv tool install git+https://github.com/DnaMes/annuli
 ```
 
 ### Alternative: Virtual Environment
@@ -72,7 +72,7 @@ To install into a dedicated Python virtual environment. Linux and macOS (POSIX):
 
 ```bash
 python3 -m venv ~/.venvs/annuli
-~/.venvs/annuli/bin/python -m pip install git+https://github.com/DnaMes/lore
+~/.venvs/annuli/bin/python -m pip install git+https://github.com/DnaMes/annuli
 ```
 
 You can then add `~/.venvs/annuli/bin` to your `PATH` or invoke the binaries directly.
@@ -81,7 +81,7 @@ Windows PowerShell:
 
 ```powershell
 python -m venv $HOME\.venvs\annuli
-& "$HOME\.venvs\annuli\Scripts\python.exe" -m pip install git+https://github.com/DnaMes/lore
+& "$HOME\.venvs\annuli\Scripts\python.exe" -m pip install git+https://github.com/DnaMes/annuli
 ```
 
 You can then add `$HOME\.venvs\annuli\Scripts` to your `PATH` or invoke the binaries directly.
@@ -91,7 +91,7 @@ You can then add `$HOME\.venvs\annuli\Scripts` to your `PATH` or invoke the bina
 To contribute to or develop Annuli:
 
 ```bash
-git clone https://github.com/DnaMes/lore && cd annuli && pip install -e .
+git clone https://github.com/DnaMes/annuli && cd annuli && pip install -e .
 ```
 
 ## Optional Extras
@@ -117,7 +117,7 @@ pipx inject annuli fastembed sqlite-vec
 Or install with the extra from the Git repository in one step:
 
 ```bash
-pipx install "annuli[semantic] @ git+https://github.com/DnaMes/lore"
+pipx install "annuli[semantic] @ git+https://github.com/DnaMes/annuli"
 ```
 
 *Note: the `pipx` commands in this section were NOT VERIFIED by running them in this environment.*
@@ -154,7 +154,7 @@ A plain repeated install is not a reliable upgrade, and neither is `pipx upgrade
 For a `pipx` install, re-run the install with `--force` (flag verified from `pipx install --help`), or reinstall with the options of the original install (verified from `pipx reinstall --help`):
 
 ```bash
-pipx install --force git+https://github.com/DnaMes/lore
+pipx install --force git+https://github.com/DnaMes/annuli
 # or
 pipx reinstall annuli
 ```
@@ -162,7 +162,7 @@ pipx reinstall annuli
 For a `pip` install from Git:
 
 ```bash
-pip install --upgrade --force-reinstall git+https://github.com/DnaMes/lore
+pip install --upgrade --force-reinstall git+https://github.com/DnaMes/annuli
 ```
 
 Existing databases, exported sessions, and cache files stored under `~/.annuli` are preserved during upgrades.

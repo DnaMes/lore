@@ -7,7 +7,7 @@
 ## Development Setup
 
 ```bash
-git clone https://github.com/DnaMes/lore.git
+git clone https://github.com/DnaMes/annuli.git
 cd annuli
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"

@@ -325,7 +325,7 @@ def register(server, deps: MCPToolDeps) -> None:
         if shutil.which(SESSION_COMMAND) is None:
             return (
                 f"{SESSION_COMMAND} command not found. "
-                "Install it with: pipx install git+https://github.com/DnaMes/lore"
+                "Install it with: pipx install git+https://github.com/DnaMes/annuli"
             )
 
         # Cloud gate: refuse before spawning anything when the requested tool
@@ -353,7 +353,7 @@ def register(server, deps: MCPToolDeps) -> None:
         except FileNotFoundError:
             return (
                 f"{SESSION_COMMAND} command not found. "
-                "Install it with: pipx install git+https://github.com/DnaMes/lore"
+                "Install it with: pipx install git+https://github.com/DnaMes/annuli"
             )
 
     server.register_tool(

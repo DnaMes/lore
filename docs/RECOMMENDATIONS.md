@@ -1,6 +1,6 @@
 # Harness recommendations: reviewed, evidence-backed, inactive by default
 
-Issue: [#189](https://github.com/DnaMes/lore/issues/189).
+Issue: [#189](https://github.com/DnaMes/annuli/issues/189).
 Implementation: `annuli/utils/rules.py` (build + store) and the `annuli rules`
 subcommands in `annuli_cli.py`.
 

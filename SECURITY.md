@@ -11,7 +11,7 @@
 
 **Please do not open a public GitHub issue for security vulnerabilities.**
 
-Reporting: open a [GitHub private security advisory](https://github.com/DnaMes/lore/security/advisories/new) (preferred), or by emailing the maintainers directly.
+Reporting: open a [GitHub private security advisory](https://github.com/DnaMes/annuli/security/advisories/new) (preferred), or by emailing the maintainers directly.
 
 Include:
 - Description of the vulnerability

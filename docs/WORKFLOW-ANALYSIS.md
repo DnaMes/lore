@@ -1,6 +1,6 @@
 # Workflow analysis: metric vocabulary and evidence contract
 
-Issue: [#188](https://github.com/DnaMes/lore/issues/188).
+Issue: [#188](https://github.com/DnaMes/annuli/issues/188).
 Implementation: `annuli/services/workflow_metrics.py`, surfaced by `annuli metrics`.
 
 This document is the contract. A number produced by `annuli metrics` is only

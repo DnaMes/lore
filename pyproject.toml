@@ -71,9 +71,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/DnaMes/lore"
-Repository = "https://github.com/DnaMes/lore"
-Issues = "https://github.com/DnaMes/lore/issues"
+Homepage = "https://github.com/DnaMes/annuli"
+Repository = "https://github.com/DnaMes/annuli"
+Issues = "https://github.com/DnaMes/annuli/issues"
 
 [project.scripts]
 annuli = "annuli_cli:main"
