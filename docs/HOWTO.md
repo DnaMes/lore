@@ -2,23 +2,23 @@
 
 Short recipes. Reference: ./CLI.md. Setup: ./INSTALL.md.
 
-## What Lore is
+## What Annuli is
 
-Lore is an archive and a shared agent memory in one local tool.
+Annuli is an archive and a shared agent memory in one local tool.
 
-- The archive collects chat histories from the supported AI coding assistants into one searchable store under `~/.lore`, with no cloud connectivity.
+- The archive collects chat histories from the supported AI coding assistants into one searchable store under `~/.annuli`, with no cloud connectivity.
 - The shared memory is a cross-tool knowledge store that agents write to and recall from, by keyword or by meaning, with provenance, so a decision made in one tool is available to the next.
 
-The name covers both halves: lore is accumulated knowledge as well as history and backstory. Which file is read for which tool is in `./PRIVACY.md`, the memory model in `./MEMORY.md`.
+The name covers both halves: annuli is accumulated knowledge as well as history and backstory. Which file is read for which tool is in `./PRIVACY.md`, the memory model in `./MEMORY.md`.
 
 ## Repository layout
 
-The product is called Lore; the Python import package is `lore`.
+The product is called Annuli; the Python import package is `annuli`.
 
-- `lore/core`: data models and unified session logic.
-- `lore/extractors`: one module per tool, parsing that tool's native format.
-- `lore/exporters`: Markdown and context formatting.
-- `lore/interfaces`: CLI, web UI and MCP entry points.
+- `annuli/core`: data models and unified session logic.
+- `annuli/extractors`: one module per tool, parsing that tool's native format.
+- `annuli/exporters`: Markdown and context formatting.
+- `annuli/interfaces`: CLI, web UI and MCP entry points.
 
 ## Extractor support levels
 
@@ -28,34 +28,34 @@ The read location of every tool is listed in `./PRIVACY.md`. The extractors diff
 - Built from the documented upstream schema and exercised against fixtures only, not verified on real machine data: Cline, Roo Code, Kilo Code, Goose, Crush, Kimi, Qwen Code, Zed, Factory Droid.
 - Every other tool in that table is read without such a caveat.
 
-For a fixture-only extractor, upstream format drift shows up as unrecognised records rather than as a hard error. `lore check --deep` reports exactly that.
+For a fixture-only extractor, upstream format drift shows up as unrecognised records rather than as a hard error. `annuli check --deep` reports exactly that.
 
-## Inspecting extractors with lore check --deep
+## Inspecting extractors with annuli check --deep
 
-`lore check` is read-only and fast. It lists the tools found on the machine, prints each tool's data path and, for a tool that synced before, the counters of its last run: sources matched, files parsed, sessions, unknown records and skips.
+`annuli check` is read-only and fast. It lists the tools found on the machine, prints each tool's data path and, for a tool that synced before, the counters of its last run: sources matched, files parsed, sessions, unknown records and skips.
 
 ```bash
-lore check
-lore check --deep
+annuli check
+annuli check --deep
 ```
 
-`lore check --deep` runs every available extractor to completion and prints, per tool, how many sources matched, how many sessions were parsed, which records were skipped and why, how many records the parser did not recognise, and how many files were parsed. It writes no archive and no index, and one failing extractor does not hide the other tools. A tool whose data directory exists but yields no session gets a warning, which points at a stale glob or a changed file format. The command exits `1` when an extractor raised.
+`annuli check --deep` runs every available extractor to completion and prints, per tool, how many sources matched, how many sessions were parsed, which records were skipped and why, how many records the parser did not recognise, and how many files were parsed. It writes no archive and no index, and one failing extractor does not hide the other tools. A tool whose data directory exists but yields no session gets a warning, which points at a stale glob or a changed file format. The command exits `1` when an extractor raised.
 
 ## Weekly digest
 
 ```bash
-lore digest --since 7d
-lore digest --since 2w --format markdown
+annuli digest --since 7d
+annuli digest --since 2w --format markdown
 ```
 
 `--since` takes a window such as `7d`, `2w` or `1m` (default `7d`). The digest lists sessions by day, by tool and by top project. The default output is plain text; `--format markdown` is the form to paste into a note or a ticket. Add `--include-automated` to count exec, cron and subagent sessions as well.
 
-## Session switching with lore-session
+## Session switching with annuli-session
 
-Output of `.venv/bin/python lore_session_cli.py --help`:
+Output of `.venv/bin/python annuli_session_cli.py --help`:
 
 ```text
-usage: lore_session_cli.py [-h] {list,switch,continue} ...
+usage: annuli_session_cli.py [-h] {list,switch,continue} ...
 
 AI Session Manager - Seamless tool switching
 
@@ -76,27 +76,27 @@ options:
 Typical use, when one tool has hit its usage limit:
 
 ```bash
-lore-session switch gemini
+annuli-session switch gemini
 ```
 
-The context block holds the last 15 messages of the project's recorded sessions, oldest first, each message truncated to 2000 characters. `--messages N` changes the count, and `--thread-id ID` continues one specific thread instead of the project's sessions. Secrets are redacted from the block first, and it is written to a unique owner-only file `~/.lore/handoff/context-<id>.md`. `gemini` and `codex` receive it as `@<that file>`, so the text never appears in the process list; both send it to the cloud, so they need `--allow-cloud` or `LORE_ALLOW_CLOUD=1` and are otherwise refused with exit code 2. The file is removed after the tool exits. `claude` is started with `--continue` and receives nothing from Lore. For a manual tool such as `cursor` or `vscode` the command keeps the file and prints how to paste it.
+The context block holds the last 15 messages of the project's recorded sessions, oldest first, each message truncated to 2000 characters. `--messages N` changes the count, and `--thread-id ID` continues one specific thread instead of the project's sessions. Secrets are redacted from the block first, and it is written to a unique owner-only file `~/.lore/handoff/context-<id>.md`. `gemini` and `codex` receive it as `@<that file>`, so the text never appears in the process list; both send it to the cloud, so they need `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` and are otherwise refused with exit code 2. The file is removed after the tool exits. `claude` is started with `--continue` and receives nothing from Annuli. For a manual tool such as `cursor` or `vscode` the command keeps the file and prints how to paste it.
 
 ## Wiring memory recall into an agent session
 
-`lore memory context --project <path> --budget 2000` renders the block an agent should read at session start; `./MEMORY.md` documents the ranking and the output formats. The wiring is per client: call that command from your own session-start hook and hand its stdout to the agent.
+`annuli memory context --project <path> --budget 2000` renders the block an agent should read at session start; `./MEMORY.md` documents the ranking and the output formats. The wiring is per client: call that command from your own session-start hook and hand its stdout to the agent.
 
-Earlier notes referred to the Claude Code and Kimi memory-recall hooks and to `LORE_RECALL` and `LORE_RECALL_BUDGET`. The Claude Code and Kimi memory-recall hooks are maintained in the ai-stack repository, not in this package. Those two variables do not exist in this repository, so do not rely on them. The budget lives in `--budget` (default 2000, a token estimate computed as characters divided by 4). Set `LORE_DEBUG=1` to print memory-context build failures to stderr.
+Earlier notes referred to the Claude Code and Kimi memory-recall hooks and to `ANNULI_RECALL` and `ANNULI_RECALL_BUDGET`. The Claude Code and Kimi memory-recall hooks are maintained in the ai-stack repository, not in this package. Those two variables do not exist in this repository, so do not rely on them. The budget lives in `--budget` (default 2000, a token estimate computed as characters divided by 4). Set `ANNULI_DEBUG=1` to print memory-context build failures to stderr.
 
 ## Restoring a rejected memory through the Python API
 
-`lore memory dedupe --restore FILE` reverses a rejection recorded in an undo log, see `./MEMORY.md`. To restore one rejected memory without such a log:
+`annuli memory dedupe --restore FILE` reverses a rejection recorded in an undo log, see `./MEMORY.md`. To restore one rejected memory without such a log:
 
 ```python
 from pathlib import Path
 
-from lore.storage import set_memory_status
+from annuli.storage import set_memory_status
 
-output_dir = Path("~/.lore").expanduser()
+output_dir = Path("~/.annuli").expanduser()
 set_memory_status(output_dir, 7, "confirmed", from_status="rejected")
 ```
 
@@ -104,7 +104,7 @@ Rejected rows are never deleted, so the call only flips the status. It returns `
 
 ## Automated sessions
 
-Sessions that were not a person talking to an assistant carry an origin of `exec`, `cron` or `subagent`. Lore archives them, so the archive stays complete, but leaves them out of the default views and out of the LLM stages.
+Sessions that were not a person talking to an assistant carry an origin of `exec`, `cron` or `subagent`. Annuli archives them, so the archive stays complete, but leaves them out of the default views and out of the LLM stages.
 
 | Surface | Include them with |
 | --- | --- |
@@ -112,7 +112,7 @@ Sessions that were not a person talking to an assistant carry an origin of `exec
 | Web UI pages and `/api/v1/...` | `?automated=1`, or the "Automated" checkbox on the sessions list |
 | MCP `list_sessions`, `search_history`, `list_recent_sessions`, `list_projects`, `get_thread` | argument `include_automated: true` |
 
-- `lore export` writes every session, automated or not, and `lore prune` never removes an automated session unless `--include-automated` is given.
+- `annuli export` writes every session, automated or not, and `annuli prune` never removes an automated session unless `--include-automated` is given.
 - Where a total is shown, the hidden count is printed as "12 automated sessions hidden". A thread counts its own hidden subagent children.
 - Filtering the sessions list by a tag does not hide automated sessions.
 - Token and cost totals (`/api/stats/costs`) always cover every session, because the spend happened either way; the payload carries `automated_included_line`.
@@ -122,12 +122,12 @@ Sessions that were not a person talking to an assistant carry an origin of `exec
 
 ## Re-extraction after a parser upgrade
 
-Each extractor carries a `PARSER_VERSION`. When it rises, sessions indexed by the older version are parsed again once, even if the source file did not change. The first sync after such an upgrade therefore works in batches: one run re-parses at most `LORE_PARSER_REEXTRACT_BUDGET` stale sources per tool (default `150`) and later runs drain the rest.
+Each extractor carries a `PARSER_VERSION`. When it rises, sessions indexed by the older version are parsed again once, even if the source file did not change. The first sync after such an upgrade therefore works in batches: one run re-parses at most `ANNULI_PARSER_REEXTRACT_BUDGET` stale sources per tool (default `150`) and later runs drain the rest.
 
 - `0` re-parses no stale source in that run; changed sources are still parsed.
 - A negative value removes the cap; an invalid value falls back to `150`.
 
-Because the variable is read on every run, `LORE_PARSER_REEXTRACT_BUDGET=0` persists: subagent sessions stay untagged and visible until it is unset.
+Because the variable is read on every run, `ANNULI_PARSER_REEXTRACT_BUDGET=0` persists: subagent sessions stay untagged and visible until it is unset.
 
 ## Gemini project resolution
 
@@ -166,15 +166,15 @@ On a session detail page, Find searches the full transcript across the lazy-load
 - Every response carries `X-Request-ID` for correlation; a client-sent value is reused, otherwise one is generated.
 - API responses carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset`; the budgets themselves are in `./CONFIGURATION.md`.
 - Security headers set a strict `Content-Security-Policy`, `X-Frame-Options: DENY` and `Referrer-Policy: strict-origin-when-cross-origin`.
-- With `LORE_JSON_REQUEST_LOGS=true`, each request is logged as one JSON object with `event`, `method`, `path`, `status`, `duration_ms` and `request_id`.
+- With `ANNULI_JSON_REQUEST_LOGS=true`, each request is logged as one JSON object with `event`, `method`, `path`, `status`, `duration_ms` and `request_id`.
 
 ## Probe result codes
 
-`lore-web-probe` exits `0` when every probe passed, `1` on probe failures, and `3` when an upstream gateway blocked the run with its own authentication, for example a `401` from a reverse proxy. `2` means the arguments were refused, such as `--user` without a usable password. Besides the per-probe lines it prints a `build_info` line read from `/api/build-info`, so a deployed revision can be compared with the checkout. The query-parameter hardening probes send URL-encoded metacharacters such as `%3B`, so proxy normalisation cannot mask application-level validation.
+`annuli-web-probe` exits `0` when every probe passed, `1` on probe failures, and `3` when an upstream gateway blocked the run with its own authentication, for example a `401` from a reverse proxy. `2` means the arguments were refused, such as `--user` without a usable password. Besides the per-probe lines it prints a `build_info` line read from `/api/build-info`, so a deployed revision can be compared with the checkout. The query-parameter hardening probes send URL-encoded metacharacters such as `%3B`, so proxy normalisation cannot mask application-level validation.
 
 ## Exporting a single session from the web UI
 
-`/export/<session_id>` serves the linked Markdown from the index. When the session is indexed but its Markdown file is missing, the file is regenerated from the live session for that tool. An unknown id returns `404` without scanning every source, unless `LORE_EXPORT_FALLBACK_SCAN=true` is set.
+`/export/<session_id>` serves the linked Markdown from the index. When the session is indexed but its Markdown file is missing, the file is regenerated from the live session for that tool. An unknown id returns `404` without scanning every source, unless `ANNULI_EXPORT_FALLBACK_SCAN=true` is set.
 
 ## Validating the compose file
 
@@ -186,7 +186,7 @@ docker compose config
 
 ## Vendored front-end assets
 
-The web UI ships highlight.js 11.9.0 and Tailwind 3.4.16 in `lore/interfaces/static/`. There is no CDN reference, so the dashboard renders fully offline.
+The web UI ships highlight.js 11.9.0 and Tailwind 3.4.16 in `annuli/interfaces/static/`. There is no CDN reference, so the dashboard renders fully offline.
 
 ## Removed features
 

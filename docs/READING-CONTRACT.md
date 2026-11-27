@@ -1,6 +1,6 @@
 # Reading contract
 
-What a reader can rely on when reading a transcript in Lore — and where the rule
+What a reader can rely on when reading a transcript in Annuli — and where the rule
 is enforced. `tests/test_a11y_reading_contract.py` checks the machine-decidable
 half over every page; the visual half (200 % zoom, a 380 px viewport, keyboard
 walkthrough in a real browser) still needs a browser and is tracked in #194.
@@ -11,7 +11,7 @@ walkthrough in a real browser) still needs a browser and is tracked in #194.
 |------|----------------|
 | Every turn states its original role in the markup | `data-role="user\|assistant\|tool\|system\|info"` in `session_pairs.html` |
 | Each role has its own badge and card | `.role-badge[data-role=…]` and `.message-card[data-role=…]` in `base.html` |
-| Tool execution state is one closed vocabulary | `pending`, `running`, `ok`, `failed`, `cancelled`, `unmatched`, `unknown` — `canonical_tool_state()` in `lore/utils/text_processing.py` |
+| Tool execution state is one closed vocabulary | `pending`, `running`, `ok`, `failed`, `cancelled`, `unmatched`, `unknown` — `canonical_tool_state()` in `annuli/utils/text_processing.py` |
 | A state is readable, not only coloured | `data-status` plus a label and an icon on every tool chip |
 | Folding never hides a failure | a collapsed burst keeps `data-status="failed"` |
 | Nothing in the pipeline rewrites the canonical text | `original_content` in `web_services.normalize_session_messages_for_display`; exports render the canonical roles and states |

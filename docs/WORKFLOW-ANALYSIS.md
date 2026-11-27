@@ -1,9 +1,9 @@
 # Workflow analysis: metric vocabulary and evidence contract
 
 Issue: [#188](https://github.com/DnaMes/lore/issues/188).
-Implementation: `lore/services/workflow_metrics.py`, surfaced by `lore metrics`.
+Implementation: `annuli/services/workflow_metrics.py`, surfaced by `annuli metrics`.
 
-This document is the contract. A number produced by `lore metrics` is only
+This document is the contract. A number produced by `annuli metrics` is only
 meaningful together with its **class**, its **source fields** and its
 **coverage**; every result carries all four.
 
@@ -129,10 +129,10 @@ Fixed, small, and deliberately not extensible by configuration.
 ## Reproducing
 
 ```bash
-lore metrics                      # human-readable, grouped by class
-lore metrics --json               # machine-readable, one object per metric
-lore metrics --include-inferred   # adds the inferred_outcomes block
-lore metrics --include-automated  # exec/cron/subagent sessions included
+annuli metrics                      # human-readable, grouped by class
+annuli metrics --json               # machine-readable, one object per metric
+annuli metrics --include-inferred   # adds the inferred_outcomes block
+annuli metrics --include-automated  # exec/cron/subagent sessions included
 ```
 
 The command is read-only and local: it extracts sessions, computes, prints. It

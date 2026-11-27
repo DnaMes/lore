@@ -1,0 +1,94 @@
+
+{% extends "base.html" %}
+{% block content %}
+<section class="max-w-6xl mx-auto px-8 py-10">
+    <div class="mb-10">
+        <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Activity</div>
+        <h1 class="title-font page-headline text-slate-900 mt-2">Statistics</h1>
+        <p class="text-sm text-slate-500 mt-2">Your AI coding activity over the last 30 days.</p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-12">
+        <div class="stat-card p-6">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Sessions · last 30 days</div>
+            <div class="text-3xl font-semibold text-slate-900">{{ total_sessions }}</div>
+            {%- if automated_hidden_line %}
+            <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="link-accent">show</a></p>
+            {%- endif %}
+        </div>
+        <div class="stat-card p-6">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Messages · last 30 days</div>
+            <div class="text-3xl font-semibold text-slate-900">{{ total_messages }}</div>
+        </div>
+        <div class="stat-card p-6">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Prompts · last 30 days</div>
+            <div class="text-3xl font-semibold text-slate-900">{{ total_prompts }}</div>
+        </div>
+        <div class="stat-card p-6">
+            <div class="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500 mb-2">Busiest day · last 30 days</div>
+            {% if busiest_day %}
+            <div class="text-xl font-semibold text-slate-900">{{ busiest_day[0][5:] }}</div>
+            <div class="text-[11px] text-slate-500 mt-1">{{ busiest_day[1] }} session{{ '' if busiest_day[1] == 1 else 's' }}</div>
+            {% else %}
+            <div class="text-xl font-semibold text-slate-500">—</div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if total_sessions == 0 %}
+    <div class="surface-card p-10 text-center">
+        <p class="text-sm text-slate-600">No sessions in the last 30 days.</p>
+        <p class="text-xs text-slate-500 mt-2">Run <span class="font-mono">annuli sync --all</span> to import your AI conversations.</p>
+    </div>
+    {% else %}
+
+    <div class="surface-card p-6 mb-8">
+        <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-5">Sessions per day</h2>
+        <div class="flex items-end gap-[3px] h-32">
+            {% for d in by_day %}
+            <div class="flex-1 h-full flex flex-col justify-end group relative" title="{{ d.date }}: {{ d.count }}">
+                <div class="w-full rounded-t transition-all"
+                     style="height: {{ ((d.count / peak_day * 100) | round(1)) if peak_day else 0 }}%; min-height: {{ '3px' if d.count else '2px' }}; background: {{ 'var(--primary)' if d.count else 'var(--border)' }};"></div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="flex justify-between text-[10px] text-slate-500 mt-2 font-mono">
+            <span>{{ by_day[0].date }}</span>
+            <span>{{ by_day[-1].date }}</span>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-5">Sessions by tool</h2>
+            <div class="space-y-2">
+                {% for tool, count in by_tool %}
+                <a href="/sessions?tool={{ tool }}" class="list-row flex items-center justify-between p-3 group">
+                    <div class="flex items-center gap-3">
+                        <span class="w-2 h-2 rounded-full" style="background: {{ get_style(tool).color }}"></span>
+                        <span class="text-sm text-slate-600 group-hover:text-slate-900">{{ get_style(tool).name }}</span>
+                    </div>
+                    <span class="text-[11px] font-mono text-slate-500 group-hover:text-slate-700">{{ count }}</span>
+                </a>
+                {% else %}
+                <div class="text-sm text-slate-500">No tool activity.</div>
+                {% endfor %}
+            </div>
+        </div>
+        <div>
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-5">Top projects</h2>
+            <div class="space-y-2">
+                {% for project, count in top_projects %}
+                <div class="list-row flex items-center justify-between p-3">
+                    <span class="text-sm text-slate-600 truncate" title="{{ project }}">{{ project_label(project) }}</span>
+                    <span class="text-[11px] font-mono text-slate-500">{{ count }}</span>
+                </div>
+                {% else %}
+                <div class="text-sm text-slate-500">No project activity.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}

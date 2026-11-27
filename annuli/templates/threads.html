@@ -1,0 +1,31 @@
+
+{% extends "base.html" %}
+{% block content %}
+<section class="max-w-5xl mx-auto px-8 py-10">
+    <div class="flex justify-between items-center mb-8">
+        <div>
+            <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Connections</div>
+            <h1 class="title-font page-headline text-slate-900 mt-2">Threads</h1>
+            <p class="text-sm text-slate-500 mt-2">All sessions of one project folder, across tools, in time order. <a href="/projects" class="link-accent">Projects</a></p>
+            {%- if automated_hidden_line %}
+            <p class="text-xs text-slate-500 mt-2">{{ automated_hidden_line }} · <a href="{{ automated_show_url }}" class="link-accent">show</a></p>
+            {%- endif %}
+        </div>
+    </div>
+    <div class="compact-list">
+        {% for t in threads %}
+        <a href="/thread/{{ t.thread_id|urlpath }}" class="compact-row flex items-center gap-3 group">
+            <div class="w-8 h-8 rounded-lg flex items-center justify-center text-sm bg-white border border-slate-200 text-slate-500">T</div>
+            <div class="flex-1 min-w-0">
+                <div class="compact-title text-slate-900 group-hover:text-slate-900 truncate">{{ t.title }}</div>
+                <div class="text-[10px] text-slate-500 mt-1 truncate uppercase tracking-[0.2em]">{{ t.project or 'No Project' }}</div>
+            </div>
+            <div class="text-[10px] font-mono text-slate-500 group-hover:text-slate-700">{{ t.count }} sessions</div>
+        </a>
+        {% endfor %}
+        {% if threads|length == 0 %}
+        <div class="compact-row text-sm text-slate-500">No thread groups found yet. Run <code>annuli sync --all</code> and refresh to build cross-session thread continuity.</div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

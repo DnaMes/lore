@@ -1,0 +1,7 @@
+{% macro tool_badge(style, size_class='') %}
+{%- if style.icon_file -%}
+<span class="tool-icon{% if size_class %} {{ size_class }}{% endif %}" style="--icon: url('/static/icons/{{ style.icon_file }}.svg'); background-color: {{ style.color }}" role="img" aria-label="{{ style.name }}" title="{{ style.name }}"></span>
+{%- else -%}
+{{ style.icon }}
+{%- endif -%}
+{% endmacro %}

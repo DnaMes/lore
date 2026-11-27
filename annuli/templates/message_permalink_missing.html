@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="max-w-3xl mx-auto px-8 py-10">
+    <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">
+        Message permalink
+    </div>
+    <h1 class="title-font page-headline text-slate-900 mt-2">This message is not available</h1>
+    <p class="text-sm text-slate-600 mt-4">
+        Session <code class="font-mono">{{ session_id }}</code>, message
+        <code class="font-mono">#{{ seq }}</code>.
+    </p>
+    <p class="text-sm text-slate-600 mt-2">
+        The archive has no such message. It may have been deleted, the session may
+        not have been synced into the store yet, or the transcript changed since the
+        link was created. The session itself may still exist.
+    </p>
+    <div class="flex gap-3 mt-4">
+        <a href="/session/{{ session_id|urlpath }}" class="text-[11px] text-slate-600 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl bg-white">Open the session</a>
+        <a href="/sessions" class="text-[11px] text-slate-600 hover:text-slate-900 border border-slate-200 px-3 py-1.5 rounded-xl bg-white">All sessions</a>
+    </div>
+</section>
+{% endblock %}

@@ -1,10 +1,10 @@
 # Harness recommendations: reviewed, evidence-backed, inactive by default
 
 Issue: [#189](https://github.com/DnaMes/lore/issues/189).
-Implementation: `lore/utils/rules.py` (build + store) and the `lore rules`
-subcommands in `lore_cli.py`.
+Implementation: `annuli/utils/rules.py` (build + store) and the `annuli rules`
+subcommands in `annuli_cli.py`.
 
-`lore/utils/rules.py` could already extract rule-like sentences. That output
+`annuli/utils/rules.py` could already extract rule-like sentences. That output
 was a flat list: no scope, no provenance, no way to review or reject a rule, and
 no record of a correction. This document is the contract for the reviewed layer
 that replaces it as the durable artifact.
@@ -65,21 +65,21 @@ LLM-backed generator records its own triple; the field set does not change.
                             └── history: accepted / corrected / contradicted ──┘
 ```
 
-- **Export** (`lore rules export --recommendations`) builds fresh evidence and
+- **Export** (`annuli rules export --recommendations`) builds fresh evidence and
   merges it into the store. New recommendations are `inactive`. Existing ones
   keep their `state`, activation metadata and `history`; evidence is unioned by
   permalink, so a re-scan adds links and never erases the ones a reviewer
   already saw. A stored recommendation whose evidence no longer appears in the
   fresh scan is kept, not deleted — review history outlives a deleted session.
-- **Activate** (`lore rules activate <id> [--by NAME]`) sets `state = active` and
+- **Activate** (`annuli rules activate <id> [--by NAME]`) sets `state = active` and
   records who (`--by`, else `$USER`, else `unknown`) and when (UTC). This is the
   entire effect: no harness file is read or written.
-- **Evaluate** (`lore rules evaluate <id> --verdict accepted|corrected|contradicted
+- **Evaluate** (`annuli rules evaluate <id> --verdict accepted|corrected|contradicted
   [--note TEXT] [--by NAME]`) appends one history entry. The original `text`,
   the evidence and the earlier entries are untouched. `current_verdict` (and the
   human-readable listing) shows the newest verdict, which is how contradictory or
   superseded evidence stays visible.
-- **Review** (`lore rules review`) is a read-only listing.
+- **Review** (`annuli rules review`) is a read-only listing.
 
 A contradiction does **not** deactivate, rewrite or delete a recommendation. The
 history is the record; the state is the human's decision. Both stay visible.
@@ -91,7 +91,7 @@ One JSON file in the output directory: `recommendations.json`, mode `0600`
 
 ```json
 {
-  "format": "lore-recommendations",
+  "format": "annuli-recommendations",
   "format_version": 1,
   "generated_at": "2026-04-02T00:00:00+00:00",
   "recommendations": [ { "id": "rec-...", "text": "...", "scope": "project", "...": "..." } ]
@@ -100,12 +100,12 @@ One JSON file in the output directory: `recommendations.json`, mode `0600`
 
 The same payload is what `--json` prints, so the file, the CLI output and a
 machine reader never diverge. A damaged or foreign file raises rather than being
-silently overwritten (`lore rules export` refuses to start), and a file written
+silently overwritten (`annuli rules export` refuses to start), and a file written
 by a newer `format_version` is refused the same way.
 
 ## Secrets
 
-`text` and every `quote` pass through `lore.utils.redact.redact` before they
+`text` and every `quote` pass through `annuli.utils.redact.redact` before they
 enter a `Recommendation`, so the store cannot contain a secret-shaped string and
 `--json` output is safe to paste. Verified by
 `test_no_secrets_in_export` (a planted `sk-proj-…` key comes out as

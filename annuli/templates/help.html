@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="max-w-4xl mx-auto px-8 py-10">
+    <div class="mb-8">
+        <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Guide</div>
+        <h1 class="title-font page-headline text-slate-900 mt-2">Help</h1>
+        <p class="text-sm text-slate-500 mt-2">How Annuli works, what each term means, and how to find things fast.</p>
+    </div>
+
+    <div class="space-y-6">
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-3">What Annuli does</h2>
+            <p class="text-sm text-slate-700">Annuli is a local-first library of your AI coding sessions from many tools. Nothing leaves this machine unless you opt in.</p>
+            <p class="text-xs text-slate-500 mt-2">See <span class="font-mono">docs/WEB-UI.md</span> for web interface details.</p>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">Glossary</h2>
+            <dl class="space-y-3 text-sm">
+                <div>
+                    <dt class="font-semibold text-slate-900">Session</dt>
+                    <dd class="text-slate-600 mt-1">One conversation with one tool.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Prompt</dt>
+                    <dd class="text-slate-600 mt-1">A message you sent.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Project</dt>
+                    <dd class="text-slate-600 mt-1">The working folder a session ran in. Sessions of different tools in the same folder share a project.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Thread / Timeline</dt>
+                    <dd class="text-slate-600 mt-1">All sessions of one project folder across tools in time order. The <a href="/threads" class="link-accent">Threads</a> page is reachable from a project and from <a href="/settings" class="link-accent">Settings</a>.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Memory</dt>
+                    <dd class="text-slate-600 mt-1">Facts, decisions and lessons any tool can write via <span class="font-mono">annuli memory add</span> or MCP, and recall later. See <span class="font-mono">docs/MEMORY.md</span>.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Candidate</dt>
+                    <dd class="text-slate-600 mt-1">A memory proposed by a tool and waiting for your accept or reject on the <a href="/memory?status=candidate" class="link-accent">Memory</a> page.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Automated session</dt>
+                    <dd class="text-slate-600 mt-1">Runs started by scripts, cron or sub-agents. Hidden by default and shown with the <span class="font-mono">show</span> link.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Rules</dt>
+                    <dd class="text-slate-600 mt-1">The <span class="font-mono">AGENTS.md</span> and <span class="font-mono">CLAUDE.md</span> files collected from your projects.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Noise rules</dt>
+                    <dd class="text-slate-600 mt-1">Switches that hide boilerplate such as injected system tags when reading a transcript.</dd>
+                </div>
+                <div>
+                    <dt class="font-semibold text-slate-900">Library</dt>
+                    <dd class="text-slate-600 mt-1">The Markdown vault <span class="font-mono">annuli library</span> writes under <span class="font-mono">~/.lore/library</span>.</dd>
+                </div>
+            </dl>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-3">Finding things</h2>
+            <div class="space-y-2 text-sm text-slate-700">
+                <p>Press <kbd class="tag-chip font-mono">Ctrl/Cmd+K</kbd> anywhere to open search.</p>
+                <p>Put words in quotes for an exact phrase. Unquoted words are prefix-matched and all must match.</p>
+                <p>Title matches appear first. Use the filters on the <a href="/sessions" class="link-accent">Sessions</a> page to narrow by tool, project, tag, or date.</p>
+                <p>When hybrid search is active, <span class="font-mono">match: semantic</span> hits appear only after keyword hits.</p>
+            </div>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">Keyboard shortcuts</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-900 mb-2">Global &amp; session list</h3>
+                    <table class="shortcuts-help-table w-full">
+                        <tbody>
+                            <tr><td>Ctrl/Cmd+K</td><td>Open search</td></tr>
+                            <tr><td>j / k</td><td>Move focus between sessions</td></tr>
+                            <tr><td>Enter</td><td>Open focused session</td></tr>
+                            <tr><td>/</td><td>Focus tool filter (desktop)</td></tr>
+                            <tr><td>x</td><td>Toggle selection (select mode)</td></tr>
+                            <tr><td>?</td><td>Show this help</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div>
+                    <h3 class="text-xs font-semibold text-slate-900 mb-2">Session detail</h3>
+                    <table class="shortcuts-help-table w-full">
+                        <tbody>
+                            <tr><td>j / k</td><td>Jump to next / previous prompt</td></tr>
+                            <tr><td>e / c</td><td>Expand / collapse all tool groups</td></tr>
+                            <tr><td>/</td><td>Find in session</td></tr>
+                            <tr><td>?</td><td>Show this help</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-3">Sync</h2>
+            <p class="text-sm text-slate-700">The Sync menu in the top bar reloads sessions from all tools or a single provider, runs a full rebuild when incremental sync misses changes, or audits the index against live files. A host timer also syncs in the background.</p>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-3">Privacy</h2>
+            <p class="text-sm text-slate-700">Annuli is local-first with no telemetry. The web server binds to loopback only by default.</p>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-3">Credits</h2>
+            <p class="text-sm text-slate-700">Tool logos are trademarks of their owners, and Annuli is not affiliated with them; the SVG files come from lobe-icons 1.106.0 under the MIT licence.</p>
+        </article>
+    </div>
+</section>
+{% endblock %}
