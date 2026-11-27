@@ -2,8 +2,8 @@
 
 The README tells users to install from a clone (`pip install -e .`), so the
 distribution itself must build and install out of this working tree and must
-provide every documented entry point: `lore`, `lore-session`, `lore-web`,
-`lore-mcp`, `lore-web-probe`. Import-only guards (see `test_cli_entry_points.py`)
+provide every documented entry point: `annuli`, `annuli-session`, `annuli-web`,
+`annuli-mcp`, `annuli-web-probe`. Import-only guards (see `test_cli_entry_points.py`)
 never exercise the packaging metadata, which is how an entry point can be
 declared in `pyproject.toml` while the module behind it is missing.
 
@@ -19,7 +19,7 @@ import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-CONSOLE_SCRIPTS = ("lore", "lore-session", "lore-web", "lore-mcp", "lore-web-probe")
+CONSOLE_SCRIPTS = ("annuli", "annuli-session", "annuli-web", "annuli-mcp", "annuli-web-probe")
 
 
 def _run(
@@ -46,23 +46,23 @@ def test_install_from_clone_provides_all_console_scripts(tmp_path):
     assert pip.exists(), f"no pip in the fresh venv: {sorted(p.name for p in bin_dir.iterdir())}"
 
     # Run every subprocess outside the checkout: otherwise `cwd` lands on
-    # sys.path and `import lore` would resolve to the repository, not the install.
+    # sys.path and `import annuli` would resolve to the repository, not the install.
     outside = tmp_path
     installed = _run([str(pip), "install", "--quiet", str(REPO)], timeout=900, cwd=outside)
     assert installed.returncode == 0, f"install from clone failed:\n{installed.stderr[-4000:]}"
 
     python = bin_dir / ("python.exe" if (bin_dir / "python.exe").exists() else "python")
     imported = _run(
-        [str(python), "-c", "import lore, pathlib; print(pathlib.Path(lore.__file__))"],
+        [str(python), "-c", "import annuli, pathlib; print(pathlib.Path(annuli.__file__))"],
         timeout=120,
         cwd=outside,
     )
     assert imported.returncode == 0, (
-        f"`import lore` failed in the clean venv:\n{imported.stderr[-2000:]}"
+        f"`import annuli` failed in the clean venv:\n{imported.stderr[-2000:]}"
     )
     # The installed copy must come from the venv, not from the repository checkout.
     assert str(venv_dir) in imported.stdout, (
-        f"`lore` did not resolve to the venv: {imported.stdout.strip()}"
+        f"`annuli` did not resolve to the venv: {imported.stdout.strip()}"
     )
 
     for script in CONSOLE_SCRIPTS:

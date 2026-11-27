@@ -7,13 +7,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.markdown import MarkdownExporter
-from lore.exporters.redaction import REDACTED_EXPORT_MARKER, redact_session
-from lore.interfaces import web as web_mod
-from lore.interfaces import web_data
-from lore.utils.paths import lore_home
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.markdown import MarkdownExporter
+from annuli.exporters.redaction import REDACTED_EXPORT_MARKER, redact_session
+from annuli.interfaces import web as web_mod
+from annuli.interfaces import web_data
+from annuli.utils.paths import annuli_home
 
 _FAKE_OPENAI_KEY = "sk-" + "a" * 24
 
@@ -92,27 +92,27 @@ def test_redact_session_leaves_input_untouched_and_counts():
 
 
 def test_export_redact_refused_without_explicit_output_dir(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [])
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
-    archive = lore_home()
+    archive = annuli_home()
     archive.mkdir(parents=True)
 
-    rc = lore_cli.cmd_export(_export_ns(archive, redact=True))
+    rc = annuli_cli.cmd_export(_export_ns(archive, redact=True))
     assert rc == 1
     assert "output-dir" in capsys.readouterr().err.lower()
 
 
 def test_export_redact_refused_when_output_is_default_archive(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [])
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
-    archive = lore_home()
+    archive = annuli_home()
     archive.mkdir(parents=True)
 
-    rc = lore_cli.cmd_export(_export_ns(str(archive), redact=True))
+    rc = annuli_cli.cmd_export(_export_ns(str(archive), redact=True))
     assert rc == 1
     assert capsys.readouterr().err
 
@@ -120,9 +120,9 @@ def test_export_redact_refused_when_output_is_default_archive(tmp_path, monkeypa
 def test_export_redact_writes_marker_and_redacted_markdown(tmp_path, monkeypatch, capsys):
     out = tmp_path / "share"
     session = _secret_session()
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_SingleExtractor([session])])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_SingleExtractor([session])])
 
-    rc = lore_cli.cmd_export(_export_ns(out, redact=True))
+    rc = annuli_cli.cmd_export(_export_ns(out, redact=True))
     assert rc in (None, 0)
     assert (out / REDACTED_EXPORT_MARKER).is_file()
     md_files = list(out.rglob("*.md"))
@@ -136,10 +136,10 @@ def test_export_redact_writes_marker_and_redacted_markdown(tmp_path, monkeypatch
 def test_plain_export_refused_in_redacted_directory(tmp_path, monkeypatch, capsys):
     out = tmp_path / "share"
     session = _secret_session("ses-redact-002")
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_SingleExtractor([session])])
-    lore_cli.cmd_export(_export_ns(out, redact=True))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_SingleExtractor([session])])
+    annuli_cli.cmd_export(_export_ns(out, redact=True))
 
-    rc = lore_cli.cmd_export(_export_ns(out, redact=False))
+    rc = annuli_cli.cmd_export(_export_ns(out, redact=False))
     assert rc == 1
     assert "redacted" in capsys.readouterr().err.lower()
 
@@ -150,8 +150,8 @@ def test_plain_export_markdown_byte_identical_to_baseline(tmp_path, monkeypatch)
     expected = exporter.export_session(session).read_bytes()
 
     out = tmp_path / "plain-out"
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_SingleExtractor([session])])
-    lore_cli.cmd_export(_export_ns(out, redact=False))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_SingleExtractor([session])])
+    annuli_cli.cmd_export(_export_ns(out, redact=False))
 
     actual = next(out.rglob("*.md")).read_bytes()
     assert actual == expected
@@ -159,9 +159,9 @@ def test_plain_export_markdown_byte_identical_to_baseline(tmp_path, monkeypatch)
 
 def test_export_html_redact_omits_secret(tmp_path, monkeypatch, capsys):
     session = _secret_session("ses-html-redact")
-    monkeypatch.setattr(lore_cli, "_find_session_by_id", lambda _id: session)
+    monkeypatch.setattr(annuli_cli, "_find_session_by_id", lambda _id: session)
     out = tmp_path / "out.html"
-    rc = lore_cli.cmd_export_html(
+    rc = annuli_cli.cmd_export_html(
         argparse.Namespace(session_id=session.session_id, output=str(out), redact=True)
     )
     assert rc == 0
@@ -187,7 +187,7 @@ def test_web_export_without_redact_unchanged(monkeypatch, tmp_path):
 
     assert response.status_code == 200
     assert _FAKE_OPENAI_KEY in response.get_data(as_text=True)
-    assert "X-Lore-Redactions" not in response.headers
+    assert "X-Annuli-Redactions" not in response.headers
 
 
 def test_web_export_redact_header_and_content(monkeypatch, tmp_path):
@@ -209,18 +209,18 @@ def test_web_export_redact_header_and_content(monkeypatch, tmp_path):
     assert response.status_code == 200
     assert _FAKE_OPENAI_KEY not in body
     assert "[REDACTED:" in body
-    assert int(response.headers["X-Lore-Redactions"]) >= 1
+    assert int(response.headers["X-Annuli-Redactions"]) >= 1
 
 
 def test_export_redact_refused_below_the_live_archive(tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [])
     home = tmp_path / "home"
     home.mkdir()
     monkeypatch.setenv("HOME", str(home))
-    nested = lore_home() / "share"
+    nested = annuli_home() / "share"
     nested.mkdir(parents=True)
 
-    rc = lore_cli.cmd_export(_export_ns(str(nested), redact=True))
+    rc = annuli_cli.cmd_export(_export_ns(str(nested), redact=True))
 
     assert rc == 1
     assert not (nested / REDACTED_EXPORT_MARKER).exists()
@@ -230,9 +230,9 @@ def test_export_redact_refused_into_non_empty_plain_directory(tmp_path, monkeypa
     out = tmp_path / "plain"
     out.mkdir()
     (out / "old-session.md").write_text("plain export", encoding="utf-8")
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_SingleExtractor([])])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_SingleExtractor([])])
 
-    rc = lore_cli.cmd_export(_export_ns(out, redact=True))
+    rc = annuli_cli.cmd_export(_export_ns(out, redact=True))
 
     assert rc == 1
     assert (out / "old-session.md").read_text(encoding="utf-8") == "plain export"
@@ -241,9 +241,9 @@ def test_export_redact_refused_into_non_empty_plain_directory(tmp_path, monkeypa
 def test_redacted_index_json_has_no_secret_title(tmp_path, monkeypatch):
     out = tmp_path / "share"
     session = _secret_session("ses-redact-index")
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_SingleExtractor([session])])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_SingleExtractor([session])])
 
-    lore_cli.cmd_export(_export_ns(out, redact=True))
+    annuli_cli.cmd_export(_export_ns(out, redact=True))
 
     index_text = (out / "index.json").read_text(encoding="utf-8")
     assert _FAKE_OPENAI_KEY not in index_text

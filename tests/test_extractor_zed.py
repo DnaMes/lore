@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.zed import PARSER_VERSION, ZedExtractor
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.zed import PARSER_VERSION, ZedExtractor
+from annuli.utils.tooling import normalize_tool_name
 
 SESSION_ID = "zed-thread-001"
 PARENT_ID = "zed-parent-01"
@@ -25,7 +25,7 @@ SIG_SENTINEL = "SIGNATURE_SENTINEL"
 @pytest.fixture
 def home(monkeypatch, tmp_path) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     return tmp_path
 
 
@@ -283,7 +283,7 @@ def test_zed_corrupt_blob_and_db_skipped(home):
 
 
 def test_zed_oversized_compressed_skipped(home, monkeypatch):
-    import lore.extractors.zed as zed_mod
+    import annuli.extractors.zed as zed_mod
 
     monkeypatch.setattr(zed_mod, "_MAX_COMPRESSED_BLOB", 64)
     workdir = _workdir(home)

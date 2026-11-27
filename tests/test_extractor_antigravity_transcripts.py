@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, TitleSource, Tool
-from lore.extractors.antigravity import AntigravityExtractor
+from annuli.core.models import Role, TitleSource, Tool
+from annuli.extractors.antigravity import AntigravityExtractor
 
 
 def _brain(home: Path, variant: str = "antigravity") -> Path:
@@ -76,7 +76,7 @@ def _extract(home: Path) -> tuple[AntigravityExtractor, list]:
 @pytest.fixture
 def home(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "1")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "1")
     return tmp_path
 
 
@@ -467,7 +467,7 @@ def test_oversized_sqlite_sidecar_disables_summaries(home, monkeypatch):
     )
     db = home / ".gemini" / "antigravity" / "conversation_summaries.db"
     Path(f"{db}-wal").write_bytes(b"x" * 4096)
-    monkeypatch.setattr("lore.extractors.antigravity._MAX_SQLITE_BYTES", db.stat().st_size + 50)
+    monkeypatch.setattr("annuli.extractors.antigravity._MAX_SQLITE_BYTES", db.stat().st_size + 50)
     session_dir = _session_dir(home, "conv-big-wal")
     _write_transcript(
         session_dir,
@@ -551,7 +551,7 @@ def test_hostile_input_does_not_abort(home, monkeypatch):
     ]
     (logs / "transcript_full.jsonl").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    monkeypatch.setattr("lore.extractors.antigravity._MAX_LINE_CHARS", 100)
+    monkeypatch.setattr("annuli.extractors.antigravity._MAX_LINE_CHARS", 100)
     huge = "x" * 200
     (logs / "transcript_full.jsonl").write_text(
         (logs / "transcript_full.jsonl").read_text() + huge + "\n",
@@ -623,7 +623,7 @@ def test_tool_property_unchanged(home):
 
 
 def test_copy_helper_rejects_symlinked_database_and_sidecars(tmp_path):
-    from lore.utils.sqlite_copy import copy_sqlite_with_sidecars
+    from annuli.utils.sqlite_copy import copy_sqlite_with_sidecars
 
     real = tmp_path / "real.db"
     real.write_bytes(b"SQLite format 3\x00" + b"x" * 64)
@@ -641,7 +641,7 @@ def test_copy_helper_rejects_symlinked_database_and_sidecars(tmp_path):
 
 
 def test_copy_helper_enforces_the_combined_cap_while_copying(tmp_path):
-    from lore.utils.sqlite_copy import copy_sqlite_with_sidecars
+    from annuli.utils.sqlite_copy import copy_sqlite_with_sidecars
 
     db = tmp_path / "a.db"
     db.write_bytes(b"x" * 600)
@@ -658,7 +658,7 @@ def test_copy_helper_survives_a_swap_between_check_and_copy(tmp_path, monkeypatc
     """The file is opened with O_NOFOLLOW: a symlink swapped in later is never read."""
     import os
 
-    from lore.utils import sqlite_copy
+    from annuli.utils import sqlite_copy
 
     db = tmp_path / "swap.db"
     db.write_bytes(b"x" * 16)
@@ -750,7 +750,9 @@ def test_pb_files_are_never_listed_or_opened(home, monkeypatch):
 
     # The generic home discovery walks the whole tree (and so lists every directory it
     # meets); this test pins the extractor's own behaviour, so it is replaced.
-    monkeypatch.setattr("lore.extractors.antigravity.discover_home_marker_paths", lambda marker: [])
+    monkeypatch.setattr(
+        "annuli.extractors.antigravity.discover_home_marker_paths", lambda marker: []
+    )
     monkeypatch.setattr(os, "scandir", spy_scandir)
     monkeypatch.setattr(os, "listdir", spy_listdir)
 

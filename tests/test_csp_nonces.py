@@ -11,7 +11,7 @@ Verifies that:
 
 import re
 
-from lore.interfaces import web
+from annuli.interfaces import web
 
 # ---------------------------------------------------------------------------
 # Helpers

@@ -20,7 +20,7 @@ from typing import Any, Dict, List
 
 import pytest
 
-from lore.llm.adapters import (
+from annuli.llm.adapters import (
     CREDENTIAL_ENV_VARS,
     AdapterAuthError,
     AdapterCancelled,
@@ -35,10 +35,10 @@ from lore.llm.adapters import (
     UnsupportedProviderCombination,
     select_provider,
 )
-from lore.llm.adapters.claude import ClaudeCliAdapter
-from lore.llm.adapters.codex import CodexCliAdapter
-from lore.llm.adapters.gemini import GeminiCliAdapter
-from lore.llm.factory import get_provider
+from annuli.llm.adapters.claude import ClaudeCliAdapter
+from annuli.llm.adapters.codex import CodexCliAdapter
+from annuli.llm.adapters.gemini import GeminiCliAdapter
+from annuli.llm.factory import get_provider
 
 ADAPTER_PROVIDERS = ("codex-cli", "claude-cli", "gemini-cli", "antigravity-cli")
 FAKE_CLI = (
@@ -129,7 +129,7 @@ def fake_bin(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     bin_dir = tmp_path / "fake-bin"
     bin_dir.mkdir()
     monkeypatch.setenv("PATH", str(bin_dir) + os.pathsep + os.environ.get("PATH", ""))
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
     monkeypatch.setenv("FAKE_CLI_LOG", str(tmp_path / "calls.jsonl"))
     monkeypatch.delenv("FAKE_CLI_MODE", raising=False)
     monkeypatch.delenv("FAKE_CLI_HELP_MODE", raising=False)
@@ -142,7 +142,7 @@ def empty_path(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     bin_dir = tmp_path / "empty-bin"
     bin_dir.mkdir()
     monkeypatch.setenv("PATH", str(bin_dir))
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
     monkeypatch.setenv("FAKE_CLI_LOG", str(tmp_path / "calls.jsonl"))
     return bin_dir
 
@@ -336,7 +336,7 @@ def test_partial_jsonl_keeps_the_complete_agent_message(
 
 
 def test_codex_accepts_the_legacy_event_shape() -> None:
-    from lore.llm.base import LLMConfig
+    from annuli.llm.base import LLMConfig
 
     adapter = CodexCliAdapter(LLMConfig(provider="codex-cli", model=""))
     raw = json.dumps({"msg": {"type": "agent_message", "message": "legacy answer"}})
@@ -478,7 +478,7 @@ def test_factory_routes_every_adapter_name_to_its_adapter(fake_bin: Path) -> Non
 def test_a_missing_cli_never_becomes_an_api_provider(
     empty_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from lore.llm import factory
+    from annuli.llm import factory
 
     def _boom(*_args, **_kwargs):
         raise AssertionError("no API provider may be built for a native-CLI request")
@@ -548,8 +548,8 @@ def test_cache_identity_covers_the_request_and_the_cli(fake_bin: Path) -> None:
 def test_gemini_api_provider_does_not_read_cli_credentials(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from lore.llm.base import LLMConfig
-    from lore.llm.gemini import GeminiProvider
+    from annuli.llm.base import LLMConfig
+    from annuli.llm.gemini import GeminiProvider
 
     for name in (
         "GEMINI_API_KEY",

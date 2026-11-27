@@ -11,14 +11,14 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-import lore.llm
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import mcp
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse
-from lore.services.summarize import SUMMARY_PROMPT_VERSION
-from lore.storage import initialise
-from lore.storage.summaries import save_summary, summary_fingerprint
-from lore.storage.writer import v2_db_path, write_sessions
+import annuli.llm
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import mcp
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse
+from annuli.services.summarize import SUMMARY_PROMPT_VERSION
+from annuli.storage import initialise
+from annuli.storage.summaries import save_summary, summary_fingerprint
+from annuli.storage.writer import v2_db_path, write_sessions
 
 T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 SID = "0b0d5f5e-7a46-4b0e-9a43-1c2d3e4f5a6b"
@@ -142,7 +142,7 @@ def use_provider(monkeypatch: pytest.MonkeyPatch):
 
     def install(provider: FakeProvider) -> FakeProvider:
         holder["provider"] = provider
-        monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
+        monkeypatch.setattr(annuli.llm, "get_provider", lambda **kwargs: provider)
         return provider
 
     install.holder = holder  # type: ignore[attr-defined]
@@ -285,21 +285,21 @@ def test_get_session_summary_deleted(tmp_path: Path):
 def test_summarize_session_disabled_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
-    monkeypatch.delenv("LORE_MCP_ALLOW_SUMMARIZE", raising=False)
+    monkeypatch.delenv("ANNULI_MCP_ALLOW_SUMMARIZE", raising=False)
     monkeypatch.setattr(
-        lore.llm,
+        annuli.llm,
         "get_provider",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("provider constructed")),
     )
     payload = json.loads(_call(server, "summarize_session", {"session_id": SID}))
     assert payload["error"] == "summarize_session is disabled"
-    assert "LORE_MCP_ALLOW_SUMMARIZE" in payload["hint"]
+    assert "ANNULI_MCP_ALLOW_SUMMARIZE" in payload["hint"]
 
 
 def test_summarize_session_enabled_writes_row(tmp_path: Path, use_provider, monkeypatch):
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
-    monkeypatch.setenv("LORE_MCP_ALLOW_SUMMARIZE", "1")
+    monkeypatch.setenv("ANNULI_MCP_ALLOW_SUMMARIZE", "1")
     provider = use_provider(FakeProvider())
 
     payload = json.loads(_call(server, "summarize_session", {"session_id": SID}))
@@ -315,15 +315,15 @@ def test_summarize_session_ignores_cloud_env_and_provider_arg(
 ):
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
-    monkeypatch.setenv("LORE_MCP_ALLOW_SUMMARIZE", "1")
-    monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "gemini")
+    monkeypatch.setenv("ANNULI_MCP_ALLOW_SUMMARIZE", "1")
+    monkeypatch.setenv("ANNULI_SUMMARY_PROVIDER", "gemini")
     seen: list[str] = []
 
     def spy(**kwargs):
         seen.append(str(kwargs.get("provider")))
         return FakeProvider()
 
-    monkeypatch.setattr(lore.llm, "get_provider", spy)
+    monkeypatch.setattr(annuli.llm, "get_provider", spy)
     _call(
         server,
         "summarize_session",
@@ -335,10 +335,10 @@ def test_summarize_session_ignores_cloud_env_and_provider_arg(
 def test_summarize_session_refuses_off_host_base_url(tmp_path: Path, monkeypatch):
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
-    monkeypatch.setenv("LORE_MCP_ALLOW_SUMMARIZE", "1")
+    monkeypatch.setenv("ANNULI_MCP_ALLOW_SUMMARIZE", "1")
     monkeypatch.setenv("OLLAMA_HOST", "https://remote.example.com")
     monkeypatch.setattr(
-        lore.llm,
+        annuli.llm,
         "get_provider",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("provider constructed")),
     )
@@ -351,7 +351,7 @@ def test_summarize_session_tombstoned_without_provider(tmp_path: Path, use_provi
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
     (tmp_path / "deleted_sessions.json").write_text(json.dumps({"session_ids": [SID]}))
-    monkeypatch.setenv("LORE_MCP_ALLOW_SUMMARIZE", "1")
+    monkeypatch.setenv("ANNULI_MCP_ALLOW_SUMMARIZE", "1")
     provider = use_provider(FakeProvider())
 
     payload = json.loads(_call(server, "summarize_session", {"session_id": SID}))
@@ -363,7 +363,7 @@ def test_summarize_session_tombstoned_without_provider(tmp_path: Path, use_provi
 def test_summarize_session_force_resends(tmp_path: Path, use_provider, monkeypatch):
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
-    monkeypatch.setenv("LORE_MCP_ALLOW_SUMMARIZE", "1")
+    monkeypatch.setenv("ANNULI_MCP_ALLOW_SUMMARIZE", "1")
     provider = use_provider(FakeProvider())
 
     _call(server, "summarize_session", {"session_id": SID})
@@ -375,7 +375,7 @@ def test_summarize_session_force_resends(tmp_path: Path, use_provider, monkeypat
 def test_summarize_session_unchanged_without_force(tmp_path: Path, use_provider, monkeypatch):
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
-    monkeypatch.setenv("LORE_MCP_ALLOW_SUMMARIZE", "1")
+    monkeypatch.setenv("ANNULI_MCP_ALLOW_SUMMARIZE", "1")
     provider = use_provider(FakeProvider())
 
     first = json.loads(_call(server, "summarize_session", {"session_id": SID}))
@@ -391,7 +391,7 @@ def test_summarize_session_concurrent_single_provider_call(
 ):
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
-    monkeypatch.setenv("LORE_MCP_ALLOW_SUMMARIZE", "1")
+    monkeypatch.setenv("ANNULI_MCP_ALLOW_SUMMARIZE", "1")
     provider = use_provider(FakeProvider())
     start = threading.Barrier(2)
 
@@ -412,7 +412,7 @@ def test_summarize_session_concurrent_single_provider_call(
 def test_summarize_session_result_has_no_summary_text(tmp_path: Path, use_provider, monkeypatch):
     server = _server(tmp_path)
     _build_store(tmp_path, _rich_session())
-    monkeypatch.setenv("LORE_MCP_ALLOW_SUMMARIZE", "1")
+    monkeypatch.setenv("ANNULI_MCP_ALLOW_SUMMARIZE", "1")
     use_provider(FakeProvider())
     raw = _call(server, "summarize_session", {"session_id": SID})
     assert "one_liner" not in raw
@@ -420,7 +420,7 @@ def test_summarize_session_result_has_no_summary_text(tmp_path: Path, use_provid
 
 
 def test_returned_payload_is_allow_listed_and_has_no_transcript_derived_text(tmp_path):
-    from lore.interfaces.mcp_tools.summaries import _sanitize_summary_payload
+    from annuli.interfaces.mcp_tools.summaries import _sanitize_summary_payload
 
     payload = {
         "one_liner": "ok",
@@ -444,7 +444,7 @@ def test_returned_payload_is_allow_listed_and_has_no_transcript_derived_text(tmp
 def test_localhost_is_only_trusted_when_it_resolves_to_loopback(monkeypatch):
     import socket
 
-    from lore.services import summarize_cli as cli
+    from annuli.services import summarize_cli as cli
 
     monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("203.0.113.9", 0))])
     assert cli.llm_base_url_is_local("http://localhost:11434") is False

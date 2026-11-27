@@ -1,10 +1,10 @@
-from lore.extractors.antigravity import AntigravityExtractor
-from lore.extractors.claude import ClaudeCodeExtractor
-from lore.extractors.codex import CodexExtractor
-from lore.extractors.copilot import CopilotCLIExtractor
-from lore.extractors.cursor import CursorExtractor
-from lore.extractors.gemini import GeminiCLIExtractor
-from lore.extractors.vscode import VSCodeCopilotExtractor
+from annuli.extractors.antigravity import AntigravityExtractor
+from annuli.extractors.claude import ClaudeCodeExtractor
+from annuli.extractors.codex import CodexExtractor
+from annuli.extractors.copilot import CopilotCLIExtractor
+from annuli.extractors.cursor import CursorExtractor
+from annuli.extractors.gemini import GeminiCLIExtractor
+from annuli.extractors.vscode import VSCodeCopilotExtractor
 
 
 def test_directory_extractors_discover_nested_home_locations(monkeypatch, tmp_path):
@@ -28,8 +28,8 @@ def test_directory_extractors_discover_nested_home_locations(monkeypatch, tmp_pa
     (paths["antigravity"] / "brain").mkdir(parents=True, exist_ok=True)
 
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("LORE_HOME_SCAN_DEPTH", "6")
-    monkeypatch.setenv("LORE_HOME_SCAN_LIMIT", "32")
+    monkeypatch.setenv("ANNULI_HOME_SCAN_DEPTH", "6")
+    monkeypatch.setenv("ANNULI_HOME_SCAN_LIMIT", "32")
 
     claude = ClaudeCodeExtractor()
     gemini = GeminiCLIExtractor()
@@ -55,8 +55,8 @@ def test_db_extractors_discover_nested_home_locations(monkeypatch, tmp_path):
     cursor_db.touch()
 
     monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("LORE_HOME_SCAN_DEPTH", "6")
-    monkeypatch.setenv("LORE_HOME_SCAN_LIMIT", "32")
+    monkeypatch.setenv("ANNULI_HOME_SCAN_DEPTH", "6")
+    monkeypatch.setenv("ANNULI_HOME_SCAN_LIMIT", "32")
 
     cursor = CursorExtractor()
 

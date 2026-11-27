@@ -1,7 +1,7 @@
 """Verify ``--help`` succeeds and emits usage for every CLI command path.
 
-Walks argparse subparsers recursively for ``lore`` and ``lore-session`` and
-also covers ``lore-web``, which has no subcommands.
+Walks argparse subparsers recursively for ``annuli`` and ``annuli-session`` and
+also covers ``annuli-web``, which has no subcommands.
 """
 
 from __future__ import annotations
@@ -45,48 +45,48 @@ def _assert_help_prints_usage(parser: argparse.ArgumentParser, path: tuple[str, 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     """Parametrize test functions by the command paths they request."""
-    if "lore_path" in metafunc.fixturenames:
-        from lore_cli import build_parser as _lore_build_parser
+    if "annuli_path" in metafunc.fixturenames:
+        from annuli_cli import build_parser as _annuli_build_parser
 
-        paths = _collect_command_paths(_lore_build_parser())
-        metafunc.parametrize("lore_path", paths, ids=[" ".join(p) for p in paths])
-    elif "lore_session_path" in metafunc.fixturenames:
-        from lore_session_cli import build_parser as _session_build_parser
+        paths = _collect_command_paths(_annuli_build_parser())
+        metafunc.parametrize("annuli_path", paths, ids=[" ".join(p) for p in paths])
+    elif "annuli_session_path" in metafunc.fixturenames:
+        from annuli_session_cli import build_parser as _session_build_parser
 
         paths = _collect_command_paths(_session_build_parser())
-        metafunc.parametrize("lore_session_path", paths, ids=[" ".join(p) for p in paths])
+        metafunc.parametrize("annuli_session_path", paths, ids=[" ".join(p) for p in paths])
 
 
-def test_lore_command_help(lore_path: tuple[str, ...], capsys):
-    """Every ``lore <command-path> --help`` exits 0 and prints usage."""
-    from lore_cli import build_parser
+def test_annuli_command_help(annuli_path: tuple[str, ...], capsys):
+    """Every ``annuli <command-path> --help`` exits 0 and prints usage."""
+    from annuli_cli import build_parser
 
-    _assert_help_prints_usage(build_parser(), lore_path, capsys)
-
-
-def test_lore_session_command_help(lore_session_path: tuple[str, ...], capsys):
-    """Every ``lore-session <command-path> --help`` exits 0 and prints usage."""
-    from lore_session_cli import build_parser
-
-    _assert_help_prints_usage(build_parser(), lore_session_path, capsys)
+    _assert_help_prints_usage(build_parser(), annuli_path, capsys)
 
 
-def test_lore_root_help(capsys):
-    """``lore --help`` exits 0 and prints usage."""
-    from lore_cli import build_parser
+def test_annuli_session_command_help(annuli_session_path: tuple[str, ...], capsys):
+    """Every ``annuli-session <command-path> --help`` exits 0 and prints usage."""
+    from annuli_session_cli import build_parser
 
-    _assert_help_prints_usage(build_parser(), (), capsys)
+    _assert_help_prints_usage(build_parser(), annuli_session_path, capsys)
 
 
-def test_lore_session_root_help(capsys):
-    """``lore-session --help`` exits 0 and prints usage."""
-    from lore_session_cli import build_parser
+def test_annuli_root_help(capsys):
+    """``annuli --help`` exits 0 and prints usage."""
+    from annuli_cli import build_parser
 
     _assert_help_prints_usage(build_parser(), (), capsys)
 
 
-def test_lore_web_help(capsys):
-    """``lore-web --help`` exits 0 and prints usage."""
-    from lore.cli.web import build_parser
+def test_annuli_session_root_help(capsys):
+    """``annuli-session --help`` exits 0 and prints usage."""
+    from annuli_session_cli import build_parser
+
+    _assert_help_prints_usage(build_parser(), (), capsys)
+
+
+def test_annuli_web_help(capsys):
+    """``annuli-web --help`` exits 0 and prints usage."""
+    from annuli.cli.web import build_parser
 
     _assert_help_prints_usage(build_parser(), (), capsys)

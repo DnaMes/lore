@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.hermes import HermesExtractor, activity_fingerprint_ns
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.hermes import HermesExtractor, activity_fingerprint_ns
+from annuli.utils.tooling import normalize_tool_name
 
 SESSION_A = "sess-aaaa-1111"
 SESSION_B = "sess-bbbb-2222"
@@ -909,7 +909,7 @@ def test_corrupt_wrong_schema_and_missing_messages_skipped(home):
 
 
 def test_symlink_and_oversize_db_skipped(home, monkeypatch, tmp_path):
-    import lore.extractors.hermes as hermes_mod
+    import annuli.extractors.hermes as hermes_mod
 
     monkeypatch.setattr(hermes_mod, "_MAX_SQLITE_BYTES", 64)
     root = _hermes_root(home)
@@ -1340,7 +1340,7 @@ def test_oversized_tool_calls_and_reasoning_are_bounded_in_sql(home):
 
 
 def test_whole_database_message_budget_stops_loading(home, monkeypatch):
-    monkeypatch.setattr("lore.extractors.hermes._MAX_MESSAGES_PER_DB", 5)
+    monkeypatch.setattr("annuli.extractors.hermes._MAX_MESSAGES_PER_DB", 5)
     root = _hermes_root(home)
     db = root / "profiles" / "main" / "state.db"
     sessions_rows = []

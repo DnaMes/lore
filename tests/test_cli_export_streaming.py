@@ -1,4 +1,4 @@
-"""Streaming contract for ``lore export --all`` (lore-sync memory peak).
+"""Streaming contract for ``annuli export --all`` (lore-sync memory peak).
 
 ``cmd_export`` used to append every ``UnifiedSession`` (with all message
 bodies) to a list before building the index, so a full sync held the whole
@@ -15,8 +15,8 @@ import weakref
 from argparse import Namespace
 from datetime import datetime
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
 
 TOTAL = 40
 
@@ -66,8 +66,8 @@ def _run_export(tmp_path, monkeypatch):
     project.mkdir()
     out = tmp_path / "out"
     extractor = _FakeExtractor(str(project))
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
-    lore_cli.cmd_export(Namespace(output_dir=str(out), tool=None, project=None))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
+    annuli_cli.cmd_export(Namespace(output_dir=str(out), tool=None, project=None))
     return out, extractor
 
 

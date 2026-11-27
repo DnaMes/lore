@@ -1,6 +1,6 @@
 import json
 
-from lore.interfaces import web, web_data
+from annuli.interfaces import web, web_data
 
 
 def test_delete_remembers_tombstone_and_redirects_back(monkeypatch, tmp_path):
@@ -33,7 +33,7 @@ def test_delete_remembers_tombstone_and_redirects_back(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "INDEX_PATH", index_path)
     monkeypatch.setattr(web_data, "INDEX_PATH", index_path)
     monkeypatch.setattr(web_data, "DELETED_SESSIONS_PATH", deleted_path)
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web.clear_index_cache()
 
     with web.app.test_client() as client:

@@ -13,7 +13,7 @@ import threading
 import markdown
 import pytest
 
-from lore.interfaces.web_formatting import (
+from annuli.interfaces.web_formatting import (
     MARKDOWN_EXTENSIONS,
     render_markdown,
     thread_local_markdown_parser,
@@ -65,7 +65,7 @@ def test_state_does_not_leak_between_documents():
 
 
 def test_missing_markdown_package_falls_back_to_escaped_text(monkeypatch):
-    from lore.utils import markdown_render
+    from annuli.utils import markdown_render
 
     monkeypatch.setattr(markdown_render, "markdown", None)
     assert render_markdown("<b>x</b>\ny") == "&lt;b&gt;x&lt;/b&gt;<br>y"
@@ -78,7 +78,7 @@ def test_parser_uses_the_documented_extensions():
 
 
 def test_markdown_safe_filter_renders_markdown_and_strips_active_content():
-    from lore.interfaces.web import _markdown_safe
+    from annuli.interfaces.web import _markdown_safe
 
     html = str(
         _markdown_safe(
@@ -92,7 +92,7 @@ def test_markdown_safe_filter_renders_markdown_and_strips_active_content():
 
 
 def test_markdown_safe_keeps_angle_brackets_in_code_spans_and_fences():
-    from lore.interfaces.web import _markdown_safe
+    from annuli.interfaces.web import _markdown_safe
 
     html = str(_markdown_safe("run `<slug>` now\n\n```\n<tag>x</tag>\n```\n\nplain <slug> too"))
     assert "&lt;slug&gt;" in html and "&amp;lt;" not in html

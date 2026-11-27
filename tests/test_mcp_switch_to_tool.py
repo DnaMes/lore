@@ -1,4 +1,4 @@
-"""MCP tool switch_to_tool launches the installed ``lore-session`` script."""
+"""MCP tool switch_to_tool launches the installed ``annuli-session`` script."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from typing import Any
 
 import pytest
 
-from lore.interfaces import mcp
-from lore.interfaces.mcp_tools import sessions
+from annuli.interfaces import mcp
+from annuli.interfaces.mcp_tools import sessions
 
 MISSING_MSG = (
-    "lore-session command not found. "
+    "annuli-session command not found. "
     "Install it with: pipx install git+https://github.com/DnaMes/lore"
 )
 
@@ -27,14 +27,14 @@ def _completed(stdout: str = "ctx") -> subprocess.CompletedProcess:
     return subprocess.CompletedProcess(args=[], returncode=0, stdout=stdout, stderr="")
 
 
-def test_switch_to_tool_invokes_lore_session_when_installed(monkeypatch: pytest.MonkeyPatch):
+def test_switch_to_tool_invokes_annuli_session_when_installed(monkeypatch: pytest.MonkeyPatch):
     calls: list[dict[str, Any]] = []
     # gemini is cloud-bound; the MCP gate needs the opt-in env before spawning.
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
 
     def fake_which(name: str) -> str | None:
         calls.append({"which": name})
-        return "/usr/local/bin/lore-session"
+        return "/usr/local/bin/annuli-session"
 
     def fake_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
         calls.append({"run": cmd})
@@ -45,16 +45,16 @@ def test_switch_to_tool_invokes_lore_session_when_installed(monkeypatch: pytest.
 
     result = _switch({"tool": "gemini", "max_messages": 5})
 
-    assert calls[0] == {"which": "lore-session"}
+    assert calls[0] == {"which": "annuli-session"}
     run_cmd = calls[1]["run"]
-    assert run_cmd[0] == "lore-session"
+    assert run_cmd[0] == "annuli-session"
     assert run_cmd[1] == "switch"
     assert "--allow-cloud" in run_cmd
     assert "--messages" in run_cmd and "5" in run_cmd
     assert "context body" in result
 
 
-def test_switch_to_tool_reports_missing_lore_session(monkeypatch: pytest.MonkeyPatch):
+def test_switch_to_tool_reports_missing_annuli_session(monkeypatch: pytest.MonkeyPatch):
     run_calls: list[list[str]] = []
 
     monkeypatch.setattr(sessions.shutil, "which", lambda name: None)
@@ -68,6 +68,6 @@ def test_switch_to_tool_reports_missing_lore_session(monkeypatch: pytest.MonkeyP
     result = _switch({"tool": "gemini"})
 
     assert result == MISSING_MSG
-    assert "lore-session" in result
+    assert "annuli-session" in result
     assert "pipx install git+https://github.com/DnaMes/lore" in result
     assert run_calls == []

@@ -1,4 +1,4 @@
-from lore.utils.datetime import parse_timestamp
+from annuli.utils.datetime import parse_timestamp
 
 
 def test_parse_timestamp_invalid_is_epoch():

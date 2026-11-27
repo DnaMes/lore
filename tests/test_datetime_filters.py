@@ -16,8 +16,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from lore.interfaces.web_helpers import filter_sessions, parse_date_param
-from lore.utils.datetime import (
+from annuli.interfaces.web_helpers import filter_sessions, parse_date_param
+from annuli.utils.datetime import (
     datetime_in_range,
     parse_date_bound,
     to_local_naive,
@@ -163,7 +163,7 @@ def test_inclusive_range_table(created, start, end, expected):
 
 def test_cli_and_mcp_cutoffs_share_the_local_frame(berlin):
     """A `--since 24h` cutoff and an offset-carrying `created` agree."""
-    from lore.interfaces.mcp_tools.search import to_local_naive as mcp_normalizer
+    from annuli.interfaces.mcp_tools.search import to_local_naive as mcp_normalizer
 
     cutoff = datetime.now() - timedelta(hours=24)
     created_aware = (datetime.now(timezone.utc) - timedelta(hours=1)).astimezone()

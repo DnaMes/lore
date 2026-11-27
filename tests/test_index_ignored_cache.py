@@ -6,10 +6,10 @@ import json
 import time
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.interfaces import web_data
-from lore.storage import reader as storage_reader
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.interfaces import web_data
+from annuli.storage import reader as storage_reader
 
 
 def _session(sid: str) -> UnifiedSession:
@@ -36,7 +36,7 @@ def test_ignored_json_change_invalidates_v2_index_cache(tmp_path, monkeypatch):
     ignored = tmp_path / "ignored.json"
     ignored.write_text(json.dumps(["drop"]), encoding="utf-8")
 
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
     monkeypatch.setattr(web_data, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(web_data, "load_deleted_session_ids", lambda: set())
@@ -52,7 +52,7 @@ def test_ignored_json_change_invalidates_v2_index_cache(tmp_path, monkeypatch):
     monkeypatch.setattr(storage_reader, "load_index_v2", spy)
     # services.index imports load_index_v2 inside the cache fn — patch the
     # storage package export the cache closes over.
-    monkeypatch.setattr("lore.storage.load_index_v2", spy)
+    monkeypatch.setattr("annuli.storage.load_index_v2", spy)
 
     first = web_data.load_index()
     assert {s["id"] for s in first["sessions"]} == {"keep"}

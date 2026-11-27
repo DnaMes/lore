@@ -8,10 +8,10 @@ from typing import Any
 
 import pytest
 
-from lore.core.models import Tool
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.qwen import PARSER_VERSION, QwenExtractor
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Tool
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.qwen import PARSER_VERSION, QwenExtractor
+from annuli.utils.tooling import normalize_tool_name
 
 SESSION_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 CWD = "/work/qwen-demo"
@@ -286,7 +286,7 @@ def test_qwen_legacy_tmp_root(home):
 
 
 def test_qwen_hostile_and_oversize_line(home, monkeypatch):
-    import lore.extractors.qwen as qwen_mod
+    import annuli.extractors.qwen as qwen_mod
 
     path = _write_session(home, _chain())
     monkeypatch.setattr(qwen_mod, "_MAX_LINE_CHARS", 4096)
@@ -321,7 +321,7 @@ def test_qwen_parser_version():
 
 
 def test_qwen_record_limit_bounds_memory(home, monkeypatch):
-    import lore.extractors.qwen as qwen_mod
+    import annuli.extractors.qwen as qwen_mod
 
     monkeypatch.setattr(qwen_mod, "_MAX_RECORDS", 3)
     records = [_user("u0", None, 0, "first")]

@@ -3,7 +3,7 @@
 import re
 from pathlib import Path
 
-PACKAGE = Path(__file__).resolve().parent.parent / "lore"
+PACKAGE = Path(__file__).resolve().parent.parent / "annuli"
 BAD_HINT = re.compile(r"""pip install ['"]?lore\[""")
 
 

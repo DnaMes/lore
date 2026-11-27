@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from lore.extractors.cursor import CursorExtractor
+from annuli.extractors.cursor import CursorExtractor
 
 _SENTINEL_BLOB = "SENTINEL_BLOB_KEY_VALUE_XX"
 _SENTINEL_SPEC = "SENTINEL_SPEC_KEY_VALUE_XX"
@@ -76,7 +76,7 @@ def _sessions(home: Path) -> list:
 @pytest.fixture
 def home(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     return tmp_path
 
 
