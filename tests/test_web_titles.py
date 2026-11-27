@@ -490,7 +490,7 @@ def test_session_delete_removes_index_entry_and_export(monkeypatch, tmp_path):
 
     session_id = "test-session-1"
     # export_path must live inside OUTPUT_DIR so resolve_export_path accepts it
-    fake_output_dir = tmp_path / ".lore"
+    fake_output_dir = tmp_path / ".annuli"
     fake_output_dir.mkdir()
     export_path = fake_output_dir / "session.md"
     export_path.write_text("# Session", encoding="utf-8")

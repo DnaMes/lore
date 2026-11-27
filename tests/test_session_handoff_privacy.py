@@ -36,7 +36,7 @@ CODEX_REFUSAL = (
 
 
 def _handoff_dir(home) -> str:
-    return home / ".lore" / "handoff"
+    return home / ".annuli" / "handoff"
 
 
 @pytest.fixture

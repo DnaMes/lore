@@ -9,12 +9,26 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-_HOME_NAME = ".lore"
+_HOME_NAME = ".annuli"
+# Pre-rebrand data dir. Kept as a fallback for good: stores hold absolute ``/.lore/`` paths.
+LEGACY_HOME_NAME = ".lore"
+_STORE_MARKERS = ("index_v2.sqlite", "index.json")
+
+
+def _has_store(path: Path) -> bool:
+    return any((path / marker).exists() for marker in _STORE_MARKERS)
 
 
 def lore_home() -> Path:
-    """Return Lore's data directory (``~/.lore``)."""
-    return Path.home() / _HOME_NAME
+    """Return the data directory: ``~/.annuli``, or the legacy ``~/.lore`` store.
+
+    A bare ``~/.annuli`` (no store file) does not hide an existing legacy store.
+    """
+    home = Path.home() / _HOME_NAME
+    legacy = Path.home() / LEGACY_HOME_NAME
+    if not _has_store(home) and _has_store(legacy):
+        return legacy
+    return home
 
 
 def secure_dir(path: Path) -> Path:

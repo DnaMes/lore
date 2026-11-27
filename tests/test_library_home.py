@@ -176,7 +176,7 @@ def test_format_relative_activity_time_hours_and_date() -> None:
 
 
 def test_empty_index_renders_without_error(monkeypatch, tmp_path: Path) -> None:
-    fake_output = tmp_path / ".lore"
+    fake_output = tmp_path / ".annuli"
     fake_output.mkdir()
     fake_index = fake_output / "index.json"
     fake_index.write_text("{}", encoding="utf-8")
@@ -206,7 +206,7 @@ def test_dashboard_escapes_html_in_titles(monkeypatch, tmp_path: Path) -> None:
         "by_tool": {"claude-code": 1},
         "by_project": {},
     }
-    fake_output = tmp_path / ".lore"
+    fake_output = tmp_path / ".annuli"
     fake_output.mkdir()
     fake_index = fake_output / "index.json"
     fake_index.write_text("{}", encoding="utf-8")

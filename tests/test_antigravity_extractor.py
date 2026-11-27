@@ -306,7 +306,7 @@ def test_check_deep_reports_coverage_for_an_undecodable_tree(monkeypatch, tmp_pa
     (session_dir / "conversations" / "x.pb").write_bytes(b"\x00bin")
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [AntigravityExtractor()])
-    lore_cli.cmd_check(argparse.Namespace(deep=True, output_dir=str(tmp_path / ".lore")))
+    lore_cli.cmd_check(argparse.Namespace(deep=True, output_dir=str(tmp_path / ".annuli")))
     out = capsys.readouterr().out
     assert "data directory present, no readable input" in out
     assert "Coverage: unsupported_artifacts=1" in out

@@ -64,7 +64,7 @@ _FIXED_NOISE_RULES = {
 
 @pytest.fixture()
 def client(monkeypatch, tmp_path):
-    fake_output = tmp_path / ".lore"
+    fake_output = tmp_path / ".annuli"
     fake_output.mkdir()
     fake_index = fake_output / "index.json"
     fake_index.write_text("{}", encoding="utf-8")

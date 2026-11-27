@@ -108,7 +108,7 @@ def _write_archive(home: Path) -> Path:
             "\n".join(json.dumps(record) for record in records),
             encoding="utf-8",
         )
-    output_dir = home / ".lore"
+    output_dir = home / ".annuli"
     output_dir.mkdir()
     return output_dir
 

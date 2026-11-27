@@ -12,7 +12,7 @@ from lore.interfaces import web_data
 
 
 def _container_output(monkeypatch, tmp_path) -> Path:
-    output = tmp_path / "container" / ".lore"
+    output = tmp_path / "container" / ".annuli"
     export = output / "projects" / "p" / "claude-code" / "s.md"
     export.parent.mkdir(parents=True)
     export.write_text("session_id: s\n", encoding="utf-8")

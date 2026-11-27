@@ -55,7 +55,7 @@ from lore.services.index import (
 from lore.services.index import (
     load_deleted_session_ids as _service_load_deleted_session_ids,
 )
-from lore.utils.paths import lore_home
+from lore.utils.paths import LEGACY_HOME_NAME, lore_home
 
 # Backwards-compatible re-export — same signature as the service helper.
 _annotate_display_titles = annotate_display_titles
@@ -224,12 +224,14 @@ def resolve_export_path(path_value: Optional[str]) -> Optional[Path]:
     # A host sync records host paths (/home/<user>/.lore/...); a container mounts the
     # same tree elsewhere. Re-anchor the part after the last output-dir name; _safe
     # still rejects anything that resolves outside OUTPUT_DIR.
+    # Pre-rebrand rows name the legacy ``.lore`` dir; re-anchor those too.
     parts = raw_path.parts
-    if OUTPUT_DIR.name in parts:
-        cut = len(parts) - 1 - parts[::-1].index(OUTPUT_DIR.name)
-        rest = parts[cut + 1 :]
-        if rest:
-            return _safe(OUTPUT_DIR.joinpath(*rest))
+    for anchor in (OUTPUT_DIR.name, LEGACY_HOME_NAME):
+        if anchor in parts:
+            cut = len(parts) - 1 - parts[::-1].index(anchor)
+            rest = parts[cut + 1 :]
+            if rest:
+                return _safe(OUTPUT_DIR.joinpath(*rest))
 
     return None
 

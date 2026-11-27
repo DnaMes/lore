@@ -9,7 +9,7 @@ def test_lore_home_returns_dot_lore(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(paths.Path, "home", classmethod(lambda cls: tmp_path))
     home = paths.lore_home()
-    assert home == tmp_path / ".lore"
+    assert home == tmp_path / ".annuli"
 
 
 def test_legacy_ai_history_dir_is_not_migrated(tmp_path, monkeypatch):
@@ -21,6 +21,6 @@ def test_legacy_ai_history_dir_is_not_migrated(tmp_path, monkeypatch):
 
     home = paths.lore_home()
 
-    assert home == tmp_path / ".lore"
+    assert home == tmp_path / ".annuli"
     assert not home.exists()
     assert (legacy / "index.json").exists()
