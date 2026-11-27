@@ -4,9 +4,9 @@
 Runs the real embedding model over ``tools/calibration/recall-floor-
 labelled-pairs.json`` (stored memory vs. user query, labelled related/unrelated)
 and reports the cosine distributions plus a recommended
-``LORE_MEMORY_RECALL_MIN_SIMILARITY``.
+``ANNULI_MEMORY_RECALL_MIN_SIMILARITY``.
 
-The model comes from the optional ``lore[semantic]`` extra, so run this from an
+The model comes from the optional ``annuli[semantic]`` extra, so run this from an
 environment that has ``fastembed`` installed — never from a unit test run (tests
 must not download models):
 
@@ -30,7 +30,7 @@ DEFAULT_PAIRS = REPO / "tools" / "calibration" / "recall-floor-labelled-pairs.js
 
 
 def cosine(a: Sequence[float], b: Sequence[float]) -> float:
-    """Plain cosine similarity, the same definition as lore.storage.embeddings."""
+    """Plain cosine similarity, the same definition as annuli.storage.embeddings."""
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = sum(x * x for x in a) ** 0.5
     norm_b = sum(y * y for y in b) ** 0.5
@@ -86,9 +86,9 @@ def main(argv: List[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        from lore.storage.embeddings import DEFAULT_MODEL, embed_text
+        from annuli.storage.embeddings import DEFAULT_MODEL, embed_text
     except ImportError as exc:
-        print(f"NOT VERIFIED: lore is not importable ({exc})", file=sys.stderr)
+        print(f"NOT VERIFIED: annuli is not importable ({exc})", file=sys.stderr)
         return 2
     if embed_text("warmup") is None:
         print(

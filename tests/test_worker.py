@@ -1,4 +1,4 @@
-"""Tests for ``lore worker`` (# B3)."""
+"""Tests for ``annuli worker`` (# B3)."""
 
 from __future__ import annotations
 
@@ -11,10 +11,10 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.services.worker import (
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.services.worker import (
     load_status,
     read_store_stamp,
     run_loop,
@@ -22,9 +22,9 @@ from lore.services.worker import (
     status_check,
     worker_dir,
 )
-from lore.storage.freshness import GENERATED_AT_KEY
-from lore.storage.schema import open_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage.freshness import GENERATED_AT_KEY
+from annuli.storage.schema import open_connection
+from annuli.storage.writer import v2_db_path
 
 
 def _session(sid: str = "s1") -> UnifiedSession:
@@ -180,7 +180,7 @@ def test_failed_job_retries_after_backoff_without_new_stamp(tmp_path: Path, monk
         ),
         encoding="utf-8",
     )
-    monkeypatch.setenv("LORE_WORKER_INTERVAL", "60")
+    monkeypatch.setenv("ANNULI_WORKER_INTERVAL", "60")
 
     calls: list[str] = []
 
@@ -204,7 +204,7 @@ def test_failed_job_retries_after_backoff_without_new_stamp(tmp_path: Path, monk
 
 def test_missing_library_command_skipped_not_failed(tmp_path: Path, monkeypatch):
     _stamp_store(tmp_path, "2026-11-10T12:00:00+00:00")
-    monkeypatch.delitem(lore_cli.COMMANDS, "library", raising=False)
+    monkeypatch.delitem(annuli_cli.COMMANDS, "library", raising=False)
 
     calls: list[str] = []
 
@@ -215,7 +215,7 @@ def test_missing_library_command_skipped_not_failed(tmp_path: Path, monkeypatch)
     def summaries(_output_dir: Path, **_kwargs) -> dict:
         return {"status": "ok", "skipped": False}
 
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     run_pass(
         tmp_path,
@@ -239,7 +239,7 @@ def test_summary_cap_respected(tmp_path: Path, monkeypatch):
         json.dumps({"summary_daily": {"date": today, "count": 19}, "jobs": {}}),
         encoding="utf-8",
     )
-    monkeypatch.setenv("LORE_WORKER_SUMMARY_DAILY_CAP", "20")
+    monkeypatch.setenv("ANNULI_WORKER_SUMMARY_DAILY_CAP", "20")
 
     written = {"n": 0}
 
@@ -276,7 +276,7 @@ def test_daily_summary_cap_deferred_no_ok_stamp_retries_same_stamp(tmp_path: Pat
         json.dumps({"summary_daily": {"date": today, "count": 20}, "jobs": {}}),
         encoding="utf-8",
     )
-    monkeypatch.setenv("LORE_WORKER_SUMMARY_DAILY_CAP", "20")
+    monkeypatch.setenv("ANNULI_WORKER_SUMMARY_DAILY_CAP", "20")
 
     calls = {"n": 0}
 
@@ -303,8 +303,8 @@ def test_daily_summary_cap_deferred_no_ok_stamp_retries_same_stamp(tmp_path: Pat
 
 def test_summaries_skip_cloud_without_opt_in(tmp_path: Path, monkeypatch):
     _stamp_store(tmp_path, "2026-11-10T14:00:00+00:00")
-    monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "gemini")
-    from lore.services import worker as worker_mod
+    monkeypatch.setenv("ANNULI_SUMMARY_PROVIDER", "gemini")
+    from annuli.services import worker as worker_mod
 
     result = worker_mod.run_summaries_job(tmp_path, daily_cap=20, remaining_cap=5)
     assert result["skipped"] is True
@@ -347,7 +347,7 @@ def _capture_signal_calls(monkeypatch, worker_mod, installed: dict) -> None:
 
 
 def test_run_loop_without_stop_event_stops_via_sig_handler(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     _stamp_store(tmp_path, "2026-11-10T15:01:00+00:00")
     installed: dict = {}
@@ -362,7 +362,7 @@ def test_run_loop_without_stop_event_stops_via_sig_handler(tmp_path: Path, monke
 
 
 def test_run_loop_default_sig_handler_sets_stop(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     stopping = threading.Event()
     installed: dict = {}
@@ -383,7 +383,7 @@ def test_run_loop_default_sig_handler_sets_stop(tmp_path: Path, monkeypatch):
 
 
 def test_run_loop_off_main_thread_installs_no_signal_handlers(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     _stamp_store(tmp_path, "2026-11-10T15:02:00+00:00")
     calls: list[int] = []
@@ -413,7 +413,7 @@ def test_run_loop_off_main_thread_installs_no_signal_handlers(tmp_path: Path, mo
 
 
 def test_run_loop_survives_unexpected_pass_exception(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     _stamp_store(tmp_path, "2026-11-10T15:03:00+00:00")
     stop = threading.Event()
@@ -458,7 +458,7 @@ def test_read_store_stamp(tmp_path: Path):
 
 
 def test_worker_cli_accepts_output_dir_on_worker_command(tmp_path: Path):
-    parser = lore_cli.build_parser()
+    parser = annuli_cli.build_parser()
     for argv in (
         ["worker", "--output-dir", str(tmp_path), "run-once"],
         ["worker", "run-once", "--output-dir", str(tmp_path)],
@@ -476,9 +476,9 @@ def test_worker_status_json_read_only(tmp_path: Path, capsys):
     (wdir / "heartbeat").write_text("", encoding="utf-8")
     before = {p.name: p.stat().st_mtime_ns for p in wdir.iterdir()}
 
-    parser = lore_cli.build_parser()
+    parser = annuli_cli.build_parser()
     args = parser.parse_args(["--output-dir", str(tmp_path), "worker", "status", "--json"])
-    assert lore_cli.cmd_worker(args) == 0
+    assert annuli_cli.cmd_worker(args) == 0
     out = json.loads(capsys.readouterr().out)
     assert out["last_stamp"] == "x"
     after = {p.name: p.stat().st_mtime_ns for p in wdir.iterdir()}
@@ -486,7 +486,7 @@ def test_worker_status_json_read_only(tmp_path: Path, capsys):
 
 
 def test_library_job_heartbeat_touched_while_child_runs(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     touches = {"n": 0}
 
@@ -513,7 +513,7 @@ def test_library_job_heartbeat_touched_while_child_runs(tmp_path: Path, monkeypa
     monkeypatch.setattr(worker_mod, "touch_heartbeat", spy_touch)
     monkeypatch.setattr(worker_mod, "HEARTBEAT_POLL_SECONDS", 0.01)
     monkeypatch.setattr(worker_mod.subprocess, "Popen", FakeProc)
-    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/bin/lore")
+    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/bin/annuli")
 
     result = worker_mod.run_library_job(tmp_path)
     assert result["status"] == "ok"
@@ -521,7 +521,7 @@ def test_library_job_heartbeat_touched_while_child_runs(tmp_path: Path, monkeypa
 
 
 def test_library_job_timeout_kills_child_and_reports(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     state = {"killed": False}
 
@@ -543,7 +543,7 @@ def test_library_job_timeout_kills_child_and_reports(tmp_path: Path, monkeypatch
     monkeypatch.setattr(worker_mod, "HEARTBEAT_POLL_SECONDS", 0.01)
     monkeypatch.setattr(worker_mod, "LIBRARY_TIMEOUT", 0.05)
     monkeypatch.setattr(worker_mod.subprocess, "Popen", HungProc)
-    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/bin/lore")
+    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/bin/annuli")
 
     result = worker_mod.run_library_job(tmp_path)
     assert state["killed"] is True
@@ -551,8 +551,8 @@ def test_library_job_timeout_kills_child_and_reports(tmp_path: Path, monkeypatch
     assert "timed out" in result["last_error"]
 
 
-def test_library_job_prefers_lore_console_script(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+def test_library_job_prefers_annuli_console_script(tmp_path: Path, monkeypatch):
+    from annuli.services import worker as worker_mod
 
     seen: list[list[str]] = []
 
@@ -566,21 +566,21 @@ def test_library_job_prefers_lore_console_script(tmp_path: Path, monkeypatch):
             return 0
 
     monkeypatch.setattr(worker_mod.subprocess, "Popen", OkProc)
-    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/lore")
+    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/annuli")
 
     assert worker_mod.run_library_job(tmp_path)["status"] == "ok"
-    assert seen[0][0] == "/usr/local/bin/lore"
+    assert seen[0][0] == "/usr/local/bin/annuli"
     # --output-dir is a global option: the real CLI parser must accept the argv as built
     # (it rejected "library --output-dir X" inside the container).
-    import lore_cli
+    import annuli_cli
 
-    args = lore_cli.build_parser().parse_args(seen[0][1:])
+    args = annuli_cli.build_parser().parse_args(seen[0][1:])
     assert args.command == "library"
     assert Path(args.output_dir) == tmp_path
 
 
 def test_library_job_falls_back_to_absolute_cli_path(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     seen: list[list[str]] = []
 
@@ -600,12 +600,12 @@ def test_library_job_falls_back_to_absolute_cli_path(tmp_path: Path, monkeypatch
     cmd = seen[0]
     assert cmd[0] == sys.executable
     assert Path(cmd[1]).is_absolute()
-    assert Path(cmd[1]).name == "lore_cli.py"
+    assert Path(cmd[1]).name == "annuli_cli.py"
     assert Path(cmd[1]).is_file()
 
 
 def test_hung_job_timeout_does_not_block_on_executor_exit(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     monkeypatch.setattr(worker_mod, "resolve_interval", lambda: 1)
 
@@ -625,7 +625,7 @@ def test_hung_job_timeout_does_not_block_on_executor_exit(tmp_path: Path, monkey
 def test_embed_job_runs_budgeted_child_process(tmp_path: Path, monkeypatch):
     """Embeddings run as a child process with a small per-pass budget, so the loop
     process does not keep the model and vectors in memory (it reached its 3 GiB cap)."""
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     seen: list[list[str]] = []
 
@@ -645,23 +645,23 @@ def test_embed_job_runs_budgeted_child_process(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(worker_mod, "embeddings_available", lambda: True)
     monkeypatch.setattr(worker_mod, "sqlite_vec_available", lambda: True)
     monkeypatch.setattr(worker_mod.subprocess, "Popen", Proc)
-    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/lore")
-    monkeypatch.setenv("LORE_WORKER_EMBED_BUDGET", "90")
+    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/annuli")
+    monkeypatch.setenv("ANNULI_WORKER_EMBED_BUDGET", "90")
     (tmp_path / "index_v2.sqlite").write_text("", encoding="utf-8")
     monkeypatch.setattr(worker_mod, "v2_db_path", lambda out: out / "index_v2.sqlite")
 
     result = worker_mod.run_embed_messages_job(tmp_path)
 
-    import lore_cli
+    import annuli_cli
 
-    args = lore_cli.build_parser().parse_args(seen[0][1:])
+    args = annuli_cli.build_parser().parse_args(seen[0][1:])
     assert args.command == "embed-messages" and float(args.budget) == 90
     assert result["status"] == "ok" and result["embedded"] == 250
     assert result["more"] is True  # a full budget's worth may leave work behind
 
 
 def test_job_with_more_work_runs_again_next_pass_without_a_new_stamp(tmp_path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     monkeypatch.setattr(worker_mod, "read_store_stamp", lambda _out: "stamp-1")
     calls: list[str] = []
@@ -683,7 +683,7 @@ def test_job_with_more_work_runs_again_next_pass_without_a_new_stamp(tmp_path, m
 
 def test_failed_pending_job_waits_for_its_backoff(tmp_path, monkeypatch):
     """A pending job that then fails must back off instead of retrying every pass."""
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     monkeypatch.setattr(worker_mod, "read_store_stamp", lambda _out: "stamp-1")
     calls: list[str] = []
@@ -705,7 +705,7 @@ def test_failed_pending_job_waits_for_its_backoff(tmp_path, monkeypatch):
 
 
 def test_child_output_with_invalid_utf8_does_not_crash(tmp_path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
     class Proc:
         returncode = 0
@@ -719,15 +719,17 @@ def test_child_output_with_invalid_utf8_does_not_crash(tmp_path, monkeypatch):
             return 0
 
     monkeypatch.setattr(worker_mod.subprocess, "Popen", Proc)
-    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/lore")
+    monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/annuli")
     result, _out = worker_mod._run_cli_child(tmp_path, ["library"], 30, "library")
     assert result["status"] == "ok"
 
 
 def test_embed_messages_job_can_be_disabled(tmp_path: Path, monkeypatch):
-    from lore.services import worker as worker_mod
+    from annuli.services import worker as worker_mod
 
-    monkeypatch.setenv("LORE_WORKER_EMBED_MESSAGES", "0")
-    monkeypatch.setattr(worker_mod, "_run_cli_child", lambda *a, **k: (_ for _ in ()).throw(AssertionError("ran")))
+    monkeypatch.setenv("ANNULI_WORKER_EMBED_MESSAGES", "0")
+    monkeypatch.setattr(
+        worker_mod, "_run_cli_child", lambda *a, **k: (_ for _ in ()).throw(AssertionError("ran"))
+    )
     result = worker_mod.run_embed_messages_job(tmp_path)
-    assert result["status"] == "skipped" and "LORE_WORKER_EMBED_MESSAGES" in result["last_error"]
+    assert result["status"] == "skipped" and "ANNULI_WORKER_EMBED_MESSAGES" in result["last_error"]

@@ -17,7 +17,7 @@ value is never a bare constant.
     python tools/calibration/calibrate_message_cutoff.py
     python tools/calibration/calibrate_message_cutoff.py --json
 
-Needs the optional ``lore[semantic]`` extra (fastembed + model); never run it
+Needs the optional ``annuli[semantic]`` extra (fastembed + model); never run it
 from a unit test — tests must not download models.
 """
 
@@ -91,9 +91,9 @@ def main(argv: List[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        from lore.storage.embeddings import DEFAULT_MODEL, embed_text
+        from annuli.storage.embeddings import DEFAULT_MODEL, embed_text
     except ImportError as exc:
-        print(f"NOT VERIFIED: lore is not importable ({exc})", file=sys.stderr)
+        print(f"NOT VERIFIED: annuli is not importable ({exc})", file=sys.stderr)
         return 2
     if embed_text("warmup") is None:
         print(

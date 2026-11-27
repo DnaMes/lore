@@ -2,7 +2,7 @@
 
 A request naming a foreign ``Host`` (DNS rebinding, poisoned Host) must be
 rejected before any route runs; the defaults are the loopback names, the bind
-host, and hosts derived from ``LORE_PUBLIC_ORIGINS`` / ``LORE_ALLOWED_HOSTS``,
+host, and hosts derived from ``ANNULI_PUBLIC_ORIGINS`` / ``ANNULI_ALLOWED_HOSTS``,
 whose literal ``*`` disables the check with one warning. Mutating requests
 carrying an ``Origin`` must be this app's own scheme://host[:port] or a
 configured public origin exactly — a loopback origin on a different port is
@@ -16,16 +16,16 @@ import logging
 
 import pytest
 
-from lore.cli import web as web_cli
-from lore.interfaces import web, web_utils
+from annuli.cli import web as web_cli
+from annuli.interfaces import web, web_utils
 
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("TRUSTED_PROXY", raising=False)
-    monkeypatch.delenv("LORE_PUBLIC_ORIGINS", raising=False)
-    monkeypatch.delenv("LORE_ALLOWED_HOSTS", raising=False)
-    monkeypatch.delenv("LORE_WEB_HOST", raising=False)
+    monkeypatch.delenv("ANNULI_PUBLIC_ORIGINS", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOWED_HOSTS", raising=False)
+    monkeypatch.delenv("ANNULI_WEB_HOST", raising=False)
     monkeypatch.setattr(web, "_BIND_HOST", "")
     web.app.config["TESTING"] = True
     return web.app.test_client()
@@ -39,7 +39,7 @@ def client(monkeypatch: pytest.MonkeyPatch):
 def test_foreign_host_is_rejected_with_400(client):
     resp = client.get("/api/v1/sessions", headers={"Host": "attacker.example:5000"})
     assert resp.status_code == 400
-    assert b"LORE_ALLOWED_HOSTS" in resp.data
+    assert b"ANNULI_ALLOWED_HOSTS" in resp.data
 
 
 @pytest.mark.parametrize(
@@ -60,26 +60,26 @@ def test_health_and_ready_stay_reachable(client, host, path):
 
 def test_allowed_hosts_env_is_read_per_request(client, monkeypatch):
     """Config is read on every request, not frozen at app creation."""
-    assert client.get("/api/health", headers={"Host": "lore.example.com"}).status_code == 400
-    monkeypatch.setenv("LORE_ALLOWED_HOSTS", " lore.example.com , other.example ")
-    assert client.get("/api/health", headers={"Host": "lore.example.com"}).status_code == 200
+    assert client.get("/api/health", headers={"Host": "annuli.example.com"}).status_code == 400
+    monkeypatch.setenv("ANNULI_ALLOWED_HOSTS", " annuli.example.com , other.example ")
+    assert client.get("/api/health", headers={"Host": "annuli.example.com"}).status_code == 200
     assert client.get("/api/health", headers={"Host": "other.example"}).status_code == 200
     assert client.get("/api/health", headers={"Host": "third.example"}).status_code == 400
 
 
 def test_wildcard_allows_any_host_and_warns_once(client, monkeypatch, caplog):
     monkeypatch.setattr(web_utils, "_WILDCARD_HOSTS_WARNED", False)
-    monkeypatch.setenv("LORE_ALLOWED_HOSTS", "*")
-    caplog.set_level(logging.WARNING, logger="lore.interfaces.web_utils")
+    monkeypatch.setenv("ANNULI_ALLOWED_HOSTS", "*")
+    caplog.set_level(logging.WARNING, logger="annuli.interfaces.web_utils")
     assert client.get("/api/health", headers={"Host": "attacker.example:5000"}).status_code == 200
     assert client.get("/api/health", headers={"Host": "other.example"}).status_code == 200
-    warned = [r for r in caplog.records if "LORE_ALLOWED_HOSTS" in r.getMessage()]
+    warned = [r for r in caplog.records if "ANNULI_ALLOWED_HOSTS" in r.getMessage()]
     assert len(warned) == 1
 
 
 def test_public_origin_host_counts_as_allowed(client, monkeypatch):
-    monkeypatch.setenv("LORE_PUBLIC_ORIGINS", "https://lore.example:8443")
-    assert client.get("/api/health", headers={"Host": "lore.example:8443"}).status_code == 200
+    monkeypatch.setenv("ANNULI_PUBLIC_ORIGINS", "https://annuli.example:8443")
+    assert client.get("/api/health", headers={"Host": "annuli.example:8443"}).status_code == 200
     assert client.get("/api/health", headers={"Host": "other.example"}).status_code == 400
 
 
@@ -112,14 +112,14 @@ def test_bracketed_ipv6_with_valid_port_is_allowed(client):
 def test_default_http_ports_match_portless(client):
     """``:80`` / ``:443`` normalise equal to a portless Host/Origin pair."""
     assert (
-        web_utils.normalize_origin("http", "lore.example", 80)
-        == web_utils.normalize_origin("http", "lore.example", None)
-        == "http://lore.example"
+        web_utils.normalize_origin("http", "annuli.example", 80)
+        == web_utils.normalize_origin("http", "annuli.example", None)
+        == "http://annuli.example"
     )
     assert (
-        web_utils.normalize_origin("https", "lore.example", 443)
-        == web_utils.normalize_origin("https", "lore.example", None)
-        == "https://lore.example"
+        web_utils.normalize_origin("https", "annuli.example", 443)
+        == web_utils.normalize_origin("https", "annuli.example", None)
+        == "https://annuli.example"
     )
     # Host allowlist: an entry without a port matches the default-port spelling.
     assert web_utils.host_header_allowed("localhost:80")
@@ -257,37 +257,37 @@ def test_get_with_foreign_origin_is_not_blocked(client):
 
 
 # ---------------------------------------------------------------------------
-# Non-loopback bind warning (lore-web has no authentication)
+# Non-loopback bind warning (annuli-web has no authentication)
 # ---------------------------------------------------------------------------
 
 
 def test_cli_warns_on_non_loopback_bind_without_hardening(capsys, monkeypatch):
-    monkeypatch.delenv("LORE_PUBLIC_ORIGINS", raising=False)
-    monkeypatch.delenv("LORE_ALLOWED_HOSTS", raising=False)
+    monkeypatch.delenv("ANNULI_PUBLIC_ORIGINS", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOWED_HOSTS", raising=False)
     web_cli.warn_if_exposed_without_origin_config("0.0.0.0")
     err = capsys.readouterr().err
     assert "WARNING" in err
-    assert "LORE_ALLOWED_HOSTS" in err
+    assert "ANNULI_ALLOWED_HOSTS" in err
     assert "authentication" in err
 
 
 def test_cli_stays_quiet_with_hardening_or_loopback(capsys, monkeypatch):
-    monkeypatch.setenv("LORE_ALLOWED_HOSTS", "lore.example.com")
+    monkeypatch.setenv("ANNULI_ALLOWED_HOSTS", "annuli.example.com")
     web_cli.warn_if_exposed_without_origin_config("0.0.0.0")
-    monkeypatch.delenv("LORE_ALLOWED_HOSTS")
-    monkeypatch.setenv("LORE_PUBLIC_ORIGINS", "https://lore.example")
+    monkeypatch.delenv("ANNULI_ALLOWED_HOSTS")
+    monkeypatch.setenv("ANNULI_PUBLIC_ORIGINS", "https://annuli.example")
     web_cli.warn_if_exposed_without_origin_config("0.0.0.0")
-    monkeypatch.delenv("LORE_PUBLIC_ORIGINS")
+    monkeypatch.delenv("ANNULI_PUBLIC_ORIGINS")
     web_cli.warn_if_exposed_without_origin_config("127.0.0.1")
     captured = capsys.readouterr()
     assert captured.err == ""
 
 
 def test_cli_warns_at_startup_via_main(capsys, monkeypatch):
-    monkeypatch.delenv("LORE_PUBLIC_ORIGINS", raising=False)
-    monkeypatch.delenv("LORE_ALLOWED_HOSTS", raising=False)
+    monkeypatch.delenv("ANNULI_PUBLIC_ORIGINS", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOWED_HOSTS", raising=False)
     started: dict[str, object] = {}
     monkeypatch.setattr(web, "start_web_ui", lambda **kwargs: started.update(kwargs))
     assert web_cli.main(["--host", "0.0.0.0", "--port", "5098"]) == 0
     assert started == {"port": 5098, "host": "0.0.0.0", "debug": False}
-    assert "LORE_ALLOWED_HOSTS" in capsys.readouterr().err
+    assert "ANNULI_ALLOWED_HOSTS" in capsys.readouterr().err
