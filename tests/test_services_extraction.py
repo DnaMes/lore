@@ -14,8 +14,8 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.services import extraction
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.services import extraction
 
 
 def _session(sid, source_path=None, n=2):
@@ -184,7 +184,7 @@ def test_should_stop_raises_cancelled(tmp_path, patched_extractors):
 
 def test_cancelled_build_leaves_previous_indexes_untouched(tmp_path, patched_extractors):
     """Cancellation rolls back the in-flight v2 transaction and JSON write."""
-    from lore.storage import v2_db_path
+    from annuli.storage import v2_db_path
 
     patched_extractors([_StubExtractor(Tool.CLAUDE_CODE, [_session("old")])])
     extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)

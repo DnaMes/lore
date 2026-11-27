@@ -14,12 +14,12 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_data
-from lore.interfaces.api_payloads import serialize_search_result
-from lore.services.index import count_index_hits, search_index
-from lore.storage import message_evidence_for_sessions, v2_db_path, write_sessions
-from lore.storage.search import session_message_evidence
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_data
+from annuli.interfaces.api_payloads import serialize_search_result
+from annuli.services.index import count_index_hits, search_index
+from annuli.storage import message_evidence_for_sessions, v2_db_path, write_sessions
+from annuli.storage.search import session_message_evidence
 
 TERM = "kwblossom"
 
@@ -41,7 +41,7 @@ def _session(session_id: str, *, matches: int = 1, filler: str = "nothing here")
         session_id=session_id,
         created_at=start,
         last_updated=start + timedelta(minutes=len(messages)),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title=f"Session {session_id}",
         messages=messages,
     )
@@ -237,7 +237,7 @@ def test_legacy_search_endpoint_carries_evidence(client):
 def test_cli_prints_total_evidence_and_page(twenty_five, monkeypatch, capsys):
     import argparse
 
-    import lore_cli
+    import annuli_cli
 
     tmp_path, index_path = twenty_five
     args = argparse.Namespace(
@@ -249,7 +249,7 @@ def test_cli_prints_total_evidence_and_page(twenty_five, monkeypatch, capsys):
         include_automated=False,
         output_dir=str(tmp_path),
     )
-    lore_cli.cmd_search(args)
+    annuli_cli.cmd_search(args)
     out = capsys.readouterr().out
     assert "Found 25 results" in out
     assert "page 2" in out

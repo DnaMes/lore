@@ -12,11 +12,11 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import envelope
-from lore.storage.reader import load_session_messages_v2
-from lore.storage.schema import apply_migrations, current_version, initialise
-from lore.storage.writer import write_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import envelope
+from annuli.storage.reader import load_session_messages_v2
+from annuli.storage.schema import apply_migrations, current_version, initialise
+from annuli.storage.writer import write_sessions
 
 
 def _session(messages: list[UnifiedMessage], sid: str = "s-envelope") -> UnifiedSession:

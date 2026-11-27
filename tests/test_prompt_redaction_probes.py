@@ -15,9 +15,9 @@ from typing import Any, List
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.llm.tasks.stats import StatsGenerator
-from lore.titles.generator import TitleGenerator, TitleStrategy
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.llm.tasks.stats import StatsGenerator
+from annuli.titles.generator import TitleGenerator, TitleStrategy
 
 # Synthetic value shaped like a GitHub token (matches the redactor's github_token rule).
 TOKEN = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
@@ -25,7 +25,7 @@ TOKEN = "ghp_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
 
 
@@ -53,7 +53,7 @@ def _session(project_path: str, title: str = "") -> UnifiedSession:
 def test_gemini_cli_title_prompt_redacts_project_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import lore.titles.generator as gen_mod
+    import annuli.titles.generator as gen_mod
 
     calls: List[List[str]] = []
 
@@ -78,7 +78,7 @@ def test_gemini_cli_title_prompt_redacts_project_path(
 def test_ollama_title_prompt_redacts_project_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    import lore.titles.generator as gen_mod
+    import annuli.titles.generator as gen_mod
 
     prompts: List[str] = []
 

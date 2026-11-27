@@ -11,16 +11,16 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.services.index import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.services.index import (
     load_deleted_session_ids,
     remember_deleted_session_id,
 )
-from lore.storage import retention
-from lore.storage.reader import load_ignored_session_ids
-from lore.storage.schema import current_version, open_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage import retention
+from annuli.storage.reader import load_ignored_session_ids
+from annuli.storage.schema import current_version, open_connection
+from annuli.storage.writer import v2_db_path
 
 
 def _session(sid: str, tool: Tool = Tool.CLAUDE_CODE, day: int = 1) -> UnifiedSession:
@@ -138,7 +138,7 @@ def test_strict_loader_keeps_store_ids(tmp_path):
     retention.record_ignored(tmp_path, ["drop"])
     (tmp_path / "ignored.json").write_text("[]", encoding="utf-8")
 
-    from lore.storage.reader import load_ignored_session_ids_strict
+    from annuli.storage.reader import load_ignored_session_ids_strict
 
     assert load_ignored_session_ids_strict(tmp_path) == {"drop"}
 

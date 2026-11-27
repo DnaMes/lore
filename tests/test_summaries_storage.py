@@ -8,13 +8,13 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_data
-from lore.services.index import remember_deleted_session_id
-from lore.storage import current_version, initialise, open_connection
-from lore.storage.knowledge import get_session_knowledge, save_session_knowledge
-from lore.storage.schema import MIGRATIONS
-from lore.storage.summaries import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_data
+from annuli.services.index import remember_deleted_session_id
+from annuli.storage import current_version, initialise, open_connection
+from annuli.storage.knowledge import get_session_knowledge, save_session_knowledge
+from annuli.storage.schema import MIGRATIONS
+from annuli.storage.summaries import (
     delete_summaries_for_session,
     get_summary,
     has_current_summary,
@@ -22,7 +22,7 @@ from lore.storage.summaries import (
     save_summary,
     summary_fingerprint,
 )
-from lore.storage.writer import _write_reused_entry, v2_db_path, write_sessions
+from annuli.storage.writer import _write_reused_entry, v2_db_path, write_sessions
 
 SID = "ses-sum-1"
 PAYLOAD = {"summary": "did things", "cites": []}
@@ -300,7 +300,7 @@ def test_web_delete_removes_summary_and_knowledge(monkeypatch, store, tmp_path):
     monkeypatch.setattr(web_data, "INDEX_PATH", index_path)
     monkeypatch.setattr(web_data, "DELETED_SESSIONS_PATH", deleted_path)
     monkeypatch.setattr(web, "INDEX_PATH", index_path)
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     with web.app.test_client() as client:

@@ -7,16 +7,16 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import message_evidence_for_sessions, v2_db_path, write_sessions
-from lore.storage import schema as schema_module
-from lore.storage.fts import snippet_to_text
-from lore.storage.message_fts import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import message_evidence_for_sessions, v2_db_path, write_sessions
+from annuli.storage import schema as schema_module
+from annuli.storage.fts import snippet_to_text
+from annuli.storage.message_fts import (
     backfill_message_fts,
     message_fts_pending,
     message_fts_ready,
 )
-from lore.storage.schema import apply_migrations, initialise, open_connection
+from annuli.storage.schema import apply_migrations, initialise, open_connection
 
 T0 = datetime(2026, 3, 1, 9, 0, 0)
 
@@ -35,7 +35,7 @@ def _session(sid: str, bodies: list[str]) -> UnifiedSession:
         session_id=sid,
         created_at=T0,
         last_updated=T0 + timedelta(minutes=len(bodies)),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title=f"Session {sid}",
         messages=messages,
     )
@@ -71,7 +71,7 @@ def test_triggers_index_insert_and_delete_and_cascade(tmp_path):
 def _store_at_version_28(tmp_path):
     """A populated store whose migration 29 has not run yet."""
     db = v2_db_path(tmp_path)
-    import lore.storage.schema as sm
+    import annuli.storage.schema as sm
 
     original = sm.MIGRATIONS
     sm.MIGRATIONS = original[:28]
@@ -89,7 +89,7 @@ def test_backfill_is_resumable_and_flips_ready(tmp_path, monkeypatch):
     assert message_fts_pending(conn) and not message_fts_ready(conn)
     assert _fts_rowids(conn) == set()
 
-    monkeypatch.setattr("lore.storage.message_fts.BATCH_IDS", 1)
+    monkeypatch.setattr("annuli.storage.message_fts.BATCH_IDS", 1)
     first = backfill_message_fts(conn, budget_seconds=1e-9)  # exhausted after one batch
     assert first == 1 and not message_fts_ready(conn)
     rest = backfill_message_fts(conn)

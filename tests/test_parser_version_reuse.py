@@ -18,22 +18,22 @@ from typing import Iterator
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.extractors.base import (
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.extractors.base import (
     DEFAULT_REEXTRACT_BUDGET,
     REEXTRACT_BUDGET_ENV,
     BaseExtractor,
     reextract_budget_from_env,
 )
-from lore.extractors.gemini import GeminiCLIExtractor
-from lore.interfaces.api_payloads import (
+from annuli.extractors.gemini import GeminiCLIExtractor
+from annuli.interfaces.api_payloads import (
     serialize_index_session_summary,
     serialize_live_session,
 )
-from lore.services import extraction
-from lore.storage import load_index_v2, open_connection
-from lore.storage.writer import (
+from annuli.services import extraction
+from annuli.storage import load_index_v2, open_connection
+from annuli.storage.writer import (
     _refresh_complete_session,
     _write_reused_entry,
     _write_reused_full_session,
@@ -93,13 +93,13 @@ def env(tmp_path, monkeypatch):
     src.mkdir()
     (src / "one.src").write_text("x", encoding="utf-8")
     extractor = FakeExtractor(src)
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
     return tmp_path, src, extractor
 
 
 def _export(tmp_path: Path) -> dict:
     out = tmp_path / "out"
-    lore_cli.cmd_export(Namespace(output_dir=str(out), tool=None, project=None, full=False))
+    annuli_cli.cmd_export(Namespace(output_dir=str(out), tool=None, project=None, full=False))
     return json.loads((out / "index.json").read_text(encoding="utf-8"))
 
 
@@ -421,7 +421,7 @@ def backlog(tmp_path, monkeypatch):
         runs.append(FakeExtractor(src))
         return [runs[-1]]
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", make)
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", make)
     _export(tmp_path)  # a full first parse, unbudgeted
     _set_stored_version(tmp_path, 0)
     monkeypatch.setenv(REEXTRACT_BUDGET_ENV, "3")
@@ -475,9 +475,9 @@ def test_budget_zero_reextracts_nothing_but_still_parses_changed_sources(backlog
 
 def test_budget_exhaustion_logs_one_info_line(backlog, caplog):
     tmp_path, _, _ = backlog
-    with caplog.at_level(logging.INFO, logger="lore.extractors.base"):
+    with caplog.at_level(logging.INFO, logger="annuli.extractors.base"):
         _export(tmp_path)
-    lines = [r for r in caplog.records if r.name == "lore.extractors.base"]
+    lines = [r for r in caplog.records if r.name == "annuli.extractors.base"]
     assert len(lines) == 1
     assert lines[0].levelno == logging.INFO
     assert "budget of 3 spent" in lines[0].getMessage()
@@ -503,7 +503,7 @@ def _origins(index: dict) -> dict[str, str]:
 def _untagged_run(monkeypatch, src: Path) -> None:
     """A first run by a parser that does not know about automated origins yet."""
     extractor = FakeExtractor(src, origin="unknown")
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
 
 
 def _tagging_run(monkeypatch, src: Path) -> FakeExtractor:
@@ -513,7 +513,7 @@ def _tagging_run(monkeypatch, src: Path) -> FakeExtractor:
         PARSER_VERSION = 2
 
     extractor = Tagging(src, origin="subagent")
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
     return extractor
 
 
@@ -647,7 +647,7 @@ def test_unstamped_session_gets_the_extractor_version_at_the_index_entry_point(
     assert [s.parser_version for s in Mixed().extract_sessions()] == [0]
 
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [Mixed()])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [Mixed()])
     exported = _export(tmp_path)
     assert exported["sessions"][0]["parser_version"] == 4
 

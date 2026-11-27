@@ -16,7 +16,7 @@ import tracemalloc
 
 import pytest
 
-from lore.extractors.opencode import OpenCodeExtractor
+from annuli.extractors.opencode import OpenCodeExtractor
 
 JUNK_BYTES = 1_000_000
 JUNK_PARTS = 40

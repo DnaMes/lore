@@ -13,10 +13,10 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_data
-from lore.interfaces.web_formatting import format_tool_calls
-from lore.utils.text_processing import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_data
+from annuli.interfaces.web_formatting import format_tool_calls
+from annuli.utils.text_processing import (
     TOOL_STATES,
     canonical_tool_state,
     tool_state_label,
@@ -113,7 +113,7 @@ def _session() -> UnifiedSession:
         session_id="ses_roles",
         created_at=START,
         last_updated=START + timedelta(minutes=5),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title="Roles",
         messages=[
             UnifiedMessage(role=Role.USER, content="run the tests", timestamp=START),
@@ -189,7 +189,7 @@ def test_user_and_assistant_keep_their_roles(client):
 def test_exports_carry_the_original_role_names():
     from pathlib import Path
 
-    from lore.exporters.markdown import MarkdownExporter
+    from annuli.exporters.markdown import MarkdownExporter
 
     markdown = MarkdownExporter(Path("."))._generate_markdown(_session())
     # Turn layout: the prompt heading is the user turn; the other roles are labelled.

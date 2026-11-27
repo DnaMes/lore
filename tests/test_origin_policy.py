@@ -20,18 +20,18 @@ from typing import Any, Iterator, Optional
 
 import pytest
 
-import lore.llm
-import lore_cli
-from lore.core.models import AUTOMATED_ORIGINS, Role, Tool, UnifiedMessage, UnifiedSession
-from lore.extractors.base import BaseExtractor
-from lore.extractors.claude import ClaudeCodeExtractor
-from lore.extractors.gemini import GeminiCLIExtractor
-from lore.interfaces import mcp, web, web_data
-from lore.llm import LLMConfig
-from lore.llm.base import LLMProvider, LLMResponse
-from lore.search.engine import SearchEngine
-from lore.services import extraction
-from lore.services.index import (
+import annuli.llm
+import annuli_cli
+from annuli.core.models import AUTOMATED_ORIGINS, Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.extractors.base import BaseExtractor
+from annuli.extractors.claude import ClaudeCodeExtractor
+from annuli.extractors.gemini import GeminiCLIExtractor
+from annuli.interfaces import mcp, web, web_data
+from annuli.llm import LLMConfig
+from annuli.llm.base import LLMProvider, LLMResponse
+from annuli.search.engine import SearchEngine
+from annuli.services import extraction
+from annuli.services.index import (
     InvalidFlagError,
     apply_deleted_filter,
     automated_hidden_line,
@@ -40,7 +40,7 @@ from lore.services.index import (
     parse_bool_flag,
     search_index,
 )
-from lore.storage.writer import v2_db_path
+from annuli.storage.writer import v2_db_path
 
 T0 = datetime(2026, 5, 1, 10, 0, 0)
 SHARED_WORD = "quokkaterm"
@@ -96,8 +96,8 @@ class FixtureExtractor(BaseExtractor):
 def _production_prompt_floor(monkeypatch):
     # conftest relaxes the floor to 1; the policy is only visible with the real 3.
     monkeypatch.setattr(BaseExtractor, "MIN_USER_PROMPTS", 3)
-    monkeypatch.delenv("LORE_MIN_USER_PROMPTS", raising=False)
-    monkeypatch.delenv("LORE_IMPORT_PROFILE", raising=False)
+    monkeypatch.delenv("ANNULI_MIN_USER_PROMPTS", raising=False)
+    monkeypatch.delenv("ANNULI_IMPORT_PROFILE", raising=False)
 
 
 # --- extractor-level policy -----------------------------------------------------------
@@ -460,8 +460,8 @@ def _point_everything_at(tmp_path: Path, monkeypatch) -> None:
 
 @pytest.fixture
 def store(tmp_path, monkeypatch) -> Path:
-    monkeypatch.setenv("LORE_USE_V2", "1")
-    monkeypatch.setenv("LORE_HYBRID_SEARCH", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_HYBRID_SEARCH", "0")
     extractor = FixtureExtractor(_fixture_sessions())
     monkeypatch.setattr(extraction, "get_all_extractors", lambda: [extractor])
     extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
@@ -499,7 +499,7 @@ def test_search_hides_automated_by_default_and_shows_them_with_the_switch(store)
 
 
 def test_search_legacy_fallback_hides_automated(store, monkeypatch):
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web.clear_index_cache()
     index_path = store / "index.json"
     assert _ids(search_index(index_path, SHARED_WORD, set())) == VISIBLE
@@ -509,7 +509,7 @@ def test_search_legacy_fallback_hides_automated(store, monkeypatch):
 
 
 def test_storage_search_filters_in_sql(store):
-    from lore.storage import search_sessions
+    from annuli.storage import search_sessions
 
     assert _ids(search_sessions(store, SHARED_WORD)) == VISIBLE
     assert _ids(search_sessions(store, SHARED_WORD, include_automated=True)) == (
@@ -518,7 +518,7 @@ def test_storage_search_filters_in_sql(store):
 
 
 def test_hybrid_semantic_path_filters_automated(store, monkeypatch):
-    import lore.storage as storage
+    import annuli.storage as storage
 
     def fake_semantic(output_dir, query, **kwargs):
         include = kwargs.get("include_automated", False)
@@ -531,7 +531,7 @@ def test_hybrid_semantic_path_filters_automated(store, monkeypatch):
             for sid in ids
         ]
 
-    monkeypatch.setenv("LORE_HYBRID_SEARCH", "1")
+    monkeypatch.setenv("ANNULI_HYBRID_SEARCH", "1")
     monkeypatch.setattr(storage, "semantic_search_sessions", fake_semantic)
     index_path = store / "index.json"
     assert _ids(search_index(index_path, SHARED_WORD, set())) == VISIBLE
@@ -665,8 +665,8 @@ def test_mcp_get_session_and_thread_by_id_work_for_hidden_sessions(store):
 
 
 def test_default_views_are_unchanged_for_interactive_only_archives(tmp_path, monkeypatch):
-    monkeypatch.setenv("LORE_USE_V2", "1")
-    monkeypatch.setenv("LORE_HYBRID_SEARCH", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_HYBRID_SEARCH", "0")
     extractor = FixtureExtractor(
         [_session("a", 3, "interactive"), _session("b", 3, "unknown"), _session("c", 1, "unknown")]
     )
@@ -704,23 +704,23 @@ def _cli_args(store: Path, **extra: Any) -> argparse.Namespace:
 
 
 def test_cli_search_hides_automated_by_default(store, capsys):
-    lore_cli.cmd_search(_cli_args(store))
+    annuli_cli.cmd_search(_cli_args(store))
     out = capsys.readouterr().out
     assert "Found 3 results" in out
-    lore_cli.cmd_search(_cli_args(store, include_automated=True))
+    annuli_cli.cmd_search(_cli_args(store, include_automated=True))
     assert "Found 5 results" in capsys.readouterr().out
 
 
 def test_cli_list_hides_automated_and_reports_the_count(store, monkeypatch, capsys):
     extractor = FixtureExtractor(_fixture_sessions())
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
-    lore_cli.cmd_list(_cli_args(store))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
+    annuli_cli.cmd_list(_cli_args(store))
     captured = capsys.readouterr()
     listed = json.loads(captured.out)
     assert {row["session_id"] for row in listed} == VISIBLE
     assert "2 automated sessions hidden" in captured.err
 
-    lore_cli.cmd_list(_cli_args(store, include_automated=True))
+    annuli_cli.cmd_list(_cli_args(store, include_automated=True))
     captured = capsys.readouterr()
     listed = json.loads(captured.out)
     assert {row["session_id"] for row in listed} == VISIBLE | AUTOMATED
@@ -728,11 +728,11 @@ def test_cli_list_hides_automated_and_reports_the_count(store, monkeypatch, caps
 
 
 def test_cli_stats_threads_and_digest_hide_automated(store, capsys):
-    lore_cli.cmd_stats(_cli_args(store))
+    annuli_cli.cmd_stats(_cli_args(store))
     out = capsys.readouterr().out
     assert "Total Sessions: 3" in out
     assert "2 automated sessions hidden" in out
-    lore_cli.cmd_stats(_cli_args(store, include_automated=True))
+    annuli_cli.cmd_stats(_cli_args(store, include_automated=True))
     assert "Total Sessions: 5" in capsys.readouterr().out
 
 
@@ -764,17 +764,17 @@ class _RecordingProvider(LLMProvider):
 
 
 def _knowledge_ids(store: Path) -> set[str]:
-    from lore.storage import list_session_knowledge
+    from annuli.storage import list_session_knowledge
 
     return {row["session_id"] for row in list_session_knowledge(store)}
 
 
 def test_knowledge_candidates_exclude_automated_unless_switched(store, monkeypatch):
     provider = _RecordingProvider()
-    monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
+    monkeypatch.setattr(annuli.llm, "get_provider", lambda **kwargs: provider)
     args = _cli_args(store, provider="gemini", model=None, output=None, limit=50, allow_cloud=True)
 
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
     assert _knowledge_ids(store) == VISIBLE
 
     args = _cli_args(
@@ -786,21 +786,21 @@ def test_knowledge_candidates_exclude_automated_unless_switched(store, monkeypat
         include_automated=True,
         allow_cloud=True,
     )
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
     assert _knowledge_ids(store) == VISIBLE | AUTOMATED
 
     # A stored extraction of an automated session never reaches the default knowledge base.
     args = _cli_args(store, provider="gemini", model=None, output=None, limit=50, allow_cloud=True)
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
     kb = json.loads((store / "knowledge" / "knowledge_base.json").read_text(encoding="utf-8"))
     assert kb["total_entries"] == len(VISIBLE)
 
 
 def test_prune_never_touches_automated_sessions_unless_asked(store, capsys):
     args = _cli_args(store, max_prompts=3, dry_run=True)
-    lore_cli.cmd_prune(args)
+    annuli_cli.cmd_prune(args)
     assert "Found 2 sessions" in capsys.readouterr().out
-    lore_cli.cmd_prune(_cli_args(store, max_prompts=3, dry_run=True, include_automated=True))
+    annuli_cli.cmd_prune(_cli_args(store, max_prompts=3, dry_run=True, include_automated=True))
     assert "Found 4 sessions" in capsys.readouterr().out
 
 
@@ -809,14 +809,14 @@ def test_single_tool_sync_merge_keeps_automated_entries_below_the_floor():
         {"id": "exec-low", "tool": "claude-code", "prompts": 1, "messages": 2, "origin": "exec"},
         {"id": "plain-low", "tool": "claude-code", "prompts": 1, "messages": 2},
     ]
-    merged = lore_cli._merge_sessions_with_existing_index([], entries)
+    merged = annuli_cli._merge_sessions_with_existing_index([], entries)
     assert {s.session_id for s in merged} == {"exec-low"}
     assert merged[0].origin == "exec"
 
 
 def test_cli_format_with_an_explicit_id_reaches_a_hidden_session(store, monkeypatch, capsys):
     provider = _RecordingProvider()
-    monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
+    monkeypatch.setattr(annuli.llm, "get_provider", lambda **kwargs: provider)
     args = _cli_args(
         store,
         provider="gemini",
@@ -826,12 +826,12 @@ def test_cli_format_with_an_explicit_id_reaches_a_hidden_session(store, monkeypa
         output_dir=str(store),
         allow_cloud=True,
     )
-    lore_cli.cmd_format(args)
+    annuli_cli.cmd_format(args)
     assert "Formatting 1 sessions" in capsys.readouterr().out
 
 
 def test_cli_parser_exposes_the_switch():
-    parser = lore_cli.build_parser()
+    parser = annuli_cli.build_parser()
     for argv in (
         ["list"],
         ["search", "q"],
@@ -853,7 +853,7 @@ def test_cli_parser_exposes_the_switch():
 
 
 def _fail_connect(monkeypatch) -> None:
-    import lore.services.discovery as discovery
+    import annuli.services.discovery as discovery
 
     def boom(*args: Any, **kwargs: Any):
         raise sqlite3.OperationalError("database is locked")
@@ -894,8 +894,8 @@ def _export_args(out: Path) -> argparse.Namespace:
 
 def test_cmd_export_records_discovery_into_store_meta(tmp_path, monkeypatch):
     extractor = FixtureExtractor([_session("a", 3, "unknown")])
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
-    lore_cli.cmd_export(_export_args(tmp_path))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
+    annuli_cli.cmd_export(_export_args(tmp_path))
     conn = sqlite3.connect(str(v2_db_path(tmp_path)))
     try:
         keys = {row[0] for row in conn.execute("SELECT key FROM store_meta")}
@@ -906,10 +906,10 @@ def test_cmd_export_records_discovery_into_store_meta(tmp_path, monkeypatch):
 
 def test_cmd_export_survives_a_failing_discovery_write(tmp_path, monkeypatch):
     extractor = FixtureExtractor([_session("a", 3, "unknown")])
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
-    lore_cli.cmd_export(_export_args(tmp_path))  # creates the store
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
+    annuli_cli.cmd_export(_export_args(tmp_path))  # creates the store
     _fail_connect(monkeypatch)
-    lore_cli.cmd_export(_export_args(tmp_path))
+    annuli_cli.cmd_export(_export_args(tmp_path))
     assert json.loads((tmp_path / "index.json").read_text(encoding="utf-8"))["sessions"]
 
 
@@ -917,8 +917,8 @@ def test_cmd_export_survives_a_failing_discovery_write(tmp_path, monkeypatch):
 
 
 def _build_store(tmp_path: Path, monkeypatch, sessions: list[UnifiedSession]) -> Path:
-    monkeypatch.setenv("LORE_USE_V2", "1")
-    monkeypatch.setenv("LORE_HYBRID_SEARCH", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_HYBRID_SEARCH", "0")
     extractor = FixtureExtractor(sessions)
     monkeypatch.setattr(extraction, "get_all_extractors", lambda: [extractor])
     extraction.build_search_index(tmp_path, tmp_path / "index.json", incremental=False)
@@ -928,7 +928,7 @@ def _build_store(tmp_path: Path, monkeypatch, sessions: list[UnifiedSession]) ->
 
 def test_tag_filter_keeps_tagged_automated_sessions_visible(store, monkeypatch):
     # The keyword tag filter reads ``keywords``, which only the JSON index carries.
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web.clear_index_cache()
     index = json.loads((store / "index.json").read_text(encoding="utf-8"))
     entry = next(s for s in index["sessions"] if s["id"] == "exec-sess1")
@@ -966,7 +966,7 @@ def test_visible_index_is_one_object_per_request_so_identity_memos_hit(store):
         first = web._visible_index()
         assert first is web._visible_index()
         assert first["automated_hidden"] == 2
-    from lore.interfaces.web_services import thread_overview_by_id
+    from annuli.interfaces.web_services import thread_overview_by_id
 
     with web.app.test_request_context("/threads"):
         sessions = web._visible_index()["sessions"]
@@ -1087,9 +1087,9 @@ def test_listing_limits_apply_after_the_origin_filter(recency_store):
 
 
 def test_summary_on_the_legacy_index_hides_automated(store, monkeypatch):
-    from lore.services.index import load_index_summary
+    from annuli.services.index import load_index_summary
 
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web.clear_index_cache()
     index_path = store / "index.json"
     summary = load_index_summary(index_path, set())
@@ -1108,8 +1108,8 @@ def test_summary_on_the_legacy_index_hides_automated(store, monkeypatch):
 
 def test_prune_run_leaves_automated_sessions_alone(store, monkeypatch, capsys):
     extractor = FixtureExtractor(_fixture_sessions())
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [extractor])
-    lore_cli.cmd_prune(_cli_args(store, max_prompts=3, dry_run=False))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [extractor])
+    annuli_cli.cmd_prune(_cli_args(store, max_prompts=3, dry_run=False))
     assert "Pruned 2 sessions" in capsys.readouterr().out
     ignored = set(json.loads((store / "ignored.json").read_text(encoding="utf-8")))
     assert ignored == {"inter-one", "plain-one"}
@@ -1130,7 +1130,7 @@ def test_legacy_search_filters_before_the_row_limit(tmp_path, monkeypatch):
     ]
     _build_store(tmp_path, monkeypatch, noisy + quiet)
     assert (tmp_path / "index.sqlite").exists()
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web.clear_index_cache()
     found = search_index(tmp_path / "index.json", SHARED_WORD, set())
     assert _ids(found) == {"human-0", "human-1", "human-2"}
@@ -1143,15 +1143,15 @@ def test_legacy_search_filters_before_the_row_limit(tmp_path, monkeypatch):
 def test_semantic_search_widens_k_when_the_neighbourhood_is_automated(tmp_path, monkeypatch):
     import struct
 
-    from lore.storage import semantic_search_sessions, write_sessions
-    from lore.storage.embeddings import EMBEDDING_DIM, sqlite_vec_available
-    from lore.storage.schema import ensure_session_vec_table, initialise
+    from annuli.storage import semantic_search_sessions, write_sessions
+    from annuli.storage.embeddings import EMBEDDING_DIM, sqlite_vec_available
+    from annuli.storage.schema import ensure_session_vec_table, initialise
 
     if not sqlite_vec_available():
         pytest.skip("needs sqlite-vec")
     automated = [_session(f"auto-{i:02d}", 1, "subagent") for i in range(10)]
     visible = [_session("human-a", 3, "interactive"), _session("human-b", 3, "interactive")]
-    monkeypatch.setattr("lore.storage.embeddings.embed_text", lambda text: None)
+    monkeypatch.setattr("annuli.storage.embeddings.embed_text", lambda text: None)
     write_sessions(v2_db_path(tmp_path), automated + visible)
     conn = initialise(v2_db_path(tmp_path))
     try:
@@ -1176,7 +1176,7 @@ def test_semantic_search_widens_k_when_the_neighbourhood_is_automated(tmp_path, 
     finally:
         conn.close()
     query = [1.0] + [0.0] * (EMBEDDING_DIM - 1)
-    monkeypatch.setattr("lore.storage.embeddings.embed_text", lambda text: query)
+    monkeypatch.setattr("annuli.storage.embeddings.embed_text", lambda text: query)
 
     hits = semantic_search_sessions(tmp_path, "anything", limit=2)  # first k is 8: all automated
     assert [h["session"]["id"] for h in hits] == ["human-a", "human-b"]
@@ -1286,7 +1286,7 @@ def test_web_false_automated_value_keeps_them_hidden(store):
 
 def test_search_widening_is_capped(tmp_path, monkeypatch, caplog):
     """A table of mostly automated rows stops at the scan cap and returns what it has."""
-    from lore.search import engine as engine_module
+    from annuli.search import engine as engine_module
 
     index_path = tmp_path / "index.json"
     automated = [f"auto-{i:04d}" for i in range(2600)]
@@ -1329,13 +1329,13 @@ def test_search_widening_is_capped(tmp_path, monkeypatch, caplog):
 
     monkeypatch.setattr(engine_module.sqlite3, "connect", lambda p: Spy(real_connect(p)))
     engine = SearchEngine(index_path)
-    with caplog.at_level(logging.WARNING, logger="lore.search.engine"):
+    with caplog.at_level(logging.WARNING, logger="annuli.search.engine"):
         found = engine.search(SHARED_WORD, include_automated=False)
 
     assert found == []
     assert limits == [50, 200, 800, engine_module.SQLITE_MAX_SCANNED_ROWS]
     assert engine.last_search_truncated is True
-    warnings = [r for r in caplog.records if r.name == "lore.search.engine"]
+    warnings = [r for r in caplog.records if r.name == "annuli.search.engine"]
     assert len(warnings) == 1 and warnings[0].levelno == logging.WARNING
     assert SHARED_WORD not in warnings[0].getMessage()
     assert "2000" in warnings[0].getMessage()
@@ -1378,12 +1378,12 @@ def test_index_entry_to_session_keeps_the_contract_fields():
         "source_version": "2.1",
         "parser_version": 3,
     }
-    session = lore_cli._index_entry_to_session(entry)
+    session = annuli_cli._index_entry_to_session(entry)
     assert (session.origin, session.parent_session_id, session.relation) == (
         "subagent",
         "main-1",
         "subagent",
     )
     assert (session.source_version, session.parser_version) == ("2.1", 3)
-    bare = lore_cli._index_entry_to_session({"id": "old", "tool": "claude-code"})
+    bare = annuli_cli._index_entry_to_session({"id": "old", "tool": "claude-code"})
     assert (bare.parent_session_id, bare.relation, bare.parser_version) == (None, None, 0)

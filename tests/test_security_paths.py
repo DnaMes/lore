@@ -1,9 +1,9 @@
 import hashlib
 import os
 
-from lore.extractors.gemini import GeminiCLIExtractor
-from lore.extractors.opencode import OpenCodeExtractor
-from lore.utils.security import sanitize_path
+from annuli.extractors.gemini import GeminiCLIExtractor
+from annuli.extractors.opencode import OpenCodeExtractor
+from annuli.utils.security import sanitize_path
 
 
 def test_sanitize_path_allows_absolute_when_enabled(tmp_path):

@@ -13,11 +13,11 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_data
-from lore.interfaces.routes import sessions as sessions_routes
-from lore.storage.schema import initialise
-from lore.storage.writer import v2_db_path, write_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_data
+from annuli.interfaces.routes import sessions as sessions_routes
+from annuli.storage.schema import initialise
+from annuli.storage.writer import v2_db_path, write_sessions
 
 SID = "sess-v2-view"
 T0 = datetime(2026, 11, 7, 19, 58, 0, tzinfo=timezone.utc)
@@ -165,7 +165,7 @@ def test_live_with_missing_source_shows_the_stored_copy(client):
 
 def test_direct_lookup_miss_skips_the_bulk_scan(monkeypatch):
     """An id that maps to one file is not searched by re-extracting the whole tool."""
-    from lore.services import extraction
+    from annuli.services import extraction
 
     monkeypatch.setattr(web, "find_live_session", lambda *a, **k: None)
     monkeypatch.setattr(extraction, "source_ruled_out", lambda sid, tool: True)
@@ -199,7 +199,7 @@ def test_unaddressable_ids_keep_the_bulk_scan(monkeypatch):
 
 
 def test_claude_addresses_main_ids_only(monkeypatch):
-    from lore.extractors.claude import ClaudeCodeExtractor
+    from annuli.extractors.claude import ClaudeCodeExtractor
 
     extractor = ClaudeCodeExtractor()
     monkeypatch.setattr(extractor, "is_available", lambda: True)

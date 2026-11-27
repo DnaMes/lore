@@ -8,15 +8,15 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
-from lore.interfaces.web_formatting import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
+from annuli.interfaces.web_formatting import (
     format_message_content,
     format_tool_calls,
     sanitize_rendered_html,
 )
-from lore.interfaces.web_services import enrich_session_for_detail
-from lore.utils.text_processing import format_thinking
+from annuli.interfaces.web_services import enrich_session_for_detail
+from annuli.utils.text_processing import format_thinking
 
 _SESSION_ID = "sess-b52-markup"
 
@@ -31,7 +31,7 @@ def _index_entry() -> dict:
                 "display_title": "B5.2 markup session",
                 "created": "2026-04-01T10:00:00",
                 "updated": "2026-04-01T10:05:00",
-                "project": "/repo/lore",
+                "project": "/repo/annuli",
                 "messages": 2,
                 "prompts": 1,
                 "tokens": 100,
@@ -41,7 +41,7 @@ def _index_entry() -> dict:
             "total_sessions": 1,
             "total_messages": 2,
             "by_tool": {"claude-code": 1},
-            "by_project": {"/repo/lore": 1},
+            "by_project": {"/repo/annuli": 1},
         },
         "generated_at": "2026-04-01T00:00:00Z",
     }
@@ -54,7 +54,7 @@ def _synthetic_session() -> UnifiedSession:
         session_id=_SESSION_ID,
         created_at=datetime(2026, 4, 1, 10, 0, 0),
         last_updated=datetime(2026, 4, 1, 10, 5, 0),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title="B5.2 markup session",
         messages=[
             UnifiedMessage(Role.USER, "Run tools please", datetime(2026, 4, 1, 10, 0, 0)),
@@ -155,14 +155,14 @@ def test_sanitizer_keeps_details_summary():
 
 
 def test_base_template_single_code_enhancer_no_wrapper():
-    base = Path(__file__).resolve().parents[1] / "lore" / "templates" / "base.html"
+    base = Path(__file__).resolve().parents[1] / "annuli" / "templates" / "base.html"
     text = base.read_text(encoding="utf-8")
     assert "code-block-wrapper" not in text
     assert text.count("function initCodeBlocks") == 1
 
 
 def test_init_code_blocks_script_accessibility():
-    base = Path(__file__).resolve().parents[1] / "lore" / "templates" / "base.html"
+    base = Path(__file__).resolve().parents[1] / "annuli" / "templates" / "base.html"
     text = base.read_text(encoding="utf-8")
     start = text.index("function initCodeBlocks")
     end = text.index("document.addEventListener('DOMContentLoaded', initCodeBlocks)")
@@ -172,7 +172,7 @@ def test_init_code_blocks_script_accessibility():
 
 
 def test_exit_code_is_never_interpolated_as_markup():
-    from lore.utils.text_processing import format_tool_result
+    from annuli.utils.text_processing import format_tool_result
 
     html = format_tool_result(
         "boom",
@@ -183,7 +183,7 @@ def test_exit_code_is_never_interpolated_as_markup():
 
 
 def test_duration_rejects_booleans_and_absurd_values():
-    from lore.utils.text_processing import format_duration_ms
+    from annuli.utils.text_processing import format_duration_ms
 
     assert format_duration_ms(True) is None
     assert format_duration_ms(10**5000) is None
@@ -192,7 +192,7 @@ def test_duration_rejects_booleans_and_absurd_values():
 
 
 def test_folded_calls_do_not_borrow_the_next_calls_event():
-    from lore.interfaces.web_formatting import format_tool_calls
+    from annuli.interfaces.web_formatting import format_tool_calls
 
     calls = [
         {"tool": "Bash", "input": {"cmd": "ls"}, "_burst_count": 2},
@@ -244,7 +244,7 @@ def test_detail_delete_form_in_header_menu(detail_client):
 
 
 def test_detail_sticky_header_css_in_base():
-    base = Path(__file__).resolve().parents[1] / "lore" / "templates" / "base.html"
+    base = Path(__file__).resolve().parents[1] / "annuli" / "templates" / "base.html"
     text = base.read_text(encoding="utf-8")
     assert ".session-header" in text
     assert "position: sticky" in text or "position:sticky" in text.replace(" ", "")
@@ -253,14 +253,14 @@ def test_detail_sticky_header_css_in_base():
 def test_enhancer_reruns_on_appended_messages_and_checks_copy_result():
     from pathlib import Path
 
-    source = Path("lore/templates/base.html").read_text(encoding="utf-8")
-    assert "addEventListener('lore:messages-appended', initCodeBlocks)" in source
+    source = Path("annuli/templates/base.html").read_text(encoding="utf-8")
+    assert "addEventListener('annuli:messages-appended', initCodeBlocks)" in source
     assert "if (document.execCommand('copy'))" in source
     assert "area.style." not in source
 
 
 def test_session_view_merged_controls_in_base_template():
-    base = Path("lore/templates/base.html").read_text(encoding="utf-8")
+    base = Path("annuli/templates/base.html").read_text(encoding="utf-8")
     assert 'role="group"' in base and "set-view-tools" in base
     for old_id in (
         "cleanToggle",
@@ -275,8 +275,8 @@ def test_session_view_merged_controls_in_base_template():
 def test_sticky_header_wrap_owns_the_sticky_position_and_compacts_on_scroll():
     from pathlib import Path
 
-    base = Path("lore/templates/base.html").read_text(encoding="utf-8")
-    page = Path("lore/templates/session.html").read_text(encoding="utf-8")
+    base = Path("annuli/templates/base.html").read_text(encoding="utf-8")
+    page = Path("annuli/templates/session.html").read_text(encoding="utf-8")
     assert ".session-header-wrap { position: sticky; top: 0;" in base
     assert "session-header-sentinel" not in page
     assert "addEventListener('scroll'" in page and "requestAnimationFrame" in page
@@ -287,7 +287,7 @@ def test_sticky_header_wrap_owns_the_sticky_position_and_compacts_on_scroll():
 
 
 def _base_template_text() -> str:
-    return (Path(__file__).resolve().parents[1] / "lore" / "templates" / "base.html").read_text(
+    return (Path(__file__).resolve().parents[1] / "annuli" / "templates" / "base.html").read_text(
         encoding="utf-8"
     )
 
@@ -299,7 +299,7 @@ def _enhancer_block() -> str:
 
 def test_base_exports_the_enhancer_on_window():
     """One named, idempotent enhancer other templates can call (#176)."""
-    assert "window.loreEnhanceCodeBlocks = initCodeBlocks" in _base_template_text()
+    assert "window.annuliEnhanceCodeBlocks = initCodeBlocks" in _base_template_text()
     assert _enhancer_block().count("function initCodeBlocks") == 1
     # idempotency: an already-wrapped block is skipped on every re-run
     assert "el.closest('.code-card')" in _enhancer_block()
@@ -315,9 +315,9 @@ def test_copy_payload_is_the_exact_text_content():
 def test_session_loader_reuses_the_exported_enhancer():
     """The lazy loader must not run a second, partial enhancement path (#176)."""
     source = (
-        Path(__file__).resolve().parents[1] / "lore" / "templates" / "session.html"
+        Path(__file__).resolve().parents[1] / "annuli" / "templates" / "session.html"
     ).read_text(encoding="utf-8")
-    assert "window.loreEnhanceCodeBlocks" in source
+    assert "window.annuliEnhanceCodeBlocks" in source
     assert "pre code:not(.hljs)" not in source  # the local highlight loop is gone
     # appended pairs still announce themselves to the other listeners
-    assert "window.dispatchEvent(new CustomEvent('lore:messages-appended'))" in source
+    assert "window.dispatchEvent(new CustomEvent('annuli:messages-appended'))" in source

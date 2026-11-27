@@ -13,9 +13,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_data
-from lore.storage import load_session_message_window, v2_db_path, write_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_data
+from annuli.storage import load_session_message_window, v2_db_path, write_sessions
 
 SESSION_ID = "ses_permalink"
 TOTAL = 200
@@ -38,7 +38,7 @@ def _session(session_id: str = SESSION_ID, total: int = TOTAL) -> UnifiedSession
         session_id=session_id,
         created_at=start,
         last_updated=start + timedelta(minutes=total),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title="Permalink session",
         messages=messages,
     )
@@ -243,7 +243,7 @@ def test_html_permalink_unknown_session_is_404(archive):
 def test_permalink_identity_is_the_stored_seq(archive):
     """Reindexing rewrites derived rows; (session_id, seq) keeps resolving."""
     tmp_path, client = archive
-    from lore.exporters.index import IndexBuilder
+    from annuli.exporters.index import IndexBuilder
 
     IndexBuilder(tmp_path).build_index([_session()], {})
     assert client.get(f"/api/v1/sessions/{SESSION_ID}/messages/42").status_code == 200

@@ -1,9 +1,9 @@
 from datetime import datetime
 from pathlib import Path
 
-from lore.core.models import Role, TitleSource, Tool, UnifiedMessage, UnifiedSession
-from lore.extractors.base import BaseExtractor
-from lore.extractors.opencode import OpenCodeExtractor
+from annuli.core.models import Role, TitleSource, Tool, UnifiedMessage, UnifiedSession
+from annuli.extractors.base import BaseExtractor
+from annuli.extractors.opencode import OpenCodeExtractor
 
 
 class DummyExtractor(BaseExtractor):

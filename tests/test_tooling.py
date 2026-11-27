@@ -1,4 +1,4 @@
-from lore.utils.tooling import (
+from annuli.utils.tooling import (
     is_supported_tool,
     normalize_tool_name,
     to_session_switch_tool,

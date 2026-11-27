@@ -10,9 +10,9 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.storage import v2_db_path, write_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.storage import v2_db_path, write_sessions
 
 
 def _session(
@@ -305,7 +305,7 @@ def test_index_builder_v2_failure_is_non_fatal(tmp_path, monkeypatch):
         raise RuntimeError("simulated v2 failure")
 
     # write_sessions_safe swallows; simulate the underlying writer blowing up.
-    monkeypatch.setattr("lore.storage.writer.write_sessions", _boom)
+    monkeypatch.setattr("annuli.storage.writer.write_sessions", _boom)
     # Must not raise.
     IndexBuilder(tmp_path).build_index([_session("e2e")], {})
     # Legacy index is intact.

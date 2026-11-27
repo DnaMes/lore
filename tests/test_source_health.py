@@ -12,10 +12,10 @@ from datetime import datetime
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage.schema import initialise
-from lore.storage.source_health import (
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage.schema import initialise
+from annuli.storage.source_health import (
     HEALTH_STATES,
     list_source_health,
     record_failure,
@@ -24,7 +24,7 @@ from lore.storage.source_health import (
     source_health_summary,
     state_for_capture,
 )
-from lore.storage.writer import write_sessions
+from annuli.storage.writer import write_sessions
 
 
 def _session(source_path: str, sid: str = "s-health") -> UnifiedSession:
@@ -62,7 +62,7 @@ def test_states_are_a_closed_set():
         "deleted",
     )
     with pytest.raises(ValueError):
-        from lore.storage.source_health import record_source_state
+        from annuli.storage.source_health import record_source_state
 
         record_source_state(None, source_identity="x", tool="t", source_path="/x", state="nonsense")
 
@@ -170,8 +170,8 @@ def test_limit_is_applied(tmp_path):
 
 
 def _run_cli(monkeypatch, capsys, *argv):
-    monkeypatch.setattr("sys.argv", ["lore", *argv])
-    code = lore_cli.main()
+    monkeypatch.setattr("sys.argv", ["annuli", *argv])
+    code = annuli_cli.main()
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 

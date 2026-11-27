@@ -13,10 +13,10 @@ from urllib.request import Request
 
 import pytest
 
-from lore.llm.base import LLMConfig
-from lore.llm.factory import get_provider
-from lore.llm.openrouter import DEFAULT_MODEL, OpenRouterError, OpenRouterProvider
-from lore.services.summarize_cli import default_model, provider_locality
+from annuli.llm.base import LLMConfig
+from annuli.llm.factory import get_provider
+from annuli.llm.openrouter import DEFAULT_MODEL, OpenRouterError, OpenRouterProvider
+from annuli.services.summarize_cli import default_model, provider_locality
 
 
 @pytest.fixture(autouse=True)
@@ -26,7 +26,7 @@ def _allow_cloud_direct_construction(monkeypatch: pytest.MonkeyPatch) -> None:
     The factory/CLI gates are tested elsewhere (test_llm_cloud_optin.py,
     test_cli_openrouter_optin.py); here only the provider itself is under test.
     """
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
 
 
 def _completion_body(content: str = "hello", tokens: int = 42) -> bytes:
@@ -68,20 +68,20 @@ def _install_urlopen(
         )
         return handler(calls)
 
-    monkeypatch.setattr("lore.llm.openrouter.urlopen", fake_urlopen)
+    monkeypatch.setattr("annuli.llm.openrouter.urlopen", fake_urlopen)
     return calls
 
 
 @pytest.fixture
-def lore_key(monkeypatch: pytest.MonkeyPatch) -> str:
+def annuli_key(monkeypatch: pytest.MonkeyPatch) -> str:
     key = "or-test-key-" + "x" * 16
     monkeypatch.setenv("OPENROUTER_API_KEY", key)
-    monkeypatch.delenv("LORE_OPENROUTER_BASE_URL", raising=False)
-    monkeypatch.delenv("LORE_OPENROUTER_MODEL", raising=False)
+    monkeypatch.delenv("ANNULI_OPENROUTER_BASE_URL", raising=False)
+    monkeypatch.delenv("ANNULI_OPENROUTER_MODEL", raising=False)
     return key
 
 
-def test_request_shape_and_authorization(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+def test_request_shape_and_authorization(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
     def handler(_calls: List[Dict[str, Any]]):
         return _FakeHTTPResponse(_completion_body("ok", 10))
 
@@ -95,7 +95,7 @@ def test_request_shape_and_authorization(monkeypatch: pytest.MonkeyPatch, lore_k
     assert resp.tokens_used == 10
     assert len(calls) == 1
     assert calls[0]["url"] == "https://openrouter.ai/api/v1/chat/completions"
-    assert calls[0]["headers"]["Authorization"] == f"Bearer {lore_key}"
+    assert calls[0]["headers"]["Authorization"] == f"Bearer {annuli_key}"
     body = calls[0]["body"]
     assert body["model"] == "test/model:free"
     assert body["max_tokens"] == 100
@@ -106,7 +106,7 @@ def test_request_shape_and_authorization(monkeypatch: pytest.MonkeyPatch, lore_k
     ]
 
 
-def test_content_parsing(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+def test_content_parsing(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
     def handler(_calls: List[Dict[str, Any]]):
         return _FakeHTTPResponse(_completion_body("parsed text", 7))
 
@@ -120,9 +120,9 @@ def test_content_parsing(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None
     assert resp.tokens_used == 7
 
 
-def test_429_then_200_retries_with_sleep(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+def test_429_then_200_retries_with_sleep(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
     sleeps: List[float] = []
-    monkeypatch.setattr("lore.llm.openrouter.time.sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr("annuli.llm.openrouter.time.sleep", lambda s: sleeps.append(s))
 
     attempt = 0
 
@@ -148,7 +148,7 @@ def test_429_then_200_retries_with_sleep(monkeypatch: pytest.MonkeyPatch, lore_k
     assert sleeps == [2.0]
 
 
-def test_401_raises_without_leaking_key(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+def test_401_raises_without_leaking_key(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
     def handler(_calls: List[Dict[str, Any]]):
         raise HTTPError(
             "https://openrouter.ai/api/v1/chat/completions",
@@ -165,11 +165,11 @@ def test_401_raises_without_leaking_key(monkeypatch: pytest.MonkeyPatch, lore_ke
     with pytest.raises(OpenRouterError) as exc_info:
         provider.generate("p")
     msg = str(exc_info.value)
-    assert lore_key not in msg
+    assert annuli_key not in msg
     assert "401" in msg
 
 
-def test_empty_content_raises(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+def test_empty_content_raises(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
     def handler(_calls: List[Dict[str, Any]]):
         return _FakeHTTPResponse(_completion_body("   "))
 
@@ -187,11 +187,11 @@ def test_for_transcripts_disables_cache() -> None:
 
 
 def test_factory_returns_openrouter_provider(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str
 ) -> None:
-    monkeypatch.delenv("LORE_OPENROUTER_MODEL", raising=False)
-    provider = get_provider("openrouter", api_key=lore_key, allow_cloud=True)
-    from lore.llm.openrouter import OpenRouterProvider as ORP
+    monkeypatch.delenv("ANNULI_OPENROUTER_MODEL", raising=False)
+    provider = get_provider("openrouter", api_key=annuli_key, allow_cloud=True)
+    from annuli.llm.openrouter import OpenRouterProvider as ORP
 
     assert isinstance(provider, ORP)
     assert provider.config.model == "nvidia/nemotron-3-ultra-550b-a55b:free"
@@ -208,14 +208,14 @@ def test_provider_locality_openrouter_is_cloud() -> None:
 
 
 def test_default_model_openrouter(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LORE_OPENROUTER_MODEL", raising=False)
+    monkeypatch.delenv("ANNULI_OPENROUTER_MODEL", raising=False)
     assert default_model("openrouter") == DEFAULT_MODEL
-    monkeypatch.setenv("LORE_OPENROUTER_MODEL", "custom/model")
+    monkeypatch.setenv("ANNULI_OPENROUTER_MODEL", "custom/model")
     assert default_model("openrouter") == "custom/model"
 
 
 def test_cache_miss_when_temperature_max_tokens_or_base_url_change(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str, tmp_path: Path
 ) -> None:
     responses = iter(["first", "second", "third", "fourth"])
 
@@ -251,9 +251,9 @@ def test_cache_miss_when_temperature_max_tokens_or_base_url_change(
     assert calls[-1]["url"] == "http://127.0.0.1:8080/chat/completions"
 
 
-def test_urlerror_then_200_retries(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+def test_urlerror_then_200_retries(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
     sleeps: List[float] = []
-    monkeypatch.setattr("lore.llm.openrouter.time.sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr("annuli.llm.openrouter.time.sleep", lambda s: sleeps.append(s))
     attempt = 0
 
     def handler(_calls: List[Dict[str, Any]]):
@@ -274,9 +274,9 @@ def test_urlerror_then_200_retries(monkeypatch: pytest.MonkeyPatch, lore_key: st
 
 
 def test_persistent_urlerror_raises_after_retries(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str
 ) -> None:
-    monkeypatch.setattr("lore.llm.openrouter.time.sleep", lambda _s: None)
+    monkeypatch.setattr("annuli.llm.openrouter.time.sleep", lambda _s: None)
 
     def handler(_calls: List[Dict[str, Any]]):
         raise URLError("down")
@@ -290,7 +290,7 @@ def test_persistent_urlerror_raises_after_retries(
     assert len(calls) == 3
 
 
-def test_base_url_scheme_policy(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
+def test_base_url_scheme_policy(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
     provider = OpenRouterProvider(
         LLMConfig(
             provider="openrouter",
@@ -324,7 +324,7 @@ def test_base_url_scheme_policy(monkeypatch: pytest.MonkeyPatch, lore_key: str) 
 
 
 def test_openrouter_cache_request_metadata_uses_resolved_values(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str, tmp_path: Path
 ) -> None:
     def handler(_calls: List[Dict[str, Any]]):
         return _FakeHTTPResponse(_completion_body("cached"))
@@ -358,7 +358,7 @@ def test_openrouter_cache_request_metadata_uses_resolved_values(
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX file modes")
 def test_openrouter_cache_write_is_atomic_0600(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str, tmp_path: Path
 ) -> None:
     def handler(_calls: List[Dict[str, Any]]):
         return _FakeHTTPResponse(_completion_body("cached-body"))
@@ -382,7 +382,7 @@ def test_openrouter_cache_write_is_atomic_0600(
 
 
 def test_cache_file_created_with_mode_0600(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str, tmp_path: Path
 ) -> None:
     def handler(_calls: List[Dict[str, Any]]):
         return _FakeHTTPResponse(_completion_body("cached-body"))
@@ -407,8 +407,8 @@ def test_cache_file_created_with_mode_0600(
 # --- free-only guard and cost reporting (Track L step 2b) ----------------
 
 
-def test_free_model_is_accepted(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
-    monkeypatch.delenv("LORE_OPENROUTER_ALLOW_PAID", raising=False)
+def test_free_model_is_accepted(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
+    monkeypatch.delenv("ANNULI_OPENROUTER_ALLOW_PAID", raising=False)
     calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("ok")))
     provider = OpenRouterProvider(
         LLMConfig(
@@ -421,9 +421,9 @@ def test_free_model_is_accepted(monkeypatch: pytest.MonkeyPatch, lore_key: str) 
 
 @pytest.mark.parametrize("model", ["openai/gpt-5.6-luna", "nvidia/nemotron-3-ultra-550b-a55b"])
 def test_paid_model_refused_before_any_request(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str, model: str
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str, model: str
 ) -> None:
-    monkeypatch.delenv("LORE_OPENROUTER_ALLOW_PAID", raising=False)
+    monkeypatch.delenv("ANNULI_OPENROUTER_ALLOW_PAID", raising=False)
     calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("x")))
     provider = OpenRouterProvider(
         LLMConfig(provider="openrouter", model=model, cache_enabled=False)
@@ -435,15 +435,15 @@ def test_paid_model_refused_before_any_request(
     assert calls == []  # refused before a request went out
     message = str(exc.value)
     assert model in message
-    assert "LORE_OPENROUTER_ALLOW_PAID" in message
-    assert lore_key not in message  # no key material in the error
+    assert "ANNULI_OPENROUTER_ALLOW_PAID" in message
+    assert annuli_key not in message  # no key material in the error
 
 
 def test_paid_model_refused_when_coming_from_env(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str
 ) -> None:
-    monkeypatch.delenv("LORE_OPENROUTER_ALLOW_PAID", raising=False)
-    monkeypatch.setenv("LORE_OPENROUTER_MODEL", "openai/gpt-5.6-luna")
+    monkeypatch.delenv("ANNULI_OPENROUTER_ALLOW_PAID", raising=False)
+    monkeypatch.setenv("ANNULI_OPENROUTER_MODEL", "openai/gpt-5.6-luna")
     calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("x")))
 
     with pytest.raises(OpenRouterError):
@@ -452,8 +452,8 @@ def test_paid_model_refused_when_coming_from_env(
     assert calls == []
 
 
-def test_allow_paid_env_opts_in(monkeypatch: pytest.MonkeyPatch, lore_key: str) -> None:
-    monkeypatch.setenv("LORE_OPENROUTER_ALLOW_PAID", "1")
+def test_allow_paid_env_opts_in(monkeypatch: pytest.MonkeyPatch, annuli_key: str) -> None:
+    monkeypatch.setenv("ANNULI_OPENROUTER_ALLOW_PAID", "1")
     calls = _install_urlopen(monkeypatch, lambda _c: _FakeHTTPResponse(_completion_body("paid")))
     provider = OpenRouterProvider(
         LLMConfig(provider="openrouter", model="openai/gpt-5.6-luna", cache_enabled=False)
@@ -462,7 +462,7 @@ def test_allow_paid_env_opts_in(monkeypatch: pytest.MonkeyPatch, lore_key: str) 
     assert len(calls) == 1
 
 
-def test_zero_cost_is_silent(monkeypatch: pytest.MonkeyPatch, lore_key: str, capsys) -> None:
+def test_zero_cost_is_silent(monkeypatch: pytest.MonkeyPatch, annuli_key: str, capsys) -> None:
     body = {
         "choices": [{"message": {"content": "ok"}}],
         "usage": {"total_tokens": 5, "cost": 0},
@@ -478,7 +478,7 @@ def test_zero_cost_is_silent(monkeypatch: pytest.MonkeyPatch, lore_key: str, cap
 
 
 def test_nonzero_cost_warns_on_stderr(
-    monkeypatch: pytest.MonkeyPatch, lore_key: str, capsys
+    monkeypatch: pytest.MonkeyPatch, annuli_key: str, capsys
 ) -> None:
     body = {
         "choices": [{"message": {"content": "ok"}}],

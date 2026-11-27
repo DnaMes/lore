@@ -12,8 +12,8 @@ import sqlite3
 
 import pytest
 
-from lore.storage import schema as schema_module
-from lore.storage.schema import MIGRATIONS, apply_migrations, current_version, open_connection
+from annuli.storage import schema as schema_module
+from annuli.storage.schema import MIGRATIONS, apply_migrations, current_version, open_connection
 
 FULL_MIGRATIONS = list(MIGRATIONS)
 # Migration 17 adds several columns. Fail on the second statement, so the first

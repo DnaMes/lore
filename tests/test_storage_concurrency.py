@@ -12,8 +12,8 @@ import sqlite3
 import threading
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import (
     add_memory,
     apply_migrations,
     current_version,
@@ -21,7 +21,7 @@ from lore.storage import (
     open_connection,
     write_sessions,
 )
-from lore.storage.schema import _run_migration_sql
+from annuli.storage.schema import _run_migration_sql
 
 
 def _session(sid, n=2):
@@ -82,8 +82,8 @@ def _inject_commit_during_hash(tmp_path, monkeypatch):
     while a reader holds its snapshot: the reader keeps seeing the older commit, and
     that is exactly what the freshness check has to report as healthy.
     """
-    from lore.storage import freshness
-    from lore.storage.writer import v2_db_path as _db_path
+    from annuli.storage import freshness
+    from annuli.storage.writer import v2_db_path as _db_path
 
     db = _db_path(tmp_path)
     real = freshness.compute_content_hash
@@ -101,8 +101,8 @@ def _inject_commit_during_hash(tmp_path, monkeypatch):
 
 def test_store_freshness_reads_stamp_and_rows_in_one_snapshot(tmp_path, monkeypatch):
     """A commit between the two reads must not look like a tampered store (#48)."""
-    from lore.storage import freshness
-    from lore.storage.writer import v2_db_path
+    from annuli.storage import freshness
+    from annuli.storage.writer import v2_db_path
 
     db = v2_db_path(tmp_path)
     initialise(db).close()
@@ -118,8 +118,8 @@ def test_store_freshness_reads_stamp_and_rows_in_one_snapshot(tmp_path, monkeypa
 
 def test_v2_is_available_reads_stamp_and_rows_in_one_snapshot(tmp_path, monkeypatch):
     """The reader's gate has the same race, so it takes the same snapshot."""
-    from lore.storage.reader import v2_is_available
-    from lore.storage.writer import v2_db_path
+    from annuli.storage.reader import v2_is_available
+    from annuli.storage.writer import v2_db_path
 
     db = v2_db_path(tmp_path)
     initialise(db).close()

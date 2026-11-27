@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.extractors.base import BaseExtractor
-from lore.interfaces import web, web_utils
-from lore.utils.redact import redact
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.extractors.base import BaseExtractor
+from annuli.interfaces import web, web_utils
+from annuli.utils.redact import redact
 
 # ---------------------------------------------------------------------------
 # (a) redact() edge cases
@@ -165,17 +165,17 @@ def test_redact_is_idempotent_on_seeded_token_composites():
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.delenv("TRUSTED_PROXY", raising=False)
-    monkeypatch.delenv("LORE_PUBLIC_ORIGINS", raising=False)
-    monkeypatch.delenv("LORE_ALLOWED_HOSTS", raising=False)
-    monkeypatch.delenv("LORE_WEB_HOST", raising=False)
+    monkeypatch.delenv("ANNULI_PUBLIC_ORIGINS", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOWED_HOSTS", raising=False)
+    monkeypatch.delenv("ANNULI_WEB_HOST", raising=False)
     monkeypatch.setattr(web, "_BIND_HOST", "")
     web.app.config["TESTING"] = True
     return web.app.test_client()
 
 
 def test_uppercase_allowed_hosts_entry_matches_lowercase_request(client, monkeypatch):
-    monkeypatch.setenv("LORE_ALLOWED_HOSTS", " Lore.Example.COM ")
-    assert client.get("/api/health", headers={"Host": "lore.example.com"}).status_code == 200
+    monkeypatch.setenv("ANNULI_ALLOWED_HOSTS", " Annuli.Example.COM ")
+    assert client.get("/api/health", headers={"Host": "annuli.example.com"}).status_code == 200
     assert client.get("/api/health", headers={"Host": "other.example"}).status_code == 400
 
 
@@ -184,9 +184,9 @@ def test_trailing_dot_host_is_rejected(client):
 
 
 def test_trailing_dot_entry_never_matches_dotless_host(monkeypatch):
-    monkeypatch.setenv("LORE_ALLOWED_HOSTS", "lore.example.")
-    assert web_utils.host_header_allowed("lore.example") is False
-    assert web_utils.host_header_allowed("lore.example.") is True
+    monkeypatch.setenv("ANNULI_ALLOWED_HOSTS", "annuli.example.")
+    assert web_utils.host_header_allowed("annuli.example") is False
+    assert web_utils.host_header_allowed("annuli.example.") is True
 
 
 def test_bare_ipv6_literal_without_brackets_is_rejected(client):
@@ -210,9 +210,9 @@ def test_userinfo_in_origin_is_not_an_origin():
 
 
 def test_userinfo_entry_in_allowed_hosts_is_ignored_with_warning(monkeypatch, caplog):
-    monkeypatch.setenv("LORE_ALLOWED_HOSTS", "user@lore.example")
-    caplog.set_level(logging.WARNING, logger="lore.interfaces.web_utils")
-    assert web_utils.host_header_allowed("lore.example:5000") is False
+    monkeypatch.setenv("ANNULI_ALLOWED_HOSTS", "user@annuli.example")
+    caplog.set_level(logging.WARNING, logger="annuli.interfaces.web_utils")
+    assert web_utils.host_header_allowed("annuli.example:5000") is False
     assert any("Ignoring malformed host entry" in r.getMessage() for r in caplog.records)
 
 
@@ -223,9 +223,9 @@ def test_port_zero_and_overflow_ports_are_never_allowed_hosts():
 
 
 def test_invalid_port_entry_in_allowed_hosts_is_ignored_with_warning(client, monkeypatch, caplog):
-    monkeypatch.setenv("LORE_ALLOWED_HOSTS", "lore.example:0")
-    caplog.set_level(logging.WARNING, logger="lore.interfaces.web_utils")
-    assert client.get("/api/health", headers={"Host": "lore.example:5000"}).status_code == 400
+    monkeypatch.setenv("ANNULI_ALLOWED_HOSTS", "annuli.example:0")
+    caplog.set_level(logging.WARNING, logger="annuli.interfaces.web_utils")
+    assert client.get("/api/health", headers={"Host": "annuli.example:5000"}).status_code == 400
     assert any("Ignoring malformed host entry" in r.getMessage() for r in caplog.records)
 
 
@@ -284,7 +284,7 @@ def _prune_args(output_dir: Path) -> Namespace:
 
 def _archive_with_candidate(tmp_path: Path, target: Path) -> Path:
     """Index one low-prompt session whose export_path points at ``target``."""
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     archive.mkdir(exist_ok=True)
     IndexBuilder(archive).build_index([_session("edge-sess")], {})
     index = json.loads((archive / "index.json").read_text(encoding="utf-8"))
@@ -297,22 +297,22 @@ def _archive_with_candidate(tmp_path: Path, target: Path) -> Path:
 
 
 def _run_prune(monkeypatch: pytest.MonkeyPatch, archive: Path) -> str:
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
     import contextlib
     import io
 
     err = io.StringIO()
     with contextlib.redirect_stderr(err):
-        lore_cli.cmd_prune(_prune_args(archive))
+        annuli_cli.cmd_prune(_prune_args(archive))
     return err.getvalue()
 
 
 def test_prune_refuses_dotdot_escape_beyond_archive_root(tmp_path, monkeypatch):
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     (archive / "projects" / "p" / "tool").mkdir(parents=True)
     escaped = tmp_path / "escaped.md"
     escaped.write_text("keep me", encoding="utf-8")
-    # tool -> p -> projects -> lore -> tmp_path: lands outside the archive root.
+    # tool -> p -> projects -> annuli -> tmp_path: lands outside the archive root.
     target = archive / "projects" / "p" / "tool" / ".." / ".." / ".." / ".." / "escaped.md"
     _archive_with_candidate(tmp_path, target)
 
@@ -325,7 +325,7 @@ def test_prune_refuses_dotdot_escape_beyond_archive_root(tmp_path, monkeypatch):
 
 def test_prune_deletes_export_when_dotdot_resolves_inside_layout(tmp_path, monkeypatch):
     """A ``..`` segment that normalises to the exporter layout is still deletable."""
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     export = archive / "projects" / "p" / "tool" / _EXPORT_NAME
     export.parent.mkdir(parents=True)
     export.write_text("# export", encoding="utf-8")
@@ -341,12 +341,12 @@ def test_prune_deletes_export_when_dotdot_resolves_inside_layout(tmp_path, monke
 
 def test_prune_refuses_prefix_sibling_directory(tmp_path, monkeypatch):
     """``<root>-evil`` shares a string prefix with the root but is a different tree."""
-    sibling = tmp_path / "lore-evil" / "projects" / "p" / "tool" / _EXPORT_NAME
+    sibling = tmp_path / "annuli-evil" / "projects" / "p" / "tool" / _EXPORT_NAME
     sibling.parent.mkdir(parents=True)
     sibling.write_text("evil keep me", encoding="utf-8")
     _archive_with_candidate(tmp_path, sibling)
 
-    err = _run_prune(monkeypatch, tmp_path / "lore")
+    err = _run_prune(monkeypatch, tmp_path / "annuli")
 
     assert sibling.exists()
     assert sibling.read_text(encoding="utf-8") == "evil keep me"
@@ -355,7 +355,7 @@ def test_prune_refuses_prefix_sibling_directory(tmp_path, monkeypatch):
 
 def test_prune_refuses_symlinked_parent_directory_escape(tmp_path, monkeypatch):
     """A symlinked directory inside projects/ must not make outside files deletable."""
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     archive.mkdir()
     (archive / "projects").mkdir()
     IndexBuilder(archive).build_index([_session("edge-sess")], {})

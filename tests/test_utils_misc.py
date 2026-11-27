@@ -9,17 +9,17 @@ from unittest.mock import patch
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.utils.datetime import make_naive, parse_duration, parse_timestamp
-from lore.utils.git import get_git_info
-from lore.utils.paths import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.utils.datetime import make_naive, parse_duration, parse_timestamp
+from annuli.utils.git import get_git_info
+from annuli.utils.paths import (
     get_current_project,
     make_thread_id,
     project_to_dirname,
     safe_copy_db,
     sanitize_filename,
 )
-from lore.utils.rules import extract_rules
+from annuli.utils.rules import extract_rules
 
 # ---------------------------------------------------------------------------
 # utils/datetime.py

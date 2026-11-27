@@ -1,4 +1,4 @@
-"""Persisted, idempotent `lore knowledge` extraction (#197, task 2, migration 14)."""
+"""Persisted, idempotent `annuli knowledge` extraction (#197, task 2, migration 14)."""
 
 from __future__ import annotations
 
@@ -10,26 +10,26 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-import lore.llm
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse
-from lore.llm.tasks.knowledge import KnowledgeExtractor
-from lore.services.knowledge import (
+import annuli.llm
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse
+from annuli.llm.tasks.knowledge import KnowledgeExtractor
+from annuli.services.knowledge import (
     KNOWLEDGE_PROMPT_VERSION,
     ExtractionReport,
     run_extraction,
 )
-from lore.storage import current_version, get_memory, initialise, open_connection
-from lore.storage.knowledge import (
+from annuli.storage import current_version, get_memory, initialise, open_connection
+from annuli.storage.knowledge import (
     get_session_knowledge,
     list_session_knowledge,
     prompt_fingerprint,
     save_session_knowledge,
 )
-from lore.storage.schema import MIGRATIONS
-from lore.storage.writer import v2_db_path
+from annuli.storage.schema import MIGRATIONS
+from annuli.storage.writer import v2_db_path
 from tests.test_summarize_pipeline import _replace_messages
 
 
@@ -138,10 +138,10 @@ def _args(output_dir: Path) -> Namespace:
 
 @pytest.fixture
 def use_provider(monkeypatch):
-    """Make `lore knowledge` use the given fake instead of a real provider."""
+    """Make `annuli knowledge` use the given fake instead of a real provider."""
 
     def install(provider: FakeProvider) -> None:
-        monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
+        monkeypatch.setattr(annuli.llm, "get_provider", lambda **kwargs: provider)
 
     return install
 
@@ -301,10 +301,10 @@ def test_knowledge_base_json_is_complete_after_partial_run(tmp_path, use_provide
     args = _args(tmp_path)
     use_provider(provider)
 
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
     _replace_messages(tmp_path, _session("b", "beta talk changed"))
     provider.responses = [_payload("Beta2")]
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
 
     kb = json.loads((tmp_path / "knowledge" / "knowledge_base.json").read_text())
     assert kb["total_entries"] == 2
@@ -365,7 +365,7 @@ def test_cmd_knowledge_exits_one_when_every_call_fails(tmp_path, use_provider, c
     _build(tmp_path, _session("s1", "hello there"))
     use_provider(FakeProvider(["not json"]))
 
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 1
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 1
 
     assert "all 1 extraction calls failed" in capsys.readouterr().err
 
@@ -375,11 +375,11 @@ def test_cmd_knowledge_tool_flag_scopes_the_output(tmp_path, use_provider):
     b.tool = Tool.CURSOR
     _build(tmp_path, a, b)
     use_provider(FakeProvider([_payload("Alpha"), _payload("Beta")]))
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
 
     args = _args(tmp_path)
     args.tool = "cursor"
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
 
     kb = json.loads((tmp_path / "knowledge" / "knowledge_base.json").read_text())
     assert [e["session_id"] for e in kb["entries"]] == ["cursor-one"]
@@ -391,11 +391,11 @@ def test_cmd_knowledge_excludes_deleted_sessions(tmp_path, use_provider):
     _build(tmp_path, a, b)
     provider = FakeProvider([_payload("Keep"), _payload("Gone")])
     use_provider(provider)
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
     assert len(provider.prompts) == 2
 
     (tmp_path / "deleted_sessions.json").write_text(json.dumps({"session_ids": ["gone"]}))
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
 
     kb = json.loads((tmp_path / "knowledge" / "knowledge_base.json").read_text())
     assert [e["session_id"] for e in kb["entries"]] == ["keep"]
@@ -406,12 +406,12 @@ def test_cmd_knowledge_clears_stale_output_when_every_session_is_deleted(tmp_pat
     """The old file must not keep the text of sessions deleted since the last run."""
     _build(tmp_path, _session("gone", "beta talk"))
     use_provider(FakeProvider([_payload("Secret topic")]))
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
     kb_path = tmp_path / "knowledge" / "knowledge_base.json"
     assert "Secret topic" in kb_path.read_text()
 
     (tmp_path / "deleted_sessions.json").write_text(json.dumps({"session_ids": ["gone"]}))
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
 
     kb = json.loads(kb_path.read_text())
     assert kb["total_entries"] == 0
@@ -424,7 +424,7 @@ def test_cmd_knowledge_does_not_extract_deleted_session(tmp_path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
 
     assert provider.prompts == []
 
@@ -434,10 +434,10 @@ def test_cmd_knowledge_exit_zero_when_nothing_new(tmp_path, use_provider, capsys
     provider = FakeProvider()
     args = _args(tmp_path)
     use_provider(provider)
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
     capsys.readouterr()
 
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
 
     out = capsys.readouterr().out
     assert "nothing new" in out.lower()
@@ -458,7 +458,7 @@ def test_cmd_knowledge_names_provider_before_sending(tmp_path, use_provider, cap
     provider.generate = spy  # type: ignore[method-assign]
     use_provider(provider)
 
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
 
     assert "gemini" in seen[0] and "gemini-2.0-flash" in seen[0]
 
@@ -473,7 +473,7 @@ def test_cmd_knowledge_session_without_messages_exits_zero(tmp_path, use_provide
     provider = FakeProvider()
     use_provider(provider)
 
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
     assert provider.prompts == []
 
 
@@ -484,12 +484,12 @@ def test_cmd_knowledge_tool_scope_ignores_the_limit(tmp_path, use_provider):
     new.created_at = datetime(2026, 2, 1)
     _build(tmp_path, old, new)
     use_provider(FakeProvider([_payload("Alpha"), _payload("Beta")]))
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 0
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 0
 
     args = _args(tmp_path)
     args.tool = "claude-code"
     args.limit = 1
-    assert lore_cli.cmd_knowledge(args) == 0
+    assert annuli_cli.cmd_knowledge(args) == 0
 
     kb = json.loads((tmp_path / "knowledge" / "knowledge_base.json").read_text())
     assert {e["session_id"] for e in kb["entries"]} == {"claude-old", "claude-new"}
@@ -528,7 +528,7 @@ def test_cmd_knowledge_error_names_the_failure_cause(tmp_path, use_provider, cap
     _build(tmp_path, _session("s1", "hello there"))
     use_provider(FakeProvider(["not json"]))
 
-    assert lore_cli.cmd_knowledge(_args(tmp_path)) == 1
+    assert annuli_cli.cmd_knowledge(_args(tmp_path)) == 1
     err = capsys.readouterr().err
     assert "all 1 extraction calls failed" in err
     assert "1 unparsable" in err
@@ -536,8 +536,8 @@ def test_cmd_knowledge_error_names_the_failure_cause(tmp_path, use_provider, cap
 
 def test_save_session_knowledge_brackets_an_explicit_transaction(tmp_path, monkeypatch):
     """The upsert must not lean on autocommit: it brackets itself (#199)."""
-    from lore.storage import knowledge as knowledge_mod
-    from lore.storage.writer import v2_db_path
+    from annuli.storage import knowledge as knowledge_mod
+    from annuli.storage.writer import v2_db_path
 
     initialise(v2_db_path(tmp_path))  # schema is current, so nothing else emits BEGIN
     statements: List[str] = []

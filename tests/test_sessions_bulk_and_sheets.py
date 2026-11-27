@@ -9,12 +9,12 @@ from html.parser import HTMLParser
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_data
-from lore.interfaces.web_formatting import format_message_content, format_tool_calls
-from lore.interfaces.web_services import enrich_session_for_detail
-from lore.storage.summaries import get_summary, save_summary
-from lore.utils.text_processing import format_thinking
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_data
+from annuli.interfaces.web_formatting import format_message_content, format_tool_calls
+from annuli.interfaces.web_services import enrich_session_for_detail
+from annuli.storage.summaries import get_summary, save_summary
+from annuli.utils.text_processing import format_thinking
 
 _DETAIL_ID = "sess-b56-detail"
 _LIST_ID = "sess-b56-list01"
@@ -42,7 +42,7 @@ def _list_session(session_id: str, **overrides) -> dict:
         "display_title": f"Title for {session_id}",
         "created": "2026-04-01T10:00:00",
         "updated": "2026-04-01T11:00:00",
-        "project": "/repo/lore",
+        "project": "/repo/annuli",
         "messages": 4,
         "prompts": 2,
         "tokens": 1000,
@@ -60,7 +60,7 @@ def _detail_index() -> dict:
             "display_title": "Detail with prompts",
             "created": "2026-04-01T10:00:00",
             "updated": "2026-04-01T10:30:00",
-            "project": "/repo/lore",
+            "project": "/repo/annuli",
             "messages": 4,
             "prompts": 2,
             "tokens": 500,
@@ -74,7 +74,7 @@ def _synthetic_detail_session() -> UnifiedSession:
         session_id=_DETAIL_ID,
         created_at=datetime(2026, 4, 1, 10, 0, 0),
         last_updated=datetime(2026, 4, 1, 10, 30, 0),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title="Detail with prompts",
         messages=[
             UnifiedMessage(Role.USER, "First user prompt here", datetime(2026, 4, 1, 10, 0, 0)),
@@ -227,7 +227,7 @@ def test_bulk_delete_tombstones_and_sanitises_next(monkeypatch, tmp_path):
     monkeypatch.setattr(web_data, "INDEX_PATH", index_path)
     monkeypatch.setattr(web_data, "DELETED_SESSIONS_PATH", deleted_path)
     monkeypatch.setattr(web, "INDEX_PATH", index_path)
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     with web.app.test_client() as client:
@@ -274,7 +274,7 @@ def test_bulk_delete_invalid_id_no_partial(monkeypatch, tmp_path):
     monkeypatch.setattr(web_data, "INDEX_PATH", index_path)
     monkeypatch.setattr(web_data, "DELETED_SESSIONS_PATH", deleted_path)
     monkeypatch.setattr(web, "INDEX_PATH", index_path)
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     with web.app.test_client() as client:
@@ -314,9 +314,9 @@ def test_bulk_delete_rejects_cross_origin():
 
 
 def test_bulk_delete_purges_summaries(monkeypatch, tmp_path):
-    from lore.storage import initialise
-    from lore.storage.summaries import summary_fingerprint
-    from lore.storage.writer import v2_db_path
+    from annuli.storage import initialise
+    from annuli.storage.summaries import summary_fingerprint
+    from annuli.storage.writer import v2_db_path
 
     fake_output = tmp_path / ".annuli"
     fake_output.mkdir()
@@ -341,7 +341,7 @@ def test_bulk_delete_purges_summaries(monkeypatch, tmp_path):
     monkeypatch.setattr(web_data, "INDEX_PATH", index_path)
     monkeypatch.setattr(web_data, "DELETED_SESSIONS_PATH", deleted_path)
     monkeypatch.setattr(web, "INDEX_PATH", index_path)
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
     save_summary(
         fake_output,
@@ -364,8 +364,8 @@ def test_bulk_delete_purges_summaries(monkeypatch, tmp_path):
 
 
 def test_bulk_tag_applies_tag(monkeypatch, tmp_path):
-    from lore.storage import get_session_tags, initialise
-    from lore.storage.writer import v2_db_path
+    from annuli.storage import get_session_tags, initialise
+    from annuli.storage.writer import v2_db_path
 
     fake_output = tmp_path / ".annuli"
     fake_output.mkdir()
@@ -392,7 +392,7 @@ def test_bulk_tag_applies_tag(monkeypatch, tmp_path):
     monkeypatch.setattr(web, "OUTPUT_DIR", fake_output)
     monkeypatch.setattr(web_data, "INDEX_PATH", index_path)
     monkeypatch.setattr(web, "INDEX_PATH", index_path)
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     with web.app.test_client() as client:
@@ -406,7 +406,7 @@ def test_bulk_tag_applies_tag(monkeypatch, tmp_path):
 
 
 def test_bulk_tag_invalid_tag_400_no_partial(monkeypatch, tmp_path):
-    from lore.storage import get_session_tags
+    from annuli.storage import get_session_tags
 
     fake_output = tmp_path / ".annuli"
     fake_output.mkdir()
@@ -427,7 +427,7 @@ def test_bulk_tag_invalid_tag_400_no_partial(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(web_data, "OUTPUT_DIR", fake_output)
     monkeypatch.setattr(web_data, "INDEX_PATH", index_path)
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     with web.app.test_client() as client:
@@ -466,8 +466,8 @@ def test_detail_scripts_have_key_guards_and_focustrap(detail_client):
 def test_rows_are_bound_once_and_escape_closes_every_dialog():
     from pathlib import Path
 
-    page = Path("lore/templates/sessions.html").read_text(encoding="utf-8")
-    base = Path("lore/templates/base.html").read_text(encoding="utf-8")
+    page = Path("annuli/templates/sessions.html").read_text(encoding="utf-8")
+    base = Path("annuli/templates/base.html").read_text(encoding="utf-8")
     assert "if (row.dataset.boundSelect) return;" in page
     assert "[bulkDeleteConfirm, bulkTagDialog].forEach" in page
     assert "e.key !== 'Escape'" in base and "closeConfirmDialog();" in base

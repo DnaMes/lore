@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-import lore
-from lore.utils import paths
+import annuli
+from annuli.utils import paths
 
 
 @pytest.fixture
@@ -22,24 +22,24 @@ def _store(path: Path) -> Path:
 
 
 def test_home_defaults_to_annuli_when_nothing_exists(fake_home):
-    assert paths.lore_home() == fake_home / ".annuli"
+    assert paths.annuli_home() == fake_home / ".annuli"
 
 
 def test_home_falls_back_to_legacy_store(fake_home):
     _store(fake_home / ".lore")
-    assert paths.lore_home() == fake_home / ".lore"
+    assert paths.annuli_home() == fake_home / ".lore"
 
 
 def test_bare_annuli_dir_does_not_hide_legacy_store(fake_home):
     (fake_home / ".annuli").mkdir()
     _store(fake_home / ".lore")
-    assert paths.lore_home() == fake_home / ".lore"
+    assert paths.annuli_home() == fake_home / ".lore"
 
 
 def test_annuli_store_wins_over_legacy(fake_home):
     _store(fake_home / ".annuli")
     _store(fake_home / ".lore")
-    assert paths.lore_home() == fake_home / ".annuli"
+    assert paths.annuli_home() == fake_home / ".annuli"
 
 
 @pytest.mark.parametrize(
@@ -56,14 +56,14 @@ def test_legacy_env_is_adopted(monkeypatch, capsys, env, expected):
     monkeypatch.delenv("LORE_X", raising=False)
     for key, value in env.items():
         monkeypatch.setenv(key, value)
-    lore._adopt_legacy_env()
+    annuli._adopt_legacy_env()
     assert os.environ.get("ANNULI_X") == expected
     err = capsys.readouterr().err
     assert ("LORE_X" in err) == (env == {"LORE_X": "old"})
 
 
 def test_stored_legacy_path_reanchors_under_new_home(tmp_path, monkeypatch):
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     home = tmp_path / ".annuli"
     target = home / "projects" / "p" / "s.md"

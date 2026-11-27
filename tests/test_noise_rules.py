@@ -1,8 +1,8 @@
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_utils
-from lore.interfaces.web_services import normalize_session_messages_for_display
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_utils
+from annuli.interfaces.web_services import normalize_session_messages_for_display
 
 
 def _session(messages):

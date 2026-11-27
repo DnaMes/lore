@@ -7,7 +7,7 @@ message range, or whether user turns were skipped with them.
 
 from __future__ import annotations
 
-from lore.services.summarize_chunks import (
+from annuli.services.summarize_chunks import (
     MAX_CHUNKS,
     MAX_SESSION_TOKENS,
     MERGE_PROMPT_BASE_TOKENS,
@@ -16,7 +16,7 @@ from lore.services.summarize_chunks import (
     chunk_coverage,
     sample_chunks,
 )
-from lore.services.summary_input import CompressedBlock, SummaryMessage, compress, split_chunks
+from annuli.services.summary_input import CompressedBlock, SummaryMessage, compress, split_chunks
 
 
 def _block(seq: int, *, user: bool = False) -> CompressedBlock:

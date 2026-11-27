@@ -7,8 +7,8 @@ from html.parser import HTMLParser
 
 import pytest
 
-from lore.interfaces import web
-from lore.interfaces.web_formatting import should_show_prompt_outline
+from annuli.interfaces import web
+from annuli.interfaces.web_formatting import should_show_prompt_outline
 
 _ISO_TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T")
 
@@ -34,7 +34,7 @@ def _full_session(**overrides) -> dict:
         "display_title": "Fix the session list layout",
         "created": "2026-04-01T10:00:00",
         "updated": "2026-04-01T11:05:00",
-        "project": "/repo/lore",
+        "project": "/repo/annuli",
         "messages": 10,
         "prompts": 3,
         "tokens": 12400,
@@ -215,7 +215,7 @@ def test_should_show_prompt_outline_punctuation_only_prefix():
 
 
 def test_mixed_naive_and_aware_timestamps_do_not_break_the_row_helpers():
-    from lore.interfaces.web_formatting import format_session_duration, format_session_row_time
+    from annuli.interfaces.web_formatting import format_session_duration, format_session_row_time
 
     mixed = format_session_duration("2026-04-01T10:00:00", "2026-04-01T11:05:00Z")
     assert isinstance(mixed, str)  # no TypeError; the value depends on the local timezone

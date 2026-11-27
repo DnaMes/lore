@@ -10,9 +10,9 @@ from unittest.mock import patch
 
 import pytest
 
-from lore.core.models import Tool
-from lore.interfaces import web
-from lore.interfaces.web_helpers import TOOL_STYLES, get_style
+from annuli.core.models import Tool
+from annuli.interfaces import web
+from annuli.interfaces.web_helpers import TOOL_STYLES, get_style
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ICONS_DIR = Path(web.__file__).parent / "static" / "icons"
@@ -126,7 +126,7 @@ def test_static_icon_route_and_csp(client):
 
 def test_package_data_covers_static_icons():
     pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    globs = pyproject["tool"]["setuptools"]["package-data"]["lore.interfaces"]
+    globs = pyproject["tool"]["setuptools"]["package-data"]["annuli.interfaces"]
     required_files = [
         "static/icons/claudecode.svg",
         "static/icons/LICENSE-lobe-icons.txt",

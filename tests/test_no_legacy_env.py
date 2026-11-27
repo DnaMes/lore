@@ -1,4 +1,4 @@
-"""The retired AI_HISTORY_* env names are not read; only LORE_* is honoured."""
+"""The retired AI_HISTORY_* env names are not read; only ANNULI_* is honoured."""
 
 from __future__ import annotations
 
@@ -11,15 +11,17 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_legacy_ai_history_env_is_ignored(tmp_path):
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("LORE_", "AI_HISTORY_"))}
+    env = {
+        k: v for k, v in os.environ.items() if not k.startswith(("ANNULI_", "LORE_", "AI_HISTORY_"))
+    }
     env["HOME"] = str(tmp_path)
     env["AI_HISTORY_RATE_LIMIT_ENABLED"] = "false"
 
     code = (
         "import os\n"
-        "import lore\n"
-        "from lore.interfaces.web_utils import _rate_limit_enabled\n"
-        "print(os.environ.get('LORE_RATE_LIMIT_ENABLED'))\n"
+        "import annuli\n"
+        "from annuli.interfaces.web_utils import _rate_limit_enabled\n"
+        "print(os.environ.get('ANNULI_RATE_LIMIT_ENABLED'))\n"
         "print(_rate_limit_enabled())\n"
     )
     result = subprocess.run(

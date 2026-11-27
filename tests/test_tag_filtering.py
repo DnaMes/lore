@@ -14,18 +14,18 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.interfaces.web_helpers import filter_sessions
-from lore.interfaces.web_services import compute_top_tags
-from lore.storage import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.interfaces.web_helpers import filter_sessions
+from annuli.interfaces.web_services import compute_top_tags
+from annuli.storage import (
     add_session_tag,
     all_tags_by_session,
     get_tags_for_sessions,
     list_all_tags,
 )
-from lore.storage.writer import write_sessions_safe
-from lore.utils.sqlite_copy import copy_sqlite_with_sidecars
+from annuli.storage.writer import write_sessions_safe
+from annuli.utils.sqlite_copy import copy_sqlite_with_sidecars
 
 
 def _session(session_id: str) -> UnifiedSession:
@@ -119,7 +119,7 @@ def test_saved_tags_survive_an_index_rebuild(archive):
 
 def test_saved_tags_survive_a_consistent_sqlite_copy(archive, tmp_path):
     """The copy is what a backup bundle contains (#161 will wrap this)."""
-    from lore.storage.writer import v2_db_path
+    from annuli.storage.writer import v2_db_path
 
     copy_dir = tmp_path / "copy"
     copy_dir.mkdir()
@@ -171,31 +171,31 @@ def _list_args(output_dir: Path, **overrides):
 
 
 def test_cli_list_filters_by_saved_tag(archive, monkeypatch, capsys):
-    """`lore list --tag` reads the same table as the web filter."""
-    import lore_cli
+    """`annuli list --tag` reads the same table as the web filter."""
+    import annuli_cli
 
     sessions = [_session("tagged"), _session("plain")]
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_StubExtractor(sessions)])
-    lore_cli.cmd_list(_list_args(archive, tag="bookmark"))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_StubExtractor(sessions)])
+    annuli_cli.cmd_list(_list_args(archive, tag="bookmark"))
     payload = json.loads(capsys.readouterr().out)
     assert [entry["session_id"] for entry in payload] == ["tagged"]
 
 
 def test_cli_list_without_tag_shows_both(archive, monkeypatch, capsys):
-    import lore_cli
+    import annuli_cli
 
     sessions = [_session("tagged"), _session("plain")]
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_StubExtractor(sessions)])
-    lore_cli.cmd_list(_list_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_StubExtractor(sessions)])
+    annuli_cli.cmd_list(_list_args(archive))
     payload = json.loads(capsys.readouterr().out)
     assert {entry["session_id"] for entry in payload} == {"tagged", "plain"}
 
 
 def test_cli_search_filters_by_saved_tag(archive, monkeypatch, capsys):
-    """`lore search --tag` keeps the ranked hits that carry the tag."""
+    """`annuli search --tag` keeps the ranked hits that carry the tag."""
     import argparse
 
-    import lore_cli
+    import annuli_cli
 
     IndexBuilder(archive).build_index([_session("tagged"), _session("plain")], {})
     args = argparse.Namespace(
@@ -206,7 +206,7 @@ def test_cli_search_filters_by_saved_tag(archive, monkeypatch, capsys):
         include_automated=False,
         output_dir=str(archive),
     )
-    lore_cli.cmd_search(args)
+    annuli_cli.cmd_search(args)
     out = capsys.readouterr().out
     assert "Found 1 result" in out
     assert "tagged" in out
@@ -216,14 +216,14 @@ def _mcp_call(monkeypatch, archive: Path, tool: str, arguments: dict) -> dict:
     """Register the real MCP tool group against the fixture archive and call it."""
     import asyncio
 
-    from lore.interfaces import mcp as mcp_module
+    from annuli.interfaces import mcp as mcp_module
 
     index_payload = json.loads((archive / "index.json").read_text(encoding="utf-8"))
     monkeypatch.setattr(mcp_module, "load_index", lambda: index_payload)
     monkeypatch.setattr(mcp_module, "INDEX_PATH", archive / "index.json")
     server = mcp_module.MCPServer()
-    from lore.interfaces.mcp_tools import search as search_tools
-    from lore.interfaces.mcp_tools.deps import build_deps
+    from annuli.interfaces.mcp_tools import search as search_tools
+    from annuli.interfaces.mcp_tools.deps import build_deps
 
     search_tools.register(server, build_deps(server, mcp_module))
     handler = server.tools[tool]["handler"]

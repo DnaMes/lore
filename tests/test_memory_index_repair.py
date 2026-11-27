@@ -13,14 +13,14 @@ import json
 
 import pytest
 
-from lore.storage import (
+from annuli.storage import (
     add_memory,
     memory_index_health,
     recall_memory,
     repair_memory_index,
 )
-from lore.storage.memory import _connect
-from lore.storage.writer import v2_db_path
+from annuli.storage.memory import _connect
+from annuli.storage.writer import v2_db_path
 
 
 @pytest.fixture()
@@ -32,7 +32,7 @@ def store(tmp_path):
             kind="fact",
             title=f"Fakt {index}",
             body=f"The build needs kwblossom step {index}",
-            scope_project="/repo/lore",
+            scope_project="/repo/annuli",
         )
     return tmp_path
 
@@ -130,7 +130,7 @@ def test_repair_keeps_the_scope_columns(store):
         ).fetchone()
     finally:
         conn.close()
-    assert row["project"] == "/repo/lore"
+    assert row["project"] == "/repo/annuli"
     assert row["title"] == "Fakt 0"
 
 
@@ -151,7 +151,7 @@ def test_repair_is_idempotent(store):
 
 def test_repair_recovers_rows_after_a_store_rebuild(store):
     """A rebuilt store keeps the memories; the repair re-attaches the search rows."""
-    from lore.storage import write_sessions_safe
+    from annuli.storage import write_sessions_safe
 
     write_sessions_safe(store, [])
     _drop_search_rows(store, [1])
@@ -163,7 +163,7 @@ def test_repair_recovers_rows_after_a_store_rebuild(store):
 def test_cli_reports_and_applies(store, capsys):
     import argparse
 
-    import lore_cli
+    import annuli_cli
 
     _drop_search_rows(store, [3])
     args = argparse.Namespace(
@@ -172,13 +172,13 @@ def test_cli_reports_and_applies(store, capsys):
         json=True,
         output_dir=str(store),
     )
-    lore_cli.cmd_memory(args)
+    annuli_cli.cmd_memory(args)
     payload = json.loads(capsys.readouterr().out)
     assert payload["missing"] == [3]
     assert payload["applied"] is False
 
     args.apply = True
-    lore_cli.cmd_memory(args)
+    annuli_cli.cmd_memory(args)
     payload = json.loads(capsys.readouterr().out)
     assert payload["missing"] == []
     assert payload["healthy"] is True
@@ -187,10 +187,10 @@ def test_cli_reports_and_applies(store, capsys):
 def test_cli_text_output_explains_the_dry_run(store, capsys):
     import argparse
 
-    import lore_cli
+    import annuli_cli
 
     _drop_search_rows(store, [2])
-    lore_cli.cmd_memory(
+    annuli_cli.cmd_memory(
         argparse.Namespace(
             memory_action="repair-index", apply=False, json=False, output_dir=str(store)
         )
@@ -202,7 +202,7 @@ def test_cli_text_output_explains_the_dry_run(store, capsys):
 
 def test_missing_store_is_not_an_error(tmp_path):
     """A fresh home has no memory table yet; the health check must not raise."""
-    from lore.storage.memory import memory_index_health as health_fn
+    from annuli.storage.memory import memory_index_health as health_fn
 
     assert v2_db_path(tmp_path).exists() is False
     health = health_fn(tmp_path)

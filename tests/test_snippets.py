@@ -16,13 +16,13 @@ from typing import Any, Iterator
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.interfaces import mcp, web, web_data
-from lore.storage import add_memory, recall_memory, search_sessions
-from lore.storage.fts import SNIPPET_CLOSE, SNIPPET_OPEN, snippet_to_text
-from lore.storage.memory import MemoryEntry
-from lore.utils.formatting import escape_snippet_html
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.interfaces import mcp, web, web_data
+from annuli.storage import add_memory, recall_memory, search_sessions
+from annuli.storage.fts import SNIPPET_CLOSE, SNIPPET_OPEN, snippet_to_text
+from annuli.storage.memory import MemoryEntry
+from annuli.utils.formatting import escape_snippet_html
 
 BASE_HTML = Path(web.__file__).parent.parent / "templates" / "base.html"
 LONG_BODY = "filler " * 300 + "the zebracorn appears here " + "tail " * 300
@@ -64,8 +64,8 @@ def v2_env(tmp_path, monkeypatch):
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
     monkeypatch.setattr(web_data, "OUTPUT_DIR", tmp_path)
     monkeypatch.setattr(mcp, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
-    monkeypatch.setenv("LORE_HYBRID_SEARCH", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_HYBRID_SEARCH", "0")
     web_data.clear_index_cache()
     return tmp_path
 
@@ -235,7 +235,7 @@ def test_base_html_dropdown_escapes_before_marking():
 
 
 def test_rrf_merge_keeps_the_fts_snippet_for_hybrid_results():
-    from lore.storage import rrf_merge
+    from annuli.storage import rrf_merge
 
     fts = [{"session": {"id": "a"}, "score": 1.0, "snippet": "the \x02hit\x03 here"}]
     vec = [{"session": {"id": "b"}, "score": 0.2}, {"session": {"id": "a"}, "score": 0.3}]

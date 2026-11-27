@@ -5,9 +5,9 @@ from __future__ import annotations
 import os
 import time
 
-from lore.storage import reader
-from lore.storage.schema import open_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage import reader
+from annuli.storage.schema import open_connection
+from annuli.storage.writer import v2_db_path
 from tests.test_summarize_pipeline import _build_store, _session
 
 

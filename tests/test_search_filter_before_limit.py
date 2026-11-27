@@ -15,11 +15,11 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.services.index import search_index
-from lore.storage import add_session_tag, search_sessions, v2_db_path, write_sessions
-from lore.storage.embeddings import embeddings_available, sqlite_vec_available
-from lore.storage.search import session_filter_sql
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.services.index import search_index
+from annuli.storage import add_session_tag, search_sessions, v2_db_path, write_sessions
+from annuli.storage.embeddings import embeddings_available, sqlite_vec_available
+from annuli.storage.search import session_filter_sql
 
 requires_vectors = pytest.mark.skipif(
     not (sqlite_vec_available() and embeddings_available()),
@@ -61,7 +61,7 @@ def elsewhere_first(tmp_path):
         _session(
             "target",
             tool=Tool.CLAUDE_CODE,
-            project="/repo/lore",
+            project="/repo/annuli",
             created=datetime(2026, 6, 15),
         ),
     ]
@@ -105,14 +105,14 @@ def test_filter_sql_executes_against_a_real_table():
         """
         CREATE TABLE sessions (id TEXT, tool TEXT, project TEXT, created TEXT);
         CREATE TABLE session_tags (session_id TEXT, tag TEXT);
-        INSERT INTO sessions VALUES ('a', 'claude-code', '/repo/lore', '2026-06-15T10:00:00');
-        INSERT INTO sessions VALUES ('b', 'cursor', '/repo/lore', '2026-06-16T10:00:00');
+        INSERT INTO sessions VALUES ('a', 'claude-code', '/repo/annuli', '2026-06-15T10:00:00');
+        INSERT INTO sessions VALUES ('b', 'cursor', '/repo/annuli', '2026-06-16T10:00:00');
         INSERT INTO sessions VALUES ('c', 'claude-code', '/repo/other', '2026-07-01T10:00:00');
         INSERT INTO session_tags VALUES ('a', 'keep');
         """
     )
     sql, params = session_filter_sql(
-        tool="claude-code", project="/repo/lore", tag="keep", start="2026-06-01", end="2026-06-30"
+        tool="claude-code", project="/repo/annuli", tag="keep", start="2026-06-01", end="2026-06-30"
     )
     rows = conn.execute(f"SELECT id FROM sessions s WHERE 1=1{sql} LIMIT 1", params).fetchall()
     assert rows == [("a",)]
@@ -131,7 +131,7 @@ def test_fts_filter_applies_before_the_limit(elsewhere_first):
 
 
 def test_fts_project_filter_applies_before_the_limit(elsewhere_first):
-    hits = search_sessions(elsewhere_first, PHRASE, project="/repo/lore", limit=1)
+    hits = search_sessions(elsewhere_first, PHRASE, project="/repo/annuli", limit=1)
     assert [hit["session"]["id"] for hit in hits] == ["target"]
 
 
@@ -186,16 +186,16 @@ def test_search_index_rejects_an_invalid_date(elsewhere_first):
 @requires_vectors
 def test_semantic_filter_applies_before_the_knn_cutoff(tmp_path):
     """The nearest neighbours fail the filter; limit=1 must still find the match."""
-    from lore.storage import semantic_search_sessions
+    from annuli.storage import semantic_search_sessions
 
     sessions = [
         _session(f"near-{i}", tool=Tool.CURSOR, project="/repo/elsewhere") for i in range(3)
     ]
-    sessions.append(_session("target", project="/repo/lore"))
+    sessions.append(_session("target", project="/repo/annuli"))
     write_sessions(v2_db_path(tmp_path), sessions)
 
     hits = semantic_search_sessions(
-        tmp_path, f"please mention {PHRASE} here", project="/repo/lore", limit=1
+        tmp_path, f"please mention {PHRASE} here", project="/repo/annuli", limit=1
     )
     assert [hit["session"]["id"] for hit in hits] == ["target"]
 
@@ -211,9 +211,9 @@ def web_client(elsewhere_first, monkeypatch):
 
     ``web.search_index`` is imported from ``web_data``, which captured
     ``INDEX_PATH``/``OUTPUT_DIR`` at import time, so both modules are patched —
-    the real ``~/.lore`` archive must never be touched by these tests.
+    the real ``~/.annuli`` archive must never be touched by these tests.
     """
-    from lore.interfaces import web, web_data
+    from annuli.interfaces import web, web_data
 
     index_path = elsewhere_first / "index.json"
     index_path.write_text(json.dumps({"sessions": []}), encoding="utf-8")
@@ -252,9 +252,9 @@ def test_api_search_applies_the_date_filter(web_client):
 def test_mcp_search_history_applies_tag_and_cap(elsewhere_first, monkeypatch):
     import asyncio
 
-    from lore.interfaces import mcp as mcp_module
-    from lore.interfaces.mcp_tools import search as search_tools
-    from lore.interfaces.mcp_tools.deps import build_deps
+    from annuli.interfaces import mcp as mcp_module
+    from annuli.interfaces.mcp_tools import search as search_tools
+    from annuli.interfaces.mcp_tools.deps import build_deps
 
     index_path = elsewhere_first / "index.json"
     index_path.write_text(json.dumps({"sessions": []}), encoding="utf-8")
@@ -272,9 +272,9 @@ def test_mcp_search_history_applies_tag_and_cap(elsewhere_first, monkeypatch):
 def test_mcp_list_sessions_rejects_an_invalid_start(elsewhere_first, monkeypatch):
     import asyncio
 
-    from lore.interfaces import mcp as mcp_module
-    from lore.interfaces.mcp_tools import search as search_tools
-    from lore.interfaces.mcp_tools.deps import build_deps
+    from annuli.interfaces import mcp as mcp_module
+    from annuli.interfaces.mcp_tools import search as search_tools
+    from annuli.interfaces.mcp_tools.deps import build_deps
 
     index_path = elsewhere_first / "index.json"
     index_path.write_text(json.dumps({"sessions": []}), encoding="utf-8")

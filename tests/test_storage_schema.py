@@ -11,16 +11,16 @@ import sqlite3
 
 import pytest
 
-from lore.storage import (
+from annuli.storage import (
     apply_migrations,
     current_version,
     initialise,
     open_connection,
 )
-from lore.storage import schema as schema_module
-from lore.storage.memory import add_memory
-from lore.storage.schema import MIGRATIONS, SCHEMA_VERSION, open_v2_connection
-from lore.storage.tags import add_session_tag, get_session_tags
+from annuli.storage import schema as schema_module
+from annuli.storage.memory import add_memory
+from annuli.storage.schema import MIGRATIONS, SCHEMA_VERSION, open_v2_connection
+from annuli.storage.tags import add_session_tag, get_session_tags
 
 # ---------------------------------------------------------------------------
 # Connection PRAGMAs
@@ -143,7 +143,7 @@ def test_expected_tables_exist(tmp_path):
 
 
 def test_session_embeddings_table_present_with_vec(tmp_path):
-    from lore.storage.embeddings import sqlite_vec_available
+    from annuli.storage.embeddings import sqlite_vec_available
 
     conn = initialise(tmp_path / "v2.sqlite")
     present = "session_embeddings" in _tables(conn)

@@ -1,6 +1,6 @@
 """Tests for POST /api/sessions/<session_id>/resume endpoint."""
 
-from lore.interfaces import web
+from annuli.interfaces import web
 
 
 def _index_with_session(session_id: str, tool: str, project: str = "/repo/demo") -> dict:
@@ -122,7 +122,7 @@ def _session_template_html() -> str:
     from pathlib import Path
 
     return (
-        Path(__file__).resolve().parent.parent / "lore" / "templates" / "session.html"
+        Path(__file__).resolve().parent.parent / "annuli" / "templates" / "session.html"
     ).read_text(encoding="utf-8")
 
 

@@ -10,9 +10,9 @@ from __future__ import annotations
 import sqlite3
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession, _message_token_total
-from lore.extractors.claude import _parse_usage_tokens
-from lore.storage import load_index_v2, v2_db_path, write_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession, _message_token_total
+from annuli.extractors.claude import _parse_usage_tokens
+from annuli.storage import load_index_v2, v2_db_path, write_sessions
 
 
 def test_message_token_total_handles_each_format():
@@ -108,7 +108,7 @@ def test_total_tokens_roundtrips_through_v2_store(tmp_path):
 
 def test_normalize_tool_call_maps_all_extractor_formats():
     """#79 — divergent extractor tool_call keys map to one canonical shape."""
-    from lore.core.models import normalize_tool_call
+    from annuli.core.models import normalize_tool_call
 
     # opencode: already "tool" + "input"
     oc = normalize_tool_call({"id": "1", "tool": "read", "input": {"f": "a"}, "output": "ok"})

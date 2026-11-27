@@ -9,26 +9,26 @@ from typing import Any, Optional
 
 import pytest
 
-from lore.core.models import Role
-from lore.services.summarize import (
+from annuli.core.models import Role
+from annuli.services.summarize import (
     _chunk_prompt_tokens,
     estimate_run,
     run_summaries,
     summarize_session,
     validate_summary,
 )
-from lore.services.summarize_chunks import (
+from annuli.services.summarize_chunks import (
     MAX_CHUNKS,
     MAX_SESSION_TOKENS,
     MERGE_PROMPT_BASE_TOKENS,
     MERGE_TOKENS_PER_CHUNK,
     chunk_max_chars,
 )
-from lore.services.summary_input import compress, estimate_tokens, from_unified, split_chunks
-from lore.storage.reader import load_session_messages_v2
-from lore.storage.schema import open_connection
-from lore.storage.summaries import get_summary, list_summaries, save_summary
-from lore.storage.writer import v2_db_path
+from annuli.services.summary_input import compress, estimate_tokens, from_unified, split_chunks
+from annuli.storage.reader import load_session_messages_v2
+from annuli.storage.schema import open_connection
+from annuli.storage.summaries import get_summary, list_summaries, save_summary
+from annuli.storage.writer import v2_db_path
 from tests.test_summarize_pipeline import (
     FAKE_KEY,
     MODEL,
@@ -56,7 +56,7 @@ class AutoProvider(FakeProvider):
         max_tokens: Optional[int] = None,
         temperature: Optional[float] = None,
     ):
-        from lore.llm.base import LLMResponse
+        from annuli.llm.base import LLMResponse
 
         self.prompts.append(prompt)
         self.system_prompts.append(system_prompt)
@@ -104,8 +104,8 @@ def _append_messages(out: Path, session: Any, messages: list) -> None:
 
 @pytest.fixture
 def chunk_limits(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
-    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 120)
+    monkeypatch.setattr("annuli.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
+    monkeypatch.setattr("annuli.services.summarize_chunks.CHUNK_TARGET_TOKENS", 120)
 
 
 def test_chunked_writes_chunk_rows_and_session_row(tmp_path: Path, chunk_limits: None):
@@ -156,8 +156,8 @@ def test_growth_reruns_last_chunk_and_merge(tmp_path: Path, chunk_limits: None):
 
 def test_default_budget_covers_every_chunk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A session the budget can pay for is summarised whole, not sampled (#178)."""
-    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 50)
-    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 30)
+    monkeypatch.setattr("annuli.services.summarize.SINGLE_PASS_MAX_TOKENS", 50)
+    monkeypatch.setattr("annuli.services.summarize_chunks.CHUNK_TARGET_TOKENS", 30)
     out = tmp_path / "out"
     _build_store(out, _long_session("many", n_users=30, pad=80))
     summarize_session(AutoProvider(), out, "many", model_label=MODEL)
@@ -181,8 +181,8 @@ def test_default_budget_covers_every_chunk(tmp_path: Path, monkeypatch: pytest.M
 def test_small_budget_truncates_and_reports_the_omitted_ranges(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ):
-    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 50)
-    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 30)
+    monkeypatch.setattr("annuli.services.summarize.SINGLE_PASS_MAX_TOKENS", 50)
+    monkeypatch.setattr("annuli.services.summarize_chunks.CHUNK_TARGET_TOKENS", 30)
     out = tmp_path / "out"
     _build_store(out, _long_session("many", n_users=30, pad=80))
     # The eight-chunk sample is kept while the budget pays for it: budget for
@@ -358,7 +358,7 @@ def test_rate_limit_backoff(tmp_path: Path, chunk_limits: None):
             self.n = 0
 
         def generate(self, *args: Any, **kwargs: Any):
-            from lore.llm.base import LLMResponse
+            from annuli.llm.base import LLMResponse
 
             self.n += 1
             if self.n <= 2:
@@ -376,7 +376,7 @@ def test_schema_failure_keeps_chunks_reused(tmp_path: Path, chunk_limits: None):
 
     class FailMerge(AutoProvider):
         def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs: Any):
-            from lore.llm.base import LLMResponse
+            from annuli.llm.base import LLMResponse
 
             self.prompts.append(prompt)
             self.system_prompts.append(system_prompt)
@@ -460,8 +460,8 @@ def test_chunk_prompts_cite_within_seqs(tmp_path: Path, chunk_limits: None):
 
 
 def test_smaller_chunk_retry_keeps_both_halves(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("lore/services/summarize.SINGLE_PASS_MAX_TOKENS".replace("/", "."), 400)
-    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
+    monkeypatch.setattr("annuli/services/summarize.SINGLE_PASS_MAX_TOKENS".replace("/", "."), 400)
+    monkeypatch.setattr("annuli.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
     out = tmp_path / "out"
     _build_store(out, _long_session("halves", n_users=12))
     bad = json.dumps({**_valid_summary(), "one_liner": "x" * 200})
@@ -480,15 +480,15 @@ def test_smaller_chunk_retry_keeps_both_halves(tmp_path: Path, monkeypatch):
 
 
 def test_merge_fingerprint_is_order_and_artifact_sensitive():
-    from lore.services.summarize_chunks import merge_fingerprint
+    from annuli.services.summarize_chunks import merge_fingerprint
 
     assert merge_fingerprint(["a", "b"], "m", 1) != merge_fingerprint(["b", "a"], "m", 1)
     assert merge_fingerprint(["a"], "m", 1, "x") != merge_fingerprint(["a"], "m", 1, "y")
 
 
 def test_halved_chunk_is_reused_on_the_second_run(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
-    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
+    monkeypatch.setattr("annuli.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
+    monkeypatch.setattr("annuli.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
     out = tmp_path / "out"
     _build_store(out, _long_session("reuse", n_users=12))
     bad = json.dumps({**_valid_summary(), "one_liner": "x" * 200})
@@ -523,7 +523,7 @@ def test_unhashable_outcome_status_is_a_validation_error_not_a_crash():
 
 
 def test_one_crashing_session_does_not_abort_the_batch(tmp_path: Path, monkeypatch):
-    import lore.services.summarize as sm
+    import annuli.services.summarize as sm
 
     out = tmp_path / "out"
     _build_store(out, _long_session("a", n_users=4), _long_session("b", n_users=4))
@@ -537,8 +537,8 @@ def test_one_crashing_session_does_not_abort_the_batch(tmp_path: Path, monkeypat
         return real(provider, output_dir, session_id, **kw)
 
     monkeypatch.setattr(sm, "_process_session", flaky)
-    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
-    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
+    monkeypatch.setattr("annuli.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
+    monkeypatch.setattr("annuli.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
     report = run_summaries(out, ["a", "b"], AutoProvider(), MODEL)
 
     assert calls == ["a", "b"]
@@ -546,7 +546,7 @@ def test_one_crashing_session_does_not_abort_the_batch(tmp_path: Path, monkeypat
 
 
 def test_transient_error_detection_is_not_a_substring_match():
-    from lore.services.summarize import _is_transient_provider_error as transient
+    from annuli.services.summarize import _is_transient_provider_error as transient
 
     assert transient(RuntimeError("HTTP 429 Too Many Requests"))
     assert transient(RuntimeError("rate limit exceeded"))
@@ -562,8 +562,8 @@ def test_plan_matches_the_half_chunks_the_run_wrote(tmp_path: Path, monkeypatch)
     smaller-chunk retry the plan believed a chunk was missing and reported
     "chunked" forever while the run considered the session done.
     """
-    monkeypatch.setattr("lore.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
-    monkeypatch.setattr("lore.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
+    monkeypatch.setattr("annuli.services.summarize.SINGLE_PASS_MAX_TOKENS", 400)
+    monkeypatch.setattr("annuli.services.summarize_chunks.CHUNK_TARGET_TOKENS", 400)
     out = tmp_path / "out"
     _build_store(out, _long_session("halves", n_users=12))
     bad = json.dumps({**_valid_summary(), "one_liner": "x" * 200})
