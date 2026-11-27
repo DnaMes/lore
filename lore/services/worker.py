@@ -343,6 +343,10 @@ def _embed_budget() -> int:
 
 
 def run_embed_messages_job(output_dir: Path) -> dict[str, Any]:
+    # Per-message vectors for a million-message store never finish on a laptop CPU and re-burn
+    # two minutes every pass (p15 2026-11-27: 37k of 1.36M done); a host can opt out.
+    if os.environ.get("LORE_WORKER_EMBED_MESSAGES", "").strip() == "0":
+        return {"status": "skipped", "skipped": True, "last_error": "disabled (LORE_WORKER_EMBED_MESSAGES=0)"}
     if not (embeddings_available() and sqlite_vec_available()):
         print(
             "worker: skipping embed-messages (semantic extra not installed)",

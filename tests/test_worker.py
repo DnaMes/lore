@@ -722,3 +722,12 @@ def test_child_output_with_invalid_utf8_does_not_crash(tmp_path, monkeypatch):
     monkeypatch.setattr(worker_mod.shutil, "which", lambda _name: "/usr/local/bin/lore")
     result, _out = worker_mod._run_cli_child(tmp_path, ["library"], 30, "library")
     assert result["status"] == "ok"
+
+
+def test_embed_messages_job_can_be_disabled(tmp_path: Path, monkeypatch):
+    from lore.services import worker as worker_mod
+
+    monkeypatch.setenv("LORE_WORKER_EMBED_MESSAGES", "0")
+    monkeypatch.setattr(worker_mod, "_run_cli_child", lambda *a, **k: (_ for _ in ()).throw(AssertionError("ran")))
+    result = worker_mod.run_embed_messages_job(tmp_path)
+    assert result["status"] == "skipped" and "LORE_WORKER_EMBED_MESSAGES" in result["last_error"]

@@ -75,6 +75,7 @@ services:
       - HOME=/home/ai
       - LORE_WORKER_INTERVAL=${LORE_WORKER_INTERVAL:-}
       - LORE_WORKER_SUMMARY_DAILY_CAP=${LORE_WORKER_SUMMARY_DAILY_CAP:-}
+      - LORE_WORKER_EMBED_MESSAGES=${LORE_WORKER_EMBED_MESSAGES:-}
       # Optional LLM summary configuration (use env_file for API keys;
       # use host.docker.internal or the compose network service name instead of 127.0.0.1).
       - LORE_SUMMARY_PROVIDER=${LORE_SUMMARY_PROVIDER:-}
