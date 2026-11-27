@@ -238,8 +238,8 @@
     }
 
     document.addEventListener('keydown', function (e) {
-        if (typeof window.loreKeysEnabled === 'function' && !window.loreKeysEnabled()) return;
-        if (typeof window.loreKeyGuard === 'function' && window.loreKeyGuard(e)) return;
+        if (typeof window.annuliKeysEnabled === 'function' && !window.annuliKeysEnabled()) return;
+        if (typeof window.annuliKeyGuard === 'function' && window.annuliKeyGuard(e)) return;
         if (e.key === '?') {
             e.preventDefault();
             if (typeof openShortcutsHelp === 'function') openShortcutsHelp();
@@ -419,10 +419,10 @@
         const wide = window.matchMedia('(min-width: 1280px)');
         if (!wide.matches) return;
 
-        const LORE_PEEK_STORAGE = 'lore.peek.v1';
+        const ANNULI_PEEK_STORAGE = 'lore.peek.v1';
         function peekEnabled() {
             try {
-                const raw = localStorage.getItem(LORE_PEEK_STORAGE);
+                const raw = localStorage.getItem(ANNULI_PEEK_STORAGE);
                 return raw !== 'off';
             } catch (_) {
                 return true;
@@ -434,7 +434,7 @@
         applyPeekVisibility();
         if (hideBtn) {
             hideBtn.addEventListener('click', function () {
-                try { localStorage.setItem(LORE_PEEK_STORAGE, 'off'); } catch (_) {}
+                try { localStorage.setItem(ANNULI_PEEK_STORAGE, 'off'); } catch (_) {}
                 applyPeekVisibility();
             });
         }

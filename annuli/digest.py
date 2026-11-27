@@ -1,6 +1,6 @@
 """Activity digest — a periodic summary of recent AI coding sessions.
 
-Powers the ``lore digest`` CLI command (issue #43). The logic here is
+Powers the ``annuli digest`` CLI command (issue #43). The logic here is
 deliberately pure: it takes already-loaded index session records plus a
 cutoff datetime and returns a structured :class:`Digest`, with no disk or
 clock access. The CLI layer handles index loading, ``--since`` parsing and

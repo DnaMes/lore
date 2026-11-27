@@ -11,10 +11,10 @@ logger = logging.getLogger(__name__)
 
 # Coverage counters every extractor may report; an extractor may add its own
 # keys (e.g. Antigravity's transcript/artifact split, #158) and they survive into
-# `lore check --deep`.
+# `annuli check --deep`.
 DISCOVERY_KEYS = ("files_matched", "files_parsed", "records_unknown")
 
-REEXTRACT_BUDGET_ENV = "LORE_PARSER_REEXTRACT_BUDGET"
+REEXTRACT_BUDGET_ENV = "ANNULI_PARSER_REEXTRACT_BUDGET"
 DEFAULT_REEXTRACT_BUDGET = 150
 
 
@@ -247,7 +247,7 @@ class BaseExtractor(ABC):
         """Whether a data directory exists, readable or not (#158).
 
         ``is_available`` answers "can I import anything"; this answers "is there
-        something to inspect", which is what ``lore check --deep`` needs to report
+        something to inspect", which is what ``annuli check --deep`` needs to report
         undecodable artifacts instead of a bare "not found".
         """
         return self.is_available()
@@ -306,7 +306,7 @@ class BaseExtractor(ABC):
         session.title_source = TitleSource.FALLBACK
 
     def _effective_thresholds(self) -> tuple[int, int, int]:
-        profile = os.environ.get("LORE_IMPORT_PROFILE", "relaxed").strip().lower()
+        profile = os.environ.get("ANNULI_IMPORT_PROFILE", "relaxed").strip().lower()
         if profile == "strict":
             min_messages, min_content, min_prompts = (3, 2048, 5)
         else:
@@ -316,14 +316,14 @@ class BaseExtractor(ABC):
                 self.MIN_USER_PROMPTS,
             )
         # Explicit override wins over the profile so users can keep more
-        # short sessions (e.g. LORE_MIN_USER_PROMPTS=2) without flipping
+        # short sessions (e.g. ANNULI_MIN_USER_PROMPTS=2) without flipping
         # the whole profile. Invalid values fall back to the profile default.
-        override = os.environ.get("LORE_MIN_USER_PROMPTS", "").strip()
+        override = os.environ.get("ANNULI_MIN_USER_PROMPTS", "").strip()
         if override:
             try:
                 min_prompts = max(0, int(override))
             except ValueError:
-                logger.warning("Ignoring invalid LORE_MIN_USER_PROMPTS=%r", override)
+                logger.warning("Ignoring invalid ANNULI_MIN_USER_PROMPTS=%r", override)
         return (min_messages, min_content, min_prompts)
 
     def should_import_session(self, session: UnifiedSession) -> bool:

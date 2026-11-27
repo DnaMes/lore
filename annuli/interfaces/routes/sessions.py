@@ -16,14 +16,14 @@ from urllib.parse import urlencode, urlparse
 import nh3
 from flask import Blueprint, Response, g, has_request_context, jsonify, redirect, request
 
-from lore.interfaces import web as _web
-from lore.utils.security import (
+from annuli.interfaces import web as _web
+from annuli.utils.security import (
     validate_search_param,
     validate_session_id,
     validate_tool_name,
 )
-from lore.utils.text_processing import format_thinking
-from lore.utils.tooling import normalize_tool_name
+from annuli.utils.text_processing import format_thinking
+from annuli.utils.tooling import normalize_tool_name
 
 from ...extractors.opencode import OpenCodeExtractor
 from ...services.cache import threadsafe_lru_cache
@@ -328,7 +328,7 @@ def sessions_rows():
 
 def _peek_cache_bucket(session_id: str) -> str:
     meta = _web._index_session_meta(session_id) or {}
-    from lore.storage.summaries import get_summary
+    from annuli.storage.summaries import get_summary
 
     row = get_summary(_web.OUTPUT_DIR, "session", f"session:{session_id}")
     summary_stamp = str((row or {}).get("created") or "")
@@ -520,11 +520,11 @@ def stats_page():
 
     The flat index carries no token/cost data, so this reports real
     activity — sessions per day/tool/project, message and prompt counts —
-    using the same aggregation as the `lore digest` command.
+    using the same aggregation as the `annuli digest` command.
     """
     from datetime import timedelta
 
-    from lore.digest import build_digest
+    from annuli.digest import build_digest
 
     sessions = _web._visible_index().get("sessions", [])
     since = datetime.now() - timedelta(days=30)
@@ -992,7 +992,7 @@ def session_detail(session_id):
 <p><strong>Messages:</strong> {html.escape(str(session_meta.get("messages") or 0))} | <strong>Prompts:</strong> {html.escape(str(session_meta.get("prompts") or 0))}</p>
 <p><strong>Project:</strong> {html.escape(str(session_meta.get("project") or "Unassigned"))}</p>
 <hr>
-<p>This session has no linked export markdown yet. Open full live transcript with <a href="?live=1"><code>?live=1</code></a>, or run <code>lore sync &lt;tool&gt;</code> to attach export paths.</p>
+<p>This session has no linked export markdown yet. Open full live transcript with <a href="?live=1"><code>?live=1</code></a>, or run <code>annuli sync &lt;tool&gt;</code> to attach export paths.</p>
 <p><strong>Prompt Outline:</strong><br>{html.escape(str(session_meta.get("prompt_outline") or "n/a"))}</p>
 """
         return _web.render(
@@ -1412,7 +1412,7 @@ def export_session(session_id):
             "Content-Disposition": f'attachment; filename="{session_id}.md"',
         }
         if want_redact:
-            headers["X-Lore-Redactions"] = str(redactions)
+            headers["X-Annuli-Redactions"] = str(redactions)
         return Response(body, mimetype="text/_web.markdown", headers=headers)
 
     if session_meta:
@@ -1441,7 +1441,7 @@ def export_session(session_id):
                     redactions,
                 )
 
-    if os.environ.get("LORE_EXPORT_FALLBACK_SCAN", "").lower() != "true":
+    if os.environ.get("ANNULI_EXPORT_FALLBACK_SCAN", "").lower() != "true":
         return "Not found", 404
 
     for ex in _web.get_all_extractors():

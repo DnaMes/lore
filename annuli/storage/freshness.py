@@ -1,7 +1,7 @@
 """How fresh the v2 store is: ``generated_at``, a content hash, and the assertion (#36, #48).
 
 ``store_meta.generated_at`` (migration 9) records when the store was last
-written; it is what :func:`lore.storage.reader.v2_is_available` compares against
+written; it is what :func:`annuli.storage.reader.v2_is_available` compares against
 ``index.json``'s mtime. A timestamp alone cannot tell whether the *rows* a reader
 sees are the ones the writer committed — a row written outside the index build
 (a bundle import, a manual fix) leaves the stamp intact. So every write path also

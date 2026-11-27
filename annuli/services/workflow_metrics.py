@@ -26,8 +26,8 @@ import statistics
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
-from lore.core.models import ORIGINS, Role, UnifiedSession
-from lore.utils.datetime import make_naive
+from annuli.core.models import ORIGINS, Role, UnifiedSession
+from annuli.utils.datetime import make_naive
 
 OBSERVED = "observed"
 COMPUTED = "computed"

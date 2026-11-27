@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from lore.services.index import load_deleted_session_ids
+from annuli.services.index import load_deleted_session_ids
 
 from .schema import open_v2_connection
 from .writer import v2_db_path

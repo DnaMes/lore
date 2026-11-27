@@ -1,7 +1,7 @@
 """Populate per-message embedding vectors for message-level retrieval (#190).
 
 One vector per message, stored in the vec0 ``message_embeddings`` table
-(created lazily by :func:`lore.storage.embeddings.ensure_message_vec_table`)
+(created lazily by :func:`annuli.storage.embeddings.ensure_message_vec_table`)
 and keyed by the stable ``<session_id>#m<seq>`` identity the message permalink
 uses — not the ``messages`` rowid, which a reindex renumbers.
 ``message_embedding_meta`` (migration 25, content hash in migration 28) records
@@ -14,7 +14,7 @@ its stale vector.
 The pass is **store-driven**: it selects the messages that still lack a
 current-model vector instead of taking a caller-supplied list. A run stopped by
 the time budget therefore resumes where it stopped — the next call just re-runs
-the same query. :func:`lore.storage.message_search.search_messages` uses the
+the same query. :func:`annuli.storage.message_search.search_messages` uses the
 result through the KNN path; without it, message retrieval stays on FTS.
 
 Everything here is **best-effort**, like the session pass (#95): when
@@ -112,8 +112,8 @@ def embed_messages(
 ) -> int:
     """Embed pending message bodies into ``message_embeddings``.
 
-    Bounded by ``budget_seconds`` (default from ``LORE_EMBED_BUDGET_SECONDS``,
-    ``0`` = unlimited — the one-shot ``lore embed-messages`` backfill). Each
+    Bounded by ``budget_seconds`` (default from ``ANNULI_EMBED_BUDGET_SECONDS``,
+    ``0`` = unlimited — the one-shot ``annuli embed-messages`` backfill). Each
     body is capped at ``_MAX_EMBED_CHARS`` like the session pass, so one
     pathological message cannot spend seconds tokenising text the model
     discards anyway. Progress is committed before the budget check stops the
@@ -141,7 +141,7 @@ def embed_messages(
     created = datetime.now(timezone.utc).isoformat(timespec="seconds")
     # One short transaction per message, never across embed_text(): a pass runs
     # for minutes on a throttled worker, and holding the write lock that long
-    # locks out `lore memory add` (busy_timeout 5 s) and loses all progress
+    # locks out `annuli memory add` (busy_timeout 5 s) and loses all progress
     # when the child is killed.
     try:
         for idx, (session_id, seq, content) in enumerate(pending):

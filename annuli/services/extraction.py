@@ -15,13 +15,13 @@ import logging
 from pathlib import Path
 from typing import Callable, Iterable, Optional
 
-from lore.core.models import UnifiedSession
-from lore.exporters.index import IndexBuilder, _stat_mtime_ns
-from lore.extractors.base import BaseExtractor, stamp_parser_version
-from lore.extractors.factory import get_all_extractors
-from lore.services.discovery import record_discovery
-from lore.storage.writer import v2_db_path
-from lore.titles.generator import TitleGenerator, TitleStrategy
+from annuli.core.models import UnifiedSession
+from annuli.exporters.index import IndexBuilder, _stat_mtime_ns
+from annuli.extractors.base import BaseExtractor, stamp_parser_version
+from annuli.extractors.factory import get_all_extractors
+from annuli.services.discovery import record_discovery
+from annuli.storage.writer import v2_db_path
+from annuli.titles.generator import TitleGenerator, TitleStrategy
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +31,7 @@ class ActionJobCancelledError(RuntimeError):
 
     Defined in the (framework-free) service layer so both ``services`` and
     the Flask-coupled interface modules can reference the same exception
-    type. ``lore.interfaces.web_utils`` re-exports it for backwards
+    type. ``annuli.interfaces.web_utils`` re-exports it for backwards
     compatibility.
     """
 
@@ -486,9 +486,9 @@ def capture_source_artifacts(
 
     Best effort: a store that is missing or locked never breaks a sync.
     """
-    from lore.storage.schema import open_v2_connection
-    from lore.storage.source_health import record_source_state
-    from lore.storage.source_revisions import capture_source_revision, source_identity_for
+    from annuli.storage.schema import open_v2_connection
+    from annuli.storage.source_health import record_source_state
+    from annuli.storage.source_revisions import capture_source_revision, source_identity_for
 
     counts: dict[str, int] = {}
     db_path = v2_db_path(output_dir)

@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from lore.utils.datetime import datetime_in_range, parse_date_bound, to_local_naive
+from annuli.utils.datetime import datetime_in_range, parse_date_bound, to_local_naive
 
 TOOL_STYLES = {
     "claude-code": {"color": "#C084FC", "icon": "C", "name": "Claude", "icon_file": "claudecode"},
@@ -69,7 +69,7 @@ def project_label(project_path: Optional[str]) -> str:
 def parse_date_param(value: Optional[str], *, end: bool = False) -> Optional[datetime]:
     """Parse a start/end filter value into a naive local boundary (#172).
 
-    Delegates to :func:`lore.utils.datetime.parse_date_bound`, so a date-only
+    Delegates to :func:`annuli.utils.datetime.parse_date_bound`, so a date-only
     end value covers the whole selected day and an offset-carrying timestamp is
     converted to the host's local wall clock. Invalid input yields ``None``.
     """
@@ -83,7 +83,7 @@ def filter_sessions(sessions, tool=None, tag=None, start=None, end=None, user_ta
     #173) as well as the LLM-generated ``keywords`` carried in the index, so a
     bookmarked session is findable by the name the user gave it. ``user_tags``
     is the ``{session_id: [tag, ...]}`` mapping from
-    :func:`lore.storage.all_tags_by_session`; a session matches when either
+    :func:`annuli.storage.all_tags_by_session`; a session matches when either
     source contains the tag.
     """
     filtered = []

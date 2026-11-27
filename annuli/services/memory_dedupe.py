@@ -4,7 +4,7 @@ Identity rule: two confirmed memories are duplicates only when *every* content
 and scoping dimension matches — the normalized (whitespace/escaped-quote
 collapsed, casefolded) title, the SHA-256 of the normalized body, the ``kind``,
 and the scope dimensions. ``scope_project`` uses the same normalizer recall
-uses: :func:`lore.services.improve.normalize_scope_project` followed by
+uses: :func:`annuli.services.improve.normalize_scope_project` followed by
 ``Path.expanduser().resolve()``, so ``/work/repo/`` and ``/work/repo`` group
 together but ``/work/repo/a  b`` and ``/work/repo/a b`` do not. ``scope_tool``
 uses exact string equality (``None`` means the global/empty scope). Memories are

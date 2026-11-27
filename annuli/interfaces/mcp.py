@@ -1,12 +1,12 @@
-"""lore MCP server.
+"""annuli MCP server.
 
-This module stays the public surface for the MCP server: the ``lore-mcp``
+This module stays the public surface for the MCP server: the ``annuli-mcp``
 entry point and the test suite both import it. The stdio JSON-RPC machinery
-lives in :mod:`lore.interfaces.server` (``MCPServer``) and the tool
-handlers are grouped under :mod:`lore.interfaces.mcp_tools`.
+lives in :mod:`annuli.interfaces.server` (``MCPServer``) and the tool
+handlers are grouped under :mod:`annuli.interfaces.mcp_tools`.
 
 ``create_server()`` is a thin assembler: it builds the ``MCPServer``, wires the
-shared :class:`~lore.interfaces.mcp_tools.deps.MCPToolDeps` bundle, and
+shared :class:`~annuli.interfaces.mcp_tools.deps.MCPToolDeps` bundle, and
 calls each group's ``register(server, deps)``.
 
 The index-access functions (``load_index``, ``load_sessions_for_tool``,
@@ -33,7 +33,7 @@ from ..services import (
 from ..services import (
     search_index as _service_search_index,
 )
-from ..utils.paths import lore_home
+from ..utils.paths import annuli_home
 from .mcp_tools import (
     build_deps,
     register_memory,
@@ -56,7 +56,7 @@ __all__ = [
 
 # Default output directory for the MCP server. Kept as a module global so
 # tests can monkeypatch ``mcp.INDEX_PATH`` (the historical patch target).
-OUTPUT_DIR = lore_home()
+OUTPUT_DIR = annuli_home()
 INDEX_PATH = OUTPUT_DIR / "index.json"
 
 

@@ -271,7 +271,7 @@ class ZedExtractor(BaseExtractor):
                     logger.warning(
                         "Skipping zstd-compressed Zed thread rows: the 'zstandard' package is "
                         "not installed. Install it with: pip install zstandard "
-                        "(or: pipx inject lore zstandard)"
+                        "(or: pipx inject annuli zstandard)"
                     )
                 self._count("skipped_missing_zstd")
                 return None

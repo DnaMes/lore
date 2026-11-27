@@ -2,7 +2,7 @@
 
 from flask import Blueprint
 
-from lore.interfaces import web as _web
+from annuli.interfaces import web as _web
 
 bp = Blueprint("help", __name__)
 

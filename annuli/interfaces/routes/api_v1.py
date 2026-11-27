@@ -1,6 +1,6 @@
 """``/api/v1`` — the versioned, read-only JSON API (#119).
 
-Every helper that the test suite patches on ``lore.interfaces.web`` is reached
+Every helper that the test suite patches on ``annuli.interfaces.web`` is reached
 through that module (``_web.<name>``) at call time, never bound at import time;
 see "Web module layout" in ``docs/WEB-UI.md``.
 """
@@ -9,14 +9,14 @@ import math
 
 from flask import Blueprint, jsonify, request
 
-from lore.interfaces import web as _web
-from lore.utils.security import (
+from annuli.interfaces import web as _web
+from annuli.utils.security import (
     validate_search_param,
     validate_search_query,
     validate_session_id,
     validate_tool_name,
 )
-from lore.utils.tooling import normalize_tool_name
+from annuli.utils.tooling import normalize_tool_name
 
 from ...services.index import automated_hidden_line, count_index_hits
 from ...storage import load_session_message_window
@@ -60,7 +60,7 @@ def api_v1_search():
 
     # Message-role scope (#97) — was silently ignored before; validate like the
     # MCP search_history tool does and reject unknown values instead of lying.
-    from lore.storage.search import SEARCH_SCOPES
+    from annuli.storage.search import SEARCH_SCOPES
 
     scope = (request.args.get("scope") or "all").strip().lower()
     if scope not in SEARCH_SCOPES:

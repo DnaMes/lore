@@ -17,11 +17,11 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from lore.services.improve import normalize_scope_project
-from lore.services.index import load_deleted_session_ids
-from lore.storage.memory import MemoryEntry, list_memory
-from lore.storage.reader import recent_project_sessions
-from lore.utils.redact import redact
+from annuli.services.improve import normalize_scope_project
+from annuli.services.index import load_deleted_session_ids
+from annuli.storage.memory import MemoryEntry, list_memory
+from annuli.storage.reader import recent_project_sessions
+from annuli.utils.redact import redact
 
 _RETIRED_MARKER_RE = re.compile(r"\b(OBSOLETE|SUPERSEDED|RETIRED)\b", re.IGNORECASE)
 _KIND_PRIORITY: dict[str, int] = {
@@ -208,7 +208,7 @@ def _token_estimate(text: str) -> int:
 
 
 def _more_line(cut: int) -> str:
-    return f'({cut} more; recall with: lore memory search "<terms>" or lore memory show <id>)'
+    return f'({cut} more; recall with: annuli memory search "<terms>" or annuli memory show <id>)'
 
 
 def _entry_record(entry: MemoryEntry) -> dict[str, Any]:
@@ -332,8 +332,8 @@ _DEFAULT_WEB_URL = "https://lore.local.erdlabs.com"
 
 
 def _web_base_url() -> str | None:
-    """Lore web base from ``LORE_WEB_URL``; an empty value turns the links off."""
-    base = os.environ.get("LORE_WEB_URL", _DEFAULT_WEB_URL).strip().rstrip("/")
+    """Annuli web base from ``ANNULI_WEB_URL``; an empty value turns the links off."""
+    base = os.environ.get("ANNULI_WEB_URL", _DEFAULT_WEB_URL).strip().rstrip("/")
     return base or None
 
 
@@ -385,7 +385,7 @@ def select_recent_sessions(
             )
         return records
     except Exception as exc:  # noqa: BLE001 - a broken store must not block memory context
-        if os.environ.get("LORE_DEBUG", "").strip() == "1":
+        if os.environ.get("ANNULI_DEBUG", "").strip() == "1":
             print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return []
 
@@ -466,6 +466,6 @@ def build_memory_context(
         )
         return "\n\n".join(part for part in (memory_text, recent_text) if part)
     except Exception as exc:  # noqa: BLE001 - hooks must not fail on missing or broken stores
-        if os.environ.get("LORE_DEBUG", "").strip() == "1":
+        if os.environ.get("ANNULI_DEBUG", "").strip() == "1":
             print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return ""

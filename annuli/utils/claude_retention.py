@@ -1,4 +1,4 @@
-"""Read-only Claude Code transcript retention settings for ``lore check`` (#197)."""
+"""Read-only Claude Code transcript retention settings for ``annuli check`` (#197)."""
 
 from __future__ import annotations
 
@@ -99,7 +99,7 @@ def has_claude_transcripts() -> bool:
 
 
 def retention_check_lines() -> List[str]:
-    """Retention lines for ``lore check``; empty when Claude projects have no transcripts."""
+    """Retention lines for ``annuli check``; empty when Claude projects have no transcripts."""
     try:
         return _retention_lines()
     except OSError:
@@ -120,7 +120,7 @@ def _retention_lines() -> List[str]:
             "Retention: cleanupPeriodDays has an invalid value; "
             f"Claude Code deletes session transcripts after {effective} days (default 30). "
             'Raise "cleanupPeriodDays" in ~/.claude/settings.json to keep them; '
-            "Lore only archives what it has already synced.",
+            "Annuli only archives what it has already synced.",
             f"  Add to ~/.claude/settings.json: {SNIPPET_CLEANUP_365}",
         ]
         near = count_transcripts_within_days_of_deletion(effective)
@@ -134,7 +134,7 @@ def _retention_lines() -> List[str]:
             f"Retention: Claude Code deletes session transcripts after {effective} days "
             f"(default {DEFAULT_CLEANUP_DAYS}). "
             'Raise "cleanupPeriodDays" in ~/.claude/settings.json to keep them; '
-            "Lore only archives what it has already synced.",
+            "Annuli only archives what it has already synced.",
             f"  Add to ~/.claude/settings.json: {SNIPPET_CLEANUP_365}",
         ]
         near = count_transcripts_within_days_of_deletion(effective)

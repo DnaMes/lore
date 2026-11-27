@@ -100,7 +100,7 @@ class SessionWatcher:
         if self._explicit_paths is not None:
             return [p for p in self._explicit_paths if p.exists()]
 
-        from lore.extractors.factory import get_all_extractors
+        from annuli.extractors.factory import get_all_extractors
 
         extractors = [ex for ex in get_all_extractors() if ex.is_available()]
         return collect_extractor_paths(extractors)
@@ -183,7 +183,7 @@ class SessionWatcher:
         self._stop.clear()
         self._thread = threading.Thread(
             target=self._run,
-            name="lore-watcher",
+            name="annuli-watcher",
             daemon=True,
         )
         self._thread.start()

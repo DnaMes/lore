@@ -2,7 +2,7 @@
 
 Session search answers "which session", but a 200-message transcript still
 hides *where* the answer is. This module returns the messages themselves, each
-with a stable identity (:mod:`lore.storage.evidence`) and the
+with a stable identity (:mod:`annuli.storage.evidence`) and the
 ``/session/<id>/m/<seq>`` permalink the web UI serves, so a hit is evidence
 rather than a claim.
 
@@ -10,7 +10,7 @@ Two paths, and the result says which one ran:
 
 ``vector``
     KNN over the per-message ``message_embeddings`` vec0 table (populated by
-    :mod:`lore.storage.message_vectors`). Finds a passage by meaning — also
+    :mod:`annuli.storage.message_vectors`). Finds a passage by meaning — also
     late in a session — and drops neighbours farther than
     :func:`message_max_distance`, so an unrelated query returns nothing instead
     of its nearest, still-meaningless neighbour (#92).
@@ -20,7 +20,7 @@ Two paths, and the result says which one ran:
     the concatenated message text) picks a bounded set of candidate sessions,
     then their messages are copied into a throwaway in-memory FTS5 table with
     the same tokenizer and the same expression, and ranked there. This is the
-    honest fallback when the optional ``lore[semantic]`` extra is missing: it
+    honest fallback when the optional ``annuli[semantic]`` extra is missing: it
     can miss a paraphrase, but it never invents a hit.
 
 The vector path runs when the backend is installed *and* the table holds
@@ -36,7 +36,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from lore.core.models import AUTOMATED_ORIGINS
+from annuli.core.models import AUTOMATED_ORIGINS
 
 from .embeddings import embed_text, embeddings_available, pack_vector, sqlite_vec_available
 from .evidence import identity_for_message
@@ -80,15 +80,15 @@ FTS_CANDIDATE_FACTOR = 5
 # labelled passages and drops every cross-topic one; the same set's negative
 # queries start at 0.844, so they return no neighbour at all. Reproduce with
 # ``python tools/calibration/calibrate_message_cutoff.py``.
-MESSAGE_SEMANTIC_MAX_DISTANCE_ENV = "LORE_MESSAGE_SEMANTIC_MAX_DISTANCE"
+MESSAGE_SEMANTIC_MAX_DISTANCE_ENV = "ANNULI_MESSAGE_SEMANTIC_MAX_DISTANCE"
 DEFAULT_MESSAGE_SEMANTIC_MAX_DISTANCE = 0.72
 
 
 def message_max_distance() -> Optional[float]:
     """Vec distance above which a message neighbour is dropped; ``None`` disables.
 
-    Env ``LORE_MESSAGE_SEMANTIC_MAX_DISTANCE`` overrides the calibrated
-    default; see :func:`lore.storage.search._distance_cutoff` for the parsing
+    Env ``ANNULI_MESSAGE_SEMANTIC_MAX_DISTANCE`` overrides the calibrated
+    default; see :func:`annuli.storage.search._distance_cutoff` for the parsing
     rules (``0`` disables, an unparsable value falls back to the default).
     """
     return _distance_cutoff(
@@ -123,7 +123,7 @@ def _hit(
         "excerpt": excerpt,
         "excerpt_truncated": bool(truncated),
         "evidence": identity_for_message(conn, session_id, int(seq)),
-        # Same route as ``lore.interfaces.api_payloads.message_permalink``; the
+        # Same route as ``annuli.interfaces.api_payloads.message_permalink``; the
         # storage layer cannot import the interfaces package.
         "permalink": f"/session/{session_id}/m/{int(seq)}",
         "source": "message",

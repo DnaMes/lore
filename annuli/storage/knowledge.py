@@ -1,7 +1,7 @@
 """Persisted per-session knowledge extractions (#197, migration 14).
 
 One row per session holds the parsed LLM extraction together with a
-fingerprint of the exact prompt input, so ``lore knowledge`` can skip a
+fingerprint of the exact prompt input, so ``annuli knowledge`` can skip a
 session whose conversation, model and prompt version did not change.
 """
 

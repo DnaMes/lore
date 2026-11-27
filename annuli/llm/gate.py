@@ -11,13 +11,13 @@ from __future__ import annotations
 
 
 class CloudOptInRequired(RuntimeError):
-    """A non-local provider was requested without ``--allow-cloud``/``LORE_ALLOW_CLOUD=1``."""
+    """A non-local provider was requested without ``--allow-cloud``/``ANNULI_ALLOW_CLOUD=1``."""
 
 
 def ensure_cloud_allowed(provider: str, allow_cloud: bool = False) -> None:
     """Raise :class:`CloudOptInRequired` unless ``provider`` is local or opt-in is granted.
 
-    Opt-in is ``allow_cloud=True`` or ``LORE_ALLOW_CLOUD`` in ``1``/``true``/``yes``.
+    Opt-in is ``allow_cloud=True`` or ``ANNULI_ALLOW_CLOUD`` in ``1``/``true``/``yes``.
     Locality comes from the shared CLI helper, so a remote ``OLLAMA_HOST`` counts as
     cloud here exactly like it does on the command line.
     """
@@ -30,5 +30,5 @@ def ensure_cloud_allowed(provider: str, allow_cloud: bool = False) -> None:
         return
     raise CloudOptInRequired(
         f"provider '{provider}' sends session text to the cloud; "
-        "pass allow_cloud=True, --allow-cloud or set LORE_ALLOW_CLOUD=1 to confirm"
+        "pass allow_cloud=True, --allow-cloud or set ANNULI_ALLOW_CLOUD=1 to confirm"
     )

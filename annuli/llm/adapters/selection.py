@@ -49,11 +49,11 @@ def _constant(value: str) -> Callable[[], str]:
 
 
 def _openrouter_default_model() -> str:
-    return os.environ.get("LORE_OPENROUTER_MODEL") or OPENROUTER_DEFAULT_MODEL
+    return os.environ.get("ANNULI_OPENROUTER_MODEL") or OPENROUTER_DEFAULT_MODEL
 
 
 def _openai_compat_default_model() -> str:
-    return os.environ.get("LORE_LLM_MODEL", "").strip()
+    return os.environ.get("ANNULI_LLM_MODEL", "").strip()
 
 
 @dataclass(frozen=True)
@@ -190,7 +190,7 @@ def select_provider(
         if api_key is not None:
             raise UnsupportedProviderCombination(
                 f"provider '{name}' answers through the installed CLI's own login; "
-                "Lore does not accept or pass an API key for it"
+                "Annuli does not accept or pass an API key for it"
             )
         if base_url is not None:
             raise UnsupportedProviderCombination(

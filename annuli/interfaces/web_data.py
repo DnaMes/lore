@@ -4,13 +4,13 @@ This module handles session loading, index management and data caching
 for the web interface.
 
 Most of the genuinely shared, framework-free logic now lives in
-``lore.services`` (issue #47). The functions here are thin
+``annuli.services`` (issue #47). The functions here are thin
 wrappers that supply this module's — test-patchable — path globals
 (``INDEX_PATH``, ``OUTPUT_DIR``, ``DELETED_SESSIONS_PATH``) to the
 service-layer functions, plus the Flask-specific bits that stay here
 (export-markdown parsing, export-path resolution, the sessions cache).
 
-Re-exports from ``lore.services`` keep the historical
+Re-exports from ``annuli.services`` keep the historical
 ``web_data.<symbol>`` import surface intact for callers and tests.
 """
 
@@ -20,8 +20,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.services import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.services import (
     ActionJobCancelledError,  # noqa: F401  (backwards-compat re-export)
     annotate_display_titles,
     apply_deleted_filter,
@@ -29,33 +29,33 @@ from lore.services import (
     collect_sessions,
     threadsafe_lru_cache,
 )
-from lore.services import (
+from annuli.services import (
     clear_index_cache as _service_clear_index_cache,
 )
-from lore.services import (
+from annuli.services import (
     load_index as _service_load_index,
 )
-from lore.services import (
+from annuli.services import (
     load_index_summary as _service_load_index_summary,
 )
-from lore.services import (
+from annuli.services import (
     remember_deleted_session_id as _service_remember_deleted_session_id,
 )
-from lore.services import (
+from annuli.services import (
     save_deleted_session_ids as _service_save_deleted_session_ids,
 )
-from lore.services import (
+from annuli.services import (
     search_index as _service_search_index,
 )
-from lore.services.index import (
+from annuli.services.index import (
     _load_deleted_session_ids_cached,
     _load_index_cached,
     _load_index_v2_cached,
 )
-from lore.services.index import (
+from annuli.services.index import (
     load_deleted_session_ids as _service_load_deleted_session_ids,
 )
-from lore.utils.paths import LEGACY_HOME_NAME, lore_home
+from annuli.utils.paths import LEGACY_HOME_NAME, annuli_home
 
 # Backwards-compatible re-export — same signature as the service helper.
 _annotate_display_titles = annotate_display_titles
@@ -71,12 +71,12 @@ def _apply_deleted_filter(payload: dict) -> dict:
 # Paths — kept as module globals so tests can monkeypatch them. The
 # service-layer functions take paths as explicit arguments; the wrappers
 # below pass these values, so patching them here stays effective.
-OUTPUT_DIR = lore_home()
+OUTPUT_DIR = annuli_home()
 INDEX_PATH = OUTPUT_DIR / "index.json"
 DELETED_SESSIONS_PATH = OUTPUT_DIR / "deleted_sessions.json"
 
 # Clear OpenCode cache if requested
-if os.environ.get("LORE_CLEAR_OPENCODE_CACHE", "").lower() == "true":
+if os.environ.get("ANNULI_CLEAR_OPENCODE_CACHE", "").lower() == "true":
     opencode_state_cache = OUTPUT_DIR / "cache" / "opencode_state.json"
     if opencode_state_cache.exists():
         opencode_state_cache.unlink()
@@ -224,7 +224,7 @@ def resolve_export_path(path_value: Optional[str]) -> Optional[Path]:
     # A host sync records host paths (/home/<user>/.lore/...); a container mounts the
     # same tree elsewhere. Re-anchor the part after the last output-dir name; _safe
     # still rejects anything that resolves outside OUTPUT_DIR.
-    # Pre-rebrand rows name the legacy ``.lore`` dir; re-anchor those too.
+    # Pre-rebrand rows name the legacy ``.annuli`` dir; re-anchor those too.
     parts = raw_path.parts
     for anchor in (OUTPUT_DIR.name, LEGACY_HOME_NAME):
         if anchor in parts:

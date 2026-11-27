@@ -20,7 +20,7 @@ from typing import Dict, Iterator, List, Optional, TypedDict
 from ..core.models import Role, Tool, UnifiedMessage, UnifiedSession
 from ..utils.datetime import parse_timestamp
 from ..utils.home_discovery import discover_home_marker_paths
-from ..utils.paths import lore_home, make_thread_id
+from ..utils.paths import annuli_home, make_thread_id
 from ..utils.security import sanitize_path
 from .base import BaseExtractor
 
@@ -278,7 +278,7 @@ class OpenCodeExtractor(BaseExtractor):
         self.session_path = self.storage_path / "session"
         self.message_path = self.storage_path / "message"
         self.part_path = self.storage_path / "part"
-        self.cache_path = lore_home() / "cache"
+        self.cache_path = annuli_home() / "cache"
         self.state_file = self.cache_path / "opencode_state.json"
         self.force_full = force_full
 

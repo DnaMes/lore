@@ -1,6 +1,6 @@
 """Renderer-neutral session formatting."""
 
-from lore.formatting.turns import (
+from annuli.formatting.turns import (
     attach_result_to_calls,
     build_session_turns,
     flat_tool_call,

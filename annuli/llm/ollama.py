@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..utils.paths import lore_home, restrict_file
+from ..utils.paths import annuli_home, restrict_file
 from .base import LLMConfig, LLMProvider, LLMResponse
 from .cache_io import sweep_temp_files
 from .gate import ensure_cloud_allowed
@@ -22,7 +22,7 @@ def resolve_ollama_num_ctx(config: LLMConfig) -> int:
     if config.num_ctx is not None:
         value = config.num_ctx
     else:
-        raw = os.environ.get("LORE_OLLAMA_NUM_CTX")
+        raw = os.environ.get("ANNULI_OLLAMA_NUM_CTX")
         if raw:
             try:
                 value = int(raw.strip())
@@ -41,7 +41,7 @@ class OllamaProvider(LLMProvider):
         # any other cloud send (#PRIVACY.md).
         self.allow_cloud = allow_cloud
         self._client = None
-        self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
+        self._cache_dir_path = Path(config.cache_dir or annuli_home() / "llm_cache")
         self._cache_dir: Optional[Path] = None
 
     def _ensure_cache_dir(self) -> Optional[Path]:

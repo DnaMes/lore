@@ -7,7 +7,7 @@ from typing import List
 
 
 def _scan_depth(default: int) -> int:
-    raw = os.environ.get("LORE_HOME_SCAN_DEPTH", str(default)).strip()
+    raw = os.environ.get("ANNULI_HOME_SCAN_DEPTH", str(default)).strip()
     try:
         return max(1, int(raw))
     except ValueError:
@@ -15,7 +15,7 @@ def _scan_depth(default: int) -> int:
 
 
 def _scan_limit(default: int) -> int:
-    raw = os.environ.get("LORE_HOME_SCAN_LIMIT", str(default)).strip()
+    raw = os.environ.get("ANNULI_HOME_SCAN_LIMIT", str(default)).strip()
     try:
         return max(1, int(raw))
     except ValueError:
@@ -23,7 +23,7 @@ def _scan_limit(default: int) -> int:
 
 
 def _scan_node_limit(default: int) -> int:
-    raw = os.environ.get("LORE_HOME_SCAN_NODE_LIMIT", str(default)).strip()
+    raw = os.environ.get("ANNULI_HOME_SCAN_NODE_LIMIT", str(default)).strip()
     try:
         return max(100, int(raw))
     except ValueError:
@@ -31,7 +31,7 @@ def _scan_node_limit(default: int) -> int:
 
 
 def _scan_time_budget_seconds(default: float) -> float:
-    raw = os.environ.get("LORE_HOME_SCAN_TIME_BUDGET_SECONDS", str(default)).strip()
+    raw = os.environ.get("ANNULI_HOME_SCAN_TIME_BUDGET_SECONDS", str(default)).strip()
     try:
         return max(1.0, float(raw))
     except ValueError:

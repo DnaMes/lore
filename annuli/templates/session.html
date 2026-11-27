@@ -26,7 +26,7 @@
                 <summary class="header-menu-trigger" aria-label="More session actions">⋯</summary>
                 <div class="header-menu-panel">
                     {% if session.thread_id %}
-                    <button type="button" data-action="copy-command" data-copy-text="{{ ("lore-session switch gemini --thread-id " ~ session.thread_id) }}" class="header-menu-item">Copy Continue</button>
+                    <button type="button" data-action="copy-command" data-copy-text="{{ ("annuli-session switch gemini --thread-id " ~ session.thread_id) }}" class="header-menu-item">Copy Continue</button>
                     {% endif %}
                     <button type="button" data-action="copy-link" class="header-menu-item">Copy Link</button>
                     <a href="/" class="header-menu-item">Dashboard</a>
@@ -147,7 +147,7 @@
         {% with pairs=_visible_pairs, pair_offset=0 %}{% include "session_pairs.html" %}{% endwith %}
         {% if session.visible_count == 0 %}
         <div class="text-sm text-slate-500 border border-slate-200 bg-white rounded-2xl p-4">
-            No messages were parsed for this session. Try `lore export --all` to rebuild the index.
+            No messages were parsed for this session. Try `annuli export --all` to rebuild the index.
         </div>
         {% endif %}
         {% if _message_pages > 1 %}
@@ -187,11 +187,11 @@
             btn.insertAdjacentHTML('beforebegin', html);
             // One enhancement path for initial and appended blocks: the exported,
             // idempotent enhancer wraps, highlights and wires the copy button (#176).
-            if (typeof window.loreEnhanceCodeBlocks === 'function') {
-                window.loreEnhanceCodeBlocks();
+            if (typeof window.annuliEnhanceCodeBlocks === 'function') {
+                window.annuliEnhanceCodeBlocks();
             }
             // Tell the TOC spy to observe the freshly added #msg-N anchors.
-            window.dispatchEvent(new CustomEvent('lore:messages-appended'));
+            window.dispatchEvent(new CustomEvent('annuli:messages-appended'));
             if (page + 1 > totalPages) {
                 btn.remove();
             } else {
@@ -345,8 +345,8 @@
 
     async function ensureMatchVisible(match) {
         const anchorId = 'msg-' + match.index;
-        if (typeof window.loreJumpToMessage === 'function') {
-            await window.loreJumpToMessage(anchorId);
+        if (typeof window.annuliJumpToMessage === 'function') {
+            await window.annuliJumpToMessage(anchorId);
             return;
         }
         const el = document.getElementById(anchorId);
@@ -443,15 +443,15 @@
             closeBar();
         }
     });
-    window.addEventListener('lore:messages-appended', function () {
+    window.addEventListener('annuli:messages-appended', function () {
         if (activeQuery) {
             applyFindHighlights(activeQuery);
             setCurrentMark();
         }
     });
     document.addEventListener('keydown', function (e) {
-        if (typeof window.loreKeysEnabled === 'function' && !window.loreKeysEnabled()) return;
-        if (typeof window.loreKeyGuard === 'function' && window.loreKeyGuard(e)) return;
+        if (typeof window.annuliKeysEnabled === 'function' && !window.annuliKeysEnabled()) return;
+        if (typeof window.annuliKeyGuard === 'function' && window.annuliKeyGuard(e)) return;
         if (e.key === '/' && !bar.hasAttribute('hidden')) {
             e.preventDefault();
             input.focus();
@@ -643,7 +643,7 @@ document.addEventListener('keydown', function(e) {
     });
 
     document.addEventListener('keydown', function (e) {
-        if (typeof window.loreKeyGuard === 'function' && window.loreKeyGuard(e)) return;
+        if (typeof window.annuliKeyGuard === 'function' && window.annuliKeyGuard(e)) return;
         if (e.key === 'Escape' && dialog.classList.contains('is-open')) closeOutline();
     });
 })();

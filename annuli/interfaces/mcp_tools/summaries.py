@@ -33,7 +33,7 @@ def _session_lock(session_id: str) -> threading.Lock:
 
 
 def _mcp_summarize_enabled() -> bool:
-    return os.environ.get("LORE_MCP_ALLOW_SUMMARIZE", "").strip() == "1"
+    return os.environ.get("ANNULI_MCP_ALLOW_SUMMARIZE", "").strip() == "1"
 
 
 def _session_known(output_dir, session_id: str) -> bool:
@@ -169,7 +169,7 @@ def register(server, deps: MCPToolDeps) -> None:
             return deps.json_text(
                 {
                     "error": "summarize_session is disabled",
-                    "hint": "set LORE_MCP_ALLOW_SUMMARIZE=1",
+                    "hint": "set ANNULI_MCP_ALLOW_SUMMARIZE=1",
                 }
             )
 
@@ -223,7 +223,7 @@ def register(server, deps: MCPToolDeps) -> None:
     server.register_tool(
         "summarize_session",
         "Generate or refresh the AI summary for one session (local Ollama only; "
-        "disabled unless LORE_MCP_ALLOW_SUMMARIZE=1). Does not return summary text.",
+        "disabled unless ANNULI_MCP_ALLOW_SUMMARIZE=1). Does not return summary text.",
         {
             "type": "object",
             "properties": {

@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from lore.core.models import AUTOMATED_ORIGINS
+from annuli.core.models import AUTOMATED_ORIGINS
 
 from ..utils.datetime import datetime_in_range, parse_date_bound, to_local_naive
 from .fts import (
@@ -81,15 +81,15 @@ def _bind_ignored_exclusion(
         placeholders = ",".join("?" for _ in ids)
         return f" AND {column_sql} NOT IN ({placeholders})", tuple(ids)
 
-    conn.execute("CREATE TEMP TABLE IF NOT EXISTS _lore_ignored_ids (id TEXT PRIMARY KEY)")
-    conn.execute("DELETE FROM _lore_ignored_ids")
+    conn.execute("CREATE TEMP TABLE IF NOT EXISTS _annuli_ignored_ids (id TEXT PRIMARY KEY)")
+    conn.execute("DELETE FROM _annuli_ignored_ids")
     for offset in range(0, len(ids), _IGNORED_SQL_CHUNK):
         chunk = ids[offset : offset + _IGNORED_SQL_CHUNK]
         conn.executemany(
-            "INSERT OR IGNORE INTO _lore_ignored_ids(id) VALUES (?)",
+            "INSERT OR IGNORE INTO _annuli_ignored_ids(id) VALUES (?)",
             [(session_id,) for session_id in chunk],
         )
-    return f" AND {column_sql} NOT IN (SELECT id FROM _lore_ignored_ids)", ()
+    return f" AND {column_sql} NOT IN (SELECT id FROM _annuli_ignored_ids)", ()
 
 
 # Rank on the FTS rowid and map it to a session through the FTS5 shadow table
@@ -132,7 +132,7 @@ def session_filter_sql(
     compared on the ``YYYY-MM-DD`` prefix, which is the granularity every
     surface exposes and which sorts correctly for ISO timestamps; the exact
     ``[start, end]`` check still runs afterwards through
-    :func:`lore.utils.datetime.datetime_in_range` so an offset-carrying stored
+    :func:`annuli.utils.datetime.datetime_in_range` so an offset-carrying stored
     value cannot slip into the wrong day.
 
     Raises:
@@ -716,7 +716,7 @@ KNN_K_MAX = 1024
 # sits at the midpoint of related-p95 / unrelated-p05 (0.881 -> 0.88) and on that set
 # keeps 14/14 related while dropping 14/14 unrelated. Reproduce with
 # ``python tools/calibration/calibrate_semantic_cutoff.py``.
-SEMANTIC_MAX_DISTANCE_ENV = "LORE_SEMANTIC_MAX_DISTANCE"
+SEMANTIC_MAX_DISTANCE_ENV = "ANNULI_SEMANTIC_MAX_DISTANCE"
 DEFAULT_SEMANTIC_MAX_DISTANCE = 0.88
 
 
@@ -724,7 +724,7 @@ def _distance_cutoff(env_name: str, default: float) -> Optional[float]:
     """Parse a distance cutoff from ``env_name``; ``None`` means no cutoff.
 
     Shared by the session-level (:func:`semantic_max_distance`) and
-    message-level (:func:`lore.storage.message_search.message_max_distance`)
+    message-level (:func:`annuli.storage.message_search.message_max_distance`)
     cutoffs so both parse the same way: unset → ``default``, ``0`` (or
     negative) → cutoff disabled, unparsable/NaN → ``default``. Never raises: a
     bad value must not break search (#92).
@@ -744,7 +744,7 @@ def _distance_cutoff(env_name: str, default: float) -> Optional[float]:
 def semantic_max_distance() -> Optional[float]:
     """Vec distance above which a session neighbour is dropped; ``None`` disables.
 
-    Env ``LORE_SEMANTIC_MAX_DISTANCE`` overrides the calibrated default; see
+    Env ``ANNULI_SEMANTIC_MAX_DISTANCE`` overrides the calibrated default; see
     :func:`_distance_cutoff` for the parsing rules.
     """
     return _distance_cutoff(SEMANTIC_MAX_DISTANCE_ENV, DEFAULT_SEMANTIC_MAX_DISTANCE)
@@ -847,7 +847,7 @@ def semantic_search_sessions(
 
     Neighbours farther away than :func:`semantic_max_distance` are dropped
     here, *before* RRF fusion (#92), so padding sessions never enter the fused
-    ranking. Set ``LORE_SEMANTIC_MAX_DISTANCE=0`` to turn the cutoff off.
+    ranking. Set ``ANNULI_SEMANTIC_MAX_DISTANCE=0`` to turn the cutoff off.
     """
     from .embeddings import embed_text, pack_vector, sqlite_vec_available
 

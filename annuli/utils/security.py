@@ -1,4 +1,4 @@
-"""Security utilities for lore."""
+"""Security utilities for annuli."""
 
 import logging
 import os
@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-from lore.utils.tooling import normalize_tool_name
+from annuli.utils.tooling import normalize_tool_name
 
 logger = logging.getLogger(__name__)
 

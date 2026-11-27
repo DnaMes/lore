@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""``lore-mcp`` entry point — run the Lore MCP server over stdio or streamable HTTP.
+"""``annuli-mcp`` entry point — run the Annuli MCP server over stdio or streamable HTTP.
 
 Stdio is the default and behaves exactly as before; ``--http`` starts the same
 server (one shared ``create_server()`` factory) behind the streamable-HTTP
-transport in :mod:`lore.interfaces.mcp_http`.
+transport in :mod:`annuli.interfaces.mcp_http`.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ import asyncio
 import os
 import sys
 
-from lore.interfaces.mcp import create_server
+from annuli.interfaces.mcp import create_server
 
 DEFAULT_HTTP_PORT = 8787
 DEFAULT_HTTP_PATH = "/mcp"
@@ -28,9 +28,9 @@ async def _serve_stdio() -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="lore-mcp",
+        prog="annuli-mcp",
         description=(
-            "Run the Lore MCP server. It speaks JSON-RPC on stdin/stdout by default; "
+            "Run the Annuli MCP server. It speaks JSON-RPC on stdin/stdout by default; "
             "--http serves the same tools over streamable HTTP instead."
         ),
     )
@@ -41,36 +41,36 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--host",
-        default=os.environ.get("LORE_MCP_HTTP_HOST", "127.0.0.1"),
+        default=os.environ.get("ANNULI_MCP_HTTP_HOST", "127.0.0.1"),
         help=(
-            "HTTP bind host (default 127.0.0.1, or $LORE_MCP_HTTP_HOST). A "
+            "HTTP bind host (default 127.0.0.1, or $ANNULI_MCP_HTTP_HOST). A "
             "non-loopback host requires an auth token."
         ),
     )
     parser.add_argument(
         "--port",
         type=int,
-        default=int(os.environ.get("LORE_MCP_HTTP_PORT", str(DEFAULT_HTTP_PORT))),
-        help="HTTP bind port (default 8787, or $LORE_MCP_HTTP_PORT).",
+        default=int(os.environ.get("ANNULI_MCP_HTTP_PORT", str(DEFAULT_HTTP_PORT))),
+        help="HTTP bind port (default 8787, or $ANNULI_MCP_HTTP_PORT).",
     )
     parser.add_argument(
         "--path",
-        default=os.environ.get("LORE_MCP_HTTP_PATH", DEFAULT_HTTP_PATH),
-        help="HTTP endpoint path (default /mcp, or $LORE_MCP_HTTP_PATH).",
+        default=os.environ.get("ANNULI_MCP_HTTP_PATH", DEFAULT_HTTP_PATH),
+        help="HTTP endpoint path (default /mcp, or $ANNULI_MCP_HTTP_PATH).",
     )
     parser.add_argument(
         "--token-file",
-        default=os.environ.get("LORE_MCP_HTTP_TOKEN_FILE") or None,
+        default=os.environ.get("ANNULI_MCP_HTTP_TOKEN_FILE") or None,
         help=(
-            "File holding the bearer token (or set $LORE_MCP_HTTP_TOKEN). Required "
+            "File holding the bearer token (or set $ANNULI_MCP_HTTP_TOKEN). Required "
             "for a non-loopback bind; the token is read from the file, never from argv."
         ),
     )
     parser.add_argument(
         "--timeout",
         type=float,
-        default=float(os.environ.get("LORE_MCP_HTTP_TIMEOUT", str(DEFAULT_HTTP_TIMEOUT))),
-        help="Per-request deadline in seconds (default 60, or $LORE_MCP_HTTP_TIMEOUT).",
+        default=float(os.environ.get("ANNULI_MCP_HTTP_TIMEOUT", str(DEFAULT_HTTP_TIMEOUT))),
+        help="Per-request deadline in seconds (default 60, or $ANNULI_MCP_HTTP_TIMEOUT).",
     )
     return parser
 
@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
         asyncio.run(_serve_stdio())
         return 0
 
-    from lore.interfaces.mcp_http import (
+    from annuli.interfaces.mcp_http import (
         MCPHTTPConfigError,
         resolve_http_token,
         run_http_server,
@@ -99,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
             request_timeout=args.timeout,
         )
     except MCPHTTPConfigError as exc:
-        print(f"lore-mcp: {exc}", file=sys.stderr)
+        print(f"annuli-mcp: {exc}", file=sys.stderr)
         return 2
 
 

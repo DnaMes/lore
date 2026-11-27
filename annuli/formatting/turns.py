@@ -8,11 +8,11 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
-from lore.core.models import normalize_tool_call
-from lore.exporters.tool_calls import CanonicalToolCall, canonical_tool_calls
-from lore.interfaces.session_view_prep import fold_tool_bursts, strip_tool_blocks
-from lore.utils.injected import classify_injected_display
-from lore.utils.text_processing import (
+from annuli.core.models import normalize_tool_call
+from annuli.exporters.tool_calls import CanonicalToolCall, canonical_tool_calls
+from annuli.interfaces.session_view_prep import fold_tool_bursts, strip_tool_blocks
+from annuli.utils.injected import classify_injected_display
+from annuli.utils.text_processing import (
     _canonical_tool_status,
     tool_call_target,
 )

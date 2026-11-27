@@ -23,7 +23,7 @@
     <link rel="stylesheet" href="/static/tailwind-compiled.min.css">
     <link rel="stylesheet" href="/static/highlight-github-11.9.0.min.css">
     <style nonce="{{ nonce }}">
-        /* Lore palette: warm paper in Light, true black in Dark, one pastel accent (peach).
+        /* Annuli palette: warm paper in Light, true black in Dark, one pastel accent (peach).
          * Every accent surface reads --primary / --primary-soft / --on-primary; nothing else in
          * this file may hardcode a blue. */
         :root {
@@ -1412,8 +1412,8 @@
         <div id="sidebarBackdrop" aria-hidden="true"></div>
         <aside id="appSidebar" class="w-72 border-r border-slate-200/70 app-panel backdrop-blur-xl flex flex-col min-h-0">
             <a href="/" class="p-6 font-semibold text-lg flex items-center gap-3 tracking-tight">
-                <div class="w-9 h-9 rounded-xl brand-tile flex items-center justify-center">L</div>
-                <span class="text-slate-900 title-font">Lore</span>
+                <div class="w-9 h-9 rounded-xl brand-tile flex items-center justify-center">A</div>
+                <span class="text-slate-900 title-font">Annuli</span>
             </a>
             <div class="flex-1 px-3 min-h-0 overflow-y-auto space-y-1 pb-4">
                 <a href="/" class="sidebar-link {{ 'active' if active=='dashboard' else '' }}">Dashboard</a>
@@ -1438,7 +1438,7 @@
                 <a href="/help" class="sidebar-link {{ 'active' if active=='help' else '' }}">Help</a>
             </div>
             <div class="px-5 py-3 border-t border-slate-200/70 text-[10px] text-slate-500 flex items-center justify-between">
-                <span class="font-mono">lore v{{ app_version }}</span>
+                <span class="font-mono">annuli v{{ app_version }}</span>
                 <a href="/api/build-info" class="hover:text-slate-700" aria-label="Build info">build</a>
             </div>
         </aside>
@@ -1606,7 +1606,7 @@
                 <span id="sbSearch" class="status-chip status-chip-hide-sm" title="Search mode and message index status"></span>
                 <span id="sbWorker" class="status-chip status-chip-hide-sm" title="Background worker heartbeat status"></span>
                 <span id="sbSummaries" class="status-chip status-chip-hide-sm" title="Web summary generation mode"></span>
-                <span id="sbVersion" class="status-chip status-chip-hide-sm" title="Lore version"></span>
+                <span id="sbVersion" class="status-chip status-chip-hide-sm" title="Annuli version"></span>
                 <span id="sbUnavailable" class="status-chip status-unavailable" hidden></span>
             </footer>
         </main>
@@ -1793,9 +1793,9 @@
         }
         /* One idempotent enhancer, exported for templates that append content later:
            the session view calls it after its lazy load (#176). */
-        window.loreEnhanceCodeBlocks = initCodeBlocks;
+        window.annuliEnhanceCodeBlocks = initCodeBlocks;
         document.addEventListener('DOMContentLoaded', initCodeBlocks);
-        window.addEventListener('lore:messages-appended', initCodeBlocks);
+        window.addEventListener('annuli:messages-appended', initCodeBlocks);
 
         /* Reusable focus-trap helper for modal dialogs */
         window.FocusTrap = (function () {
@@ -1862,20 +1862,20 @@
             return { activate: activate };
         })();
 
-        const LORE_KEYS_STORAGE = 'lore.keys.v1';
-        const LORE_PEEK_STORAGE = 'lore.peek.v1';
-        function loreNormalizeOnOff(raw) {
+        const ANNULI_KEYS_STORAGE = 'lore.keys.v1';
+        const ANNULI_PEEK_STORAGE = 'lore.peek.v1';
+        function annuliNormalizeOnOff(raw) {
             return raw === 'off' ? 'off' : 'on';
         }
-        function loreKeysEnabled() {
+        function annuliKeysEnabled() {
             try {
-                return loreNormalizeOnOff(localStorage.getItem(LORE_KEYS_STORAGE)) !== 'off';
+                return annuliNormalizeOnOff(localStorage.getItem(ANNULI_KEYS_STORAGE)) !== 'off';
             } catch (_) {
                 return true;
             }
         }
-        window.loreKeysEnabled = loreKeysEnabled;
-        window.loreKeyGuard = function loreKeyGuard(e) {
+        window.annuliKeysEnabled = annuliKeysEnabled;
+        window.annuliKeyGuard = function annuliKeyGuard(e) {
             if (e.ctrlKey || e.metaKey || e.altKey || e.defaultPrevented) return true;
             const t = e.target;
             if (!t || !t.tagName) return false;
@@ -1913,7 +1913,7 @@
                 shortcutsTrapRelease = window.FocusTrap.activate(panel);
             }
             const toggle = document.getElementById('shortcutsDisableToggle');
-            if (toggle) toggle.checked = !loreKeysEnabled();
+            if (toggle) toggle.checked = !annuliKeysEnabled();
         }
         window.openShortcutsHelp = openShortcutsHelp;
         (function initShortcutsHelp() {
@@ -1927,7 +1927,7 @@
             if (toggle) {
                 toggle.addEventListener('change', function () {
                     try {
-                        localStorage.setItem(LORE_KEYS_STORAGE, toggle.checked ? 'off' : 'on');
+                        localStorage.setItem(ANNULI_KEYS_STORAGE, toggle.checked ? 'off' : 'on');
                     } catch (_) {}
                 });
             }
@@ -1940,7 +1940,7 @@
         })();
 
         document.addEventListener('keydown', function (e) {
-            if (!loreKeysEnabled() || window.loreKeyGuard(e)) return;
+            if (!annuliKeysEnabled() || window.annuliKeyGuard(e)) return;
             if (document.body.dataset.shortcutsPage !== 'detail') return;
             if (e.key === '?') {
                 e.preventDefault();
@@ -2333,7 +2333,7 @@
                 const issues = result?.totals?.issues ?? 0;
                 const sessions = result?.totals?.sessions ?? 0;
                 setActionStatus(`Audit ${scope} finished: ${sessions} sessions, ${issues} issues, uniform=${result.uniform ? 'yes' : 'no'}`);
-                console.log('lore audit', result);
+                console.log('annuli audit', result);
             } catch (error) {
                 setActionStatus(`Audit failed: ${error.message}`);
                 showErrorToast('Audit failed', error.message);
@@ -2342,8 +2342,8 @@
                 if (btn) { btn.disabled = false; btn.textContent = original || 'Audit'; }
             }
         }
-        const LORE_VIEW_KEY = 'lore.view.v2';
-        const LORE_VIEW_LEGACY = {
+        const ANNULI_VIEW_KEY = 'lore.view.v2';
+        const ANNULI_VIEW_LEGACY = {
             density: 'aihistory-density',
             clean: 'aihistory-clean-mode',
             ultra: 'aihistory-ultra-clean',
@@ -2357,7 +2357,7 @@
             let state = defaultLoreViewState();
             let migrated = false;
             try {
-                const raw = localStorage.getItem(LORE_VIEW_KEY);
+                const raw = localStorage.getItem(ANNULI_VIEW_KEY);
                 if (raw) {
                     const parsed = JSON.parse(raw);
                     if (parsed && typeof parsed === 'object') {
@@ -2370,11 +2370,11 @@
                         };
                     }
                 }
-                const density = localStorage.getItem(LORE_VIEW_LEGACY.density);
-                const clean = localStorage.getItem(LORE_VIEW_LEGACY.clean);
-                const ultra = localStorage.getItem(LORE_VIEW_LEGACY.ultra);
-                const readability = localStorage.getItem(LORE_VIEW_LEGACY.readability);
-                const presenter = localStorage.getItem(LORE_VIEW_LEGACY.presenter);
+                const density = localStorage.getItem(ANNULI_VIEW_LEGACY.density);
+                const clean = localStorage.getItem(ANNULI_VIEW_LEGACY.clean);
+                const ultra = localStorage.getItem(ANNULI_VIEW_LEGACY.ultra);
+                const readability = localStorage.getItem(ANNULI_VIEW_LEGACY.readability);
+                const presenter = localStorage.getItem(ANNULI_VIEW_LEGACY.presenter);
                 if (density || clean || ultra || readability || presenter) {
                     migrated = true;
                     if (density === 'compact' || ultra === 'on') {
@@ -2388,8 +2388,8 @@
                     }
                 }
                 if (migrated) {
-                    localStorage.setItem(LORE_VIEW_KEY, JSON.stringify(state));
-                    Object.values(LORE_VIEW_LEGACY).forEach((key) => {
+                    localStorage.setItem(ANNULI_VIEW_KEY, JSON.stringify(state));
+                    Object.values(ANNULI_VIEW_LEGACY).forEach((key) => {
                         try { localStorage.removeItem(key); } catch (_) {}
                     });
                 }
@@ -2456,7 +2456,7 @@
             syncViewSegmentButtons(next);
             syncLoreViewDetailsOpen(next);
             if (persist) {
-                try { localStorage.setItem(LORE_VIEW_KEY, JSON.stringify(next)); } catch (_) {}
+                try { localStorage.setItem(ANNULI_VIEW_KEY, JSON.stringify(next)); } catch (_) {}
             }
             return next;
         }
@@ -2512,7 +2512,7 @@
             // user opened by hand is never promoted to "default open".
             const state = migrateLoreViewState();
             applyLoreViewState(state, false);
-            window.addEventListener('lore:messages-appended', () => {
+            window.addEventListener('annuli:messages-appended', () => {
                 syncLoreViewDetailsOpen({
                     tools: document.body.dataset.tools,
                     thinking: document.body.dataset.thinking,
@@ -2590,7 +2590,7 @@
             }
             observeAnchors();
             // After "Load more" appends a page, the new anchors must be observed.
-            window.addEventListener('lore:messages-appended', observeAnchors);
+            window.addEventListener('annuli:messages-appended', observeAnchors);
 
             // Scroll the conversation so the target message is at the top.
             // scrollIntoView resolves the correct scroll container itself and
@@ -2617,7 +2617,7 @@
                 return true;
             }
             // Resolve once the next message page has actually been appended
-            // (or timed out) — driven by the lore:messages-appended event the
+            // (or timed out) — driven by the annuli:messages-appended event the
             // load-more script fires, so we never click a still-busy button.
             function waitForAppend(timeoutMs) {
                 return new Promise((resolve) => {
@@ -2625,10 +2625,10 @@
                     const finish = () => {
                         if (done) return;
                         done = true;
-                        window.removeEventListener('lore:messages-appended', finish);
+                        window.removeEventListener('annuli:messages-appended', finish);
                         resolve();
                     };
-                    window.addEventListener('lore:messages-appended', finish);
+                    window.addEventListener('annuli:messages-appended', finish);
                     setTimeout(finish, timeoutMs);
                 });
             }
@@ -2654,7 +2654,7 @@
                     jumpTo(item.dataset.toc);
                 });
             });
-            window.loreJumpToMessage = jumpTo;
+            window.annuliJumpToMessage = jumpTo;
         }
         document.addEventListener('DOMContentLoaded', initTocSpy);
     </script>

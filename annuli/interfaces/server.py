@@ -1,8 +1,8 @@
 """Stdio JSON-RPC MCP server implementation.
 
-``MCPServer`` was extracted from :mod:`lore.interfaces.mcp` so the
+``MCPServer`` was extracted from :mod:`annuli.interfaces.mcp` so the
 ``mcp_tools`` group modules can import it without a circular dependency. The
-class is unchanged; :mod:`lore.interfaces.mcp` re-exports it.
+class is unchanged; :mod:`annuli.interfaces.mcp` re-exports it.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import sys
 from typing import Optional
 
 from .. import __version__
-from ..utils.paths import lore_home
+from ..utils.paths import annuli_home
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ class MCPServer:
 
     def __init__(self):
         self.tools = {}
-        self.output_dir = lore_home()
+        self.output_dir = annuli_home()
 
     def register_tool(
         self,
@@ -73,7 +73,7 @@ class MCPServer:
                     "tools": {},
                 },
                 "serverInfo": {
-                    "name": "lore",
+                    "name": "annuli",
                     "version": __version__,
                 },
             },

@@ -22,7 +22,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
 
-from lore.core.models import AUTOMATED_ORIGINS
+from annuli.core.models import AUTOMATED_ORIGINS
 
 from .envelope import load_envelope_value, normalise_status
 from .freshness import GENERATED_AT_KEY, store_state

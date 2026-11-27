@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Lore — local-first archive + shared agent memory for AI coding sessions
+Annuli — local-first archive + shared agent memory for AI coding sessions
 
 A local alternative to SpecStory that collects, unifies and exports chat histories
 from multiple AI coding assistants without any cloud connectivity.
@@ -13,20 +13,20 @@ Supported tools:
 - Codex CLI
 
 Usage:
-    lore list [--tool TOOL] [--since DURATION] [--format FORMAT]
-    lore export [--all] [--tool TOOL] [--project PATH]
-    lore search QUERY [--tool TOOL] [--context N]
-    lore stats
-    lore digest [--since 7d] [--format text|markdown]
-    lore memory add|list|search|rate ...
-    lore watch [--interval SECS] [--git]
-    lore check
-    lore sync TOOL [--session-id ID] [--project PATH]
-    lore run TOOL [-- ARGS...]
-    lore threads
-    lore metrics [--json] [--include-inferred]
-    lore rules export --recommendations [--json] | activate <id> | evaluate <id>
-    lore summarize [--session ID] [--since 30d] [--provider ollama] [--dry-run]
+    annuli list [--tool TOOL] [--since DURATION] [--format FORMAT]
+    annuli export [--all] [--tool TOOL] [--project PATH]
+    annuli search QUERY [--tool TOOL] [--context N]
+    annuli stats
+    annuli digest [--since 7d] [--format text|markdown]
+    annuli memory add|list|search|rate ...
+    annuli watch [--interval SECS] [--git]
+    annuli check
+    annuli sync TOOL [--session-id ID] [--project PATH]
+    annuli run TOOL [-- ARGS...]
+    annuli threads
+    annuli metrics [--json] [--include-inferred]
+    annuli rules export --recommendations [--json] | activate <id> | evaluate <id>
+    annuli summarize [--session ID] [--since 30d] [--provider ollama] [--dry-run]
 """
 
 import argparse
@@ -43,29 +43,29 @@ from pathlib import Path
 # Add local package to path if running from source
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from lore.core.models import AUTOMATED_ORIGINS, Tool, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.exporters.markdown import MarkdownExporter
-from lore.exporters.redaction import REDACTED_EXPORT_MARKER, redact_session
-from lore.extractors.base import stamp_parser_version
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.opencode import OpenCodeExtractor
-from lore.services.discovery import read_last_discovery, record_discovery
-from lore.services.extraction import preserve_unobserved_index_entries
-from lore.services.index import automated_hidden_line, filter_automated
-from lore.services.summarize_cli import PROVIDER_CHOICES, default_model
-from lore.storage.reader import load_ignored_session_ids_strict
-from lore.utils.console import make_console_safe
-from lore.utils.datetime import make_naive, parse_duration
-from lore.utils.git import get_git_info
-from lore.utils.paths import (
+from annuli.core.models import AUTOMATED_ORIGINS, Tool, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.exporters.markdown import MarkdownExporter
+from annuli.exporters.redaction import REDACTED_EXPORT_MARKER, redact_session
+from annuli.extractors.base import stamp_parser_version
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.opencode import OpenCodeExtractor
+from annuli.services.discovery import read_last_discovery, record_discovery
+from annuli.services.extraction import preserve_unobserved_index_entries
+from annuli.services.index import automated_hidden_line, filter_automated
+from annuli.services.summarize_cli import PROVIDER_CHOICES, default_model
+from annuli.storage.reader import load_ignored_session_ids_strict
+from annuli.utils.console import make_console_safe
+from annuli.utils.datetime import make_naive, parse_duration
+from annuli.utils.git import get_git_info
+from annuli.utils.paths import (
+    annuli_home,
     get_current_project,
-    lore_home,
     make_thread_id,
     restrict_file,
     secure_dir,
 )
-from lore.utils.rules import (
+from annuli.utils.rules import (
     activate_recommendation,
     build_recommendations,
     extract_rules,
@@ -76,7 +76,7 @@ from lore.utils.rules import (
     record_evaluation,
     save_recommendations,
 )
-from lore.utils.tooling import normalize_tool_name
+from annuli.utils.tooling import normalize_tool_name
 
 TOOL_EXECUTABLES = {
     "claude-code": "claude",
@@ -243,7 +243,7 @@ def cmd_list(args):
             sessions.append(session)
 
     if getattr(args, "tag", None):
-        from lore.storage import all_tags_by_session
+        from annuli.storage import all_tags_by_session
 
         user_tags = all_tags_by_session(Path(args.output_dir).expanduser())
         wanted = args.tag.strip().lower()
@@ -373,11 +373,11 @@ def _reusable_entries(extractor, prior_by_path: dict, ignored_ids: set) -> dict[
 def _redacted_export_dir_error(output_dir: Path) -> str | None:
     """Refuse redacted export into (or below) the live archive and into plain exports."""
     resolved = output_dir.resolve()
-    home = lore_home().resolve()
+    home = annuli_home().resolve()
     if resolved == home or resolved.is_relative_to(home) or home.is_relative_to(resolved):
         return (
             "Error: --redact requires --output-dir outside the default archive "
-            f"({lore_home()}) and not containing it"
+            f"({annuli_home()}) and not containing it"
         )
     marker = output_dir / REDACTED_EXPORT_MARKER
     try:
@@ -412,7 +412,7 @@ def _print_skip_summary(extractors) -> None:
         if reason == "too_few_user_prompts":
             line = (
                 f"Skipped {n} sessions with fewer than {min_prompts} user prompts "
-                "(set LORE_MIN_USER_PROMPTS=1 to include them)"
+                "(set ANNULI_MIN_USER_PROMPTS=1 to include them)"
             )
         elif reason == "too_little_content":
             line = f"Skipped {n} sessions with too little content"
@@ -649,8 +649,8 @@ def _find_session_by_id(session_id: str):
 
 def cmd_export_html(args):
     """Export a single session as a standalone, shareable HTML file."""
-    from lore.exporters.html import render_session_html
-    from lore.utils.security import sanitize_filename
+    from annuli.exporters.html import render_session_html
+    from annuli.utils.security import sanitize_filename
 
     try:
         session = _find_session_by_id(args.session_id)
@@ -719,7 +719,7 @@ _PROTECTED_NAME_PREFIXES = (
 )
 
 # Deletable-export heuristic, mirroring MarkdownExporter._candidate_path
-# (lore/exporters/markdown.py): the exporter writes
+# (annuli/exporters/markdown.py): the exporter writes
 # <root>/projects/<project dir>/<tool dir>/<YYYY-MM-DD>_<title>_<id>.md.
 # Both the basename pattern and the directory layout are checked, so a stray
 # .md anywhere else in the archive (e.g. backups/notes.md) is never deleted.
@@ -768,7 +768,7 @@ def cmd_prune(args):
     output_dir = Path(args.output_dir).expanduser()
     index_path = output_dir / "index.json"
     if not index_path.exists():
-        print(f"No index found at {index_path}. Run `lore export --all` first.")
+        print(f"No index found at {index_path}. Run `annuli export --all` first.")
         return
 
     # Read the existing ignore set before anything is deleted or rewritten:
@@ -926,9 +926,9 @@ def _cloud_optin_error(args) -> int | None:
     """Exit code 2 when a cloud provider is chosen without opt-in, else None.
 
     Every non-local provider (gemini, openrouter, jev, off-host ollama) needs
-    ``--allow-cloud`` or ``LORE_ALLOW_CLOUD=1``.
+    ``--allow-cloud`` or ``ANNULI_ALLOW_CLOUD=1``.
     """
-    from lore.services.summarize_cli import require_cloud_opt_in
+    from annuli.services.summarize_cli import require_cloud_opt_in
 
     provider = getattr(args, "provider", None)
     if not provider:
@@ -938,14 +938,14 @@ def _cloud_optin_error(args) -> int | None:
 
 def _print_manifest(manifest) -> None:
     """Print the fields of a backup manifest that a person needs to see."""
-    from lore.storage.backup import BUNDLE_FORMAT
+    from annuli.storage.backup import BUNDLE_FORMAT
 
     print(
         f"  format:     {BUNDLE_FORMAT} v{manifest.format_version}, created {manifest.created_at}"
     )
     print(
-        f"  lore:       {manifest.lore_version} "
-        f"(store schema {manifest.schema_version}, this Lore {manifest.expected_schema_version})"
+        f"  annuli:       {manifest.annuli_version} "
+        f"(store schema {manifest.schema_version}, this Annuli {manifest.expected_schema_version})"
     )
     rows = " ".join(f"{table}={count}" for table, count in sorted(manifest.counts.items()))
     print(f"  rows:       {rows}")
@@ -954,19 +954,19 @@ def _print_manifest(manifest) -> None:
 
 
 def cmd_backup(args):
-    """``lore backup <path>`` writes a bundle; ``lore backup verify <path>`` checks one.
+    """``annuli backup <path>`` writes a bundle; ``annuli backup verify <path>`` checks one.
 
     Both forms share one subcommand (#161 asks for both) and are told apart by
     a literal leading ``verify``, the way ``git stash list`` works.
     """
-    from lore.storage.backup import BackupError, create_backup, verify_bundle
+    from annuli.storage.backup import BackupError, create_backup, verify_bundle
 
     words = list(args.arguments)
     verify = words[:1] == ["verify"]
     if verify:
         words = words[1:]
     if len(words) != 1:
-        print("usage: lore backup [verify] <path>", file=sys.stderr)
+        print("usage: annuli backup [verify] <path>", file=sys.stderr)
         return 1
     path = Path(words[0]).expanduser()
 
@@ -995,7 +995,7 @@ def cmd_backup(args):
 
 def cmd_restore(args):
     """Replace the v2 store with the one in a verified bundle."""
-    from lore.storage.backup import BackupError, restore_backup
+    from annuli.storage.backup import BackupError, restore_backup
 
     bundle = Path(args.bundle).expanduser()
     output_dir = Path(args.output_dir).expanduser()
@@ -1012,7 +1012,7 @@ def cmd_restore(args):
 
 def _print_portable_manifest(manifest) -> None:
     """Print the fields of a portable bundle manifest a person needs to see."""
-    from lore.storage.portable import PORTABLE_FORMAT
+    from annuli.storage.portable import PORTABLE_FORMAT
 
     provenance = manifest.provenance
     print(
@@ -1021,8 +1021,8 @@ def _print_portable_manifest(manifest) -> None:
     )
     print(f"  origin:     namespace={provenance.namespace} machine={provenance.machine_scope}")
     print(
-        f"  lore:       {provenance.lore_version} "
-        f"(store schema {manifest.schema_version}, this Lore {manifest.expected_schema_version})"
+        f"  annuli:       {provenance.annuli_version} "
+        f"(store schema {manifest.schema_version}, this Annuli {manifest.expected_schema_version})"
     )
     rows = " ".join(f"{table}={count}" for table, count in sorted(manifest.counts.items()))
     print(f"  rows:       {rows}")
@@ -1086,14 +1086,14 @@ def _print_import_report(report) -> None:
 
 
 def cmd_bundle(args):
-    """``lore bundle export <path>`` writes a portable archive; ``import`` merges one.
+    """``annuli bundle export <path>`` writes a portable archive; ``import`` merges one.
 
     A portable bundle is the backup bundle plus source provenance, and is the form
     meant to travel between machines: importing merges instead of replacing, and
-    never overwrites local content (see :mod:`lore.storage.portable`).
+    never overwrites local content (see :mod:`annuli.storage.portable`).
     """
-    from lore.storage.backup import BackupError
-    from lore.storage.portable import create_portable_bundle, import_bundle
+    from annuli.storage.backup import BackupError
+    from annuli.storage.portable import create_portable_bundle, import_bundle
 
     path = Path(args.path).expanduser()
     output_dir = Path(args.output_dir).expanduser()
@@ -1120,14 +1120,14 @@ def cmd_bundle(args):
 
 def cmd_analyze(args):
     """Generate AI-powered statistics and insights."""
-    from lore.llm import LLMConfig, get_provider
-    from lore.llm.tasks import StatsGenerator
+    from annuli.llm import LLMConfig, get_provider
+    from annuli.llm.tasks import StatsGenerator
 
     output_dir = Path(args.output_dir).expanduser()
     index_file = output_dir / "index.json"
 
     if not index_file.exists():
-        print("Error: No index found. Run 'lore reindex' first.", file=sys.stderr)
+        print("Error: No index found. Run 'annuli reindex' first.", file=sys.stderr)
         return 1
 
     with open(index_file, "r") as f:
@@ -1184,7 +1184,7 @@ def cmd_analyze(args):
 
 def cmd_summarize(args):
     """Generate AI session summaries (local-first; cloud requires --allow-cloud)."""
-    from lore.services.summarize_cli import run_summarize_command
+    from annuli.services.summarize_cli import run_summarize_command
 
     return run_summarize_command(args)
 
@@ -1193,16 +1193,16 @@ def cmd_improve(args):
     """Run the improve pipeline (embeddings, extraction, memory candidates)."""
     import json as json_mod
 
-    from lore.services.improve import run_improve
-    from lore.services.summarize_cli import require_cloud_opt_in
+    from annuli.services.improve import run_improve
+    from annuli.services.summarize_cli import require_cloud_opt_in
 
     output_dir = Path(args.output_dir).expanduser()
     stages = args.stage if getattr(args, "stage", None) else None
     provider = getattr(args, "provider", None)
-    chosen = provider or os.environ.get("LORE_LLM_PROVIDER", "").strip()
+    chosen = provider or os.environ.get("ANNULI_LLM_PROVIDER", "").strip()
     if chosen and not getattr(args, "dry_run", False):
         # extract_knowledge sends conversation text to the provider: cloud
-        # providers need --allow-cloud or LORE_ALLOW_CLOUD=1 like the other
+        # providers need --allow-cloud or ANNULI_ALLOW_CLOUD=1 like the other
         # cloud commands.
         allow_cloud = bool(getattr(args, "allow_cloud", False))
         if (rc := require_cloud_opt_in(chosen, allow_cloud)) is not None:
@@ -1238,25 +1238,25 @@ def cmd_knowledge(args):
     """Extract knowledge from sessions using LLM."""
     if not getattr(args, "provider", None):
         print(
-            "Error: lore knowledge requires --provider (e.g. ollama). "
-            "Cloud providers also need --allow-cloud or LORE_ALLOW_CLOUD=1.",
+            "Error: annuli knowledge requires --provider (e.g. ollama). "
+            "Cloud providers also need --allow-cloud or ANNULI_ALLOW_CLOUD=1.",
             file=sys.stderr,
         )
         return 2
     if (rc := _cloud_optin_error(args)) is not None:
         return rc
-    from lore.llm import LLMConfig, get_provider
-    from lore.llm.tasks import KnowledgeExtractor
-    from lore.llm.tasks.knowledge import KnowledgeEntry
-    from lore.services.index import load_deleted_session_ids
-    from lore.services.knowledge import run_extraction
-    from lore.storage import list_session_knowledge
+    from annuli.llm import LLMConfig, get_provider
+    from annuli.llm.tasks import KnowledgeExtractor
+    from annuli.llm.tasks.knowledge import KnowledgeEntry
+    from annuli.services.index import load_deleted_session_ids
+    from annuli.services.knowledge import run_extraction
+    from annuli.storage import list_session_knowledge
 
     output_dir = Path(args.output_dir).expanduser()
     index_file = output_dir / "index.json"
 
     if not index_file.exists():
-        print("Error: No index found. Run 'lore reindex' first.", file=sys.stderr)
+        print("Error: No index found. Run 'annuli reindex' first.", file=sys.stderr)
         return 1
 
     with open(index_file, "r") as f:
@@ -1273,7 +1273,7 @@ def cmd_knowledge(args):
         for e in index.get("sessions", [])
         if not include_automated and e.get("origin") in AUTOMATED_ORIGINS
     }
-    from lore.services.knowledge import sessions_for_extraction
+    from annuli.services.knowledge import sessions_for_extraction
 
     sessions = sessions_for_extraction(
         output_dir,
@@ -1390,14 +1390,14 @@ def cmd_format(args):
     """Format sessions with AI-generated summaries and tags."""
     if (rc := _cloud_optin_error(args)) is not None:
         return rc
-    from lore.llm import LLMConfig, get_provider
-    from lore.llm.tasks import SessionFormatter
+    from annuli.llm import LLMConfig, get_provider
+    from annuli.llm.tasks import SessionFormatter
 
     output_dir = Path(args.output_dir).expanduser()
     index_file = output_dir / "index.json"
 
     if not index_file.exists():
-        print("Error: No index found. Run 'lore reindex' first.", file=sys.stderr)
+        print("Error: No index found. Run 'annuli reindex' first.", file=sys.stderr)
         return 1
 
     with open(index_file, "r") as f:
@@ -1449,7 +1449,7 @@ def cmd_format(args):
 
     # Index entries carry metadata only: the archived transcript is hydrated from
     # the v2 store first so the formatter summarises what happened (#177).
-    from lore.services.hydration import HydrationError, hydrate_session
+    from annuli.services.hydration import HydrationError, hydrate_session
 
     hydration_reasons: dict[str, int] = {}
     formatted_count = 0
@@ -1556,7 +1556,7 @@ def cmd_sync(args):
     print(f"\nSynced {len(sessions)} sessions to {output_dir}")
     _print_skip_summary(built_extractors)
     _record_source_health(output_dir, built_extractors)
-    from lore.services.extraction import capture_source_artifacts
+    from annuli.services.extraction import capture_source_artifacts
 
     preserved = capture_source_artifacts(output_dir, built_extractors)
     if preserved:
@@ -1669,7 +1669,7 @@ def cmd_run(args):
 
 def _print_message_search(output_dir, args):
     """Message-level retrieval: the passage, its evidence and its permalink (#190)."""
-    from lore.storage import search_messages
+    from annuli.storage import search_messages
 
     result = search_messages(output_dir, args.query, limit=getattr(args, "limit", 10) or 10)
     if not result.hits:
@@ -1694,12 +1694,12 @@ def cmd_search(args):
     # the same backend: v2 FTS + hybrid semantic fusion when available, with the
     # legacy SearchEngine as the fallback. Previously this called SearchEngine
     # directly, bypassing v2 and hybrid search entirely (#87).
-    from lore.services.index import load_deleted_session_ids, search_index
-    from lore.storage import v2_db_path
+    from annuli.services.index import load_deleted_session_ids, search_index
+    from annuli.storage import v2_db_path
 
     index_path = output_dir / "index.json"
     if not index_path.exists() and not v2_db_path(output_dir).exists():
-        print("No index found. Run 'lore export --all' first.")
+        print("No index found. Run 'annuli export --all' first.")
         return
     if getattr(args, "messages", False):
         _print_message_search(output_dir, args)
@@ -1722,7 +1722,7 @@ def cmd_search(args):
             limit=per_page,
             offset=(page - 1) * per_page,
         )
-        from lore.services.index import count_index_hits
+        from annuli.services.index import count_index_hits
 
         total = count_index_hits(
             index_path,
@@ -1767,8 +1767,8 @@ def cmd_search(args):
 
 def cmd_library(args):
     """Build a browsable Markdown library from the v2 store."""
-    from lore.library.builder import build_library
-    from lore.storage.writer import v2_db_path
+    from annuli.library.builder import build_library
+    from annuli.storage.writer import v2_db_path
 
     store_dir = Path(args.output_dir).expanduser()
     library_dir = Path(args.output).expanduser() if args.output else store_dir / "library"
@@ -1780,7 +1780,7 @@ def cmd_library(args):
             print(f"Invalid --since value: {exc}", file=sys.stderr)
             return 1
     if not v2_db_path(store_dir).exists():
-        print("No v2 store found. Run 'lore export --all' first.", file=sys.stderr)
+        print("No v2 store found. Run 'annuli export --all' first.", file=sys.stderr)
         return 1
     try:
         stats = build_library(
@@ -1803,19 +1803,19 @@ def cmd_embed_messages(args):
     Incremental: only messages without a vector from the current model are
     embedded, so re-running after a budget stop continues where it stopped.
     """
-    from lore.storage import embed_messages, v2_db_path
-    from lore.storage.embeddings import embeddings_available, sqlite_vec_available
-    from lore.storage.schema import open_connection
+    from annuli.storage import embed_messages, v2_db_path
+    from annuli.storage.embeddings import embeddings_available, sqlite_vec_available
+    from annuli.storage.schema import open_connection
 
     output_dir = Path(args.output_dir).expanduser()
     db = v2_db_path(output_dir)
     if not db.exists():
-        print("No index found. Run 'lore export --all' first.")
+        print("No index found. Run 'annuli export --all' first.")
         return 1
     if not (embeddings_available() and sqlite_vec_available()):
         print(
             "Message vectors need the optional 'semantic' extra "
-            "(pipx inject lore fastembed sqlite-vec). Message search stays on FTS.",
+            "(pipx inject annuli fastembed sqlite-vec). Message search stays on FTS.",
             file=sys.stderr,
         )
         return 1
@@ -1839,18 +1839,18 @@ def cmd_message_fts(args):
     Resumable: progress is committed per batch, so a run that hit ``--budget`` continues
     where it stopped. Search evidence uses the index once this has finished.
     """
-    from lore.storage import v2_db_path
-    from lore.storage.message_fts import (
+    from annuli.storage import v2_db_path
+    from annuli.storage.message_fts import (
         backfill_message_fts,
         message_fts_pending,
         message_fts_ready,
     )
-    from lore.storage.schema import open_v2_connection
+    from annuli.storage.schema import open_v2_connection
 
     output_dir = Path(args.output_dir).expanduser()
     db = v2_db_path(output_dir)
     if not db.exists():
-        print("No index found. Run 'lore export --all' first.")
+        print("No index found. Run 'annuli export --all' first.")
         return 1
     budget = getattr(args, "budget", None)
     conn = open_v2_connection(db)
@@ -1876,13 +1876,13 @@ def cmd_stats(args):
     index_path = output_dir / "index.json"
 
     if not index_path.exists():
-        print("No index found. Run 'lore export --all' first.")
+        print("No index found. Run 'annuli export --all' first.")
         return
 
     with open(index_path, "r", encoding="utf-8") as f:
         index = json.load(f)
 
-    from lore.services.index import filter_automated_payload
+    from annuli.services.index import filter_automated_payload
 
     index = filter_automated_payload(index, _include_automated(args))
     stats = index.get("stats", {})
@@ -1910,12 +1910,12 @@ def cmd_stats(args):
 
 
 def _print_source_health(output_dir: Path) -> None:
-    """One-line archive health summary for ``lore check`` (#162)."""
+    """One-line archive health summary for ``annuli check`` (#162)."""
     db_path = output_dir / "index_v2.sqlite"
     if not db_path.exists():
         return
-    from lore.storage.schema import open_v2_connection
-    from lore.storage.source_health import HEALTH_STATES, source_health_summary
+    from annuli.storage.schema import open_v2_connection
+    from annuli.storage.source_health import HEALTH_STATES, source_health_summary
 
     try:
         conn = open_v2_connection(db_path)
@@ -1923,7 +1923,7 @@ def _print_source_health(output_dir: Path) -> None:
             summary = source_health_summary(conn)
         finally:
             conn.close()
-    except Exception:  # noqa: BLE001 - a health report never fails `lore check`
+    except Exception:  # noqa: BLE001 - a health report never fails `annuli check`
         return
     parts = [
         f"{state}={summary['states'][state]['sources']}"
@@ -1934,7 +1934,7 @@ def _print_source_health(output_dir: Path) -> None:
         f"Archive health: {summary['sources_tracked']} source file(s) tracked"
         + (f" ({', '.join(parts)})" if parts else "")
     )
-    print("  Per-source detail: lore sources [--state STATE] [--json]")
+    print("  Per-source detail: annuli sources [--state STATE] [--json]")
 
 
 def _record_source_health(output_dir: Path, extractors) -> None:
@@ -1942,8 +1942,8 @@ def _record_source_health(output_dir: Path, extractors) -> None:
     db_path = output_dir / "index_v2.sqlite"
     if not db_path.exists():
         return
-    from lore.storage.schema import open_v2_connection
-    from lore.storage.source_health import record_extractor_skips
+    from annuli.storage.schema import open_v2_connection
+    from annuli.storage.source_health import record_extractor_skips
 
     try:
         conn = open_v2_connection(db_path)
@@ -1965,7 +1965,7 @@ def cmd_digest(args):
     index_path = output_dir / "index.json"
 
     if not index_path.exists():
-        print("No index found. Run 'lore export --all' first.")
+        print("No index found. Run 'annuli export --all' first.")
         sys.exit(1)
 
     try:
@@ -1977,7 +1977,7 @@ def cmd_digest(args):
     with open(index_path, "r", encoding="utf-8") as f:
         index = json.load(f)
 
-    from lore.digest import build_digest, format_digest
+    from annuli.digest import build_digest, format_digest
 
     digest = build_digest(
         filter_automated(index.get("sessions", []), _include_automated(args)), since=cutoff
@@ -2007,16 +2007,16 @@ def cmd_jobs(args):
     output_dir = Path(args.output_dir).expanduser()
     db_path = output_dir / "index_v2.sqlite"
     if not db_path.exists():
-        print("No archive store found. Run 'lore export --all' or 'lore sync' first.")
+        print("No archive store found. Run 'annuli export --all' or 'annuli sync' first.")
         return 1
 
-    from lore.services.analysis_jobs import (
+    from annuli.services.analysis_jobs import (
         JOB_STATES,
         AnalysisJobError,
         list_jobs,
         resume_job,
     )
-    from lore.storage.schema import open_v2_connection
+    from annuli.storage.schema import open_v2_connection
 
     action = getattr(args, "jobs_action", None)
     as_json = bool(getattr(args, "json", False))
@@ -2071,11 +2071,11 @@ def cmd_sources(args):
     output_dir = Path(args.output_dir).expanduser()
     db_path = output_dir / "index_v2.sqlite"
     if not db_path.exists():
-        print("No archive store found. Run 'lore export --all' or 'lore sync' first.")
+        print("No archive store found. Run 'annuli export --all' or 'annuli sync' first.")
         sys.exit(1)
 
-    from lore.storage.schema import open_v2_connection
-    from lore.storage.source_health import (
+    from annuli.storage.schema import open_v2_connection
+    from annuli.storage.source_health import (
         HEALTH_STATES,
         list_source_health,
         source_health_summary,
@@ -2124,7 +2124,7 @@ def cmd_memory(args):
     action = args.memory_action
 
     if action == "context":
-        from lore.services.memory_context import build_memory_context
+        from annuli.services.memory_context import build_memory_context
 
         project = getattr(args, "project", None)
         scope = Path(project).expanduser().resolve() if project else Path.cwd().resolve()
@@ -2141,7 +2141,7 @@ def cmd_memory(args):
             print(text)
         return
 
-    from lore.storage import (
+    from annuli.storage import (
         MEMORY_KINDS,
         add_memory,
         feedback_weight,
@@ -2151,7 +2151,7 @@ def cmd_memory(args):
     )
 
     if action == "dedupe":
-        from lore.services.memory_dedupe import dedupe_memories, restore_dedupe_undo
+        from annuli.services.memory_dedupe import dedupe_memories, restore_dedupe_undo
 
         if args.restore:
             undo_path = Path(args.restore).expanduser()
@@ -2185,7 +2185,7 @@ def cmd_memory(args):
         return
 
     if action == "import-claude":
-        from lore.services.claude_memory_import import import_claude_memory
+        from annuli.services.claude_memory_import import import_claude_memory
 
         root = Path(args.root).expanduser() if args.root else Path.home() / ".claude" / "projects"
         if not root.is_dir():
@@ -2215,7 +2215,7 @@ def cmd_memory(args):
         return
 
     if action == "show":
-        from lore.storage import get_memory
+        from annuli.storage import get_memory
 
         entry = get_memory(output_dir, args.memory_id)
         if entry is None:
@@ -2229,7 +2229,7 @@ def cmd_memory(args):
             print(f"Scope tool: {entry.scope_tool}")
         if entry.superseded_by is not None:
             print(f"superseded by #{entry.superseded_by}")
-        from lore.storage.memory import list_superseded_by
+        from annuli.storage.memory import list_superseded_by
 
         for other_id in list_superseded_by(output_dir, entry.id):
             print(f"supersedes #{other_id}")
@@ -2252,7 +2252,7 @@ def cmd_memory(args):
         return
 
     if action == "review":
-        from lore.storage import list_memory, set_memory_status
+        from annuli.storage import list_memory, set_memory_status
 
         target = getattr(args, "target", None)
         review_ids = getattr(args, "ids", None) or []
@@ -2285,7 +2285,7 @@ def cmd_memory(args):
             for entry in candidates:
                 scope = entry.scope_project or "global"
                 print(f"  #{entry.id} [{entry.kind}] {entry.title} ({scope})")
-            print("\nAccept or reject with: lore memory review accept|reject <id> [...]")
+            print("\nAccept or reject with: annuli memory review accept|reject <id> [...]")
             return
 
         if not review_ids:
@@ -2329,7 +2329,7 @@ def cmd_memory(args):
         return
 
     if action == "repair-index":
-        from lore.storage import memory_index_health, repair_memory_index
+        from annuli.storage import memory_index_health, repair_memory_index
 
         health = repair_memory_index(output_dir, apply=bool(getattr(args, "apply", False)))
         if getattr(args, "json", False):
@@ -2383,7 +2383,7 @@ def cmd_memory(args):
             sys.exit(1)
         supersedes = getattr(args, "supersedes", None)
         try:
-            from lore.storage import find_similar_memories
+            from annuli.storage import find_similar_memories
 
             # Before the insert, so the new memory cannot match itself.
             similar = find_similar_memories(
@@ -2475,7 +2475,7 @@ def cmd_threads(args):
     index_path = output_dir / "index.json"
 
     if not index_path.exists():
-        print("No index found. Run 'lore export --all' first.")
+        print("No index found. Run 'annuli export --all' first.")
         return
 
     with open(index_path, "r", encoding="utf-8") as f:
@@ -2532,7 +2532,7 @@ def _actor_name(args) -> str:
 
 
 def _rules_write_markdown(args) -> int:
-    """``lore rules`` — the plain rule list, unchanged."""
+    """``annuli rules`` — the plain rule list, unchanged."""
     output_dir = Path(args.output_dir).expanduser()
     rules_path = output_dir / "rules.md"
 
@@ -2553,10 +2553,10 @@ def _rules_write_markdown(args) -> int:
 
 
 def _rules_export(args) -> int:
-    """``lore rules export --recommendations`` — write/print the recommendation store."""
+    """``annuli rules export --recommendations`` — write/print the recommendation store."""
     if not getattr(args, "recommendations", False):
         print(
-            "lore rules export writes harness recommendations only; "
+            "annuli rules export writes harness recommendations only; "
             "pass --recommendations to select them.",
             file=sys.stderr,
         )
@@ -2578,7 +2578,7 @@ def _rules_export(args) -> int:
 
 
 def _rules_activate(args) -> int:
-    """``lore rules activate <id>`` — flip one recommendation to active and record who/when."""
+    """``annuli rules activate <id>`` — flip one recommendation to active and record who/when."""
     path = recommendations_path(Path(args.output_dir).expanduser())
     recommendations = load_recommendations(path)
     actor = _actor_name(args)
@@ -2597,7 +2597,7 @@ def _rules_activate(args) -> int:
 
 
 def _rules_evaluate(args) -> int:
-    """``lore rules evaluate <id> --verdict ...`` — append to the history, change nothing else."""
+    """``annuli rules evaluate <id> --verdict ...`` — append to the history, change nothing else."""
     path = recommendations_path(Path(args.output_dir).expanduser())
     recommendations = load_recommendations(path)
     actor = _actor_name(args)
@@ -2621,7 +2621,7 @@ def _rules_evaluate(args) -> int:
 
 
 def _rules_review(args) -> int:
-    """``lore rules review`` — read-only listing of the stored recommendations."""
+    """``annuli rules review`` — read-only listing of the stored recommendations."""
     path = recommendations_path(Path(args.output_dir).expanduser())
     print(format_recommendations(load_recommendations(path)))
     return 0
@@ -2643,8 +2643,8 @@ def cmd_rules(args):
 
 
 def cmd_metrics(args):
-    """``lore metrics`` — evidence-backed workflow metrics, read-only and local (#188)."""
-    from lore.services.workflow_metrics import (
+    """``annuli metrics`` — evidence-backed workflow metrics, read-only and local (#188)."""
+    from annuli.services.workflow_metrics import (
         compute_workflow_metrics,
         format_metrics,
         metrics_as_payload,
@@ -2662,7 +2662,7 @@ def cmd_metrics(args):
 
 
 def cmd_generate_titles(args):
-    from lore.titles import TitleGenerator, TitleStrategy
+    from annuli.titles import TitleGenerator, TitleStrategy
 
     strategy_map = {
         "fast": TitleStrategy.FAST,
@@ -2677,7 +2677,7 @@ def cmd_generate_titles(args):
     # non-local provider (gemini-cli, or an off-host ollama behind "local")
     # sends a transcript excerpt and is gated like analyze/knowledge/format.
     gate_provider = "ollama" if (provider or "local") == "local" else provider
-    from lore.services.summarize_cli import require_cloud_opt_in
+    from annuli.services.summarize_cli import require_cloud_opt_in
 
     allow_cloud = bool(getattr(args, "allow_cloud", False))
     if (rc := require_cloud_opt_in(gate_provider, allow_cloud)) is not None:
@@ -2726,14 +2726,14 @@ def cmd_generate_titles(args):
 
 def cmd_worker(args):
     """Run background jobs after each store sync stamp (library, embeddings, summaries)."""
-    from lore.services.worker import (
+    from annuli.services.worker import (
         load_status,
         run_loop,
         run_pass,
         status_check,
     )
 
-    output_dir = Path(getattr(args, "output_dir", None) or lore_home()).expanduser()
+    output_dir = Path(getattr(args, "output_dir", None) or annuli_home()).expanduser()
     action = getattr(args, "worker_action", None)
 
     if action == "status":
@@ -2753,14 +2753,14 @@ def cmd_worker(args):
         return 0
 
     if action == "run-once":
-        from lore.services.worker import touch_heartbeat
+        from annuli.services.worker import touch_heartbeat
 
         touch_heartbeat(output_dir)
         run_pass(output_dir)
         return 0
 
     print(
-        f"Worker loop on {output_dir} (interval from LORE_WORKER_INTERVAL, Ctrl+C to stop)",
+        f"Worker loop on {output_dir} (interval from ANNULI_WORKER_INTERVAL, Ctrl+C to stop)",
         file=sys.stderr,
     )
     run_loop(output_dir)
@@ -2769,7 +2769,7 @@ def cmd_worker(args):
 
 def cmd_watch(args):
     """Watch for new sessions and auto-export."""
-    from lore.watcher import SessionWatcher
+    from annuli.watcher import SessionWatcher
 
     output_dir = Path(args.output_dir).expanduser()
     exporter = MarkdownExporter(output_dir)
@@ -2892,7 +2892,7 @@ def _print_deep_report(extractor) -> bool:
     print(f"  Parsed files: {found['files_parsed']}")
     # Extractors may report finer coverage (Antigravity splits transcripts from
     # task artifacts and undecodable blobs, #158); print whatever they added.
-    from lore.extractors.base import DISCOVERY_KEYS
+    from annuli.extractors.base import DISCOVERY_KEYS
 
     extra = {key: value for key, value in found.items() if key not in DISCOVERY_KEYS and value}
     if extra:
@@ -2934,7 +2934,7 @@ def cmd_check(args):
     failed = False
     last_runs = {}
     if not deep:
-        output_dir = getattr(args, "output_dir", None) or lore_home()
+        output_dir = getattr(args, "output_dir", None) or annuli_home()
         last_runs = read_last_discovery(Path(output_dir).expanduser())
 
     for extractor in extractors:
@@ -2963,8 +2963,8 @@ def cmd_check(args):
 
     print("-" * 40)
     print(f"Summary: {available_count}/{len(extractors)} tools available.")
-    _print_source_health(Path(getattr(args, "output_dir", None) or lore_home()).expanduser())
-    from lore.utils.claude_retention import retention_check_lines
+    _print_source_health(Path(getattr(args, "output_dir", None) or annuli_home()).expanduser())
+    from annuli.utils.claude_retention import retention_check_lines
 
     for line in retention_check_lines():
         print(line)
@@ -3016,39 +3016,39 @@ COMMANDS = {
 
 
 def build_parser() -> argparse.ArgumentParser:
-    """Construct the top-level ``lore`` argument parser.
+    """Construct the top-level ``annuli`` argument parser.
 
     Split out of main() so tests can introspect the registered subparsers
     and pin them against the COMMANDS dispatch table (#118).
     """
     parser = argparse.ArgumentParser(
-        prog="lore",
-        description="Lore — local-first archive and shared agent memory for your AI coding sessions",
+        prog="annuli",
+        description="Annuli — local-first archive and shared agent memory for your AI coding sessions",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  lore list                      List all sessions
-  lore list --tool claude-code   List Claude Code sessions only
-  lore export --all              Export all sessions to ~/.lore
-  lore search "docker"           Search for "docker" in all sessions
-  lore watch --git               Watch for new sessions and auto-commit
-  lore check                     Check availability of AI tools
+  annuli list                      List all sessions
+  annuli list --tool claude-code   List Claude Code sessions only
+  annuli export --all              Export all sessions to ~/.annuli
+  annuli search "docker"           Search for "docker" in all sessions
+  annuli watch --git               Watch for new sessions and auto-commit
+  annuli check                     Check availability of AI tools
         """,
     )
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-    from lore import __version__
+    from annuli import __version__
 
     parser.add_argument(
         "--version",
         action="version",
-        version=f"lore {__version__}",
-        help="Show the lore version and exit",
+        version=f"annuli {__version__}",
+        help="Show the annuli version and exit",
     )
     parser.add_argument(
         "--output-dir",
-        default=str(lore_home()),
-        help="Output directory (default: ~/.lore)",
+        default=str(annuli_home()),
+        help="Output directory (default: ~/.annuli)",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")
@@ -3324,7 +3324,7 @@ Examples:
     sources_parser.add_argument("--json", action="store_true", help="Machine-readable output")
 
     # jobs command — persisted analysis jobs (#179)
-    from lore.services.analysis_jobs import JOB_STATES
+    from annuli.services.analysis_jobs import JOB_STATES
 
     jobs_parser = subparsers.add_parser(
         "jobs", help="List or resume durable analysis jobs (the DB is the source of truth)"
@@ -3347,7 +3347,7 @@ Examples:
     # threads command
     _add_automated_flag(subparsers.add_parser("threads", help="List threads"))
 
-    # rules command — bare `lore rules` keeps writing rules.md; the subcommands
+    # rules command — bare `annuli rules` keeps writing rules.md; the subcommands
     # manage the evidence-backed recommendation store (#189).
     rules_parser = subparsers.add_parser(
         "rules", help="Generate derived rules, or export/activate harness recommendations"
@@ -3414,14 +3414,14 @@ Examples:
     prune_parser.add_argument("--dry-run", action="store_true", help="Show what would be pruned")
     _add_automated_flag(prune_parser)
 
-    # backup command — a bundle, or `lore backup verify` for an existing one
+    # backup command — a bundle, or `annuli backup verify` for an existing one
     backup_parser = subparsers.add_parser(
         "backup",
         help="Write a versioned, consistent backup bundle",
         description=(
             "Write a bundle of the v2 store taken from a consistent SQLite "
             "snapshot, or check an existing bundle without restoring it "
-            "(`lore backup verify <path>`)"
+            "(`annuli backup verify <path>`)"
         ),
     )
     backup_parser.add_argument(
@@ -3435,7 +3435,7 @@ Examples:
     restore_parser = subparsers.add_parser(
         "restore", help="Restore the v2 store from a backup bundle"
     )
-    restore_parser.add_argument("bundle", help="bundle written by `lore backup`")
+    restore_parser.add_argument("bundle", help="bundle written by `annuli backup`")
     restore_parser.add_argument("--force", action="store_true", help="Replace an existing store")
 
     # bundle command — portable archive with source provenance (#163)
@@ -3506,7 +3506,7 @@ Examples:
     titles_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
+        help="Allow cloud providers to receive session text (or set ANNULI_ALLOW_CLOUD=1)",
     )
     _add_automated_flag(titles_parser)
 
@@ -3523,7 +3523,7 @@ Examples:
         "--budget",
         type=float,
         default=None,
-        help="Seconds of embedding work (0 = unlimited, default: LORE_EMBED_BUDGET_SECONDS or 60)",
+        help="Seconds of embedding work (0 = unlimited, default: ANNULI_EMBED_BUDGET_SECONDS or 60)",
     )
 
     fts_parser = subparsers.add_parser(
@@ -3551,7 +3551,7 @@ Examples:
     analyze_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
+        help="Allow cloud providers to receive session text (or set ANNULI_ALLOW_CLOUD=1)",
     )
     analyze_parser.add_argument(
         "--no-llm",
@@ -3573,7 +3573,7 @@ Examples:
         choices=PROVIDER_CHOICES,
         default=None,
         help=(
-            "LLM provider (required; no default — bare lore knowledge sends nothing). "
+            "LLM provider (required; no default — bare annuli knowledge sends nothing). "
             "Use ollama for local, or a cloud provider with --allow-cloud"
         ),
     )
@@ -3581,7 +3581,7 @@ Examples:
     knowledge_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
+        help="Allow cloud providers to receive session text (or set ANNULI_ALLOW_CLOUD=1)",
     )
     knowledge_parser.add_argument(
         "--limit",
@@ -3605,7 +3605,7 @@ Examples:
     improve_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
+        help="Allow cloud providers to receive session text (or set ANNULI_ALLOW_CLOUD=1)",
     )
     improve_parser.add_argument(
         "--limit",
@@ -3647,7 +3647,7 @@ Examples:
     summarize_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow cloud providers to receive transcript text (or set LORE_ALLOW_CLOUD=1)",
+        help="Allow cloud providers to receive transcript text (or set ANNULI_ALLOW_CLOUD=1)",
     )
     summarize_parser.add_argument(
         "--dry-run",
@@ -3716,7 +3716,7 @@ Examples:
     format_parser.add_argument(
         "--allow-cloud",
         action="store_true",
-        help="Allow cloud providers to receive session text (or set LORE_ALLOW_CLOUD=1)",
+        help="Allow cloud providers to receive session text (or set ANNULI_ALLOW_CLOUD=1)",
     )
     format_parser.add_argument("--session-id", help="Format specific session by ID")
     _add_automated_flag(format_parser)
@@ -3734,7 +3734,7 @@ Examples:
 
     worker_output_dir_kw = dict(
         default=argparse.SUPPRESS,
-        help="Output directory (default: ~/.lore or global --output-dir)",
+        help="Output directory (default: ~/.annuli or global --output-dir)",
     )
     worker_parser = subparsers.add_parser(
         "worker",

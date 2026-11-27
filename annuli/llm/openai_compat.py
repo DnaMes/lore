@@ -15,7 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from ..utils.paths import lore_home, restrict_file, secure_dir
+from ..utils.paths import annuli_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
 from .cache_io import sweep_temp_files
 from .gate import ensure_cloud_allowed
@@ -98,11 +98,11 @@ def validate_openai_base_url(
 
 
 def resolve_openai_compat_base_url(config: LLMConfig) -> str:
-    """Resolve and validate the base URL from config or ``LORE_LLM_BASE_URL``."""
-    raw = (config.base_url or "").strip() or os.environ.get("LORE_LLM_BASE_URL", "").strip()
+    """Resolve and validate the base URL from config or ``ANNULI_LLM_BASE_URL``."""
+    raw = (config.base_url or "").strip() or os.environ.get("ANNULI_LLM_BASE_URL", "").strip()
     if not raw:
         raise OpenAICompatError(
-            "OpenAI-compatible base URL not configured: set LORE_LLM_BASE_URL or pass base_url"
+            "OpenAI-compatible base URL not configured: set ANNULI_LLM_BASE_URL or pass base_url"
         )
     return validate_openai_base_url(
         raw,
@@ -114,24 +114,24 @@ def resolve_openai_compat_base_url(config: LLMConfig) -> str:
 
 
 def resolve_openai_compat_model(config: LLMConfig) -> str:
-    """Resolve the model id from config or ``LORE_LLM_MODEL``."""
-    model = (config.model or "").strip() or os.environ.get("LORE_LLM_MODEL", "").strip()
+    """Resolve the model id from config or ``ANNULI_LLM_MODEL``."""
+    model = (config.model or "").strip() or os.environ.get("ANNULI_LLM_MODEL", "").strip()
     if not model:
         raise OpenAICompatError(
-            "OpenAI-compatible model not configured: set LORE_LLM_MODEL or pass --model"
+            "OpenAI-compatible model not configured: set ANNULI_LLM_MODEL or pass --model"
         )
     return model
 
 
 def resolve_openai_compat_api_key(config: LLMConfig) -> Optional[str]:
-    """Resolve optional API key from config, ``LORE_LLM_API_KEY``, or ``LORE_LLM_API_KEY_ENV``."""
+    """Resolve optional API key from config, ``ANNULI_LLM_API_KEY``, or ``ANNULI_LLM_API_KEY_ENV``."""
     direct = (config.api_key or "").strip()
     if direct:
         return direct
-    env_key = os.environ.get("LORE_LLM_API_KEY", "").strip()
+    env_key = os.environ.get("ANNULI_LLM_API_KEY", "").strip()
     if env_key:
         return env_key
-    key_env_name = os.environ.get("LORE_LLM_API_KEY_ENV", "").strip()
+    key_env_name = os.environ.get("ANNULI_LLM_API_KEY_ENV", "").strip()
     if key_env_name:
         named_val = os.environ.get(key_env_name, "").strip()
         if named_val:
@@ -145,7 +145,7 @@ class OpenAICompatProvider(LLMProvider):
     def __init__(self, config: LLMConfig, allow_cloud: bool = False):
         super().__init__(config)
         self.allow_cloud = allow_cloud
-        self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
+        self._cache_dir_path = Path(config.cache_dir or annuli_home() / "llm_cache")
         self._cache_dir: Optional[Path] = None
 
     def _ensure_cache_dir(self) -> Optional[Path]:

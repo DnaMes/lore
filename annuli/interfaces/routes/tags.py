@@ -2,8 +2,8 @@
 
 from flask import Blueprint, jsonify, request
 
-from lore.interfaces import web as _web
-from lore.utils.security import validate_search_param, validate_session_id
+from annuli.interfaces import web as _web
+from annuli.utils.security import validate_search_param, validate_session_id
 
 from ..web_data import clear_index_cache
 

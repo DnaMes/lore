@@ -110,7 +110,7 @@ def _render_content(content: str) -> str:
     tables, lists, blockquotes and inline markup appeared as literal text in a
     standalone file that no longer has a renderer. It now uses the same
     thread-local Markdown pipeline as the web UI and the same allowlist
-    (:mod:`lore.utils.html_sanitize`), so a shared page shows what the UI shows —
+    (:mod:`annuli.utils.html_sanitize`), so a shared page shows what the UI shows —
     offline, with scripts and event handlers stripped.
     """
     if not content:
@@ -207,7 +207,7 @@ def render_session_html(session: UnifiedSession) -> str:
 <main>
 {chr(10).join(rows) or '<p class="empty">No messages were captured for this session.</p>'}
 </main>
-<footer class="session">Exported by lore &middot; session {html.escape(session.session_id)}</footer>
+<footer class="session">Exported by annuli &middot; session {html.escape(session.session_id)}</footer>
 </div>
 </body>
 </html>

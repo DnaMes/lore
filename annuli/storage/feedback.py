@@ -3,7 +3,7 @@
 Ratings live in ``memory_feedback`` (migration 15), one row per (memory, rater).
 The weight is computed at read time from the rows and never stored. Rater
 names are unverified labels, so the effect of feedback on ranking is bounded
-(see :func:`ranking_factor`) and off unless ``LORE_FEEDBACK_INFLUENCE`` is set.
+(see :func:`ranking_factor`) and off unless ``ANNULI_FEEDBACK_INFLUENCE`` is set.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from .writer import v2_db_path
 
 MAX_RATER_LEN = 64
 
-FEEDBACK_INFLUENCE_ENV = "LORE_FEEDBACK_INFLUENCE"
+FEEDBACK_INFLUENCE_ENV = "ANNULI_FEEDBACK_INFLUENCE"
 DEFAULT_FEEDBACK_INFLUENCE = 0.0
 
 # The weight is a mean of normalised scores pulled toward the neutral 0.5 by

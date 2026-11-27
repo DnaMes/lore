@@ -8,7 +8,7 @@ import sys
 def make_console_safe() -> None:
     """Make stdout and stderr replace unencodable characters instead of raising.
 
-    A Windows console on cp1252 cannot print the status symbols Lore uses, and a
+    A Windows console on cp1252 cannot print the status symbols Annuli uses, and a
     UnicodeEncodeError there turned every command into a traceback. Streams that cannot be
     reconfigured (pytest capture, some wrappers) are left alone.
     """

@@ -247,14 +247,14 @@ def _resolve_password(args: argparse.Namespace) -> Optional[str]:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Run lore web security probe matrix against a base URL."
+        description="Run annuli web security probe matrix against a base URL."
     )
     parser.add_argument("--base-url", required=True, help="Base URL to probe")
     parser.add_argument("--user", default="", help="Basic auth username")
     parser.add_argument("--password", default="", help="Basic auth password")
     parser.add_argument(
         "--password-env",
-        default="LORE_WEB_PROBE_PASSWORD",
+        default="ANNULI_WEB_PROBE_PASSWORD",
         help="Env var name for basic auth password",
     )
     parser.add_argument(

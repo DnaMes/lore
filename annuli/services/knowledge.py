@@ -1,4 +1,4 @@
-"""Idempotent knowledge extraction shared by ``lore knowledge`` (#197).
+"""Idempotent knowledge extraction shared by ``annuli knowledge`` (#197).
 
 Loads each session's real conversation from the v2 store, skips sessions whose
 prompt input is unchanged, and persists a row only after a parsed provider
@@ -36,7 +36,7 @@ def sessions_for_extraction(
     tool: Optional[str] = None,
     require_synced_messages: bool = False,
 ) -> List[UnifiedSession]:
-    """Sessions eligible for knowledge extraction (same rules as ``lore knowledge``)."""
+    """Sessions eligible for knowledge extraction (same rules as ``annuli knowledge``)."""
     index_file = output_dir / "index.json"
     if not index_file.exists():
         return []

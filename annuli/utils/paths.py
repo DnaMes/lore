@@ -19,8 +19,8 @@ def _has_store(path: Path) -> bool:
     return any((path / marker).exists() for marker in _STORE_MARKERS)
 
 
-def lore_home() -> Path:
-    """Return the data directory: ``~/.annuli``, or the legacy ``~/.lore`` store.
+def annuli_home() -> Path:
+    """Return the data directory: ``~/.annuli``, or the legacy ``~/.annuli`` store.
 
     A bare ``~/.annuli`` (no store file) does not hide an existing legacy store.
     """

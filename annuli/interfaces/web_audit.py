@@ -18,16 +18,16 @@ import sys
 from datetime import datetime, timezone
 from typing import Optional
 
-from lore.extractors.factory import get_all_extractors
-from lore.utils.security import validate_tool_name
-from lore.utils.tooling import normalize_tool_name
+from annuli.extractors.factory import get_all_extractors
+from annuli.utils.security import validate_tool_name
+from annuli.utils.tooling import normalize_tool_name
 
 from .web_utils import ActionJobCancelledError
 
 
 def _build_info_payload() -> dict:
-    from lore import __version__
-    from lore.storage.embeddings import embeddings_available, sqlite_vec_available
+    from annuli import __version__
+    from annuli.storage.embeddings import embeddings_available, sqlite_vec_available
 
     from .web import _current_revision, _export_fallback_scan_enabled
 

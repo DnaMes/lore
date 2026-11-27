@@ -1,7 +1,7 @@
-"""Streamable-HTTP transport for the Lore MCP server (issue #29).
+"""Streamable-HTTP transport for the Annuli MCP server (issue #29).
 
-Transport only: the tool surface stays in :mod:`lore.interfaces.mcp` /
-:mod:`lore.interfaces.server`, and ``lore-mcp`` hands one shared
+Transport only: the tool surface stays in :mod:`annuli.interfaces.mcp` /
+:mod:`annuli.interfaces.server`, and ``annuli-mcp`` hands one shared
 ``create_server()`` result to either ``MCPServer.run()`` (stdio, the default) or
 :func:`run_http_server`.
 
@@ -17,12 +17,12 @@ The archive is private, so the transport is locked down by default:
 
 - The bind host defaults to loopback. A non-loopback bind is an explicit opt-in
   and :func:`create_http_app` refuses to build without a bearer token
-  (``LORE_MCP_HTTP_TOKEN`` or ``--token-file``).
-- ``Host`` must pass the same allowlist as ``lore-web``
-  (:func:`lore.interfaces.web_utils.host_header_allowed`), and a present
+  (``ANNULI_MCP_HTTP_TOKEN`` or ``--token-file``).
+- ``Host`` must pass the same allowlist as ``annuli-web``
+  (:func:`annuli.interfaces.web_utils.host_header_allowed`), and a present
   ``Origin`` must name this server's own origin (or a configured public origin
   behind a trusted proxy) exactly as for the web UI. Foreign ``Host`` -> 400,
-  cross-origin -> 403, following ``lore-web``'s status codes.
+  cross-origin -> 403, following ``annuli-web``'s status codes.
 - Request bodies are bounded, in-flight requests are capped and every request
   has a wall-clock deadline: a timed-out tool call is cancelled and answered
   with JSON-RPC error ``-32000`` instead of hanging the client.
@@ -48,7 +48,7 @@ logger = logging.getLogger(__name__)
 
 # Bearer token for a non-loopback bind (an explicit loopback bind with a token
 # set also demands it — a token never weakens the transport).
-MCP_HTTP_TOKEN_ENV = "LORE_MCP_HTTP_TOKEN"
+MCP_HTTP_TOKEN_ENV = "ANNULI_MCP_HTTP_TOKEN"
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
@@ -66,7 +66,7 @@ class MCPHTTPConfigError(ValueError):
 
 
 def resolve_http_token(token_file: Optional[str] = None) -> Optional[str]:
-    """Bearer token from ``--token-file`` (wins) or ``LORE_MCP_HTTP_TOKEN``.
+    """Bearer token from ``--token-file`` (wins) or ``ANNULI_MCP_HTTP_TOKEN``.
 
     ``None`` means no token is configured, which only a loopback bind allows.
     The value is never logged; an unreadable or empty token file is a
@@ -193,14 +193,14 @@ def create_http_app(
     @app.before_request
     def guard_request() -> Optional[Response]:
         # Foreign Host first: a DNS-rebinding or poisoned Host never reaches a
-        # route, exactly as in lore-web (#193).
+        # route, exactly as in annuli-web (#193).
         if not host_header_allowed(request.headers.get("Host", ""), bind_host):
             logger.warning(
                 "Rejecting MCP HTTP request with disallowed Host header: %r",
                 request.headers.get("Host", "")[:120],
             )
             return Response(
-                "Bad Host header. Allowed hosts can be configured via LORE_ALLOWED_HOSTS.",
+                "Bad Host header. Allowed hosts can be configured via ANNULI_ALLOWED_HOSTS.",
                 status=400,
                 mimetype="text/plain",
             )
@@ -217,7 +217,7 @@ def create_http_app(
             response = _rpc_error_response(
                 None, -32001, "Unauthorized: bearer token required", status=401
             )
-            response.headers["WWW-Authenticate"] = 'Bearer realm="lore-mcp"'
+            response.headers["WWW-Authenticate"] = 'Bearer realm="annuli-mcp"'
             return response
         return None
 
@@ -283,7 +283,7 @@ def run_http_server(
 
     auth = "bearer token required" if token else "none (loopback bind only)"
     print(
-        f"Lore MCP server (streamable-http) on http://{host}:{httpd.server_port}"
+        f"Annuli MCP server (streamable-http) on http://{host}:{httpd.server_port}"
         f"{app.config['MCP_HTTP_PATH']}",
         file=sys.stderr,
     )

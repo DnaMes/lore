@@ -42,7 +42,7 @@ class AdapterCancelled(AdapterError):
 
 
 class AdapterAuthError(AdapterError):
-    """The CLI reported a missing or rejected login (Lore never supplies one)."""
+    """The CLI reported a missing or rejected login (Annuli never supplies one)."""
 
 
 class AdapterExecutionError(AdapterError):

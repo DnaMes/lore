@@ -16,7 +16,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from lore.core.models import AUTOMATED_ORIGINS
+from annuli.core.models import AUTOMATED_ORIGINS
 
 from .cache import threadsafe_lru_cache
 from .extraction import build_search_index
@@ -59,7 +59,7 @@ def load_deleted_session_ids(deleted_sessions_path: Path) -> set[str]:
             logger.warning(
                 "Failed to load deleted session ids from %s: %s", deleted_sessions_path, exc
             )
-    from lore.storage.retention import load_tombstones
+    from annuli.storage.retention import load_tombstones
 
     stored = load_tombstones(deleted_sessions_path.parent)
     if stored:
@@ -71,8 +71,8 @@ def save_deleted_session_ids(
     session_ids: set[str], output_dir: Path, deleted_sessions_path: Path
 ) -> None:
     """Persist ``session_ids`` to the v2 store and its JSON mirror (owner-only, #41)."""
-    from lore.storage.retention import record_tombstones
-    from lore.utils.paths import restrict_file, secure_dir
+    from annuli.storage.retention import record_tombstones
+    from annuli.utils.paths import restrict_file, secure_dir
 
     secure_dir(output_dir)
     record_tombstones(output_dir, session_ids)
@@ -89,8 +89,8 @@ def remember_deleted_session_id(
     ids = load_deleted_session_ids(deleted_sessions_path)
     ids.add(session_id)
     save_deleted_session_ids(ids, output_dir, deleted_sessions_path)
-    from lore.storage.knowledge import delete_session_knowledge
-    from lore.storage.summaries import delete_summaries_for_session
+    from annuli.storage.knowledge import delete_session_knowledge
+    from annuli.storage.summaries import delete_summaries_for_session
 
     # Each purge is attempted on its own; a failure is logged, never blocks the tombstone
     # (the tombstone alone already hides the rows from every reader).
@@ -357,7 +357,7 @@ def _load_index_v2_cached(
     ``ignored.json`` stats are part of the key: prune/un-prune only rewrites
     that file, so DB mtime/size alone would serve a stale filtered list.
     """
-    from lore.storage import load_index_v2
+    from annuli.storage import load_index_v2
 
     return load_index_v2(Path(db_path).parent)
 
@@ -455,21 +455,21 @@ def session_by_id_map(payload: dict) -> dict[str, dict]:
 def _v2_enabled() -> bool:
     """Whether to read sessions from the v2 SQLite store (issue #44).
 
-    Default is **on**. Set ``LORE_USE_V2=0`` (or false/no/off) to
+    Default is **on**. Set ``ANNULI_USE_V2=0`` (or false/no/off) to
     force the legacy index.json reader as an escape hatch.
     """
-    raw = os.environ.get("LORE_USE_V2", "1").strip().lower()
+    raw = os.environ.get("ANNULI_USE_V2", "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
 def _hybrid_enabled() -> bool:
     """Whether to fuse semantic (vector) hits into keyword search (#87).
 
-    Default is **on**. Set ``LORE_HYBRID_SEARCH=0`` (or false/no/off) to force
+    Default is **on**. Set ``ANNULI_HYBRID_SEARCH=0`` (or false/no/off) to force
     keyword-only search — an escape hatch if the vector pass ever misbehaves.
     The vector backend still has to be installed for hybrid to do anything.
     """
-    raw = os.environ.get("LORE_HYBRID_SEARCH", "1").strip().lower()
+    raw = os.environ.get("ANNULI_HYBRID_SEARCH", "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
 
@@ -506,7 +506,7 @@ def count_index_hits(
     if not _v2_enabled():
         return None
     try:
-        from lore.storage import count_session_hits, v2_is_available
+        from annuli.storage import count_session_hits, v2_is_available
 
         if not v2_is_available(index_dir, compare_to=index_path):
             return None
@@ -550,7 +550,7 @@ def _hybrid_search(
     cannot change with the page size) and carry ``match == "semantic"``; the vector pass is
     skipped entirely when keyword hits already fill the page.
     """
-    from lore.storage import semantic_search_sessions
+    from annuli.storage import semantic_search_sessions
 
     labelled = [dict(entry, match="keyword") for entry in fts_results]
     if len(fts_results) >= limit:
@@ -582,10 +582,10 @@ def _load_index_from_v2(index_path: Path, deleted: set[str]) -> Optional[dict]:
     titles annotated) or ``None`` when v2 is unavailable/unreadable.
     """
     if not _v2_enabled():
-        _serving_legacy("LORE_USE_V2 is off")
+        _serving_legacy("ANNULI_USE_V2 is off")
         return None
     try:
-        from lore.storage import v2_is_available
+        from annuli.storage import v2_is_available
 
         index_dir = index_path.parent
         # Staleness check: if a JSON index exists and is newer than the v2
@@ -598,7 +598,7 @@ def _load_index_from_v2(index_path: Path, deleted: set[str]) -> Optional[dict]:
             return None
         v2_db = index_dir / "index_v2.sqlite"
         stat = v2_db.stat()
-        from lore.storage.reader import ignored_json_stat
+        from annuli.storage.reader import ignored_json_stat
 
         ignored_mtime_ns, ignored_size = ignored_json_stat(index_dir)
         payload = _processed_index_v2_cached(
@@ -755,8 +755,8 @@ def search_index(
     index_dir = index_path.parent
     if _v2_enabled():
         try:
-            from lore.storage import search_sessions, v2_is_available
-            from lore.storage.search import annotate_session_hits
+            from annuli.storage import search_sessions, v2_is_available
+            from annuli.storage.search import annotate_session_hits
 
             # Pass compare_to so a v2 store that is older than the JSON index
             # (e.g. a prune ran but the v2 dual-write failed with a constraint
@@ -838,15 +838,15 @@ def search_index(
     # Legacy SearchEngine has no per-message rows; validate scope but treat
     # any non-"all" value as a no-op (return the unfiltered legacy result).
     if not _v2_enabled():
-        _serving_legacy("search: LORE_USE_V2 is off")
-    from lore.storage.search import SEARCH_SCOPES
+        _serving_legacy("search: ANNULI_USE_V2 is off")
+    from annuli.storage.search import SEARCH_SCOPES
 
     if (scope or "all").strip().lower() not in SEARCH_SCOPES:
         raise ValueError(
             f"Invalid scope '{scope}'. Expected one of: {', '.join(sorted(SEARCH_SCOPES))}."
         )
 
-    from lore.search.engine import SearchEngine
+    from annuli.search.engine import SearchEngine
 
     # Validate the filters even on this path, so an invalid date is an error
     # rather than a silently unfiltered result set (#174).
@@ -865,12 +865,12 @@ def search_index(
 
 def _validated_range(index_dir: Path, start: Optional[str], end: Optional[str]) -> tuple:
     """Parse the date filters; raises ValueError on an unparsable value (#174)."""
-    from lore.storage.search import session_filter_sql
+    from annuli.storage.search import session_filter_sql
 
     # Reuses the v2 helper purely for its validation, so both paths reject the
     # same inputs with the same message.
     session_filter_sql(start=start, end=end, prefix="sessions")
-    from lore.utils.datetime import parse_date_bound
+    from annuli.utils.datetime import parse_date_bound
 
     return (
         parse_date_bound(start) if start else None,
@@ -882,8 +882,8 @@ def _filter_ranked_results(
     results: list[dict], index_dir: Path, tag, start_dt, end_dt
 ) -> list[dict]:
     """Post-filter for the legacy store, which has no tags and no indexed date."""
-    from lore.storage import all_tags_by_session
-    from lore.utils.datetime import datetime_in_range, to_local_naive
+    from annuli.storage import all_tags_by_session
+    from annuli.utils.datetime import datetime_in_range, to_local_naive
 
     saved = all_tags_by_session(index_dir) if tag else {}
     wanted = str(tag).strip().lower() if tag else None

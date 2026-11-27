@@ -12,13 +12,13 @@ Invocation is the documented headless interface of the Claude Code CLI:
   result, reported as an execution or auth failure, never parsed as an answer.
 * ``--model`` — passed only when the request names a model; otherwise the CLI's
   own configured model answers (documented aliases such as ``sonnet`` are the
-  CLI's vocabulary, not Lore's).
+  CLI's vocabulary, not Annuli's).
 
 ``claude --help`` must document ``--print`` and ``--output-format``, otherwise the
 installed CLI is reported unavailable with that reason instead of being invoked
 on a guess.
 
-Deliberately unsupported: ``--continue``/``--resume`` (Lore does not adopt the
+Deliberately unsupported: ``--continue``/``--resume`` (Annuli does not adopt the
 user's interactive sessions), tool or MCP permission changes, ``claude login`` on
 the user's behalf, and any credential file access. The adapter strips API-key
 variables from the child environment so only the CLI's own native login can

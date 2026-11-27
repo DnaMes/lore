@@ -4,9 +4,9 @@ import sqlite3
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from lore.core.models import AUTOMATED_ORIGINS
-from lore.utils.security import validate_search_param, validate_tool_name
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import AUTOMATED_ORIGINS
+from annuli.utils.security import validate_search_param, validate_tool_name
+from annuli.utils.tooling import normalize_tool_name
 
 # Rows the SQLite path returns at most (the historical ``LIMIT 50``).
 SQLITE_RESULT_LIMIT = 50

@@ -23,9 +23,9 @@ from flask import request
 # (issue #47) so both ``services`` and the interface modules share one
 # exception type. Re-exported here for backwards compatibility — callers
 # and tests historically import it from ``web_utils``.
-from lore.services import ActionJobCancelledError  # noqa: F401
+from annuli.services import ActionJobCancelledError  # noqa: F401
 
-from ..utils.paths import lore_home
+from ..utils.paths import annuli_home
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +39,13 @@ METRICS: dict[str, int] = {}
 METRICS_LOCK = Lock()
 
 # Paths
-OUTPUT_DIR = lore_home()
+OUTPUT_DIR = annuli_home()
 
 # Origins the app is legitimately served from, as a comma-separated list of
 # ``scheme://host[:port]`` (#193). Honoured only while TRUSTED_PROXY is set —
 # without a proxy nothing rewrites scheme/host, so the loopback check below is
 # all a direct deployment needs.
-LORE_PUBLIC_ORIGINS_ENV = "LORE_PUBLIC_ORIGINS"
+ANNULI_PUBLIC_ORIGINS_ENV = "ANNULI_PUBLIC_ORIGINS"
 
 # Reverse-proxy trust switch. Only these values (case-insensitive, surrounding
 # whitespace ignored) enable it; unset, empty, ``0``, ``false``, ``no``, ``off``
@@ -67,13 +67,13 @@ DEFAULT_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "[::1]")
 
 # Extra permitted ``Host`` values, comma separated (#193 follow-up). The literal
 # ``*`` allows every Host, but only when set explicitly here.
-LORE_ALLOWED_HOSTS_ENV = "LORE_ALLOWED_HOSTS"
+ANNULI_ALLOWED_HOSTS_ENV = "ANNULI_ALLOWED_HOSTS"
 
 # Bind hosts that listen on every interface; they never appear as a Host value.
 # Matched against the Host header only, never bound: bandit B104 false positive.
 WILDCARD_BIND_HOSTS = ("0.0.0.0", "::")  # nosec B104
 
-# ``LORE_ALLOWED_HOSTS='*'`` turns Host validation off entirely; complain about
+# ``ANNULI_ALLOWED_HOSTS='*'`` turns Host validation off entirely; complain about
 # that exactly once per process instead of once per request.
 _WILDCARD_HOSTS_WARNED = False
 
@@ -186,12 +186,12 @@ def normalize_origin(scheme: str, host: str, port: Optional[int]) -> str:
 
 
 def configured_public_origins() -> Tuple[str, ...]:
-    """Normalized origins from ``LORE_PUBLIC_ORIGINS``.
+    """Normalized origins from ``ANNULI_PUBLIC_ORIGINS``.
 
     Entries that are not ``scheme://host[:port]`` are dropped with one warning
     instead of being silently accepted or failing the whole list (#193).
     """
-    raw = os.environ.get(LORE_PUBLIC_ORIGINS_ENV, "")
+    raw = os.environ.get(ANNULI_PUBLIC_ORIGINS_ENV, "")
     origins: list[str] = []
     for chunk in raw.split(","):
         entry = chunk.strip()
@@ -200,7 +200,7 @@ def configured_public_origins() -> Tuple[str, ...]:
         parsed = parse_origin(entry)
         if parsed is None:
             logger.warning(
-                "Ignoring malformed entry in %s: %r", LORE_PUBLIC_ORIGINS_ENV, entry[:120]
+                "Ignoring malformed entry in %s: %r", ANNULI_PUBLIC_ORIGINS_ENV, entry[:120]
             )
             continue
         origins.append(normalize_origin(*parsed))
@@ -274,10 +274,10 @@ def _split_host_checked(value: str) -> Optional[Tuple[str, Optional[int]]]:
 def request_is_cross_origin() -> bool:
     """Whether the current request carries an ``Origin`` that is not this app's.
 
-    The one origin policy shared by ``lore-web`` and the MCP HTTP transport
+    The one origin policy shared by ``annuli-web`` and the MCP HTTP transport
     (#193): a missing ``Origin`` is not cross-origin (curl and MCP clients send
     none), a malformed one is, the request's own origin is not, and an origin
-    listed in ``LORE_PUBLIC_ORIGINS`` is not while ``TRUSTED_PROXY`` is set.
+    listed in ``ANNULI_PUBLIC_ORIGINS`` is not while ``TRUSTED_PROXY`` is set.
     Scheme and port are part of the comparison, so ``https://host:8443`` never
     authorises ``http://host``.
     """
@@ -389,9 +389,9 @@ def configured_allowed_hosts(bind_host: str = "") -> Tuple[Tuple[str, Optional[i
 
     Always includes the loopback defaults (``localhost``, ``127.0.0.1``,
     ``[::1]``), the configured bind host (``start_web_ui`` passes it; gunicorn
-    deployments rely on ``LORE_WEB_HOST``), and the host of every
-    ``LORE_PUBLIC_ORIGINS`` entry — an operator who configured a public origin
-    means that host to reach the app (#193). ``LORE_ALLOWED_HOSTS`` (comma
+    deployments rely on ``ANNULI_WEB_HOST``), and the host of every
+    ``ANNULI_PUBLIC_ORIGINS`` entry — an operator who configured a public origin
+    means that host to reach the app (#193). ``ANNULI_ALLOWED_HOSTS`` (comma
     separated) adds more entries; the literal ``*`` allows every Host, but only
     when set explicitly there. An entry without a port matches any port; an
     entry with a port requires the same port.
@@ -408,14 +408,14 @@ def configured_allowed_hosts(bind_host: str = "") -> Tuple[Tuple[str, Optional[i
 
     for entry in DEFAULT_ALLOWED_HOSTS:
         add(entry)
-    bind = (bind_host or os.environ.get("LORE_WEB_HOST", "")).strip()
+    bind = (bind_host or os.environ.get("ANNULI_WEB_HOST", "")).strip()
     if bind and bind not in WILDCARD_BIND_HOSTS:
         add(bind)
     for origin in configured_public_origins():
         parsed = parse_origin(origin)
         if parsed is not None:
             allowed.add((parsed[1], parsed[2]))
-    for chunk in os.environ.get(LORE_ALLOWED_HOSTS_ENV, "").split(","):
+    for chunk in os.environ.get(ANNULI_ALLOWED_HOSTS_ENV, "").split(","):
         entry = chunk.strip()
         if not entry:
             continue
@@ -424,7 +424,7 @@ def configured_allowed_hosts(bind_host: str = "") -> Tuple[Tuple[str, Optional[i
                 _WILDCARD_HOSTS_WARNED = True
                 logger.warning(
                     "%s='*' disables Host header validation entirely; any Host is accepted",
-                    LORE_ALLOWED_HOSTS_ENV,
+                    ANNULI_ALLOWED_HOSTS_ENV,
                 )
             allowed.add(("*", None))
         else:
@@ -452,7 +452,7 @@ class ActionJobTimeoutError(RuntimeError):
 
 
 def _rate_limit_enabled() -> bool:
-    raw = (os.environ.get("LORE_RATE_LIMIT_ENABLED") or "true").strip().lower()
+    raw = (os.environ.get("ANNULI_RATE_LIMIT_ENABLED") or "true").strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
 
@@ -466,18 +466,18 @@ def _env_int(name: str, default: int, minimum: int = 1) -> int:
 
 
 def _rate_limit_window_seconds() -> int:
-    return _env_int("LORE_RATE_LIMIT_WINDOW_SECONDS", 60, minimum=1)
+    return _env_int("ANNULI_RATE_LIMIT_WINDOW_SECONDS", 60, minimum=1)
 
 
 def _rate_limit_max_for_path(path: str) -> int:
     normalized = path.strip()
     if normalized == "/api/reload-sessions":
-        return _env_int("LORE_RATE_LIMIT_RELOAD_PER_WINDOW", 12, minimum=1)
+        return _env_int("ANNULI_RATE_LIMIT_RELOAD_PER_WINDOW", 12, minimum=1)
     if normalized == "/api/audit":
-        return _env_int("LORE_RATE_LIMIT_AUDIT_PER_WINDOW", 20, minimum=1)
+        return _env_int("ANNULI_RATE_LIMIT_AUDIT_PER_WINDOW", 20, minimum=1)
     if normalized == "/api/search":
-        return _env_int("LORE_RATE_LIMIT_SEARCH_PER_WINDOW", 180, minimum=1)
-    return _env_int("LORE_RATE_LIMIT_MAX_API_REQUESTS", 240, minimum=1)
+        return _env_int("ANNULI_RATE_LIMIT_SEARCH_PER_WINDOW", 180, minimum=1)
+    return _env_int("ANNULI_RATE_LIMIT_MAX_API_REQUESTS", 240, minimum=1)
 
 
 def _client_ip() -> str:
@@ -567,7 +567,7 @@ def _record_job_outcome(kind: str, status: str, started_epoch: float) -> None:
 
 
 def _json_request_logging_enabled() -> bool:
-    raw = (os.environ.get("LORE_JSON_REQUEST_LOGS") or "false").strip().lower()
+    raw = (os.environ.get("ANNULI_JSON_REQUEST_LOGS") or "false").strip().lower()
     return raw in {"1", "true", "yes", "on"}
 
 

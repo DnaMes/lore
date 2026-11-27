@@ -12,9 +12,9 @@ from uuid import UUID
 
 import msgpack
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.extractors.base import BaseExtractor
-from lore.utils.home_discovery import discover_home_marker_paths
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.extractors.base import BaseExtractor
+from annuli.utils.home_discovery import discover_home_marker_paths
 
 logger = logging.getLogger(__name__)
 MAX_SOURCE_BYTES = 64 * 1024 * 1024
@@ -44,12 +44,12 @@ class VisualStudioCopilotExtractor(BaseExtractor):
         """Describe the bounded project locations searched."""
         return (
             "~/source/repos/**/.vs/*/copilot-chat/*/sessions/*; current project .vs; "
-            "LORE_EXTRA_HOME_PATHS profiles; LORE_VISUAL_STUDIO_PROJECT_PATHS roots"
+            "ANNULI_EXTRA_HOME_PATHS profiles; ANNULI_VISUAL_STUDIO_PROJECT_PATHS roots"
         )
 
     def _sources(self) -> Iterator[tuple[Path, Path]]:
         roots = discover_home_marker_paths("source/repos")
-        for raw in os.environ.get("LORE_VISUAL_STUDIO_PROJECT_PATHS", "").split(os.pathsep):
+        for raw in os.environ.get("ANNULI_VISUAL_STUDIO_PROJECT_PATHS", "").split(os.pathsep):
             if raw.strip():
                 root = Path(raw.strip()).expanduser()
                 if not root.is_dir():

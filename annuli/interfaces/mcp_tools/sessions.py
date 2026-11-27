@@ -33,9 +33,9 @@ from ..web_services import (
 )
 from .deps import MCPToolDeps
 
-SESSION_COMMAND = "lore-session"
+SESSION_COMMAND = "annuli-session"
 
-# Tools whose lore-session switch launches a process that receives OUR session
+# Tools whose annuli-session switch launches a process that receives OUR session
 # context (gemini and codex, both via a @file reference). They need an explicit cloud opt-in.
 CLOUD_CONTEXT_TOOLS = frozenset({"gemini", "codex"})
 
@@ -320,7 +320,7 @@ def register(server, deps: MCPToolDeps) -> None:
 
         switch_tool = to_session_switch_tool(normalized_tool)
         if not switch_tool:
-            return f"Tool '{normalized_tool}' is not supported by lore-session switch."
+            return f"Tool '{normalized_tool}' is not supported by annuli-session switch."
 
         if shutil.which(SESSION_COMMAND) is None:
             return (
@@ -332,8 +332,8 @@ def register(server, deps: MCPToolDeps) -> None:
         # would receive the session context in a cloud-bound process.
         if switch_tool in CLOUD_CONTEXT_TOOLS and not cloud_opt_in_granted():
             return (
-                f"Refusing to switch to {normalized_tool}: lore-session would send the "
-                "session context to the cloud. Set LORE_ALLOW_CLOUD=1 to confirm."
+                f"Refusing to switch to {normalized_tool}: annuli-session would send the "
+                "session context to the cloud. Set ANNULI_ALLOW_CLOUD=1 to confirm."
             )
 
         cmd = [SESSION_COMMAND, "switch", switch_tool, "--messages", str(max_messages)]

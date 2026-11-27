@@ -34,7 +34,7 @@ DEFAULT_TIMEOUT_SECONDS = 60
 class AuthMode(Enum):
     """How the selected provider authenticates. There is no implicit mode."""
 
-    NATIVE_CLI = "native-cli"  # the installed CLI's own login; Lore holds nothing
+    NATIVE_CLI = "native-cli"  # the installed CLI's own login; Annuli holds nothing
     API_KEY = "api-key"
     OAUTH = "oauth"
     ADC = "adc"

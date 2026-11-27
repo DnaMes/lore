@@ -1,20 +1,20 @@
 import re
 from typing import Any, Dict, List, Optional
 
-from lore.formatting.turns import (
+from annuli.formatting.turns import (
     DEFAULT_NOISE_RULES,
 )
-from lore.formatting.turns import (
+from annuli.formatting.turns import (
     attach_result_to_calls as _attach_result,
 )
-from lore.formatting.turns import (
+from annuli.formatting.turns import (
     is_tool_result_record as _is_tool_result_record,
 )
-from lore.formatting.turns import (
+from annuli.formatting.turns import (
     tool_only_calls as _tool_only_calls,
 )
-from lore.utils.formatting import format_message as format_message_with_rules
-from lore.utils.injected import classify_injected_display as _classify_injected_display
+from annuli.utils.formatting import format_message as format_message_with_rules
+from annuli.utils.injected import classify_injected_display as _classify_injected_display
 
 from .session_view_prep import fold_tool_bursts, render_message_body
 from .web_formatting import format_session_event
@@ -44,7 +44,7 @@ def compute_top_tags(
     """Most used tags for the filter dropdown.
 
     ``user_tag_counts`` (``{tag: session_count}`` from
-    :func:`lore.storage.list_all_tags`) is merged in and ranked first, so a tag
+    :func:`annuli.storage.list_all_tags`) is merged in and ranked first, so a tag
     the user saved is selectable even when no LLM keyword repeats it (#173).
     """
     tag_counts: Dict[str, int] = {}
@@ -252,7 +252,7 @@ def _summarize_unset_env_vars(text: str) -> str:
 
 
 def _rule_enabled(noise_rules: Dict[str, Any], key: str, default: bool) -> bool:
-    from lore.utils.injected import rule_enabled
+    from annuli.utils.injected import rule_enabled
 
     return rule_enabled(noise_rules, key, default)
 
@@ -759,7 +759,7 @@ def build_thread_detail_payload(
                     }
                 )
 
-    continue_cmd = f"lore-session switch gemini --thread-id {thread_id}"
+    continue_cmd = f"annuli-session switch gemini --thread-id {thread_id}"
     thread_meta = {
         "session_count": session_count,
         "message_count": len(messages),

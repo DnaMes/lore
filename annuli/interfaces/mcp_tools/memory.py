@@ -1,7 +1,7 @@
 """MCP shared-memory tools: ``memory_write``, ``memory_recall``, ``memory_feedback``
 (issue #44 / #33 / #197).
 
-These tools turn lore into a cross-tool memory: an agent in one tool
+These tools turn annuli into a cross-tool memory: an agent in one tool
 records a fact, an agent in any other tool recalls it later. Backed by the v2
 SQLite store's memory tables.
 """

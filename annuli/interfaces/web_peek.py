@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any, Mapping
 
-from lore.interfaces.mcp_tools.summaries import sanitize_summary_payload
-from lore.interfaces.session_view_prep import at_a_glance
-from lore.interfaces.web_formatting import format_session_duration, format_session_row_time
-from lore.interfaces.web_helpers import get_style, project_label
-from lore.storage.summaries import get_summary
+from annuli.interfaces.mcp_tools.summaries import sanitize_summary_payload
+from annuli.interfaces.session_view_prep import at_a_glance
+from annuli.interfaces.web_formatting import format_session_duration, format_session_row_time
+from annuli.interfaces.web_helpers import get_style, project_label
+from annuli.storage.summaries import get_summary
 
 
 def build_peek_context(

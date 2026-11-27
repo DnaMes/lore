@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..utils.paths import lore_home, restrict_file
+from ..utils.paths import annuli_home, restrict_file
 from .base import LLMConfig, LLMProvider, LLMResponse
 from .cache_io import sweep_temp_files
 from .gate import ensure_cloud_allowed
@@ -20,7 +20,7 @@ class GeminiProvider(LLMProvider):
         # to send without it just like one built by the factory (#PRIVACY.md).
         self.allow_cloud = allow_cloud
         self._client = None
-        self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
+        self._cache_dir_path = Path(config.cache_dir or annuli_home() / "llm_cache")
         self._cache_dir: Optional[Path] = None
 
     def _ensure_cache_dir(self) -> Optional[Path]:

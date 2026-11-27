@@ -1,6 +1,6 @@
 """Provider construction: every choice goes through the explicit request contract.
 
-Selection itself lives in :mod:`lore.llm.adapters.selection` (#180). This module
+Selection itself lives in :mod:`annuli.llm.adapters.selection` (#180). This module
 resolves the environment overrides it is responsible for, hands the request to
 the cloud opt-in gate, and then builds one provider for that request — an
 installed-CLI adapter, an in-process API client, or the local Ollama path. An
@@ -29,7 +29,7 @@ from .ollama import OllamaProvider
 from .openai_compat import OpenAICompatProvider
 from .openrouter import OpenRouterProvider
 
-TIMEOUT_ENV_VAR = "LORE_LLM_TIMEOUT"
+TIMEOUT_ENV_VAR = "ANNULI_LLM_TIMEOUT"
 
 # CloudOptInRequired is imported from .gate above (providers import it from there
 # too, so the check lives outside this module and avoids an import cycle).
@@ -40,7 +40,7 @@ _KNOWN_PROVIDERS = frozenset(PROVIDERS)
 
 
 def _resolve_timeout(provider: str, kwargs: dict) -> dict:
-    """Apply ``LORE_LLM_TIMEOUT`` and the hosted defaults to ``kwargs``.
+    """Apply ``ANNULI_LLM_TIMEOUT`` and the hosted defaults to ``kwargs``.
 
     Only ``openrouter`` and ``jev`` are affected — local providers keep
     ``LLMConfig.timeout``. An explicit ``timeout`` argument wins over the env
@@ -70,7 +70,7 @@ def _cloud_opt_in_error(provider: str, allow_cloud: bool) -> str | None:
     """Return the refusal message when ``provider`` is non-local without opt-in."""
     if provider not in _KNOWN_PROVIDERS:
         return None
-    # One shared check with the provider transport boundary (lore/llm/gate.py).
+    # One shared check with the provider transport boundary (annuli/llm/gate.py).
     try:
         ensure_cloud_allowed(provider, allow_cloud)
     except CloudOptInRequired as exc:
@@ -89,8 +89,8 @@ def get_provider(
 ) -> LLMProvider:
     """Build the provider named by an explicit :class:`ProviderRequest`.
 
-    Raises :class:`~lore.llm.adapters.UnknownProviderError` (a ``ValueError``) for an
-    unknown name, :class:`~lore.llm.adapters.UnsupportedProviderCombination` for a
+    Raises :class:`~annuli.llm.adapters.UnknownProviderError` (a ``ValueError``) for an
+    unknown name, :class:`~annuli.llm.adapters.UnsupportedProviderCombination` for a
     contract the provider does not implement (an API key offered to a native CLI,
     a mismatched auth mode, a ``base_url`` for a subprocess provider), and
     :class:`CloudOptInRequired` before any of that when the provider is non-local

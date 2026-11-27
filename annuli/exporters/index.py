@@ -374,7 +374,7 @@ class IndexBuilder:
         return conn
 
     def _load_ignored(self) -> set:
-        # Single source of truth: the shared hardened loader in lore.storage.reader
+        # Single source of truth: the shared hardened loader in annuli.storage.reader
         # (never raises; warns once per process on unreadable or malformed files).
         return load_ignored_session_ids(self.output_dir)
 

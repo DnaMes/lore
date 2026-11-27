@@ -8,7 +8,7 @@ coding; never infer it from the IDE data directory".
 Open questions that block a real adapter:
 
 1. Is there a non-interactive *CLI* for Antigravity, as opposed to the IDE / agent
-   manager and the `brain/` data directory Lore already extracts from? Which
+   manager and the `brain/` data directory Annuli already extracts from? Which
    executable name and installation channel is supported?
 2. What is the documented non-interactive entry point — prompt on stdin, a
    ``-p``/``--print`` flag, a subcommand — and is it stable?
@@ -58,6 +58,6 @@ class AntigravityCliAdapter(NativeCliAdapter):
                 "an 'antigravity' executable exists but no supported non-interactive "
                 "CLI contract (prompt transport, structured output, credit handling) "
                 "has been confirmed; see the module docstring of "
-                "lore/llm/adapters/antigravity.py"
+                "annuli/llm/adapters/antigravity.py"
             ),
         )

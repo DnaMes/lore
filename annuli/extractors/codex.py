@@ -353,7 +353,7 @@ class CodexExtractor(BaseExtractor):
                     logger.warning(
                         "Skipping zstd-compressed Codex rollouts: the 'zstandard' package is "
                         "not installed. Install it with: pip install zstandard "
-                        "(or: pipx inject lore zstandard)"
+                        "(or: pipx inject annuli zstandard)"
                     )
                 self._count("skipped_compressed")
                 return None

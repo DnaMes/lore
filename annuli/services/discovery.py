@@ -1,7 +1,7 @@
-"""Per-tool discovery telemetry: record it at sync time, read it back for ``lore check``.
+"""Per-tool discovery telemetry: record it at sync time, read it back for ``annuli check``.
 
 The counters come from ``BaseExtractor.discovery``. They are stored in the v2
-``store_meta`` table under ``discovery:<tool>`` so ``lore check`` can show the last
+``store_meta`` table under ``discovery:<tool>`` so ``annuli check`` can show the last
 sync run without scanning. Recording is best-effort and never creates the database.
 """
 
@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from lore.extractors.base import BaseExtractor
-from lore.storage.writer import v2_db_path
+from annuli.extractors.base import BaseExtractor
+from annuli.storage.writer import v2_db_path
 
 logger = logging.getLogger(__name__)
 

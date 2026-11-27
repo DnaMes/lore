@@ -47,7 +47,7 @@
     {% if semantic and not semantic_available %}
     <div class="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 mb-6">
         Semantic search needs the optional embedding model
-        (<span class="font-mono">pipx inject lore fastembed sqlite-vec</span>) — showing keyword results instead.
+        (<span class="font-mono">pipx inject annuli fastembed sqlite-vec</span>) — showing keyword results instead.
     </div>
     {% endif %}
 
@@ -113,7 +113,7 @@
         <div class="surface-card p-8 text-center">
             <p class="text-sm text-slate-600">No memory entries{{ ' match your search' if query else ' yet' }}{{ ' waiting for review' if status == 'candidate' else '' }}.</p>
             <p class="text-xs text-slate-500 mt-2">
-                Record one with <span class="font-mono">lore memory add</span>, or let an
+                Record one with <span class="font-mono">annuli memory add</span>, or let an
                 AI agent write to it via the <span class="font-mono">memory_write</span> MCP tool.
             </p>
         </div>

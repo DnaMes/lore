@@ -8,9 +8,9 @@ from typing import Any, Optional
 
 from flask import Blueprint, Response, jsonify, request
 
-from lore.interfaces import web as _web
-from lore.utils.security import validate_tool_name
-from lore.utils.tooling import normalize_tool_name
+from annuli.interfaces import web as _web
+from annuli.utils.security import validate_tool_name
+from annuli.utils.tooling import normalize_tool_name
 
 from ..web_data import _build_index_from_extractors, clear_index_cache, clear_sessions_cache
 from ..web_jobs import (
@@ -32,14 +32,14 @@ def api_build_info():
 @bp.route("/api/status")
 def api_status():
     """Return lightweight operational status for the web UI status bar."""
-    from lore import __version__
-    from lore.services import index as _index_service
-    from lore.services import summarize_cli as _summarize_cli
-    from lore.services import worker as _worker_service
-    from lore.storage import v2_db_path
-    from lore.storage.freshness import store_freshness
-    from lore.storage.message_fts import message_fts_pending, message_fts_ready
-    from lore.storage.schema import open_connection
+    from annuli import __version__
+    from annuli.services import index as _index_service
+    from annuli.services import summarize_cli as _summarize_cli
+    from annuli.services import worker as _worker_service
+    from annuli.storage import v2_db_path
+    from annuli.storage.freshness import store_freshness
+    from annuli.storage.message_fts import message_fts_pending, message_fts_ready
+    from annuli.storage.schema import open_connection
 
     errors: list[str] = []
 
@@ -120,7 +120,7 @@ def api_status():
 
     llm_info: Optional[dict[str, Any]] = None
     try:
-        raw_provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip()
+        raw_provider = os.environ.get("ANNULI_SUMMARY_PROVIDER", "").strip()
         if raw_provider:
             provider: Optional[str] = raw_provider.lower()
             local: Optional[bool] = _summarize_cli.provider_locality(provider) == "local"
@@ -210,12 +210,12 @@ def api_metrics():
 
     if out_format in {"prom", "prometheus", "text"}:
         lines = [
-            "# HELP lore_uptime_seconds Process uptime in seconds",
-            "# TYPE lore_uptime_seconds gauge",
-            f"lore_uptime_seconds {uptime_seconds}",
+            "# HELP annuli_uptime_seconds Process uptime in seconds",
+            "# TYPE annuli_uptime_seconds gauge",
+            f"annuli_uptime_seconds {uptime_seconds}",
         ]
         for key in sorted(metrics_snapshot.keys()):
-            metric_name = f"lore_{key}"
+            metric_name = f"annuli_{key}"
             lines.append(f"# TYPE {metric_name} counter")
             lines.append(f"{metric_name} {metrics_snapshot[key]}")
         body = "\n".join(lines) + "\n"

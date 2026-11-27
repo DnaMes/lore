@@ -50,7 +50,7 @@ RECOMMENDATION_STATES = ("inactive", "active")
 EVALUATION_VERDICTS = ("accepted", "corrected", "contradicted")
 
 STORE_FILENAME = "recommendations.json"
-STORE_FORMAT = "lore-recommendations"
+STORE_FORMAT = "annuli-recommendations"
 STORE_FORMAT_VERSION = 1
 
 # The generation request is recorded on every recommendation so an export can be
@@ -431,7 +431,7 @@ def load_recommendations(path: Path) -> List[Recommendation]:
     if int(data.get("format_version", 0)) > STORE_FORMAT_VERSION:
         raise ValueError(
             f"{path} has format_version {data.get('format_version')}, "
-            f"this Lore understands {STORE_FORMAT_VERSION}"
+            f"this Annuli understands {STORE_FORMAT_VERSION}"
         )
     return [Recommendation.from_dict(item) for item in data.get("recommendations", [])]
 
@@ -455,7 +455,7 @@ def format_recommendations(recommendations: Sequence[Recommendation]) -> str:
     lines = [
         "# Harness recommendations",
         "",
-        "Inactive until explicitly activated with 'lore rules activate <id>'.",
+        "Inactive until explicitly activated with 'annuli rules activate <id>'.",
         "Nothing here modifies a harness configuration.",
         "",
     ]

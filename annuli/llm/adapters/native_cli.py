@@ -11,10 +11,10 @@ owns the shared part of that contract so no adapter can invent its own:
 * **Invocation.** The prompt travels on standard input by default, so transcript
   text never appears in the argument vector. The child runs in a temporary
   working directory in its own process group.
-* **Credentials.** Lore never reads a credential file and never passes a token.
+* **Credentials.** Annuli never reads a credential file and never passes a token.
   The child inherits the user's environment *minus* the credential variables
   listed in :data:`CREDENTIAL_ENV_VARS`, so the answer can only come from the
-  CLI's own native login — not from a key Lore holds for another provider.
+  CLI's own native login — not from a key Annuli holds for another provider.
 * **Bounds.** The request timeout and the execution policy's prompt bound are
   enforced, and the cancellation token kills the process group.
 
@@ -63,7 +63,7 @@ logger = logging.getLogger(__name__)
 
 # Credential-bearing variables are removed from the child environment: a
 # native-CLI run authenticates through the CLI's own login, never with a key
-# Lore (or another provider) happens to hold (#180, docs/PRIVACY.md).
+# Annuli (or another provider) happens to hold (#180, docs/PRIVACY.md).
 CREDENTIAL_ENV_VARS = frozenset(
     {
         "ANTHROPIC_API_KEY",
@@ -293,7 +293,7 @@ class NativeCliAdapter(LLMProvider):
     # -- invocation -----------------------------------------------------------
 
     def child_env(self) -> Dict[str, str]:
-        """The user's environment without the credential variables Lore must not pass."""
+        """The user's environment without the credential variables Annuli must not pass."""
         return {
             name: value for name, value in os.environ.items() if name not in CREDENTIAL_ENV_VARS
         }

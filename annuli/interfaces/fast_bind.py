@@ -2,8 +2,8 @@
 
 ``http.server.HTTPServer.server_bind`` calls ``socket.getfqdn(host)`` to fill ``server_name``.
 On macOS (and any machine whose hostname does not resolve) that lookup stalls for tens of
-seconds, so ``lore-web`` took ~35 s to answer its first request on GitHub's macOS runners,
-against 1 s on Linux and Windows. Nothing in Lore reads ``server_name``: Werkzeug builds
+seconds, so ``annuli-web`` took ~35 s to answer its first request on GitHub's macOS runners,
+against 1 s on Linux and Windows. Nothing in Annuli reads ``server_name``: Werkzeug builds
 ``SERVER_NAME`` from the bound address.
 """
 

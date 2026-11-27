@@ -19,10 +19,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-from lore.storage.embeddings import embeddings_available, sqlite_vec_available
-from lore.storage.reader import _read_generated_at
-from lore.storage.schema import open_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage.embeddings import embeddings_available, sqlite_vec_available
+from annuli.storage.reader import _read_generated_at
+from annuli.storage.schema import open_connection
+from annuli.storage.writer import v2_db_path
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +109,7 @@ def heartbeat_mtime(output_dir: Path) -> Optional[float]:
 
 
 def resolve_interval() -> int:
-    raw = os.environ.get("LORE_WORKER_INTERVAL", "").strip()
+    raw = os.environ.get("ANNULI_WORKER_INTERVAL", "").strip()
     if not raw:
         return DEFAULT_INTERVAL
     try:
@@ -120,7 +120,7 @@ def resolve_interval() -> int:
 
 
 def resolve_summary_cap() -> int:
-    raw = os.environ.get("LORE_WORKER_SUMMARY_DAILY_CAP", "").strip()
+    raw = os.environ.get("ANNULI_WORKER_SUMMARY_DAILY_CAP", "").strip()
     if not raw:
         return DEFAULT_SUMMARY_CAP
     try:
@@ -246,25 +246,25 @@ def _run_job_with_timeout(
         pool.shutdown(wait=False, cancel_futures=True)
 
 
-def _lore_command_head() -> list[str]:
-    import lore_cli
+def _annuli_command_head() -> list[str]:
+    import annuli_cli
 
-    console = shutil.which("lore")
+    console = shutil.which("annuli")
     if console:
         return [console]
-    return [sys.executable, str(Path(lore_cli.__file__).resolve())]
+    return [sys.executable, str(Path(annuli_cli.__file__).resolve())]
 
 
 def _run_cli_child(
     output_dir: Path, args: list[str], timeout: float, label: str
 ) -> tuple[dict[str, Any], str]:
-    """Run ``lore --output-dir <dir> <args>`` as a child, keeping the heartbeat fresh.
+    """Run ``annuli --output-dir <dir> <args>`` as a child, keeping the heartbeat fresh.
 
     A child process returns its memory when it exits; the loop process stays small.
     Returns the job result and the child's stdout.
     """
     # --output-dir is a global option and must precede the subcommand.
-    cmd = [*_lore_command_head(), "--output-dir", str(output_dir), *args]
+    cmd = [*_annuli_command_head(), "--output-dir", str(output_dir), *args]
     deadline = time.monotonic() + timeout
     with (
         tempfile.TemporaryFile("w+", encoding="utf-8", errors="replace") as out_f,
@@ -304,9 +304,9 @@ def _run_cli_child(
 
 
 def run_library_job(output_dir: Path) -> dict[str, Any]:
-    import lore_cli
+    import annuli_cli
 
-    if "library" not in lore_cli.COMMANDS:
+    if "library" not in annuli_cli.COMMANDS:
         print("worker: skipping library (command not available)", file=sys.stderr)
         return {"status": "skipped", "skipped": True}
     result, _stdout = _run_cli_child(output_dir, ["library"], LIBRARY_TIMEOUT, "library")
@@ -335,7 +335,7 @@ def run_message_fts_job(output_dir: Path) -> dict[str, Any]:
 
 
 def _embed_budget() -> int:
-    raw = os.environ.get("LORE_WORKER_EMBED_BUDGET", "").strip()
+    raw = os.environ.get("ANNULI_WORKER_EMBED_BUDGET", "").strip()
     try:
         return max(10, int(raw)) if raw else DEFAULT_EMBED_BUDGET
     except ValueError:
@@ -345,8 +345,12 @@ def _embed_budget() -> int:
 def run_embed_messages_job(output_dir: Path) -> dict[str, Any]:
     # Per-message vectors for a million-message store never finish on a laptop CPU and re-burn
     # two minutes every pass (p15 2026-11-27: 37k of 1.36M done); a host can opt out.
-    if os.environ.get("LORE_WORKER_EMBED_MESSAGES", "").strip() == "0":
-        return {"status": "skipped", "skipped": True, "last_error": "disabled (LORE_WORKER_EMBED_MESSAGES=0)"}
+    if os.environ.get("ANNULI_WORKER_EMBED_MESSAGES", "").strip() == "0":
+        return {
+            "status": "skipped",
+            "skipped": True,
+            "last_error": "disabled (ANNULI_WORKER_EMBED_MESSAGES=0)",
+        }
     if not (embeddings_available() and sqlite_vec_available()):
         print(
             "worker: skipping embed-messages (semantic extra not installed)",
@@ -376,9 +380,9 @@ def run_summaries_job(
     remaining_cap: Optional[int] = None,
     allow_cloud: bool = False,
 ) -> dict[str, Any]:
-    from lore.llm import LLMConfig, get_provider
-    from lore.services.summarize import run_summaries, select_candidates
-    from lore.services.summarize_cli import (
+    from annuli.llm import LLMConfig, get_provider
+    from annuli.services.summarize import run_summaries, select_candidates
+    from annuli.services.summarize_cli import (
         cloud_opt_in_granted,
         default_model,
         provider_locality,
@@ -390,7 +394,7 @@ def run_summaries_job(
         print("worker: skipping summaries (daily cap reached)", file=sys.stderr)
         return {"status": "skipped", "skipped": True, "deferred_daily_cap": True}
 
-    provider_name = os.environ.get("LORE_SUMMARY_PROVIDER", "ollama").strip().lower() or "ollama"
+    provider_name = os.environ.get("ANNULI_SUMMARY_PROVIDER", "ollama").strip().lower() or "ollama"
     if require_cloud_opt_in(provider_name, allow_cloud) == 2:
         return {"status": "skipped", "skipped": True}
     if provider_locality(provider_name) != "local" and not cloud_opt_in_granted(allow_cloud):

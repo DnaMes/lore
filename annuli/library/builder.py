@@ -11,20 +11,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
-from lore.core.models import UnifiedSession
-from lore.exporters.index import IndexBuilder, is_low_quality_title
-from lore.exporters.markdown import MarkdownExporter
-from lore.interfaces.web_data import _tool_from_value
-from lore.services.index import annotate_display_titles, is_automated, load_deleted_session_ids
-from lore.services.memory_context import select_context_memories
-from lore.storage.memory import MemoryEntry, list_memory
-from lore.storage.reader import load_ignored_session_ids, load_index_v2, load_session_messages_v2
-from lore.storage.summaries import get_summary
-from lore.storage.tags import all_tags_by_session, list_all_tags
-from lore.storage.writer import v2_db_path
-from lore.utils.datetime import make_naive
-from lore.utils.injected import classify_injected_display
-from lore.utils.paths import project_to_dirname, sanitize_filename
+from annuli.core.models import UnifiedSession
+from annuli.exporters.index import IndexBuilder, is_low_quality_title
+from annuli.exporters.markdown import MarkdownExporter
+from annuli.interfaces.web_data import _tool_from_value
+from annuli.services.index import annotate_display_titles, is_automated, load_deleted_session_ids
+from annuli.services.memory_context import select_context_memories
+from annuli.storage.memory import MemoryEntry, list_memory
+from annuli.storage.reader import load_ignored_session_ids, load_index_v2, load_session_messages_v2
+from annuli.storage.summaries import get_summary
+from annuli.storage.tags import all_tags_by_session, list_all_tags
+from annuli.storage.writer import v2_db_path
+from annuli.utils.datetime import make_naive
+from annuli.utils.injected import classify_injected_display
+from annuli.utils.paths import project_to_dirname, sanitize_filename
 
 _MANIFEST = ".lore-library.json"
 _SESSIONS = "Sessions"
@@ -641,7 +641,7 @@ def _render_index(
         if updated > slot["last"]:
             slot["last"] = updated
         by_day[entry.day] = by_day.get(entry.day, 0) + 1
-    lines = ["# Lore library", ""]
+    lines = ["# Annuli library", ""]
     lines.append("## Projects")
     lines.append("")
     for slug, info in sorted(by_project.items(), key=lambda kv: kv[1]["last"], reverse=True):

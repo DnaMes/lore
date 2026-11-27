@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any, Mapping, Optional
 from urllib.parse import urlencode
 
-from lore.interfaces.web_formatting import _parse_local_naive, session_day_iso
-from lore.services.index import is_automated
-from lore.storage.summaries import list_summaries
+from annuli.interfaces.web_formatting import _parse_local_naive, session_day_iso
+from annuli.services.index import is_automated
+from annuli.storage.summaries import list_summaries
 
 CONTINUE_LIMIT = 6
 PROJECTS_LIMIT = 12

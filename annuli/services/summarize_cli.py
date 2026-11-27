@@ -1,4 +1,4 @@
-"""CLI orchestration for ``lore summarize`` (B4.4, #197)."""
+"""CLI orchestration for ``annuli summarize`` (B4.4, #197)."""
 
 from __future__ import annotations
 
@@ -14,16 +14,16 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urlparse
 
-from lore.services.summarize import (
+from annuli.services.summarize import (
     SessionEstimate,
     SummarizeReport,
     estimate_run,
     run_summaries,
     select_candidates,
 )
-from lore.storage.writer import v2_db_path
-from lore.utils.datetime import parse_duration
-from lore.utils.tooling import normalize_tool_name
+from annuli.storage.writer import v2_db_path
+from annuli.utils.datetime import parse_duration
+from annuli.utils.tooling import normalize_tool_name
 
 LOCAL_PROVIDERS = frozenset({"ollama", "openai-compatible"})
 PROVIDER_CHOICES = (
@@ -56,7 +56,7 @@ def list_indexed_session_ids(output_dir: Path) -> list[str]:
     db = v2_db_path(output_dir)
     if not db.exists():
         return []
-    from lore.storage import open_connection
+    from annuli.storage import open_connection
 
     conn = open_connection(db)
     try:
@@ -86,7 +86,7 @@ def provider_locality(provider: str) -> str:
 
     An Ollama client honours ``OLLAMA_HOST``: pointing it off-host makes it a remote
     endpoint that must be treated (and announced) like any other cloud provider.
-    ``openai-compatible`` honours ``LORE_LLM_BASE_URL``: it is local only when
+    ``openai-compatible`` honours ``ANNULI_LLM_BASE_URL``: it is local only when
     configured and its host is loopback (127.0.0.0/8, ::1, localhost).
     """
     name = provider.lower()
@@ -95,24 +95,24 @@ def provider_locality(provider: str) -> str:
     if name == "ollama" and not llm_base_url_is_local(resolve_ollama_host()):
         return "cloud"
     if name == "openai-compatible":
-        base_url = os.environ.get("LORE_LLM_BASE_URL", "").strip()
+        base_url = os.environ.get("ANNULI_LLM_BASE_URL", "").strip()
         if not base_url or not llm_base_url_is_local(base_url):
             return "cloud"
     return "local"
 
 
 def cloud_opt_in_granted(allow_cloud: bool = False) -> bool:
-    """True when ``--allow-cloud`` or ``LORE_ALLOW_CLOUD=1`` (or true/yes) is set."""
+    """True when ``--allow-cloud`` or ``ANNULI_ALLOW_CLOUD=1`` (or true/yes) is set."""
     if allow_cloud:
         return True
-    return os.environ.get("LORE_ALLOW_CLOUD", "").strip().lower() in ("1", "true", "yes")
+    return os.environ.get("ANNULI_ALLOW_CLOUD", "").strip().lower() in ("1", "true", "yes")
 
 
 def require_cloud_opt_in(provider: str, allow_cloud: bool = False) -> int | None:
     """Exit code 2 when a cloud provider is chosen without opt-in, else None.
 
     Shared by summarize, analyze, knowledge, and format. Refusal names both
-    ``--allow-cloud`` and ``LORE_ALLOW_CLOUD``.
+    ``--allow-cloud`` and ``ANNULI_ALLOW_CLOUD``.
     """
     if provider_locality(provider) != "cloud":
         return None
@@ -120,7 +120,7 @@ def require_cloud_opt_in(provider: str, allow_cloud: bool = False) -> int | None
         return None
     print(
         f"Error: provider '{provider}' sends session text to the cloud. "
-        "Pass --allow-cloud or set LORE_ALLOW_CLOUD=1 to confirm.",
+        "Pass --allow-cloud or set ANNULI_ALLOW_CLOUD=1 to confirm.",
         file=sys.stderr,
     )
     return 2
@@ -165,7 +165,9 @@ def resolve_ollama_host() -> str | None:
 
 
 def mcp_summarize_model() -> str:
-    return os.environ.get("LORE_SUMMARY_MODEL", "").strip() or default_model(MCP_SUMMARIZE_PROVIDER)
+    return os.environ.get("ANNULI_SUMMARY_MODEL", "").strip() or default_model(
+        MCP_SUMMARIZE_PROVIDER
+    )
 
 
 def check_mcp_summarize_locality() -> str | None:
@@ -177,7 +179,7 @@ def check_mcp_summarize_locality() -> str | None:
 
 def web_summarize_enabled() -> bool:
     """True when the web UI may offer local session summary generation."""
-    provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip().lower()
+    provider = os.environ.get("ANNULI_SUMMARY_PROVIDER", "").strip().lower()
     if not provider or provider not in LOCAL_PROVIDERS:
         return False
     return provider_locality(provider) == "local"
@@ -185,27 +187,27 @@ def web_summarize_enabled() -> bool:
 
 def web_summarize_disabled_reason() -> str:
     """Short user-facing hint when :func:`web_summarize_enabled` is false."""
-    provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip().lower()
+    provider = os.environ.get("ANNULI_SUMMARY_PROVIDER", "").strip().lower()
     if not provider or provider not in LOCAL_PROVIDERS:
-        return "No local provider configured: set LORE_SUMMARY_PROVIDER=ollama"
+        return "No local provider configured: set ANNULI_SUMMARY_PROVIDER=ollama"
     if provider == "ollama" and provider_locality("ollama") != "local":
         return "Ollama endpoint must be loopback (check OLLAMA_HOST)"
     if provider == "openai-compatible" and provider_locality("openai-compatible") != "local":
-        return "OpenAI-compatible endpoint must be loopback (check LORE_LLM_BASE_URL)"
+        return "OpenAI-compatible endpoint must be loopback (check ANNULI_LLM_BASE_URL)"
     return "Local summarize provider is not available"
 
 
 def build_mcp_summarize_provider(provider_name: Optional[str] = None):
     """Construct a transcript-safe local provider for MCP/web ``summarize_session``."""
-    from lore.llm import LLMConfig, get_provider
-    from lore.llm.base import transcript_safe
+    from annuli.llm import LLMConfig, get_provider
+    from annuli.llm.base import transcript_safe
 
     chosen = (provider_name or MCP_SUMMARIZE_PROVIDER).strip().lower()
     if chosen not in LOCAL_PROVIDERS or provider_locality(chosen) != "local":
         raise ValueError(
             f"Refused non-local base_url for {chosen}; summarize requires a local provider"
         )
-    model = os.environ.get("LORE_SUMMARY_MODEL", "").strip() or default_model(chosen)
+    model = os.environ.get("ANNULI_SUMMARY_MODEL", "").strip() or default_model(chosen)
     config = LLMConfig.for_transcripts(provider=chosen, model=model)
     provider = get_provider(provider=config.provider, model=config.model)
     model_label = f"{chosen}/{model}"
@@ -215,12 +217,12 @@ def build_mcp_summarize_provider(provider_name: Optional[str] = None):
 def default_model(provider: str) -> str:
     """Default model label for ``provider``, from the one provider table.
 
-    ``lore/llm/adapters/selection.py`` owns the defaults, so the CLI and the factory
+    ``annuli/llm/adapters/selection.py`` owns the defaults, so the CLI and the factory
     cannot disagree. A native-CLI adapter answers ``""``: the installed CLI uses
-    its own configured model and Lore passes no ``--model``. An unknown name keeps
+    its own configured model and Annuli passes no ``--model``. An unknown name keeps
     the historical ``llama3.2`` answer.
     """
-    from lore.llm.adapters import UnknownProviderError, default_model_for
+    from annuli.llm.adapters import UnknownProviderError, default_model_for
 
     try:
         return default_model_for(provider)
@@ -323,7 +325,7 @@ def _collect_candidates(args: Namespace, output_dir: Path) -> tuple[Optional[int
         return 2, []  # an empty value must not silently widen the run to every session
 
     if not v2_db_path(output_dir).exists():
-        print("Error: No session store found. Run 'lore reindex' first.", file=sys.stderr)
+        print("Error: No session store found. Run 'annuli reindex' first.", file=sys.stderr)
         return 2, []  # exit 1 is reserved for "every attempted call failed / no provider"
 
     session_id: Optional[str] = None
@@ -358,7 +360,7 @@ def _collect_candidates(args: Namespace, output_dir: Path) -> tuple[Optional[int
 
 
 def run_summarize_command(args: Namespace) -> int:
-    """Entry point for ``lore summarize``."""
+    """Entry point for ``annuli summarize``."""
     output_dir = Path(args.output_dir).expanduser()
     err, candidates = _collect_candidates(args, output_dir)
     if err is not None:
@@ -396,7 +398,7 @@ def run_summarize_command(args: Namespace) -> int:
             _print_dry_run_table(estimates)
         return 0
 
-    from lore.llm import LLMConfig, get_provider
+    from annuli.llm import LLMConfig, get_provider
 
     try:
         config = LLMConfig.for_transcripts(provider=provider_name, model=model)
@@ -416,7 +418,9 @@ def run_summarize_command(args: Namespace) -> int:
         if provider_name == "ollama":
             hint = "Start Ollama locally or choose another --provider."
         elif provider_name == "openai-compatible":
-            hint = "Set LORE_LLM_BASE_URL and LORE_LLM_MODEL (and LORE_LLM_API_KEY if required)."
+            hint = (
+                "Set ANNULI_LLM_BASE_URL and ANNULI_LLM_MODEL (and ANNULI_LLM_API_KEY if required)."
+            )
         elif provider_name == "openrouter":
             hint = "Set OPENROUTER_API_KEY."
         elif provider_name in ("claude-cli", "codex-cli", "gemini-cli"):

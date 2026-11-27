@@ -1,4 +1,4 @@
-"""Ordered ``lore improve`` pipeline: embeddings, extraction, memory candidates (#197)."""
+"""Ordered ``annuli improve`` pipeline: embeddings, extraction, memory candidates (#197)."""
 
 from __future__ import annotations
 
@@ -213,7 +213,7 @@ class _PromoteState:
             kind,
             title,
             body,
-            author="lore-improve",
+            author="annuli-improve",
             scope_project=scope_project,
             source_session=session_id,
             status="candidate",
@@ -410,7 +410,7 @@ def _stage_extract(
 ) -> StageResult:
     if dry_run:
         return StageResult("extract_knowledge", "skipped", reason="dry_run")
-    chosen = (provider_name or os.environ.get("LORE_LLM_PROVIDER") or "").strip()
+    chosen = (provider_name or os.environ.get("ANNULI_LLM_PROVIDER") or "").strip()
     if not chosen:
         return StageResult("extract_knowledge", "skipped", reason="no_llm")
     try:

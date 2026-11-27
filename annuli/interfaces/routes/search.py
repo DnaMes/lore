@@ -2,13 +2,13 @@
 
 from flask import Blueprint, jsonify, request
 
-from lore.interfaces import web as _web
-from lore.utils.security import (
+from annuli.interfaces import web as _web
+from annuli.utils.security import (
     validate_search_param,
     validate_search_query,
     validate_tool_name,
 )
-from lore.utils.tooling import normalize_tool_name
+from annuli.utils.tooling import normalize_tool_name
 
 from ..api_payloads import search_result_snippet, serialize_search_evidence
 

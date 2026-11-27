@@ -74,24 +74,24 @@ WRITABLE_STATUSES = ("candidate", "confirmed")
 # protection. Distribution, reproduction command and the two known misses
 # (German query vs. English memory, keyword-poor paraphrase):
 # tools/calibration/recall-floor-calibration.md. The session-level cutoff
-# of #92 is calibrated separately. Override with LORE_MEMORY_RECALL_MIN_SIMILARITY.
-RECALL_MIN_SIMILARITY_ENV = "LORE_MEMORY_RECALL_MIN_SIMILARITY"
+# of #92 is calibrated separately. Override with ANNULI_MEMORY_RECALL_MIN_SIMILARITY.
+RECALL_MIN_SIMILARITY_ENV = "ANNULI_MEMORY_RECALL_MIN_SIMILARITY"
 DEFAULT_RECALL_MIN_SIMILARITY = 0.6
 
 
 # Cosine similarity at or above which a new memory is reported as a near-duplicate
 # of an existing one (``find_similar_memories``). A DUPLICATE threshold, distinct
 # from the recall floor above and higher on purpose. The default is a PLACEHOLDER
-# pending calibration with issue #92. Override with LORE_SIMILARITY_THRESHOLD.
-SIMILARITY_THRESHOLD_ENV = "LORE_SIMILARITY_THRESHOLD"
+# pending calibration with issue #92. Override with ANNULI_SIMILARITY_THRESHOLD.
+SIMILARITY_THRESHOLD_ENV = "ANNULI_SIMILARITY_THRESHOLD"
 DEFAULT_SIMILARITY_THRESHOLD = 0.85
 
 # Upper bound on how many stored vectors one recall scores in Python. Semantic
 # ranking is a ranking aid, not the only retrieval path: memories beyond the
 # bound are still found through keywords, and the bound keeps a large archive
 # from turning one recall into a full-table vector scan (#199). Override with
-# LORE_MEMORY_VECTOR_SCAN_LIMIT.
-VECTOR_SCAN_LIMIT_ENV = "LORE_MEMORY_VECTOR_SCAN_LIMIT"
+# ANNULI_MEMORY_VECTOR_SCAN_LIMIT.
+VECTOR_SCAN_LIMIT_ENV = "ANNULI_MEMORY_VECTOR_SCAN_LIMIT"
 DEFAULT_VECTOR_SCAN_LIMIT = 20_000
 
 
@@ -933,7 +933,7 @@ def recall_memory(
 
     ``status`` defaults to confirmed memories only; ``None`` means any status.
 
-    Only when ``LORE_FEEDBACK_INFLUENCE`` is above 0 are the results reordered
+    Only when ``ANNULI_FEEDBACK_INFLUENCE`` is above 0 are the results reordered
     by their feedback weight (bounded to +-25%); otherwise the order is the
     retrieval order, untouched.
     """

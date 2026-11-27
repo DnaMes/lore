@@ -2,8 +2,8 @@
 
 Semantic search needs an embedding model. To keep the base install light,
 this is an *optional* feature: it depends on ``fastembed`` (a small
-ONNX-runtime model, no torch), pulled in by the ``lore[semantic]``
-extra — or, for a pipx install, ``pipx inject lore fastembed sqlite-vec``.
+ONNX-runtime model, no torch), pulled in by the ``annuli[semantic]``
+extra — or, for a pipx install, ``pipx inject annuli fastembed sqlite-vec``.
 When ``fastembed`` is not installed every function here degrades
 gracefully — :func:`embeddings_available` returns False and callers fall
 back to FTS search.
@@ -66,7 +66,7 @@ def _get_model():
         return _model
     except Exception as exc:  # noqa: BLE001 - any failure disables the feature
         hint = (
-            " (install with: pipx inject lore fastembed sqlite-vec)"
+            " (install with: pipx inject annuli fastembed sqlite-vec)"
             if isinstance(exc, ImportError)
             else ""
         )
@@ -95,7 +95,7 @@ class _NoVector(Exception):
     """Raised inside the cache so a failed embed is not memoised (lru_cache skips raises)."""
 
 
-# functools, not services.cache.threadsafe_lru_cache: lore.services imports lore.storage,
+# functools, not services.cache.threadsafe_lru_cache: annuli.services imports annuli.storage,
 # so importing it here would be circular. A rare double compute under a race is harmless.
 @functools.lru_cache(maxsize=256)
 def _embed_text_cached(text: str) -> tuple:
@@ -204,7 +204,7 @@ def load_vec_extension(conn: sqlite3.Connection) -> bool:
 def ensure_message_vec_table(conn: sqlite3.Connection) -> bool:
     """Create the ``message_embeddings`` vec0 table if sqlite-vec is loaded.
 
-    Mirrors :func:`lore.storage.schema.ensure_session_vec_table`: returns True
+    Mirrors :func:`annuli.storage.schema.ensure_session_vec_table`: returns True
     when the table exists (or was just created) and False when the extension
     cannot be loaded — callers then skip message vector writes/search and rely
     on the FTS path. Idempotent: ``CREATE VIRTUAL TABLE IF NOT EXISTS`` is a

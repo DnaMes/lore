@@ -1,7 +1,7 @@
 """Native Gemini CLI adapter (#184): the CLI answers, the API adapter never does.
 
-This module and ``lore/llm/gemini.py`` are separate providers on purpose. The
-``gemini`` provider talks to the Generative Language API with a Lore-configured
+This module and ``annuli/llm/gemini.py`` are separate providers on purpose. The
+``gemini`` provider talks to the Generative Language API with a Annuli-configured
 credential; this adapter runs the installed ``gemini`` executable with whatever
 login that CLI already has and never touches an API client, an OAuth refresh
 token, or ``~/.gemini/oauth_creds.json``. A missing CLI is an explicit
@@ -13,7 +13,7 @@ Invocation is the documented non-interactive interface:
 * ``gemini -p "<instruction>"`` — non-interactive mode. The instruction on argv is
   a constant ("follow the instructions on stdin"); the prompt itself travels on
   standard input in this module too, so transcript text stays out of the process
-  list (the same choice ``lore/titles/generator.py`` makes).
+  list (the same choice ``annuli/titles/generator.py`` makes).
 * ``gemini --output-format json`` — one JSON document on stdout with the answer in
   ``response`` and accounting under ``stats``. Any other shape is malformed
   output, not an answer.

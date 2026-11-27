@@ -27,11 +27,11 @@ RELOAD_JOBS_LOCK = threading.Lock()
 
 # Configuration from environment
 RELOAD_JOB_TTL_SECONDS = max(
-    60, int(os.environ.get("LORE_ACTION_JOB_TTL_SECONDS", "3600") or "3600")
+    60, int(os.environ.get("ANNULI_ACTION_JOB_TTL_SECONDS", "3600") or "3600")
 )
-RELOAD_JOB_MAX = max(32, int(os.environ.get("LORE_ACTION_JOB_MAX", "256") or "256"))
+RELOAD_JOB_MAX = max(32, int(os.environ.get("ANNULI_ACTION_JOB_MAX", "256") or "256"))
 ACTION_JOB_TIMEOUT_SECONDS = max(
-    30, int(os.environ.get("LORE_ACTION_JOB_TIMEOUT_SECONDS", "180") or "180")
+    30, int(os.environ.get("ANNULI_ACTION_JOB_TIMEOUT_SECONDS", "180") or "180")
 )
 APP_STARTED_EPOCH = time.time()
 
@@ -362,8 +362,11 @@ def _start_session_summary_job(session_id: str) -> str:
     _metrics_inc("summary_jobs_started")
 
     def run() -> None:
-        from lore.services.summarize import summarize_session as run_summarize_session
-        from lore.services.summarize_cli import build_mcp_summarize_provider, web_summarize_enabled
+        from annuli.services.summarize import summarize_session as run_summarize_session
+        from annuli.services.summarize_cli import (
+            build_mcp_summarize_provider,
+            web_summarize_enabled,
+        )
 
         from .web_data import OUTPUT_DIR
 
@@ -380,7 +383,7 @@ def _start_session_summary_job(session_id: str) -> str:
             progress_callback(5, "Preparing local provider")
             if not web_summarize_enabled():
                 raise ValueError("Local summary provider is not configured")
-            summary_provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip().lower()
+            summary_provider = os.environ.get("ANNULI_SUMMARY_PROVIDER", "").strip().lower()
             if summary_provider and summary_provider != "ollama":
                 provider, model_label = build_mcp_summarize_provider(summary_provider)
             else:

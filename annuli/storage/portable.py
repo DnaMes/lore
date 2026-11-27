@@ -1,6 +1,6 @@
 """Portable archive bundles: export, verify and merge-import (issue #163).
 
-``lore backup``/``lore restore`` move a store within one machine — restore
+``annuli backup``/``annuli restore`` move a store within one machine — restore
 replaces the store wholesale. Moving an archive *between* machines needs the
 other half: an import that merges into a store it must never damage.
 
@@ -8,7 +8,7 @@ A portable bundle is the backup bundle plus a contract:
 
 ``manifest.json``
     ``format: "lore-portable-bundle"``, ``format_version``, the provenance of the
-    exporting store (source namespace scope, machine scope, creation time, Lore
+    exporting store (source namespace scope, machine scope, creation time, Annuli
     version), the store's schema and applied migrations, an evidence
     fingerprint over every captured ``(source_identity, content_sha256)``
     revision, one sha256 and size per payload member, and the row count of every
@@ -29,7 +29,7 @@ schema compatibility are all checked before the live store is opened. Then:
 
 - revisions dedupe on ``(source_identity, content_sha256)``; changed bytes become
   an extra ``revision_seq``, never an overwritten revision;
-- sessions follow :func:`lore.storage.identity.resolve_store_identity`, so an
+- sessions follow :func:`annuli.storage.identity.resolve_store_identity`, so an
   identical copy changes nothing and a divergent copy is stored under a
   qualified id with ``copy_of_session_id`` — a local row is never replaced;
 - imported rows keep their original ``source_namespace``, and the report counts
@@ -161,14 +161,14 @@ class Provenance:
     namespace: str
     machine_scope: str
     created_at: str
-    lore_version: str
+    annuli_version: str
 
     def to_dict(self) -> Dict[str, str]:
         return {
             "namespace": self.namespace,
             "machine_scope": self.machine_scope,
             "created_at": self.created_at,
-            "lore_version": self.lore_version,
+            "annuli_version": self.annuli_version,
         }
 
     @classmethod
@@ -177,7 +177,7 @@ class Provenance:
             namespace=str(data["namespace"]),
             machine_scope=str(data["machine_scope"]),
             created_at=str(data["created_at"]),
-            lore_version=str(data["lore_version"]),
+            annuli_version=str(data["annuli_version"]),
         )
 
 
@@ -199,8 +199,8 @@ class PortableManifest:
         return self.provenance.created_at
 
     @property
-    def lore_version(self) -> str:
-        return self.provenance.lore_version
+    def annuli_version(self) -> str:
+        return self.provenance.annuli_version
 
     def to_dict(self) -> Dict[str, Any]:
         """Return the JSON form written into the bundle."""
@@ -389,7 +389,7 @@ def create_portable_bundle(output_dir: Path, destination: Path) -> PortableExpor
                 namespace=_store_namespace(snapshot),
                 machine_scope=_machine_scope(),
                 created_at=_now(),
-                lore_version=__version__,
+                annuli_version=__version__,
             ),
             schema_version=schema_version,
             expected_schema_version=SCHEMA_VERSION,
@@ -427,7 +427,7 @@ def verify_portable_bundle(bundle: Path) -> PortableReport:
     Covers the zip structure, the format marker, every member checksum and size,
     the evidence fingerprint (revision/artifact counts plus a digest over every
     captured checksum), the snapshot's ``PRAGMA integrity_check``, the row counts
-    against the manifest and whether this Lore can read the bundle's schema at
+    against the manifest and whether this Annuli can read the bundle's schema at
     all. Every problem found is reported; nothing is raised and nothing is
     written outside a temp directory.
     """
@@ -454,7 +454,7 @@ def verify_portable_bundle(bundle: Path) -> PortableReport:
         problems: List[str] = []
         if manifest.format_version > PORTABLE_FORMAT_VERSION:
             problems.append(
-                f"bundle format {manifest.format_version} is newer than this Lore "
+                f"bundle format {manifest.format_version} is newer than this Annuli "
                 f"supports ({PORTABLE_FORMAT_VERSION})"
             )
         member_names = {member.name for member in manifest.members}
@@ -547,7 +547,7 @@ def _now() -> str:
 
 
 def _namespace_scope() -> str:
-    """The host's source-namespace scope (``LORE_SOURCE_NAMESPACE`` or ``local``)."""
+    """The host's source-namespace scope (``ANNULI_SOURCE_NAMESPACE`` or ``local``)."""
     return os.environ.get(NAMESPACE_ENV, "").strip() or "local"
 
 
@@ -555,7 +555,7 @@ def _store_namespace(snapshot: Path) -> str:
     """The namespace scope the store's own rows carry.
 
     Read from the rows rather than from the environment: a bundle exported later,
-    on a host whose ``LORE_SOURCE_NAMESPACE`` has changed, must still say where its
+    on a host whose ``ANNULI_SOURCE_NAMESPACE`` has changed, must still say where its
     content actually came from. The environment is only a fallback for a store
     with no namespaced rows yet.
     """
@@ -671,8 +671,8 @@ def _snapshot_problems(archive: zipfile.ZipFile, manifest: PortableManifest) -> 
         supported = SCHEMA_VERSION
         if schema_version > supported:
             problems.append(
-                f"the snapshot uses schema {schema_version}, newer than this Lore "
-                f"supports ({supported}); upgrade Lore to import it"
+                f"the snapshot uses schema {schema_version}, newer than this Annuli "
+                f"supports ({supported}); upgrade Annuli to import it"
             )
 
         counts = _read_counts(snapshot)
@@ -1423,7 +1423,7 @@ def _shared_columns(
 ) -> Tuple[str, ...]:
     """The column subset both the archive and the live store have.
 
-    An archive written by a newer Lore may carry columns this store lacks; copying
+    An archive written by a newer Annuli may carry columns this store lacks; copying
     only what both sides have keeps an older importer working instead of failing
     on a column it has never seen.
     """

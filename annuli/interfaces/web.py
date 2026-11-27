@@ -16,9 +16,9 @@ import nh3
 from flask import Flask, Response, g, has_request_context, jsonify, request
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from lore.extractors.factory import get_all_extractors
-from lore.utils.formatting import escape_snippet_html
-from lore.utils.text_processing import format_thinking
+from annuli.extractors.factory import get_all_extractors
+from annuli.utils.formatting import escape_snippet_html
+from annuli.utils.text_processing import format_thinking
 
 from ..services.extraction import find_live_session
 from ..services.index import (
@@ -163,7 +163,7 @@ _TEST_EXPORTS = (
     _record_job_outcome,
 )
 
-_web_services = importlib.import_module("lore.interfaces.web_services")
+_web_services = importlib.import_module("annuli.interfaces.web_services")
 build_projects_payload = _web_services.build_projects_payload
 build_thread_detail_payload = _web_services.build_thread_detail_payload
 build_threads_overview = _web_services.build_threads_overview
@@ -208,12 +208,12 @@ if trusted_proxy_enabled():
 _SESSION_WATCHER = None
 
 # Bind host passed to ``start_web_ui``; part of the Host allowlist. Gunicorn
-# deployments never call it and rely on ``$LORE_WEB_HOST`` instead.
+# deployments never call it and rely on ``$ANNULI_WEB_HOST`` instead.
 _BIND_HOST = ""
 
 
 def _maybe_start_session_watcher() -> None:
-    """Start the background file watcher when ``LORE_WATCH=1``.
+    """Start the background file watcher when ``ANNULI_WATCH=1``.
 
     The watcher polls every extractor's data dir and clears the index cache
     whenever any of them change. The next request rebuilds the index lazily.
@@ -221,14 +221,14 @@ def _maybe_start_session_watcher() -> None:
     global _SESSION_WATCHER
     if _SESSION_WATCHER is not None:
         return
-    if os.environ.get("LORE_WATCH", "").strip() not in ("1", "true", "True"):
+    if os.environ.get("ANNULI_WATCH", "").strip() not in ("1", "true", "True"):
         return
     try:
-        interval = float(os.environ.get("LORE_WATCH_INTERVAL", "30"))
+        interval = float(os.environ.get("ANNULI_WATCH_INTERVAL", "30"))
     except ValueError:
         interval = 30.0
     try:
-        from lore.watcher import SessionWatcher
+        from annuli.watcher import SessionWatcher
 
         watcher = SessionWatcher(callback=clear_index_cache, interval=interval)
         watcher.start()
@@ -254,7 +254,7 @@ def _check_local_origin() -> Optional[tuple]:
       connection scheme and the ``Host`` header spell it. A loopback Origin on
       a different port is no longer a free pass: another local app is
       cross-origin like any other site (follow-up to #193),
-    - an origin listed in ``LORE_PUBLIC_ORIGINS`` — but only while
+    - an origin listed in ``ANNULI_PUBLIC_ORIGINS`` — but only while
       ``TRUSTED_PROXY`` is set, because without a proxy nothing rewrites
       scheme/host and the configured list would just be attack surface.
 
@@ -262,7 +262,7 @@ def _check_local_origin() -> Optional[tuple]:
     never authorises ``http://host`` or ``https://host``. Malformed
     ``X-Forwarded-*`` headers are rejected in ``before_request`` first: a
     request whose forwarded headers do not parse is not one a proxy sent. The
-    policy itself is :func:`lore.interfaces.web_utils.request_is_cross_origin`,
+    policy itself is :func:`annuli.interfaces.web_utils.request_is_cross_origin`,
     shared with the MCP HTTP transport.
     """
     if not request_is_cross_origin():
@@ -271,21 +271,21 @@ def _check_local_origin() -> Optional[tuple]:
 
 
 def _current_revision() -> str:
-    return os.environ.get("LORE_BUILD_SHA") or os.environ.get("LORE_BUILD_REVISION") or "dev"
+    return os.environ.get("ANNULI_BUILD_SHA") or os.environ.get("ANNULI_BUILD_REVISION") or "dev"
 
 
 def _export_fallback_scan_enabled() -> bool:
-    return os.environ.get("LORE_EXPORT_FALLBACK_SCAN", "").lower() == "true"
+    return os.environ.get("ANNULI_EXPORT_FALLBACK_SCAN", "").lower() == "true"
 
 
 # Clear OpenCode cache if requested
-if os.environ.get("LORE_CLEAR_OPENCODE_CACHE", "").lower() == "true":
+if os.environ.get("ANNULI_CLEAR_OPENCODE_CACHE", "").lower() == "true":
     opencode_state_cache = OUTPUT_DIR / "cache" / "opencode_state.json"
     if opencode_state_cache.exists():
         opencode_state_cache.unlink()
 
 
-# Templates live as files under lore/templates/*.html, loaded by _template_env().
+# Templates live as files under annuli/templates/*.html, loaded by _template_env().
 
 # --- LOGIC ---
 
@@ -304,8 +304,8 @@ def _markdown_safe(text: object):
     """
     from markupsafe import Markup
 
-    from lore.utils.html_sanitize import sanitize_html
-    from lore.utils.markdown_render import render_markdown
+    from annuli.utils.html_sanitize import sanitize_html
+    from annuli.utils.markdown_render import render_markdown
 
     # "<" is escaped first: memory is prose, so placeholders such as <slug> must stay visible
     # instead of being parsed (and stripped) as tags. "&" and ">" stay Markdown-meaningful.
@@ -437,7 +437,7 @@ def render(tpl_name, **kwargs):
                     session_deleted=str(session_id) in deleted_ids,
                 )
             )
-    from lore import __version__
+    from annuli import __version__
 
     include_automated = _include_automated()
     # A view that counted within its own filters passes ``automated_hidden``.
@@ -507,7 +507,7 @@ def prepare_request_context_and_limit() -> Optional[Response]:
 
     # Host allowlist: a request naming a foreign domain (DNS rebinding,
     # poisoned Host) never reaches a route. Loopback names, the bind host and
-    # operator-configured hosts (LORE_ALLOWED_HOSTS, LORE_PUBLIC_ORIGINS) pass.
+    # operator-configured hosts (ANNULI_ALLOWED_HOSTS, ANNULI_PUBLIC_ORIGINS) pass.
     if not host_header_allowed(request.headers.get("Host", ""), _BIND_HOST):
         _metrics_inc("host_rejections")
         logger.warning(
@@ -516,7 +516,7 @@ def prepare_request_context_and_limit() -> Optional[Response]:
             g.request_id,
         )
         return Response(
-            "Bad Host header. Allowed hosts can be configured via LORE_ALLOWED_HOSTS.",
+            "Bad Host header. Allowed hosts can be configured via ANNULI_ALLOWED_HOSTS.",
             status=400,
             mimetype="text/plain",
         )
@@ -601,7 +601,7 @@ def add_security_headers(response):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["X-XSS-Protection"] = "1; mode=block"
-    response.headers["X-Lore-Revision"] = _current_revision()
+    response.headers["X-Annuli-Revision"] = _current_revision()
     response.headers["X-Request-ID"] = getattr(g, "request_id", "")
     peek_max_age = getattr(g, "peek_cache_max_age", None)
     if peek_max_age is not None:
@@ -697,9 +697,9 @@ def start_web_ui(port=5000, host="127.0.0.1", debug=False):
 
 
 # --- Route blueprints (#119) --------------------------------------------------
-# Handlers live in ``lore/interfaces/routes/`` and are registered on ``app`` at
+# Handlers live in ``annuli/interfaces/routes/`` and are registered on ``app`` at
 # the end of this module. They keep their old module-level names here so
-# ``lore.interfaces.web.<name>`` stays a valid patch target; the routes resolve
+# ``annuli.interfaces.web.<name>`` stays a valid patch target; the routes resolve
 # those seams through this module at call time.
 from .routes import register_blueprints  # noqa: E402
 from .routes.api_v1 import (  # noqa: E402,F401  (re-exports)

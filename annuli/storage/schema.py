@@ -272,7 +272,7 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         15,
         "memory feedback ratings (#197)",
         # One 1-5 rating per (memory, rater); a re-rating replaces the row. The
-        # weight is derived at read time (lore.storage.feedback), never stored.
+        # weight is derived at read time (annuli.storage.feedback), never stored.
         # Rater names are unverified labels, not identities.
         """
         CREATE TABLE IF NOT EXISTS memory_feedback (
@@ -289,7 +289,7 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
         "memory review status (#197)",
         # candidate | confirmed | rejected. Existing rows and every human or
         # agent write stay 'confirmed'; only confirmed memories are visible by
-        # default (lore.storage.memory).
+        # default (annuli.storage.memory).
         """
         ALTER TABLE memory ADD COLUMN status TEXT NOT NULL DEFAULT 'confirmed';
         CREATE INDEX IF NOT EXISTS idx_memory_status ON memory(status);
@@ -535,7 +535,7 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
     (
         26,
         "append-only log of portable bundle imports (#163)",
-        # One row per completed `lore bundle import`: which archive, in which
+        # One row per completed `annuli bundle import`: which archive, in which
         # mode, from which origin, and what it changed. Append-only like
         # source_revisions — a second import of the same bundle adds a second
         # row instead of rewriting the first, so the history is auditable.
@@ -619,7 +619,7 @@ MIGRATIONS: List[Tuple[int, str, str]] = [
 ]
 
 
-#: The schema version this Lore builds: the highest migration it knows. Derived
+#: The schema version this Annuli builds: the highest migration it knows. Derived
 #: from the last entry rather than ``len(MIGRATIONS)`` — migrations are numbered
 #: and append-only, so a branch that adds a later number while an earlier one is
 #: still in flight must not claim a version it does not build.

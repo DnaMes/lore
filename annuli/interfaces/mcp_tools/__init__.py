@@ -1,7 +1,7 @@
 """MCP tool handler groups.
 
-``create_server()`` in :mod:`lore.interfaces.mcp` stays a thin
-assembler: it builds the :class:`~lore.interfaces.mcp_tools.deps.MCPToolDeps`
+``create_server()`` in :mod:`annuli.interfaces.mcp` stays a thin
+assembler: it builds the :class:`~annuli.interfaces.mcp_tools.deps.MCPToolDeps`
 bundle of shared helpers and calls each group module's ``register(server, deps)``.
 
 Each module exposes a ``register`` function that registers its tools with an

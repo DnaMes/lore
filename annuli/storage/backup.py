@@ -4,7 +4,7 @@ A bundle is a single zip file with two parts:
 
 ``manifest.json``
     The format-version marker (``format`` + ``format_version``), the creation
-    time, the Lore version, the store's schema and applied migration versions,
+    time, the Annuli version, the store's schema and applied migration versions,
     one sha256 and size per payload member, and the row count of every
     archived table.
 ``db/index_v2.sqlite``
@@ -92,7 +92,7 @@ class BackupManifest:
 
     format_version: int
     created_at: str
-    lore_version: str
+    annuli_version: str
     schema_version: int
     expected_schema_version: int
     migrations: Tuple[Tuple[int, str], ...]
@@ -105,7 +105,7 @@ class BackupManifest:
             "format": BUNDLE_FORMAT,
             "format_version": self.format_version,
             "created_at": self.created_at,
-            "lore_version": self.lore_version,
+            "annuli_version": self.annuli_version,
             "schema": {
                 "version": self.schema_version,
                 "expected_version": self.expected_schema_version,
@@ -179,7 +179,7 @@ def create_backup(output_dir: Path, destination: Path) -> BackupResult:
         manifest = BackupManifest(
             format_version=BUNDLE_FORMAT_VERSION,
             created_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
-            lore_version=__version__,
+            annuli_version=__version__,
             schema_version=schema_version,
             expected_schema_version=SCHEMA_VERSION,
             migrations=migrations,
@@ -214,7 +214,7 @@ def verify_bundle(bundle: Path) -> BundleReport:
 
     Covers the zip structure, the format marker, every member checksum and
     size, the snapshot's ``PRAGMA integrity_check``, the row counts against
-    the manifest, and whether this Lore can restore the bundle's schema at
+    the manifest, and whether this Annuli can restore the bundle's schema at
     all. Every problem found is reported; nothing is raised and nothing is
     written outside a temp directory.
     """
@@ -241,7 +241,7 @@ def verify_bundle(bundle: Path) -> BundleReport:
         problems: List[str] = []
         if manifest.format_version > BUNDLE_FORMAT_VERSION:
             problems.append(
-                f"bundle format {manifest.format_version} is newer than this Lore "
+                f"bundle format {manifest.format_version} is newer than this Annuli "
                 f"supports ({BUNDLE_FORMAT_VERSION})"
             )
         member_names = {member.name for member in manifest.members}
@@ -282,7 +282,7 @@ def restore_backup(bundle: Path, output_dir: Path, *, force: bool = False) -> Re
     if replaced and not force:
         raise BackupError(
             f"{store} already exists; pass --force to replace it "
-            "(back it up first with `lore backup <path>`)"
+            "(back it up first with `annuli backup <path>`)"
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -375,7 +375,7 @@ def _parse_manifest(data: Dict[str, Any]) -> BackupManifest:
     return BackupManifest(
         format_version=int(data["format_version"]),
         created_at=str(data["created_at"]),
-        lore_version=str(data["lore_version"]),
+        annuli_version=str(data["annuli_version"]),
         schema_version=int(schema["version"]),
         expected_schema_version=int(schema["expected_version"]),
         migrations=tuple(
@@ -426,8 +426,8 @@ def _snapshot_problems(archive: zipfile.ZipFile, manifest: BackupManifest) -> Li
         supported = SCHEMA_VERSION
         if schema_version > supported:
             problems.append(
-                f"the snapshot uses schema {schema_version}, newer than this Lore "
-                f"supports ({supported}); upgrade Lore to restore it"
+                f"the snapshot uses schema {schema_version}, newer than this Annuli "
+                f"supports ({supported}); upgrade Annuli to restore it"
             )
 
         counts = _read_counts(snapshot)

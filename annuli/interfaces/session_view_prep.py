@@ -70,7 +70,7 @@ def fold_tool_bursts(tool_calls):
     a count keeps the transcript scannable. Only *exactly identical consecutive*
     calls fold — anything that differs renders normally, so no information is lost.
     """
-    from lore.core.models import normalize_tool_call
+    from annuli.core.models import normalize_tool_call
 
     if not tool_calls:
         return []
@@ -158,8 +158,8 @@ def _duration_label(session) -> str | None:
 
 def at_a_glance(session) -> dict[str, Any]:
     """Deterministic session stats for the summary card when no AI summary exists."""
-    from lore.core.models import Role
-    from lore.services.summary_input import extract_artifacts, from_unified
+    from annuli.core.models import Role
+    from annuli.services.summary_input import extract_artifacts, from_unified
 
     messages = list(getattr(session, "messages", None) or [])
     first_prompt = ""

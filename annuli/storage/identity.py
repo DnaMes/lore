@@ -19,7 +19,7 @@ from typing import Dict, Iterable, Optional, Tuple
 from ..core.models import UnifiedMessage, UnifiedSession
 
 #: Overrides the machine/home scope in a source namespace.
-NAMESPACE_ENV = "LORE_SOURCE_NAMESPACE"
+NAMESPACE_ENV = "ANNULI_SOURCE_NAMESPACE"
 
 #: Separator between the qualifiers of a copy id: ``<tool>:<ns>:<id>#<n>``.
 COPY_SEPARATOR = "#"

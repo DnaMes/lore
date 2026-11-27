@@ -8,7 +8,7 @@ if TYPE_CHECKING:
 
 from ...services.hydration import REASON_EMPTY
 from ...services.summary_input import compress, from_unified
-from ...utils.paths import lore_home
+from ...utils.paths import annuli_home
 from ..base import LLMProvider, prepare_prompt, transcript_safe
 
 # A formatted session's summary is one call: the compressed conversation is
@@ -56,7 +56,7 @@ class SessionFormatter:
     def __init__(self, provider: LLMProvider, output_dir: Optional[Path] = None):
         self.provider = transcript_safe(provider)
         self.redactions = 0  # secret-like strings removed from prompts sent so far
-        self.output_dir = output_dir or lore_home() / "formatted"
+        self.output_dir = output_dir or annuli_home() / "formatted"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     def format_session(

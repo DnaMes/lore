@@ -6,13 +6,13 @@ from typing import Optional
 
 from flask import Blueprint
 
-from lore import __version__
-from lore.interfaces import web as _web
-from lore.services import index as _index_service
-from lore.services import summarize_cli as _summarize_cli
-from lore.storage import v2_db_path
-from lore.storage.message_fts import message_fts_pending, message_fts_ready
-from lore.storage.schema import open_connection
+from annuli import __version__
+from annuli.interfaces import web as _web
+from annuli.services import index as _index_service
+from annuli.services import summarize_cli as _summarize_cli
+from annuli.storage import v2_db_path
+from annuli.storage.message_fts import message_fts_pending, message_fts_ready
+from annuli.storage.schema import open_connection
 
 bp = Blueprint("settings", __name__)
 
@@ -59,7 +59,7 @@ def _search_state() -> dict[str, str]:
 
 def _ai_summary_state() -> dict[str, object]:
     """Return AI summary provider locality and key presence (never key values)."""
-    raw_provider = os.environ.get("LORE_SUMMARY_PROVIDER", "").strip()
+    raw_provider = os.environ.get("ANNULI_SUMMARY_PROVIDER", "").strip()
     provider: Optional[str] = raw_provider.lower() if raw_provider else None
     locality: Optional[str] = _summarize_cli.provider_locality(provider) if provider else None
     api_keys = [

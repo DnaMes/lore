@@ -56,7 +56,7 @@ SEARCH_INDEX_BODY_COLUMN = 5
 
 # FTS5 ``snippet()`` brackets each match with these sentinels at the storage
 # layer. Payloads convert them with :func:`snippet_to_text`; nothing outside
-# ``lore.storage`` should see the raw form.
+# ``annuli.storage`` should see the raw form.
 SNIPPET_OPEN = "\x02"
 SNIPPET_CLOSE = "\x03"
 

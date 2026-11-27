@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from ..utils.paths import lore_home, restrict_file, secure_dir
+from ..utils.paths import annuli_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
 from .cache_io import sweep_temp_files
 from .gate import ensure_cloud_allowed
@@ -26,8 +26,8 @@ class JevError(Exception):
 
 
 def resolve_jev_lanes() -> Tuple[str, ...]:
-    """Lane order from ``LORE_JEV_LANES`` (comma-separated), default local then fastcheap."""
-    raw = os.environ.get("LORE_JEV_LANES", DEFAULT_MODEL_LABEL)
+    """Lane order from ``ANNULI_JEV_LANES`` (comma-separated), default local then fastcheap."""
+    raw = os.environ.get("ANNULI_JEV_LANES", DEFAULT_MODEL_LABEL)
     lanes = tuple(part.strip() for part in raw.split(",") if part.strip())
     if not lanes:
         lanes = ("local", "fastcheap")
@@ -66,7 +66,7 @@ class JevProvider(LLMProvider):
         self.allow_cloud = allow_cloud
         self._lanes = resolve_jev_lanes()
         validate_jev_lanes(self._lanes)
-        self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
+        self._cache_dir_path = Path(config.cache_dir or annuli_home() / "llm_cache")
         self._cache_dir: Optional[Path] = None
 
     def _ensure_cache_dir(self) -> Optional[Path]:

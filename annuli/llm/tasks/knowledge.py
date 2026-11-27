@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 if TYPE_CHECKING:
     from ...core.models import UnifiedSession
 
-from ...utils.paths import lore_home
+from ...utils.paths import annuli_home
 from ..base import LLMProvider, prepare_prompt, transcript_safe
 
 # Why an extraction produced no entry. The report counts these apart so a
@@ -76,7 +76,7 @@ class KnowledgeEntry:
 class KnowledgeExtractor:
     def __init__(self, provider: LLMProvider, output_dir: Optional[Path] = None):
         self.provider = transcript_safe(provider)
-        self.output_dir = output_dir or lore_home() / "knowledge"
+        self.output_dir = output_dir or annuli_home() / "knowledge"
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod

@@ -94,7 +94,7 @@ class CursorExtractor(BaseExtractor):
     def _decode_blob(self, value: Any) -> str:
         """Try to decode a blob that might be hex or just string.
 
-        The heuristic lives in :func:`lore.utils.text_processing.decode_hex_or_str`
+        The heuristic lives in :func:`annuli.utils.text_processing.decode_hex_or_str`
         so other SQLite-backed extractors can reuse it (#120).
         """
         return decode_hex_or_str(value)

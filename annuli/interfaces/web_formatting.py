@@ -13,18 +13,18 @@ from typing import Any, Optional
 import markdown
 import nh3
 
-from lore.core.models import AUTOMATED_ORIGINS
-from lore.services.cache import threadsafe_lru_cache
-from lore.utils.html_sanitize import SANITIZE_ATTRS as _SHARED_SANITIZE_ATTRS
-from lore.utils.html_sanitize import SANITIZE_TAGS as _SHARED_SANITIZE_TAGS
-from lore.utils.html_sanitize import SANITIZE_URL_SCHEMES as _SHARED_SANITIZE_URL_SCHEMES
-from lore.utils.html_sanitize import sanitize_html
-from lore.utils.markdown_render import MARKDOWN_EXTENSIONS as MARKDOWN_EXTENSIONS
-from lore.utils.markdown_render import render_markdown as render_markdown
-from lore.utils.markdown_render import (
+from annuli.core.models import AUTOMATED_ORIGINS
+from annuli.services.cache import threadsafe_lru_cache
+from annuli.utils.html_sanitize import SANITIZE_ATTRS as _SHARED_SANITIZE_ATTRS
+from annuli.utils.html_sanitize import SANITIZE_TAGS as _SHARED_SANITIZE_TAGS
+from annuli.utils.html_sanitize import SANITIZE_URL_SCHEMES as _SHARED_SANITIZE_URL_SCHEMES
+from annuli.utils.html_sanitize import sanitize_html
+from annuli.utils.markdown_render import MARKDOWN_EXTENSIONS as MARKDOWN_EXTENSIONS
+from annuli.utils.markdown_render import render_markdown as render_markdown
+from annuli.utils.markdown_render import (
     thread_local_markdown_parser as thread_local_markdown_parser,
 )
-from lore.utils.text_processing import strip_ansi
+from annuli.utils.text_processing import strip_ansi
 
 _COMPARE_STRIP_RE = re.compile(r"[\W_]+", re.UNICODE)
 
@@ -263,7 +263,7 @@ def is_automated_origin(origin: Optional[str]) -> bool:
     return origin in AUTOMATED_ORIGINS
 
 
-# The allowlist lives in lore.utils.html_sanitize so the standalone HTML export
+# The allowlist lives in annuli.utils.html_sanitize so the standalone HTML export
 # applies exactly the same rules (#169). These bindings stay for callers that
 # import them from here; the tag set is frozen so a caller cannot widen it.
 SANITIZE_TAGS = frozenset(_SHARED_SANITIZE_TAGS)
@@ -279,7 +279,7 @@ def sanitize_rendered_html(rendered_html: str) -> str:
 @threadsafe_lru_cache(maxsize=4096)
 def _format_message_content_cached(raw_content: str) -> str:
     """Format message content with caching for performance."""
-    from lore.utils.text_processing import (
+    from annuli.utils.text_processing import (
         format_thinking,
         format_tool_display,
         format_tool_result,
@@ -417,7 +417,7 @@ def _tool_event_for_call(
 
 
 def _tool_group_label(raw_tool: str) -> str:
-    from lore.utils.text_processing import _normalize_tool_name
+    from annuli.utils.text_processing import _normalize_tool_name
 
     base = str(raw_tool).split(" ×", 1)[0]
     return _normalize_tool_name(base).title()
@@ -441,7 +441,7 @@ def _tool_group_name_line(entries: list[tuple[str, int]]) -> str:
 def _tool_group_status_html(
     failed_count: int, duration_ms: int | None, all_confirmed_ok: bool = True
 ) -> str:
-    from lore.utils.text_processing import format_duration_ms
+    from annuli.utils.text_processing import format_duration_ms
 
     if failed_count:
         return (
@@ -541,7 +541,7 @@ def format_session_event(label: str, original: str) -> str:
 
 def format_tool_calls(tool_calls, tool_events=None):
     """Format tool calls for display, grouping consecutive calls when there are two or more."""
-    from lore.utils.text_processing import (
+    from annuli.utils.text_processing import (
         _canonical_tool_status,
         format_duration_ms,
         format_tool_display,
@@ -551,7 +551,7 @@ def format_tool_calls(tool_calls, tool_events=None):
 
     if not tool_calls:
         return ""
-    from lore.core.models import normalize_tool_call
+    from annuli.core.models import normalize_tool_call
 
     events = tool_events or []
     aligned = len(events) == len(tool_calls)

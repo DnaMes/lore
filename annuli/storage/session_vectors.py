@@ -1,7 +1,7 @@
 """Populate per-session embedding vectors for hybrid search (#87, PR 2; #95).
 
 One vector per session, stored in the ``session_embeddings`` vec0 table
-(created by :func:`lore.storage.schema.ensure_session_vec_table`). The text
+(created by :func:`annuli.storage.schema.ensure_session_vec_table`). The text
 embedded is the same title + message-body concatenation that feeds the FTS
 ``search_index`` row, so keyword and semantic search see the same content.
 
@@ -10,7 +10,7 @@ Since #95 the pass is **incremental**: ``session_embedding_meta`` (migration
 from, and only new/changed sessions are re-embedded. A full re-embed of the
 archive (~950 CPU model calls) blew the web reload job's 180s timeout; the
 common-case delta is a handful of sessions and takes well under a second.
-A **time budget** (``LORE_EMBED_BUDGET_SECONDS``, default 60, ``0`` =
+A **time budget** (``ANNULI_EMBED_BUDGET_SECONDS``, default 60, ``0`` =
 unlimited) bounds the worst case (first backfill): progress is committed and
 the remainder is picked up by the next reload.
 
@@ -48,16 +48,16 @@ SessionText = Tuple[str, Optional[str], Optional[int]]
 
 
 def _embed_budget_seconds() -> Optional[float]:
-    """Per-pass time budget from ``LORE_EMBED_BUDGET_SECONDS`` (default 60s).
+    """Per-pass time budget from ``ANNULI_EMBED_BUDGET_SECONDS`` (default 60s).
 
     ``0`` (or a negative value) disables the budget — used by one-shot CLI
     backfills where wall time doesn't race a job timeout.
     """
-    raw = os.environ.get("LORE_EMBED_BUDGET_SECONDS", "60").strip()
+    raw = os.environ.get("ANNULI_EMBED_BUDGET_SECONDS", "60").strip()
     try:
         value = float(raw)
     except ValueError:
-        logger.warning("Invalid LORE_EMBED_BUDGET_SECONDS=%r, using 60", raw)
+        logger.warning("Invalid ANNULI_EMBED_BUDGET_SECONDS=%r, using 60", raw)
         value = 60.0
     return value if value > 0 else None
 
@@ -76,7 +76,7 @@ def embed_sessions(
     - Unchanged sessions are skipped entirely; keep-only items (text=None)
       are never embedded, only protected from cleanup.
     - Stops early once ``budget_seconds`` is spent (default from
-      ``LORE_EMBED_BUDGET_SECONDS``); committed progress is kept and the next
+      ``ANNULI_EMBED_BUDGET_SECONDS``); committed progress is kept and the next
       pass continues where this one stopped.
 
     Returns the number of vectors written. Returns 0 (without raising) when

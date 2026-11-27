@@ -1,8 +1,8 @@
 """Interface-agnostic service layer.
 
 This package holds shared, framework-free logic that both the web
-interface (``lore.interfaces.web``) and the MCP server
-(``lore.interfaces.mcp``) depend on.
+interface (``annuli.interfaces.web``) and the MCP server
+(``annuli.interfaces.mcp``) depend on.
 
 It exists to kill code duplication (the "iterate extractors -> build
 index" routine used to be copied into ~4 places) and to fix a layering
@@ -10,7 +10,7 @@ inversion: the MCP server previously imported from ``web_data``, but the
 web app and the MCP server are *sibling* interfaces and neither should
 depend on the other. Shared logic belongs here instead.
 
-Nothing in this package may import Flask or any ``lore.interfaces``
+Nothing in this package may import Flask or any ``annuli.interfaces``
 module.
 """
 

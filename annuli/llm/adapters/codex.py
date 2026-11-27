@@ -11,7 +11,7 @@ nothing here reads or writes Codex configuration:
   ``{"type": "item.completed", "item": {"item_type": "agent_message", "text": …}}``
   or the older ``{"msg": {"type": "agent_message", "message": …}}``.
 * ``--sandbox read-only`` and ``--skip-git-repo-check`` — the run may not modify
-  the workspace and may start outside a git repository (Lore runs it from a
+  the workspace and may start outside a git repository (Annuli runs it from a
   temporary directory).
 
 ``codex exec --help`` must document ``--json``, otherwise the installed CLI is
@@ -20,7 +20,7 @@ reported unavailable with that reason rather than invoked on a guess.
 Deliberately unsupported: the interactive TUI, image input, ``codex login`` on the
 user's behalf, and any credential file access. Authentication is whatever
 ``codex login`` already installed; the adapter strips API-key variables from the
-child environment so a key Lore holds can never answer for Codex.
+child environment so a key Annuli holds can never answer for Codex.
 """
 
 from __future__ import annotations

@@ -34,7 +34,7 @@ except ImportError:
 # never to pick a provider implicitly (#185).
 import shutil
 
-from ..utils.paths import lore_home, restrict_file, secure_dir
+from ..utils.paths import annuli_home, restrict_file, secure_dir
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,7 @@ class TitleGenerator:
             )
         self.model = model or (ollama_model if self.provider == "local" else "gemini-cli")
         self.allow_cloud = allow_cloud
-        self.cache_dir = cache_dir or lore_home() / "title_cache"
+        self.cache_dir = cache_dir or annuli_home() / "title_cache"
         secure_dir(self.cache_dir)
         self.cache_file = self.cache_dir / "titles.json"
         self.ollama_model = ollama_model

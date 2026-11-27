@@ -1,8 +1,8 @@
-"""Pin skills/lore-memory/SKILL.md against the memory CLI it documents.
+"""Pin skills/annuli-memory/SKILL.md against the memory CLI it documents.
 
 The skill is shipped to agents (and in the sdist), so a renamed subcommand or a
 dropped flag must not be able to leave it lying. The test reads every fenced bash
-command that starts with ``lore memory`` and checks the subcommand and each long
+command that starts with ``annuli memory`` and checks the subcommand and each long
 option against ``build_parser()``; it also checks the frontmatter a harness needs
 to load the skill at all.
 """
@@ -16,11 +16,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-from lore_cli import build_parser
+from annuli_cli import build_parser
 
-SKILL_MD = Path(__file__).resolve().parents[1] / "skills" / "lore-memory" / "SKILL.md"
+SKILL_MD = Path(__file__).resolve().parents[1] / "skills" / "annuli-memory" / "SKILL.md"
 
-_COMMAND_RE = re.compile(r"^lore memory ([a-z][a-z0-9-]*)", re.MULTILINE)
+_COMMAND_RE = re.compile(r"^annuli memory ([a-z][a-z0-9-]*)", re.MULTILINE)
 _FLAG_RE = re.compile(r"--[a-z][a-z0-9-]*")
 _FENCE_RE = re.compile(r"```bash\n(.*?)```", re.DOTALL)
 
@@ -41,7 +41,7 @@ def _skill_text() -> str:
 
 
 def _skill_commands() -> list[tuple[str, set[str], list[str]]]:
-    """Every ``lore memory <cmd>`` in a bash block: subcommand, flags, positional words.
+    """Every ``annuli memory <cmd>`` in a bash block: subcommand, flags, positional words.
 
     Shell comments are stripped first: ``# dry run; --apply rejects duplicates`` is
     documentation, not an argument.
@@ -71,7 +71,7 @@ def _frontmatter() -> dict:
 
 def test_frontmatter_gives_a_harness_a_name_and_a_description():
     frontmatter = _frontmatter()
-    assert frontmatter["name"] == "lore-memory"
+    assert frontmatter["name"] == "annuli-memory"
     description = frontmatter["description"]
     assert isinstance(description, str) and description.strip()
     assert "Triggers:" in description, "the description names its triggers"
@@ -79,7 +79,7 @@ def test_frontmatter_gives_a_harness_a_name_and_a_description():
 
 def test_every_documented_command_exists():
     documented = _skill_commands()
-    assert documented, "no `lore memory` example found - did the fences change?"
+    assert documented, "no `annuli memory` example found - did the fences change?"
     known = _memory_commands()
     unknown = sorted({name for name, _flags, _words in documented if name not in known})
     assert not unknown, f"the skill documents unknown memory subcommands: {unknown}"
@@ -93,12 +93,12 @@ def test_every_documented_flag_is_accepted():
             continue
         accepted = {option for action in known[name]._actions for option in action.option_strings}
         for flag in sorted(flags - accepted):
-            problems.append(f"lore memory {name} {flag}")
+            problems.append(f"annuli memory {name} {flag}")
     assert not problems, f"the skill documents flags the CLI does not take: {problems}"
 
 
 def test_documented_positional_actions_exist():
-    """``lore memory review accept`` is a positional with choices, not a subcommand."""
+    """``annuli memory review accept`` is a positional with choices, not a subcommand."""
     known = _memory_commands()
     problems: list[str] = []
     for name, _flags, words in _skill_commands():
@@ -111,10 +111,10 @@ def test_documented_positional_actions_exist():
             choices |= {str(choice) for choice in action.choices}
         if not choices:
             continue
-        # The action word comes before the ids: `lore memory review accept 12 15`.
+        # The action word comes before the ids: `annuli memory review accept 12 15`.
         action = next((word for word in words if not word.isdigit()), None)
         if action is not None and action not in choices:
-            problems.append(f"lore memory {name} {action}")
+            problems.append(f"annuli memory {name} {action}")
     assert not problems, f"the skill documents positionals the CLI does not accept: {problems}"
 
 

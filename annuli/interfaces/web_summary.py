@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Iterable, Mapping, Optional
 
-from lore.interfaces.mcp_tools.summaries import sanitize_summary_payload
-from lore.interfaces.session_view_prep import at_a_glance
-from lore.services.summarize import is_summary_stale
-from lore.services.summarize_cli import web_summarize_disabled_reason, web_summarize_enabled
-from lore.storage.summaries import get_summary, list_summaries
+from annuli.interfaces.mcp_tools.summaries import sanitize_summary_payload
+from annuli.interfaces.session_view_prep import at_a_glance
+from annuli.services.summarize import is_summary_stale
+from annuli.services.summarize_cli import web_summarize_disabled_reason, web_summarize_enabled
+from annuli.storage.summaries import get_summary, list_summaries
 
 
 def summary_message_anchors(visible_pairs: Iterable[Mapping[str, Any]]) -> set[int]:
@@ -42,7 +42,7 @@ def session_summary_lines(
     One storage query for the whole page. ``outdated`` is a cheap timestamp comparison
     (session updated after the summary was created); the exact check runs on the detail page.
     """
-    from lore.services.index import load_deleted_session_ids
+    from annuli.services.index import load_deleted_session_ids
 
     deleted = load_deleted_session_ids(output_dir / "deleted_sessions.json")
     ids = [sid for sid in session_ids if isinstance(sid, str) and sid and sid not in deleted]
@@ -137,7 +137,7 @@ def build_summary_card_context(
             "summary_glance": glance,
             "summary_generate_enabled": generate_enabled,
             "summary_generate_reason": web_summarize_disabled_reason(),
-            "summary_cli_command": f"lore summarize --session {session_id}",
+            "summary_cli_command": f"annuli summarize --session {session_id}",
         }
 
     return {
@@ -152,7 +152,7 @@ def build_summary_card_context(
         "summary_glance": glance,
         "summary_generate_enabled": generate_enabled,
         "summary_generate_reason": web_summarize_disabled_reason(),
-        "summary_cli_command": f"lore summarize --session {session_id}",
+        "summary_cli_command": f"annuli summarize --session {session_id}",
     }
 
 

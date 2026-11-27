@@ -1,7 +1,7 @@
 """OpenRouter chat-completions provider (OpenAI-compatible API over urllib).
 
 Default model: ``nvidia/nemotron-3-ultra-550b-a55b:free`` (override with
-``LORE_OPENROUTER_MODEL``). A faster free alternative is
+``ANNULI_OPENROUTER_MODEL``). A faster free alternative is
 ``nvidia/nemotron-3.5-lightning:free`` — set it via config or env if you want it.
 """
 
@@ -17,7 +17,7 @@ from typing import Any, Dict, List, Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from ..utils.paths import lore_home, restrict_file, secure_dir
+from ..utils.paths import annuli_home, restrict_file, secure_dir
 from .base import LLMConfig, LLMProvider, LLMResponse
 from .cache_io import sweep_temp_files
 from .gate import ensure_cloud_allowed
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free"
-ALLOW_PAID_ENV_VAR = "LORE_OPENROUTER_ALLOW_PAID"
+ALLOW_PAID_ENV_VAR = "ANNULI_OPENROUTER_ALLOW_PAID"
 _MAX_RETRIES = 2
 _MAX_SLEEP_SECONDS = 30.0
 
@@ -37,10 +37,10 @@ class OpenRouterError(Exception):
 
 
 def resolve_openrouter_model(config: LLMConfig) -> str:
-    """Model id from config, then ``LORE_OPENROUTER_MODEL``, then default."""
+    """Model id from config, then ``ANNULI_OPENROUTER_MODEL``, then default."""
     if config.model:
         return config.model
-    return os.environ.get("LORE_OPENROUTER_MODEL") or DEFAULT_MODEL
+    return os.environ.get("ANNULI_OPENROUTER_MODEL") or DEFAULT_MODEL
 
 
 def validate_openrouter_model(model: str) -> str:
@@ -48,8 +48,8 @@ def validate_openrouter_model(model: str) -> str:
 
     The shared OpenRouter account is not on the free tier, so an accidental
     non-free model id would cost real money. Applies to the default, to
-    ``LORE_OPENROUTER_MODEL`` and to ``--model`` — they all arrive here through
-    ``config.model``. Opt in with ``LORE_OPENROUTER_ALLOW_PAID=1``.
+    ``ANNULI_OPENROUTER_MODEL`` and to ``--model`` — they all arrive here through
+    ``config.model``. Opt in with ``ANNULI_OPENROUTER_ALLOW_PAID=1``.
 
     The message names the model and the opt-in variable only; it never carries
     key material.
@@ -74,7 +74,7 @@ def validate_openrouter_base_url(base_url: str) -> str:
 
 
 def resolve_openrouter_base_url(config: LLMConfig) -> str:
-    raw = config.base_url or os.environ.get("LORE_OPENROUTER_BASE_URL") or DEFAULT_BASE_URL
+    raw = config.base_url or os.environ.get("ANNULI_OPENROUTER_BASE_URL") or DEFAULT_BASE_URL
     return validate_openrouter_base_url(raw)
 
 
@@ -84,7 +84,7 @@ class OpenRouterProvider(LLMProvider):
         # Transport-boundary opt-in: a directly constructed provider must refuse
         # to send without it just like one built by the factory (#PRIVACY.md).
         self.allow_cloud = allow_cloud
-        self._cache_dir_path = Path(config.cache_dir or lore_home() / "llm_cache")
+        self._cache_dir_path = Path(config.cache_dir or annuli_home() / "llm_cache")
         self._cache_dir: Optional[Path] = None
 
     def _ensure_cache_dir(self) -> Optional[Path]:

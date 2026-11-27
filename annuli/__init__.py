@@ -1,12 +1,12 @@
-"""Lore — local-first AI coding-session history + shared agent memory.
+"""Annuli — local-first AI coding-session history + shared agent memory.
 
 The single source of truth for the package version. ``pyproject.toml``
 reads ``__version__`` from here via ``[tool.setuptools.dynamic]``, so the
 version is set in exactly one place.
 
-2.4.0: the Python import package is ``lore``; CLI entry modules are
-``lore_cli`` / ``lore_session_cli``; environment variables are ``LORE_*``.
-Data dir is ``~/.lore``.
+2.4.0: the Python import package is ``annuli``; CLI entry modules are
+``annuli_cli`` / ``annuli_session_cli``; environment variables are ``ANNULI_*``.
+Data dir is ``~/.annuli``.
 """
 
 import os
@@ -19,7 +19,7 @@ _ENV_PREFIX = "ANNULI_"
 
 
 def _adopt_legacy_env() -> None:
-    """Copy pre-rebrand ``LORE_*`` variables to ``ANNULI_*`` unless already set.
+    """Copy pre-rebrand ``ANNULI_*`` variables to ``ANNULI_*`` unless already set.
 
     Child processes inherit the result. One deprecation line goes to stderr
     (never stdout: the MCP server speaks JSON-RPC there).
@@ -33,7 +33,7 @@ def _adopt_legacy_env() -> None:
                 adopted.append(key)
     if adopted:
         print(
-            "annuli: deprecated LORE_* variables read as ANNULI_*: " + ", ".join(sorted(adopted)),
+            "annuli: deprecated ANNULI_* variables read as ANNULI_*: " + ", ".join(sorted(adopted)),
             file=sys.stderr,
         )
 

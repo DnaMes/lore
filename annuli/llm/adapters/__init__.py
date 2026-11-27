@@ -1,15 +1,15 @@
 """Explicit provider boundary for native-CLI and local-model providers (#180).
 
-``lore.llm.factory`` and the adapters import from here; nothing in this package
+``annuli.llm.factory`` and the adapters import from here; nothing in this package
 is a second opinion about where text goes.
 
-* :mod:`~lore.llm.adapters.contract` — the request descriptor: provider identity,
+* :mod:`~annuli.llm.adapters.contract` — the request descriptor: provider identity,
   model, auth mode, timeout, cancellation token, execution policy. Persistable.
-* :mod:`~lore.llm.adapters.errors` — typed outcomes: unavailable, auth, timeout,
+* :mod:`~annuli.llm.adapters.errors` — typed outcomes: unavailable, auth, timeout,
   cancelled, execution error, malformed output, refused selection.
-* :mod:`~lore.llm.adapters.native_cli` — detection (``which`` + ``--version`` +
+* :mod:`~annuli.llm.adapters.native_cli` — detection (``which`` + ``--version`` +
   capability probe), bounded invocation, cancellation, parsed results.
-* :mod:`~lore.llm.adapters.selection` — the one table of provider names and what
+* :mod:`~annuli.llm.adapters.selection` — the one table of provider names and what
   each means.
 * ``codex``, ``claude``, ``gemini``, ``antigravity`` — the installed-CLI adapters
   (#181, #182, #184, #183).

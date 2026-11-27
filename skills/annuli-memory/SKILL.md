@@ -1,17 +1,17 @@
 ---
-name: lore-memory
+name: annuli-memory
 description: >
-  Use Lore's shared memory store to recall what earlier agent sessions decided and to
-  record durable facts, decisions and lessons, through the `lore memory` CLI or the MCP
+  Use Annuli's shared memory store to recall what earlier agent sessions decided and to
+  record durable facts, decisions and lessons, through the `annuli memory` CLI or the MCP
   tools. Use at the start of a task (recall before you re-derive something) and right
   after a decision, a non-obvious lesson or a failed assumption worth not repeating.
-  Triggers: lore memory, shared memory, record a decision, remember this, what did we
-  decide, memory recall, cross-agent memory, lore-mcp memory_write.
+  Triggers: annuli memory, shared memory, record a decision, remember this, what did we
+  decide, memory recall, cross-agent memory, annuli-mcp memory_write.
 ---
 
-# Lore shared memory
+# Annuli shared memory
 
-Lore keeps one local SQLite store of facts, decisions and lessons under `~/.lore`.
+Annuli keeps one local SQLite store of facts, decisions and lessons under `~/.annuli`.
 Every AI tool on the machine reads and writes the same store, so a decision recorded
 by one session is recallable by the next one — nothing leaves the host.
 
@@ -24,12 +24,12 @@ Two rules make the store useful instead of noisy:
 ## Recall
 
 ```bash
-lore memory search "database performance"        # keywords plus meaning when available
-lore memory search "database performance" --semantic
-lore memory search '"exact phrase"'
-lore memory list --kind decision --project /path/to/repo --limit 20
-lore memory show 7
-lore memory list --all                            # include superseded rows
+annuli memory search "database performance"        # keywords plus meaning when available
+annuli memory search "database performance" --semantic
+annuli memory search '"exact phrase"'
+annuli memory list --kind decision --project /path/to/repo --limit 20
+annuli memory show 7
+annuli memory list --all                            # include superseded rows
 ```
 
 Recall returns confirmed memories only. The reason a memory exists is in its
@@ -39,7 +39,7 @@ use, not on the words of the task.
 ## Record
 
 ```bash
-lore memory add --kind decision \
+annuli memory add --kind decision \
     --title "Standardise the stack on Postgres 16" \
     --body "Every service uses PG16; upgrading is a separate decision." \
     --project /path/to/repo --author <tool> --tag db --tag infra
@@ -67,21 +67,21 @@ Machine-generated memories arrive as `candidate` and stay out of recall until a 
 accepts them:
 
 ```bash
-lore memory review                    # what is waiting
-lore memory review accept 12 15
-lore memory review reject 14          # keeps the row, excludes it from recall
+annuli memory review                    # what is waiting
+annuli memory review accept 12 15
+annuli memory review reject 14          # keeps the row, excludes it from recall
 ```
 
 The web UI shows the same queue at `/memory?status=candidate`.
 
 ## Hand a budget to the agent
 
-`lore memory context` renders a ranked, redacted block that fits a token budget —
+`annuli memory context` renders a ranked, redacted block that fits a token budget —
 project matches first, then related scopes, then global memories:
 
 ```bash
-lore memory context --project /path/to/repo --budget 2000
-lore memory context --project /path/to/repo --format json
+annuli memory context --project /path/to/repo --budget 2000
+annuli memory context --project /path/to/repo --format json
 ```
 
 Use it when a session should start with the relevant memory instead of a raw dump.
@@ -89,10 +89,10 @@ Use it when a session should start with the relevant memory instead of a raw dum
 ## Housekeeping
 
 ```bash
-lore memory rate 7 5                  # 1 (wrong) … 5 (right and useful)
-lore memory dedupe                    # dry run; --apply rejects duplicates
-lore memory repair-index               # memory rows missing from the search index
-lore memory import-claude --apply      # seed from Claude Code auto-memory files
+annuli memory rate 7 5                  # 1 (wrong) … 5 (right and useful)
+annuli memory dedupe                    # dry run; --apply rejects duplicates
+annuli memory repair-index               # memory rows missing from the search index
+annuli memory import-claude --apply      # seed from Claude Code auto-memory files
 ```
 
 Dedupe and import are dry runs by default; nothing is deleted, rejections are

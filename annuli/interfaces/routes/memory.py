@@ -2,9 +2,9 @@
 
 from flask import Blueprint, jsonify, redirect, request
 
-from lore.interfaces import web as _web
-from lore.utils.security import validate_search_query
-from lore.utils.tooling import normalize_tool_name
+from annuli.interfaces import web as _web
+from annuli.utils.security import validate_search_query
+from annuli.utils.tooling import normalize_tool_name
 
 from ..web_data import clear_index_cache, clear_sessions_cache
 from ..web_services import preview_normalize_message
@@ -18,7 +18,7 @@ _TAB_COUNT_CAP = 500  # list_memory limit used to count a tab; shown as "500+" w
 @bp.route("/memory")
 def memory_page():
     """Browse and search the shared agent-memory store (#33)."""
-    from lore.storage import (
+    from annuli.storage import (
         MEMORY_KINDS,
         embeddings_available,
         list_memory,
@@ -85,11 +85,11 @@ def memory_review(memory_id):
     """Accept or reject a memory candidate (#197).
 
     Rejecting keeps the row (status ``rejected``), so the decision is reversible
-    with `lore memory review` or a direct status change; nothing is deleted.
+    with `annuli memory review` or a direct status change; nothing is deleted.
     """
     if (err := _web._check_local_origin()) is not None:
         return err
-    from lore.storage import set_memory_status
+    from annuli.storage import set_memory_status
 
     action = (request.form.get("action") or request.args.get("action") or "").strip().lower()
     if action not in ("accept", "reject"):
@@ -106,7 +106,7 @@ def memory_review(memory_id):
 def memory_delete(memory_id):
     if (err := _web._check_local_origin()) is not None:
         return err
-    from lore.storage import delete_memory
+    from annuli.storage import delete_memory
 
     delete_memory(_web.INDEX_PATH.parent, memory_id)
     return redirect("/memory")
