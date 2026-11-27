@@ -5,6 +5,16 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ## [Unreleased]
 
+### Changed
+
+- **Renamed from Lore to Annuli** to stop name collisions with other "Lore" products in the same niche.
+  The package, the commands (`annuli`, `annuli-web`, `annuli-mcp`, `annuli-session`, `annuli-web-probe`),
+  the env prefix (`ANNULI_*`), the data dir (`~/.annuli`) and the bundled skill (`annuli-memory`) carry the
+  new name. Compatibility: the `lore*` commands stay as aliases, `LORE_*` variables are read as
+  `ANNULI_*` (one stderr notice per process), `~/.lore` is used while `~/.annuli` holds no store, stored
+  `/.lore/` export paths still resolve, docker compose reads `LORE_*` as a fallback and keeps the
+  `lore-data` volume.
+
 ### Added
 
 - `openai-compatible` LLM provider (`LORE_LLM_BASE_URL`, `LORE_LLM_MODEL`, `LORE_LLM_API_KEY`, `LORE_LLM_API_KEY_ENV`) for Ollama `/v1`, llama.cpp, LM Studio, and hosted OpenAI-compatible endpoints.

@@ -50,7 +50,7 @@ jobs:
         run: ruff check .
 
       - name: bandit
-        run: bandit -r lore/ -c pyproject.toml -ll
+        run: bandit -r annuli/ -c pyproject.toml -ll
 
   package:
     runs-on: ubuntu-latest
@@ -83,6 +83,6 @@ jobs:
           python -m venv "$workdir/venv"
           "$workdir/venv/bin/python" -m pip install "$PWD"/dist/*.tar.gz
           cd "$sdist_dir"
-          "$workdir/venv/bin/lore" --version
-          "$workdir/venv/bin/lore-session" --help
+          "$workdir/venv/bin/annuli" --version
+          "$workdir/venv/bin/annuli-session" --help
           "$workdir/venv/bin/python" scripts/smoke_install.py --help

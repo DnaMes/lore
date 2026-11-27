@@ -1,9 +1,9 @@
 # API Reference
 
-`lore` exposes two integration surfaces for agents and tools:
+`annuli` exposes two integration surfaces for agents and tools:
 
-1. MCP over stdio via `lore-mcp`
-2. HTTP JSON endpoints via `lore-web`
+1. MCP over stdio via `annuli-mcp`
+2. HTTP JSON endpoints via `annuli-web`
 
 Use MCP when the client already supports tool calling. Use HTTP when you are wiring a custom tool, service, plugin, or skill.
 
@@ -18,13 +18,13 @@ pip install -e .
 Start the web API locally:
 
 ```bash
-lore-web
+annuli-web
 ```
 
 Start the MCP server manually:
 
 ```bash
-lore-mcp
+annuli-mcp
 ```
 
 ## Claude Code
@@ -34,15 +34,15 @@ Add this to `~/.claude/settings.json`:
 ```json
 {
   "mcpServers": {
-    "lore": {
-      "command": "lore-mcp",
+    "annuli": {
+      "command": "annuli-mcp",
       "args": []
     }
   }
 }
 ```
 
-If `lore-mcp` is not on `PATH`, use the full executable path.
+If `annuli-mcp` is not on `PATH`, use the full executable path.
 
 Example prompts in Claude Code:
 
@@ -59,15 +59,15 @@ Add this to `opencode.json`:
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
-    "lore": {
+    "annuli": {
       "type": "local",
-      "command": ["lore-mcp"]
+      "command": ["annuli-mcp"]
     }
   }
 }
 ```
 
-If needed, replace `lore-mcp` with an absolute path.
+If needed, replace `annuli-mcp` with an absolute path.
 
 ## MCP Tools
 
@@ -241,12 +241,12 @@ and `chunks`.
 ### `summarize_session`
 
 Generate or refresh a session summary. **Disabled by default.** Set
-`LORE_MCP_ALLOW_SUMMARIZE=1` to enable. When disabled the tool returns:
+`ANNULI_MCP_ALLOW_SUMMARIZE=1` to enable. When disabled the tool returns:
 
 ```json
 {
   "error": "summarize_session is disabled",
-  "hint": "set LORE_MCP_ALLOW_SUMMARIZE=1"
+  "hint": "set ANNULI_MCP_ALLOW_SUMMARIZE=1"
 }
 ```
 
@@ -277,7 +277,7 @@ Output:
 ```
 
 - `similar` lists up to 3 near-duplicates (active, `confirmed`, same `project`
-  scope, cosine similarity at or above `LORE_SIMILARITY_THRESHOLD`, default
+  scope, cosine similarity at or above `ANNULI_SIMILARITY_THRESHOLD`, default
   `0.85`, a placeholder pending calibration in #92; invalid values fall back to
   the default, range 0 to 1), computed before the new memory is stored. Nothing
   is superseded automatically. Without the optional `semantic` extra `similar` is
@@ -291,8 +291,8 @@ Output:
 #### Memory status
 
 A memory is `candidate`, `confirmed` or `rejected` (`status` key in every memory
-payload). Writes through `memory_write` and `lore memory add` are `confirmed`.
-Only `confirmed` memories are returned by `memory_recall`, `lore memory list` /
+payload). Writes through `memory_write` and `annuli memory add` are `confirmed`.
+Only `confirmed` memories are returned by `memory_recall`, `annuli memory list` /
 `search` and the web `/memory` page; candidates are produced by later review
 workflows and change state only `candidate -> confirmed|rejected`. Rejected rows
 are kept.
@@ -320,7 +320,7 @@ Input:
   installed and a memory has a stored vector, memories similar in meaning are
   fused in (reciprocal rank fusion). Memories without a vector are still found by
   keyword. Only semantic candidates with cosine similarity at or above
-  `LORE_MEMORY_RECALL_MIN_SIMILARITY` (default `0.6`, calibrated on 61 labelled
+  `ANNULI_MEMORY_RECALL_MIN_SIMILARITY` (default `0.6`, calibrated on 61 labelled
   pairs on 2026-10-14 — see `tools/calibration/recall-floor-calibration.md`;
   invalid values fall back to the default, range 0 to 1)
   take part.
@@ -377,12 +377,12 @@ Rate a **confirmed** memory (candidates and rejected rows cannot be rated). Inpu
 
 Output: `{"status": "recorded", "weight": 0.625, "count": 1}`. Invalid input or an
 unknown memory returns a plain error string. One rating per rater and memory: a new
-rating replaces the old one. The same operation is `lore memory rate <id> <1-5>
+rating replaces the old one. The same operation is `annuli memory rate <id> <1-5>
 [--rater NAME]`.
 
 The weight is `(sum((score - 1) / 4) + 1.5) / (n + 3)`, a mean pulled toward the
 neutral 0.5 by three virtual votes. It is derived at read time, never stored, and
-only shown by default. Set `LORE_FEEDBACK_INFLUENCE` (0 to 1, default `0`, invalid
+only shown by default. Set `ANNULI_FEEDBACK_INFLUENCE` (0 to 1, default `0`, invalid
 values fall back to `0`) to let it nudge `memory_recall` ranking: results are
 reordered by `1/(60 + rank)` times `1 + influence * (0.75 + 0.5 * weight - 1)`.
 Caveat: rater names are unverified labels, so one party can pose as many raters;
@@ -488,7 +488,7 @@ Response fields:
 - `search`: `{mode, message_index}` where `mode` is `"hybrid"` or `"keyword"` and `message_index` is `"ready"`, `"backfilling"`, or `"absent"`
 - `worker`: `{state, heartbeat_age_seconds}` where `state` is `"ok"`, `"stale"`, or `"absent"`
 - `llm`: `{provider, local, web_summaries}` (never exposes API keys or URLs)
-- `version`: Lore package version string
+- `version`: Annuli package version string
 - `revision`: current git revision
 - `generated_at`: UTC ISO-8601 timestamp
 - `errors`: list of per-section error strings (empty when healthy)

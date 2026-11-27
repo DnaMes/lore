@@ -1,12 +1,12 @@
 # Command reference
 
-`lore` (version 2.4.0) is a local-first archive and shared agent memory for your
+`annuli` (version 2.4.0) is a local-first archive and shared agent memory for your
 AI coding sessions. This page lists every command, what it is for, whether it
 reads or writes your data, and the exact output of its `--help` flag.
 
 Install with the steps in [INSTALL.md](./INSTALL.md). From a clone without
-installing, run the commands through the `python3 lore_cli.py <command>` entry
-point instead of the `lore` console script; the arguments are identical.
+installing, run the commands through the `python3 annuli_cli.py <command>` entry
+point instead of the `annuli` console script; the arguments are identical.
 
 Related pages: [CONFIGURATION.md](./CONFIGURATION.md) for settings and
 environment variables, [MEMORY.md](./MEMORY.md) for the shared memory store,
@@ -15,14 +15,14 @@ environment variables, [MEMORY.md](./MEMORY.md) for the shared memory store,
 
 ## Global options
 
-Output of `.venv/bin/python lore_cli.py --help`:
+Output of `.venv/bin/python annuli_cli.py --help`:
 
 ```text
-usage: lore [-h] [-v] [--version] [--output-dir OUTPUT_DIR]
+usage: annuli [-h] [-v] [--version] [--output-dir OUTPUT_DIR]
             {list,export,export-html,search,stats,digest,memory,watch,check,sources,jobs,threads,rules,metrics,prune,backup,restore,bundle,sync,run,generate-titles,reindex,embed-messages,analyze,knowledge,improve,summarize,library,format,worker}
             ...
 
-Lore — local-first archive and shared agent memory for your AI coding sessions
+Annuli — local-first archive and shared agent memory for your AI coding sessions
 
 positional arguments:
   {list,export,export-html,search,stats,digest,memory,watch,check,sources,jobs,threads,rules,metrics,prune,backup,restore,bundle,sync,run,generate-titles,reindex,embed-messages,analyze,knowledge,improve,summarize,library,format,worker}
@@ -68,17 +68,17 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   -v, --verbose         Verbose output
-  --version             Show the lore version and exit
+  --version             Show the annuli version and exit
   --output-dir OUTPUT_DIR
-                        Output directory (default: ~/.lore)
+                        Output directory (default: ~/.annuli)
 
 Examples:
-  lore list                      List all sessions
-  lore list --tool claude-code   List Claude Code sessions only
-  lore export --all              Export all sessions to ~/.lore
-  lore search "docker"           Search for "docker" in all sessions
-  lore watch --git               Watch for new sessions and auto-commit
-  lore check                     Check availability of AI tools
+  annuli list                      List all sessions
+  annuli list --tool claude-code   List Claude Code sessions only
+  annuli export --all              Export all sessions to ~/.annuli
+  annuli search "docker"           Search for "docker" in all sessions
+  annuli watch --git               Watch for new sessions and auto-commit
+  annuli check                     Check availability of AI tools
         
 ```
 Most commands list and process sessions that were created by automated runs
@@ -86,23 +86,23 @@ Most commands list and process sessions that were created by automated runs
 include them. The `--help` output of every command that supports the flag
 repeats it, so it is not explained again below.
 
-The cloud opt-in can also be set with `LORE_ALLOW_CLOUD=1` (see [CONFIGURATION.md](./CONFIGURATION.md)).
+The cloud opt-in can also be set with `ANNULI_ALLOW_CLOUD=1` (see [CONFIGURATION.md](./CONFIGURATION.md)).
 
 ## list
 
 List the sessions found in the live tool directories, with optional filters.
 
-`lore list` reads the tool source directories, not the archive index: when a
+`annuli list` reads the tool source directories, not the archive index: when a
 session's source file is deleted (for example by the tool's retention setting),
-the session disappears from `lore list`, but it stays in `lore search`,
-`lore stats` and the web UI, because those read the archive. With
+the session disappears from `annuli list`, but it stays in `annuli search`,
+`annuli stats` and the web UI, because those read the archive. With
 `--format json`, stdout carries only the JSON array; totals and paging hints
 go to stderr.
 
 Mode: read-only
 
 ```text
-usage: lore list [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
+usage: annuli list [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
                  [--since SINCE] [--format {table,json}] [--limit LIMIT]
                  [--offset OFFSET] [--include-automated]
 
@@ -124,11 +124,11 @@ options:
 
 Export sessions to Markdown files and rebuild the index.
 
-Writes: Markdown exports and the index under the output directory (default `~/.lore`).
+Writes: Markdown exports and the index under the output directory (default `~/.annuli`).
 
 What an export contains: every canonical message in order — empty, system, failed and tool
 messages included — with each tool call rendered from the canonical envelope
-(`lore/exporters/tool_calls.py`): call name and id, pretty-printed JSON arguments (or the raw
+(`annuli/exporters/tool_calls.py`): call name and id, pretty-printed JSON arguments (or the raw
 text with a "not valid JSON" note), the result or error, status, duration and a truncation or
 "n events dropped" label. An unmatched tool result stays visible as its own block. Message text
 is written verbatim, so fenced code keeps its exact whitespace and line endings. Titles and
@@ -137,16 +137,16 @@ summaries are derived values: the export labels their source (`title_source`) an
 calls a model, so it works with every provider unavailable.
 
 Layout: the Markdown export follows the same turn layout as the web UI, both built on
-`lore/formatting/turns.py`. The body sits under `## Conversation` and is grouped into
+`annuli/formatting/turns.py`. The body sits under `## Conversation` and is grouped into
 prompt turns: a `### Prompt N · <timestamp>` heading per user prompt (with a day separator
 when the day changes), the prompt text, then the agent's answer marked `**Assistant**` once
 per turn, `**System:**` notes, `**Thinking**` and event blocks folded into `<details>`, and
 tool calls rendered as list items with long outputs folded into `<details>`.
 
-After the run, stderr reports how many sessions were skipped and why (for example, sessions below the prompt floor). Archive preservation drops nothing automatically: an index entry is kept even when both its source file and its exported Markdown file are gone. Only `lore prune` removes entries, and it records the pruned ids in the v2 store (`ignored_sessions`, migration 27) and mirrors them to `ignored.json`. This is deliberate: an unreadable, unmounted or temporarily missing source must never cost an index row, so the index can contain rows whose source no longer exists — that is the archive.
+After the run, stderr reports how many sessions were skipped and why (for example, sessions below the prompt floor). Archive preservation drops nothing automatically: an index entry is kept even when both its source file and its exported Markdown file are gone. Only `annuli prune` removes entries, and it records the pruned ids in the v2 store (`ignored_sessions`, migration 27) and mirrors them to `ignored.json`. This is deliberate: an unreadable, unmounted or temporarily missing source must never cost an index row, so the index can contain rows whose source no longer exists — that is the archive.
 
 ```text
-usage: lore export [-h] [--all] [--tool TOOL] [--project PROJECT] [--full]
+usage: annuli export [-h] [--all] [--tool TOOL] [--project PROJECT] [--full]
                    [--redact]
 
 options:
@@ -166,10 +166,10 @@ Export one session as a standalone HTML file.
 
 Writes: the file given by `--output`, or `<session-id>.html` in the current directory (created with mode 0600).
 
-The page renders full Markdown — headings, lists, tables, blockquotes, inline code, emphasis and links — with the same thread-local pipeline the web UI uses, then sanitises the result with the shared allowlist (`lore/utils/html_sanitize.py`): scripts, event handlers, `javascript:` URLs and tags outside the list are removed, while their text stays. The stylesheet is inline and no remote asset is referenced, so the file opens correctly offline.
+The page renders full Markdown — headings, lists, tables, blockquotes, inline code, emphasis and links — with the same thread-local pipeline the web UI uses, then sanitises the result with the shared allowlist (`annuli/utils/html_sanitize.py`): scripts, event handlers, `javascript:` URLs and tags outside the list are removed, while their text stays. The stylesheet is inline and no remote asset is referenced, so the file opens correctly offline.
 
 ```text
-usage: lore export-html [-h] [--output OUTPUT] [--redact] session_id
+usage: annuli export-html [-h] [--output OUTPUT] [--redact] session_id
 
 positional arguments:
   session_id       Session ID (full or unique prefix)
@@ -187,10 +187,10 @@ Full-text search across archived sessions.
 
 Mode: read-only
 
-Prints `Found N result` (singular for one hit) with each score to three decimals. With no index yet it says to run `lore export --all` first.
+Prints `Found N result` (singular for one hit) with each score to three decimals. With no index yet it says to run `annuli export --all` first.
 
 ```text
-usage: lore search [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
+usage: annuli search [-h] [--tool TOOL] [--project PROJECT] [--tag TAG]
                    [--messages] [--limit LIMIT] [--page PAGE]
                    [--include-automated]
                    query
@@ -214,9 +214,9 @@ options:
 `--messages` drills into the transcript: each hit is one archived message with
 its `seq`, an excerpt (`…` marks a shortened passage), the stable evidence
 identity, and the `/session/<id>/m/<seq>` permalink. The header names the path
-that produced the hits — `vector` when the optional `lore[semantic]` extra has
+that produced the hits — `vector` when the optional `annuli[semantic]` extra has
 populated message vectors, `fts` for the keyword fallback over message bodies.
-`lore embed-messages` populates the vector path; without it (or without the
+`annuli embed-messages` populates the vector path; without it (or without the
 extra) message search still works, by keyword, and says so.
 
 ## stats
@@ -226,7 +226,7 @@ Print counts and breakdowns from the existing index.
 Mode: read-only
 
 ```text
-usage: lore stats [-h] [--include-automated]
+usage: annuli stats [-h] [--include-automated]
 
 options:
   -h, --help           show this help message and exit
@@ -241,7 +241,7 @@ Print an activity digest for a recent time window.
 Mode: read-only
 
 ```text
-usage: lore digest [-h] [--since SINCE] [--format {text,markdown}]
+usage: annuli digest [-h] [--since SINCE] [--format {text,markdown}]
                    [--include-automated]
 
 options:
@@ -265,7 +265,7 @@ prints `n/a` with a `no data:` caveat instead of a zero. See
 Mode: read-only and local (extracts sessions, writes nothing, needs no index).
 
 ```text
-usage: lore metrics [-h] [--json] [--include-inferred] [--include-automated]
+usage: annuli metrics [-h] [--json] [--include-inferred] [--include-automated]
 
 options:
   -h, --help           show this help message and exit
@@ -283,7 +283,7 @@ Manage the shared cross-tool memory store.
 Writes: the memory store in the output directory (SQLite `index_v2.sqlite`); each subcommand below states its own write behaviour.
 
 ```text
-usage: lore memory [-h]
+usage: annuli memory [-h]
                    {add,list,search,dedupe,import-claude,show,context,review,repair-index,rate}
                    ...
 
@@ -307,7 +307,7 @@ options:
   -h, --help            show this help message and exit
 ```
 
-The subcommands are documented below. Run them as `lore memory <sub>` (or `python3 lore_cli.py memory <sub>` from a clone).
+The subcommands are documented below. Run them as `annuli memory <sub>` (or `python3 annuli_cli.py memory <sub>` from a clone).
 
 ### add
 
@@ -316,7 +316,7 @@ Record a new memory.
 Writes: one memory record in the store.
 
 ```text
-usage: lore memory add [-h] [--kind KIND] --title TITLE --body BODY
+usage: annuli memory add [-h] [--kind KIND] --title TITLE --body BODY
                        [--project PROJECT] [--author AUTHOR] [--tag TAG]
                        [--from-session FROM_SESSION] [--supersedes ID]
 
@@ -342,7 +342,7 @@ List recorded memories.
 Mode: read-only
 
 ```text
-usage: lore memory list [-h] [--kind KIND] [--project PROJECT] [--all]
+usage: annuli memory list [-h] [--kind KIND] [--project PROJECT] [--all]
                         [--limit LIMIT]
                         [--status {confirmed,candidate,rejected}] [--json]
 
@@ -364,7 +364,7 @@ Search memories by keyword and, when the semantic extra is installed, by meaning
 Mode: read-only
 
 ```text
-usage: lore memory search [-h] [--kind KIND] [--project PROJECT]
+usage: annuli memory search [-h] [--kind KIND] [--project PROJECT]
                           [--limit LIMIT] [--semantic]
                           query
 
@@ -387,7 +387,7 @@ Reject exact confirmed duplicates.
 Writes: memory status changes and an undo log, only with `--apply` (dry run by default). Duplicates must match on title, body, kind and scope, so memories are never merged across kinds or scopes. The undo log records its store, and `--restore` refuses a log written for a different store.
 
 ```text
-usage: lore memory dedupe [-h] [--apply] [--restore FILE]
+usage: annuli memory dedupe [-h] [--apply] [--restore FILE]
 
 options:
   -h, --help      show this help message and exit
@@ -402,7 +402,7 @@ Import Claude Code auto-memory files.
 Writes: memory records, only with `--apply` (dry run by default).
 
 ```text
-usage: lore memory import-claude [-h] [--apply] [--root ROOT]
+usage: annuli memory import-claude [-h] [--apply] [--root ROOT]
 
 Seed the memory store from ~/.claude/projects/<slug>/memory/*.md.
 
@@ -428,7 +428,7 @@ Show one memory in full.
 Mode: read-only
 
 ```text
-usage: lore memory show [-h] memory_id
+usage: annuli memory show [-h] memory_id
 
 positional arguments:
   memory_id   memory id
@@ -453,7 +453,7 @@ running session (`CLAUDE_CODE_SESSION_ID`) are left out. With
 `entries` and `cut`. `--no-recent` omits the block entirely.
 
 ```text
-usage: lore memory context [-h] [--project PROJECT] [--budget BUDGET]
+usage: annuli memory context [-h] [--project PROJECT] [--budget BUDGET]
                            [--tool TOOL] [--format {text,json}]
                            [--limit LIMIT] [--no-recent]
 
@@ -480,7 +480,7 @@ Writes: memory status changes, only with `accept` or `reject` (listing is
 read-only).
 
 ```text
-usage: lore memory review [-h] [--kind KIND] [--json]
+usage: annuli memory review [-h] [--kind KIND] [--json]
                           [{accept,reject}] [ids ...]
 
 positional arguments:
@@ -500,7 +500,7 @@ Detect and rebuild missing memory search rows.
 Writes: search-index rows, only with `--apply` (dry run by default).
 
 ```text
-usage: lore memory repair-index [-h] [--apply] [--json]
+usage: annuli memory repair-index [-h] [--apply] [--json]
 
 options:
   -h, --help  show this help message and exit
@@ -515,7 +515,7 @@ Rate a memory from 1 to 5.
 Writes: the rating for that memory.
 
 ```text
-usage: lore memory rate [-h] [--rater RATER] memory_id score
+usage: annuli memory rate [-h] [--rater RATER] memory_id score
 
 positional arguments:
   memory_id      memory id
@@ -533,7 +533,7 @@ Poll for new sessions and export them as they appear.
 Writes: new Markdown exports and the index on every poll.
 
 ```text
-usage: lore watch [-h] [--interval INTERVAL] [--git]
+usage: annuli watch [-h] [--interval INTERVAL] [--git]
 
 options:
   -h, --help           show this help message and exit
@@ -548,7 +548,7 @@ Report which AI tool extractors are available on this machine.
 Mode: read-only
 
 ```text
-usage: lore check [-h] [--deep]
+usage: annuli check [-h] [--deep]
 
 options:
   -h, --help  show this help message and exit
@@ -566,7 +566,7 @@ per state; `--state` narrows the report to one state.
 Mode: read-only
 
 ```text
-usage: lore sources [-h]
+usage: annuli sources [-h]
                     [--state {captured,parsed,filtered,unsupported,failed,unavailable,deleted}]
                     [--limit LIMIT] [--json]
 
@@ -587,7 +587,7 @@ interrupted job (complete ones are skipped) and reports what is left — it
 does not run the work itself.
 
 ```text
-usage: lore jobs [-h] [--json] [--kind KIND]
+usage: annuli jobs [-h] [--json] [--kind KIND]
                  [--state {pending,running,completed,failed,timed_out,cancelled}]
                  [--limit LIMIT]
                  {resume} ...
@@ -612,7 +612,7 @@ Requeue unfinished chunks of an interrupted job.
 Writes: job and chunk states in the store (requeued chunks return to `pending`).
 
 ```text
-usage: lore jobs resume [-h] [--json] job_id
+usage: annuli jobs resume [-h] [--json] job_id
 
 positional arguments:
   job_id      Job id (e.g. reload-abc123 or summary-abc123)
@@ -629,7 +629,7 @@ List thread groups: the sessions of one project path, across tools.
 Mode: read-only
 
 ```text
-usage: lore threads [-h] [--include-automated]
+usage: annuli threads [-h] [--include-automated]
 
 options:
   -h, --help           show this help message and exit
@@ -642,7 +642,7 @@ options:
 Extract reusable rules from session prompts, or manage the evidence-backed
 harness recommendations built from them.
 
-Mode: bare `lore rules` writes `rules.md` (read-only otherwise) and reads no
+Mode: bare `annuli rules` writes `rules.md` (read-only otherwise) and reads no
 other file. `rules export` / `rules activate` / `rules evaluate` write
 `recommendations.json`; `rules review` is read-only. Nothing in this command
 modifies a harness configuration — recommendations stay inactive until a human
@@ -650,7 +650,7 @@ activates them, and even activation only flips a stored flag. See
 [RECOMMENDATIONS.md](RECOMMENDATIONS.md) for the field-by-field contract.
 
 ```text
-usage: lore rules [-h] [--limit LIMIT] [--include-automated]
+usage: annuli rules [-h] [--limit LIMIT] [--include-automated]
                   {export,activate,evaluate,review} ...
 
 positional arguments:
@@ -675,7 +675,7 @@ are `inactive`; an existing id keeps its activation and evaluation history, and
 evidence links are unioned rather than replaced.
 
 ```text
-usage: lore rules export [-h] [--recommendations] [--json] [--limit LIMIT]
+usage: annuli rules export [-h] [--recommendations] [--json] [--limit LIMIT]
                          [--include-automated]
 
 options:
@@ -691,7 +691,7 @@ options:
 ### activate
 
 ```text
-usage: lore rules activate [-h] [--by BY] recommendation_id
+usage: annuli rules activate [-h] [--by BY] recommendation_id
 
 positional arguments:
   recommendation_id  Recommendation id (rec-...)
@@ -707,7 +707,7 @@ id.
 ### evaluate
 
 ```text
-usage: lore rules evaluate [-h] --verdict {accepted,corrected,contradicted}
+usage: annuli rules evaluate [-h] --verdict {accepted,corrected,contradicted}
                            [--note NOTE] [--by BY]
                            recommendation_id
 
@@ -726,7 +726,7 @@ options:
 ### review
 
 ```text
-usage: lore rules review [-h]
+usage: annuli rules review [-h]
 
 options:
   -h, --help  show this help message and exit
@@ -741,14 +741,14 @@ Delete sessions whose prompt count is at or below a threshold.
 
 Writes: marks sessions as ignored in `ignored.json` and deletes their exports (`--dry-run` only prints the selection).
 
-Deletion is confined to the output directory. `lore prune` deletes only regular `.md` export files under the archive root, and refuses: symlinks (including link chains whose target leaves the root), files directly in the top level of the archive, and control or store files (whose names start with `index`, `ignored`, `deleted_sessions`, `title_cache`, `memory`, `memories`, `opencode_state` or `rules`, or end with `-wal` or `-shm`). Each refusal is reported to stderr. The index is then rebuilt from the sources, preserving every entry that was not re-observed, so entries whose source still exists elsewhere are not lost.
+Deletion is confined to the output directory. `annuli prune` deletes only regular `.md` export files under the archive root, and refuses: symlinks (including link chains whose target leaves the root), files directly in the top level of the archive, and control or store files (whose names start with `index`, `ignored`, `deleted_sessions`, `title_cache`, `memory`, `memories`, `opencode_state` or `rules`, or end with `-wal` or `-shm`). Each refusal is reported to stderr. The index is then rebuilt from the sources, preserving every entry that was not re-observed, so entries whose source still exists elsewhere are not lost.
 
-Pruned ids are recorded in the store's `ignored_sessions` table, which is the source of truth, and mirrored to `ignored.json` for builds that predate the table; both are read, so an id in either place stays hidden. They are hidden from the v2 store views (`lore search`, stats and the web UI) without deleting the SQLite rows, and the store file's (and its `-wal` sidecar's) stats are part of the v2 index cache key, so a prune takes effect at once. If `ignored.json` is damaged (bad UTF-8, invalid JSON, or the wrong shape), a process warns once on stderr; ids already in the store stay hidden, so a damaged mirror can no longer make pruned sessions visible again.
+Pruned ids are recorded in the store's `ignored_sessions` table, which is the source of truth, and mirrored to `ignored.json` for builds that predate the table; both are read, so an id in either place stays hidden. They are hidden from the v2 store views (`annuli search`, stats and the web UI) without deleting the SQLite rows, and the store file's (and its `-wal` sidecar's) stats are part of the v2 index cache key, so a prune takes effect at once. If `ignored.json` is damaged (bad UTF-8, invalid JSON, or the wrong shape), a process warns once on stderr; ids already in the store stay hidden, so a damaged mirror can no longer make pruned sessions visible again.
 
-Archive preservation (see [export](#export)) no longer drops entries on its own: only `lore prune` removes index entries, so the index can contain rows whose source file no longer exists. That is the archive — use `lore prune` to retire such sessions.
+Archive preservation (see [export](#export)) no longer drops entries on its own: only `annuli prune` removes index entries, so the index can contain rows whose source file no longer exists. That is the archive — use `annuli prune` to retire such sessions.
 
 ```text
-usage: lore prune [-h] [--max-prompts MAX_PROMPTS] [--dry-run]
+usage: annuli prune [-h] [--max-prompts MAX_PROMPTS] [--dry-run]
                   [--include-automated]
 
 options:
@@ -767,7 +767,7 @@ Write a bundle of the v2 store, or check an existing one.
 Writes: one zip file at the given path (or `lore-backup-<UTC>.zip` inside it when the path is a directory).
 
 A bundle is a zip with a format-version marker: `manifest.json` records
-`format: "lore-backup"`, `format_version`, the creation time, the Lore version,
+`format: "lore-backup"`, `format_version`, the creation time, the Annuli version,
 the store's schema version and every applied migration, one sha256 and size per
 payload member, and the row count of every archived table (sessions, messages,
 the shared FTS index, memory with its tags/sources/ratings, session tags,
@@ -779,19 +779,19 @@ file copy of a live WAL database can miss the newest commits.
 Only the store is archived. The rest of the data directory — including the
 provider cache — stays out, and no credential, token or API key is read or
 written: provider credentials come from the environment
-([CONFIGURATION.md](./CONFIGURATION.md#provider-credentials-not-lore_-variables)).
+([CONFIGURATION.md](./CONFIGURATION.md#provider-credentials-not-annuli_-variables)).
 
-`lore backup verify <path>` runs the whole verification without restoring
+`annuli backup verify <path>` runs the whole verification without restoring
 anything: zip structure, format marker, member checksums and sizes, the
 snapshot's `PRAGMA integrity_check`, the row counts against the manifest, and
-whether this Lore can restore the bundle's schema at all. It prints every
+whether this Annuli can restore the bundle's schema at all. It prints every
 problem it finds and exits `1` if there is one.
 
 ```text
-usage: lore backup [-h] [verify] PATH [[verify] PATH ...]
+usage: annuli backup [-h] [verify] PATH [[verify] PATH ...]
 
 Write a bundle of the v2 store taken from a consistent SQLite snapshot, or
-check an existing bundle without restoring it (`lore backup verify <path>`)
+check an existing bundle without restoring it (`annuli backup verify <path>`)
 
 positional arguments:
   [verify] PATH  destination for a new bundle, or `verify PATH` to check one
@@ -811,7 +811,7 @@ An existing store is only replaced with `--force`; without it the command
 refuses and exits `1`. The snapshot is extracted to a sibling temp file, its
 sha256 is re-checked there, and only then moved over the store with an atomic
 replace, so a failed restore leaves the existing store as it was. A bundle
-recorded by an older Lore is restored as it was written and migrated on the
+recorded by an older Annuli is restored as it was written and migrated on the
 next open; a bundle from a newer schema is refused. A completed restore stamps
 `store_meta.generated_at` and `content_hash` as the write it is: the snapshot
 carries the stamp of the moment it was taken, and against a newer local
@@ -819,10 +819,10 @@ carries the stamp of the moment it was taken, and against a newer local
 serve the archive the restore just replaced.
 
 ```text
-usage: lore restore [-h] [--force] bundle
+usage: annuli restore [-h] [--force] bundle
 
 positional arguments:
-  bundle      bundle written by `lore backup`
+  bundle      bundle written by `annuli backup`
 
 options:
   -h, --help  show this help message and exit
@@ -838,16 +838,16 @@ Writes: one zip file per export. An import writes the v2 store (`<output-dir>/in
 A portable bundle is the [backup](#backup) snapshot plus the provenance needed to
 merge it somewhere else. `manifest.json` records `format: "lore-portable-bundle"`,
 `format_version`, a `provenance` object (the source namespace scope the store's rows
-carry, the machine scope, the creation time and the Lore version), the store schema
+carry, the machine scope, the creation time and the Annuli version), the store schema
 and every applied migration, one sha256 and size per member, the row count of every
 archived table, and an `evidence` fingerprint: how many `source_revisions` and
 `source_artifacts` rows the archive holds plus a digest over every captured
 `(source_identity, content_sha256)` pair. `db/index_v2.sqlite` is the same
-SQLite-consistent snapshot `lore backup` writes, taken with SQLite's online-backup
+SQLite-consistent snapshot `annuli backup` writes, taken with SQLite's online-backup
 API; it carries the raw evidence, so the join between a session and the bytes it was
 parsed from cannot come apart in transit.
 
-`lore bundle import` verifies the manifest, every member checksum, the evidence
+`annuli bundle import` verifies the manifest, every member checksum, the evidence
 fingerprint, the snapshot's `PRAGMA integrity_check`, the row counts and the schema
 compatibility **before** the live store is opened, so a tampered archive writes
 nothing. It then merges:
@@ -877,7 +877,7 @@ form can import a credential: the bundle holds the store and
 nothing else (see [CONFIGURATION.md](./CONFIGURATION.md#data-directory-and-backups)).
 
 ```text
-usage: lore bundle [-h] [--merge | --replace] [--dry-run] {export,import} path
+usage: annuli bundle [-h] [--merge | --replace] [--dry-run] {export,import} path
 
 Write a portable bundle of the v2 store (snapshot plus source provenance), or
 merge one from another machine into this store without overwriting local
@@ -901,7 +901,7 @@ Sync sessions for a single tool.
 Writes: Markdown exports and index entries for that tool. Like `export`, it prints skipped-session counts to stderr after the run.
 
 ```text
-usage: lore sync [-h] [--session-id SESSION_ID] [--project PROJECT] tool
+usage: annuli sync [-h] [--session-id SESSION_ID] [--project PROJECT] tool
 
 positional arguments:
   tool                  Tool to sync (e.g., codex, claude-code)
@@ -920,7 +920,7 @@ Run a tool and sync its sessions after it exits.
 Writes: session exports and index entries once the child tool exits.
 
 ```text
-usage: lore run [-h] [--no-pty] tool ...
+usage: annuli run [-h] [--no-pty] tool ...
 
 positional arguments:
   tool        Tool to run (e.g., codex, claude-code)
@@ -935,10 +935,10 @@ options:
 
 Generate readable titles for sessions.
 
-Writes: the title cache `~/.lore/title_cache/titles.json`. Calls a provider: local by default; `gemini-cli` (cloud) only when selected with `--provider`. Selecting it is not enough: it needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1` (otherwise exit 2, nothing sent). The local default needs no opt-in.
+Writes: the title cache `~/.lore/title_cache/titles.json`. Calls a provider: local by default; `gemini-cli` (cloud) only when selected with `--provider`. Selecting it is not enough: it needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` (otherwise exit 2, nothing sent). The local default needs no opt-in.
 
 ```text
-usage: lore generate-titles [-h] [--strategy {fast,keyword,smart,auto}]
+usage: annuli generate-titles [-h] [--strategy {fast,keyword,smart,auto}]
                             [--tool TOOL] [--since SINCE] [--force]
                             [--provider {local,gemini-cli}] [--model MODEL]
                             [--allow-cloud] [--include-automated]
@@ -957,12 +957,12 @@ options:
   --model MODEL         Model for the selected provider (provider default
                         otherwise)
   --allow-cloud         Allow cloud providers to receive session text (or set
-                        LORE_ALLOW_CLOUD=1)
+                        ANNULI_ALLOW_CLOUD=1)
   --include-automated   Also include automated (exec/cron/subagent) sessions,
                         hidden by default
 ```
 
-Note: Titles use `--provider local` by default and stay on this machine. `gemini-cli` is a cloud provider; it is only used when you choose it, it needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`, and it receives a transcript excerpt per title.
+Note: Titles use `--provider local` by default and stay on this machine. `gemini-cli` is a cloud provider; it is only used when you choose it, it needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`, and it receives a transcript excerpt per title.
 
 ## reindex
 
@@ -971,7 +971,7 @@ Rebuild the index from every source on disk, which fixes sessions missing after 
 Writes: `index.json` and the SQLite index under the output directory.
 
 ```text
-usage: lore reindex [-h]
+usage: annuli reindex [-h]
 
 options:
   -h, --help  show this help message and exit
@@ -979,23 +979,23 @@ options:
 
 ## embed-messages
 
-Populate the optional per-message embedding vectors that `lore search --messages`
+Populate the optional per-message embedding vectors that `annuli search --messages`
 uses (#190). Incremental: only messages that have no vector from the current
 embedding model are embedded, so re-running after an interruption (or a budget
 stop) continues where it stopped. Without the optional `semantic` extra
-(`pipx inject lore fastembed sqlite-vec`) the command exits 1 and message search
+(`pipx inject annuli fastembed sqlite-vec`) the command exits 1 and message search
 stays on the FTS path.
 
 Mode: writes `message_embeddings` + `message_embedding_meta` rows inside the
 existing v2 SQLite store.
 
 ```text
-usage: lore embed-messages [-h] [--budget BUDGET]
+usage: annuli embed-messages [-h] [--budget BUDGET]
 
 options:
   -h, --help         show this help message and exit
   --budget BUDGET    Seconds of embedding work (0 = unlimited, default:
-                     LORE_EMBED_BUDGET_SECONDS or 60)
+                     ANNULI_EMBED_BUDGET_SECONDS or 60)
 ```
 
 ## message-fts
@@ -1012,7 +1012,7 @@ it automatically (90 s per pass); run it by hand to finish sooner.
 Mode: writes `message_fts` rows and two `store_meta` keys inside the v2 SQLite store.
 
 ```text
-usage: lore message-fts [-h] [--budget BUDGET]
+usage: annuli message-fts [-h] [--budget BUDGET]
 
 options:
   -h, --help       show this help message and exit
@@ -1024,10 +1024,10 @@ options:
 
 Generate AI-powered statistics and insights.
 
-Writes: `stats/stats.json` in the output directory. Calls a provider unless `--no-llm` is given. The default provider is gemini, a cloud provider, so it needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1` (otherwise exit 2, nothing sent).
+Writes: `stats/stats.json` in the output directory. Calls a provider unless `--no-llm` is given. The default provider is gemini, a cloud provider, so it needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` (otherwise exit 2, nothing sent).
 
 ```text
-usage: lore analyze [-h] [--provider {gemini,jev,ollama,openrouter}]
+usage: annuli analyze [-h] [--provider {gemini,jev,ollama,openrouter}]
                     [--model MODEL] [--allow-cloud] [--no-llm]
                     [--output OUTPUT] [--include-automated]
 
@@ -1037,7 +1037,7 @@ options:
                         LLM provider to use (default: gemini)
   --model MODEL         Model name (default depends on --provider)
   --allow-cloud         Allow cloud providers to receive session text (or set
-                        LORE_ALLOW_CLOUD=1)
+                        ANNULI_ALLOW_CLOUD=1)
   --no-llm              Generate basic stats without LLM
   --output OUTPUT       Output file for stats (default:
                         ~/.lore/stats/stats.json)
@@ -1045,28 +1045,28 @@ options:
                         hidden by default
 ```
 
-Note: Use `--no-llm` to skip the provider entirely, or `--provider ollama` (local) to keep text on this machine. Any other provider is cloud and needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`.
+Note: Use `--no-llm` to skip the provider entirely, or `--provider ollama` (local) to keep text on this machine. Any other provider is cloud and needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`.
 
 ## knowledge
 
 Extract knowledge entries from sessions with an LLM.
 
-Writes: `knowledge/knowledge_base.json` in the output directory. Calls a provider only when `--provider` is given. There is no default provider: a bare `lore knowledge` exits 2 and sends nothing.
+Writes: `knowledge/knowledge_base.json` in the output directory. Calls a provider only when `--provider` is given. There is no default provider: a bare `annuli knowledge` exits 2 and sends nothing.
 
 ```text
-usage: lore knowledge [-h] [--provider {gemini,jev,ollama,openrouter}]
+usage: annuli knowledge [-h] [--provider {gemini,jev,ollama,openrouter}]
                       [--model MODEL] [--allow-cloud] [--limit LIMIT]
                       [--tool TOOL] [--output OUTPUT] [--include-automated]
 
 options:
   -h, --help            show this help message and exit
   --provider {gemini,jev,ollama,openrouter}
-                        LLM provider (required; no default — bare lore
+                        LLM provider (required; no default — bare annuli
                         knowledge sends nothing). Use ollama for local, or a
                         cloud provider with --allow-cloud
   --model MODEL         Model name (default depends on --provider)
   --allow-cloud         Allow cloud providers to receive session text (or set
-                        LORE_ALLOW_CLOUD=1)
+                        ANNULI_ALLOW_CLOUD=1)
   --limit LIMIT         Max sessions to process (default: 50)
   --tool TOOL           Only process sessions from specific tool
   --output OUTPUT       Output file (default:
@@ -1075,16 +1075,16 @@ options:
                         hidden by default
 ```
 
-Note: `--provider` is required. Use `--provider ollama` (local), or a cloud provider with `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; a cloud choice without opt-in exits 2.
+Note: `--provider` is required. Use `--provider ollama` (local), or a cloud provider with `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`; a cloud choice without opt-in exits 2.
 
 ## improve
 
 Backfill embeddings, extract knowledge and propose memory candidates.
 
-Writes: memory embeddings, knowledge entries and lesson candidates in the output directory. Calls a provider: only the extract_knowledge stage, and only when `--provider` or `LORE_LLM_PROVIDER` is set (`--dry-run` calls nothing). A non-local provider needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`, as with `analyze`, `knowledge`, `format` and `summarize`; without it the command exits with code 2 and sends nothing. With the opt-in, a notice on stderr names the provider before the run.
+Writes: memory embeddings, knowledge entries and lesson candidates in the output directory. Calls a provider: only the extract_knowledge stage, and only when `--provider` or `ANNULI_LLM_PROVIDER` is set (`--dry-run` calls nothing). A non-local provider needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`, as with `analyze`, `knowledge`, `format` and `summarize`; without it the command exits with code 2 and sends nothing. With the opt-in, a notice on stderr names the provider before the run.
 
 ```text
-usage: lore improve [-h] [--provider PROVIDER] [--model MODEL] [--allow-cloud]
+usage: annuli improve [-h] [--provider PROVIDER] [--model MODEL] [--allow-cloud]
                     [--limit LIMIT]
                     [--stage {embed_memories,extract_knowledge,distill_lessons,from_summaries}]
                     [--dry-run] [--json] [--include-automated]
@@ -1094,7 +1094,7 @@ options:
   --provider PROVIDER   LLM provider for extract_knowledge
   --model MODEL         Model name for extract_knowledge
   --allow-cloud         Allow cloud providers to receive session text (or set
-                        LORE_ALLOW_CLOUD=1)
+                        ANNULI_ALLOW_CLOUD=1)
   --limit LIMIT         Max sessions for extract_knowledge (default: 50)
   --stage {embed_memories,extract_knowledge,distill_lessons,from_summaries}
                         Run only these stages (repeatable)
@@ -1105,7 +1105,7 @@ options:
                         hidden by default
 ```
 
-Note: Without `--provider` or `LORE_LLM_PROVIDER` the extract stage is skipped, so no conversation text leaves the machine.
+Note: Without `--provider` or `ANNULI_LLM_PROVIDER` the extract stage is skipped, so no conversation text leaves the machine.
 
 ## summarize
 
@@ -1114,7 +1114,7 @@ Generate AI session summaries for archived sessions.
 Writes: summaries for the selected sessions. Calls a provider: ollama by default, which is local.
 
 ```text
-usage: lore summarize [-h] [--session SESSION] [--project PROJECT]
+usage: annuli summarize [-h] [--session SESSION] [--project PROJECT]
                       [--tool TOOL] [--since SINCE]
                       [--provider {gemini,jev,ollama,openrouter}]
                       [--model MODEL] [--allow-cloud] [--dry-run] [--force]
@@ -1135,7 +1135,7 @@ options:
                         LLM provider (default: ollama, local)
   --model MODEL         Model name (default depends on --provider)
   --allow-cloud         Allow cloud providers to receive transcript text (or
-                        set LORE_ALLOW_CLOUD=1)
+                        set ANNULI_ALLOW_CLOUD=1)
   --dry-run             Estimate tokens and calls without contacting a
                         provider
   --force               Re-summarize even when the fingerprint is unchanged
@@ -1153,7 +1153,7 @@ options:
                         hidden by default
 ```
 
-Note: Default provider is `ollama` (local). `gemini`, `openrouter` and `jev` need `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. `--dry-run` estimates tokens and calls without contacting a provider.
+Note: Default provider is `ollama` (local). `gemini`, `openrouter` and `jev` need `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`. `--dry-run` estimates tokens and calls without contacting a provider.
 
 ## library
 
@@ -1180,7 +1180,7 @@ Layout:
 Session pages link back to their project and day pages: the frontmatter carries `project_page` and `day_page` as wikilinks, and the page ends with a `See also:` line.
 
 ```text
-usage: lore library [-h] [--output OUTPUT] [--full] [--project PROJECT]
+usage: annuli library [-h] [--output OUTPUT] [--full] [--project PROJECT]
                     [--since SINCE]
 
 options:
@@ -1195,10 +1195,10 @@ options:
 
 Format sessions with AI-generated summaries and tags.
 
-Writes: formatted files under `formatted/` in the output directory. Calls a provider: gemini by default, a cloud provider, so it needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1` (otherwise exit 2, nothing sent).
+Writes: formatted files under `formatted/` in the output directory. Calls a provider: gemini by default, a cloud provider, so it needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1` (otherwise exit 2, nothing sent).
 
 ```text
-usage: lore format [-h] [--provider {gemini,jev,ollama,openrouter}]
+usage: annuli format [-h] [--provider {gemini,jev,ollama,openrouter}]
                    [--model MODEL] [--allow-cloud] [--session-id SESSION_ID]
                    [--include-automated] [--tool TOOL] [--limit LIMIT]
                    [--output-dir OUTPUT_DIR]
@@ -1209,7 +1209,7 @@ options:
                         LLM provider to use (default: gemini)
   --model MODEL         Model name (default depends on --provider)
   --allow-cloud         Allow cloud providers to receive session text (or set
-                        LORE_ALLOW_CLOUD=1)
+                        ANNULI_ALLOW_CLOUD=1)
   --session-id SESSION_ID
                         Format specific session by ID
   --include-automated   Also include automated (exec/cron/subagent) sessions,
@@ -1220,7 +1220,7 @@ options:
                         Output directory (default: ~/.lore/formatted)
 ```
 
-Note: `format` has no `--no-llm` flag. Use `--provider ollama` (local) to keep text on this machine; any cloud provider needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`.
+Note: `format` has no `--no-llm` flag. Use `--provider ollama` (local) to keep text on this machine; any cloud provider needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`.
 
 ## worker
 
@@ -1238,18 +1238,18 @@ failing job keeps the stamp pending and is retried.
 
 Environment variables:
 
-- `LORE_WORKER_INTERVAL` — seconds between passes (default `300`, minimum `1`)
-- `LORE_WORKER_SUMMARY_DAILY_CAP` — summaries per UTC day (default `20`)
-- `LORE_WORKER_EMBED_BUDGET` — seconds of message embedding per pass (default `120`, minimum `10`)
+- `ANNULI_WORKER_INTERVAL` — seconds between passes (default `300`, minimum `1`)
+- `ANNULI_WORKER_SUMMARY_DAILY_CAP` — summaries per UTC day (default `20`)
+- `ANNULI_WORKER_EMBED_BUDGET` — seconds of message embedding per pass (default `120`, minimum `10`)
 
-The library job runs as a child process (`lore` console script when on `PATH`,
-else `lore_cli.py` under the current Python), polled every 15 s so the
+The library job runs as a child process (`annuli` console script when on `PATH`,
+else `annuli_cli.py` under the current Python), polled every 15 s so the
 heartbeat stays fresh; a child still running at the 1800 s limit is killed and
 recorded as timed out. Message embeddings run as a budgeted child process:
-`lore embed-messages --budget N` with `LORE_WORKER_EMBED_BUDGET` seconds per
+`annuli embed-messages --budget N` with `ANNULI_WORKER_EMBED_BUDGET` seconds per
 pass. While a pass still embeds messages the job reruns on the next pass, so a
 backlog drains without holding memory in the loop process. The summaries job
-uses the local provider from `LORE_SUMMARY_PROVIDER` (default `ollama`) and
+uses the local provider from `ANNULI_SUMMARY_PROVIDER` (default `ollama`) and
 never opts into a cloud provider by itself; a cloud provider is skipped.
 
 Failed jobs keep the previous `last_stamp` and are retried with per-job
@@ -1258,7 +1258,7 @@ recorded as `retry_after` in `state.json`. Corrupt or unreadable `state.json`
 is treated as empty state (warning on stderr).
 
 ```text
-usage: lore worker [-h] [--output-dir OUTPUT_DIR] {status,run-once} ...
+usage: annuli worker [-h] [--output-dir OUTPUT_DIR] {status,run-once} ...
 
 positional arguments:
   {status,run-once}
@@ -1268,15 +1268,15 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --output-dir OUTPUT_DIR
-                        Output directory (default: ~/.lore or global --output-
+                        Output directory (default: ~/.annuli or global --output-
                         dir)
 ```
 
 ### loop (default mode)
 
-The loop is the default mode: `lore worker` without a subcommand runs it
+The loop is the default mode: `annuli worker` without a subcommand runs it
 until SIGINT or SIGTERM. There is no separate `loop` subcommand —
-`lore worker loop` is rejected by the parser.
+`annuli worker loop` is rejected by the parser.
 
 SIGINT/SIGTERM set an internal stop event; the loop uses `event.wait(interval)`
 between passes so shutdown is noticed after the current wait or job, then
@@ -1298,12 +1298,12 @@ it prints the raw state (including `heartbeat_mtime`, `interval_seconds` and
 is older than 3× the worker interval; it prints nothing.
 
 ```text
-usage: lore worker status [-h] [--output-dir OUTPUT_DIR] [--json] [--check]
+usage: annuli worker status [-h] [--output-dir OUTPUT_DIR] [--json] [--check]
 
 options:
   -h, --help            show this help message and exit
   --output-dir OUTPUT_DIR
-                        Output directory (default: ~/.lore or global --output-
+                        Output directory (default: ~/.annuli or global --output-
                         dir)
   --json                Machine-readable JSON on stdout
   --check               Exit non-zero when heartbeat is older than 3× the
@@ -1317,16 +1317,16 @@ Touch the heartbeat, run one worker pass when the store stamp changed, then exit
 Writes: same as `worker` (state, heartbeat, and job side effects when the stamp is new).
 
 ```text
-usage: lore worker run-once [-h] [--output-dir OUTPUT_DIR]
+usage: annuli worker run-once [-h] [--output-dir OUTPUT_DIR]
 
 options:
   -h, --help            show this help message and exit
   --output-dir OUTPUT_DIR
-                        Output directory (default: ~/.lore or global --output-
+                        Output directory (default: ~/.annuli or global --output-
                         dir)
 ```
 
-## lore-session
+## annuli-session
 
 Switch the active AI tool for the current project and continue where the last
 session stopped.
@@ -1339,7 +1339,7 @@ than 24 hours are removed the next time a handoff file is written, not on a time
 
 Sends nothing by itself. Switching to `gemini` or `codex` -- they receive the
 context as a referenced file (the process list shows only its path, never the text) -- requires the cloud opt-in
-`--allow-cloud` or `LORE_ALLOW_CLOUD=1`; without it the command prints an
+`--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`; without it the command prints an
 error and exits with code 2 (the MCP tool `switch_to_tool` returns the same refusal as text). The context is redacted before it is written or
 passed. `claude` is continued with `--continue`, and the manual tools
 (`cursor`, `vscode`) only print how to paste the block; both send nothing.
@@ -1352,7 +1352,7 @@ Google has retired the standalone Gemini CLI for individual accounts (it answers
 working choices. Other Gemini CLI account types were not tested.
 
 ```text
-usage: lore_session_cli.py [-h] {list,switch,continue} ...
+usage: annuli_session_cli.py [-h] {list,switch,continue} ...
 
 AI Session Manager - Seamless tool switching
 
@@ -1367,7 +1367,7 @@ options:
   -h, --help            show this help message and exit
 ```
 
-## lore-web
+## annuli-web
 
 Serve the web UI. See [WEB-UI.md](./WEB-UI.md) for routes, deployment and
 access control.
@@ -1376,18 +1376,18 @@ Writes: nothing on start; its POST endpoints can rebuild caches, cancel jobs and
 generate summaries.
 
 ```text
-usage: lore-web [-h] [--host HOST] [--port PORT] [--debug]
+usage: annuli-web [-h] [--host HOST] [--port PORT] [--debug]
 
-Serve the Lore web UI (Flask dev server). For production use gunicorn.
+Serve the Annuli web UI (Flask dev server). For production use gunicorn.
 
 options:
   -h, --help   show this help message and exit
-  --host HOST  Bind host (default 127.0.0.1, or $LORE_WEB_HOST).
-  --port PORT  Bind port (default 5000, or $LORE_WEB_PORT).
-  --debug      Run Flask in debug mode (or set $LORE_WEB_DEBUG=true).
+  --host HOST  Bind host (default 127.0.0.1, or $ANNULI_WEB_HOST).
+  --port PORT  Bind port (default 5000, or $ANNULI_WEB_PORT).
+  --debug      Run Flask in debug mode (or set $ANNULI_WEB_DEBUG=true).
 ```
 
-## lore-mcp
+## annuli-mcp
 
 MCP server. Stdio is the default and has no `--help`-driven behaviour to speak of:
 started without flags it speaks JSON-RPC on stdin/stdout and is driven by the MCP
@@ -1395,22 +1395,22 @@ client. `--http` serves the same tools over streamable HTTP instead. See
 [MCP.md](./MCP.md) for the tool list, both transports and client configuration.
 
 ```text
-usage: lore-mcp [-h] [--http] [--host HOST] [--port PORT] [--path PATH]
+usage: annuli-mcp [-h] [--http] [--host HOST] [--port PORT] [--path PATH]
                 [--token-file TOKEN_FILE] [--timeout TIMEOUT]
 ```
 
 ```text
   --http                Serve the streamable-HTTP transport instead of stdio.
-  --host HOST           HTTP bind host (default 127.0.0.1, or $LORE_MCP_HTTP_HOST).
+  --host HOST           HTTP bind host (default 127.0.0.1, or $ANNULI_MCP_HTTP_HOST).
                         A non-loopback host requires an auth token.
-  --port PORT           HTTP bind port (default 8787, or $LORE_MCP_HTTP_PORT).
-  --path PATH           HTTP endpoint path (default /mcp, or $LORE_MCP_HTTP_PATH).
+  --port PORT           HTTP bind port (default 8787, or $ANNULI_MCP_HTTP_PORT).
+  --path PATH           HTTP endpoint path (default /mcp, or $ANNULI_MCP_HTTP_PATH).
   --token-file TOKEN_FILE
                         File holding the bearer token (or set
-                        $LORE_MCP_HTTP_TOKEN). Required for a non-loopback bind;
+                        $ANNULI_MCP_HTTP_TOKEN). Required for a non-loopback bind;
                         the token is read from the file, never from argv.
   --timeout TIMEOUT     Per-request deadline in seconds (default 60, or
-                        $LORE_MCP_HTTP_TIMEOUT).
+                        $ANNULI_MCP_HTTP_TIMEOUT).
 ```
 
 A non-loopback `--host` without a token exits `2` with a message on stderr and
@@ -1420,7 +1420,7 @@ malformed `--path`).
 Writes: the shared memory store through the `memory_write` and `memory_feedback`
 tools; the search, session and summary tools only read it.
 
-## lore-web-probe
+## annuli-web-probe
 
 Security probe matrix against a base URL, to check the deployed web UI's
 authentication and exposure.
@@ -1428,12 +1428,12 @@ authentication and exposure.
 Writes: nothing; it only sends requests to `--base-url`.
 
 ```text
-usage: lore-web-probe [-h] --base-url BASE_URL [--user USER]
+usage: annuli-web-probe [-h] --base-url BASE_URL [--user USER]
                       [--password PASSWORD] [--password-env PASSWORD_ENV]
                       [--timeout-seconds TIMEOUT_SECONDS]
                       [--timeout-retries TIMEOUT_RETRIES] [--json]
 
-Run lore web security probe matrix against a base URL.
+Run annuli web security probe matrix against a base URL.
 
 options:
   -h, --help            show this help message and exit
@@ -1458,10 +1458,10 @@ The CLI returns three codes:
 - `1`: an error. Examples are a missing index, an unknown or ambiguous session
   id, an unavailable provider, or a failed write.
 - `2`: a non-local provider was chosen without opt-in. `_cloud_optin_error` in
-  `lore_cli.py` (via `require_cloud_opt_in` in `lore/services/summarize_cli.py`; `improve` and `generate-titles` call `require_cloud_opt_in` directly)
+  `annuli_cli.py` (via `require_cloud_opt_in` in `annuli/services/summarize_cli.py`; `improve` and `generate-titles` call `require_cloud_opt_in` directly)
   returns `2` for `gemini`, `gemini-cli`, `openrouter`, `jev`, or an off-host `ollama`
-  without `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; nothing is sent and nothing
-  is written. `lore-session switch` and `lore-session continue` also exit with
+  without `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`; nothing is sent and nothing
+  is written. `annuli-session switch` and `annuli-session continue` also exit with
   `2` when the target tool is `gemini` or `codex` without the opt-in.
   The value `2` is not unique to this refusal: argparse usage errors (an unknown
   option, or a missing argument) also exit with code `2`.
@@ -1470,7 +1470,7 @@ Automation can therefore treat any non-zero code as failure. Because argparse
 usage errors share the code `2`, confirm the refusal by its stderr message
 before treating `2` as a rejected cloud opt-in.
 
-The other entry points have their own codes. `lore-web-probe` returns `2` when
+The other entry points have their own codes. `annuli-web-probe` returns `2` when
 `--user` is given without a usable password and `3` when the probe matrix was
-blocked; `lore-web` and `lore-mcp` are long-running servers, so their exit code
+blocked; `annuli-web` and `annuli-mcp` are long-running servers, so their exit code
 reflects shutdown rather than a command result.

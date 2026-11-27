@@ -1,9 +1,12 @@
-# Lore
+# Annuli
 
-Lore collects the session histories that AI coding tools already write to disk and
+*annuli* (AN-yoo-lye, like *radii*) is Latin for tree rings: a record of every year kept
+inside a living tree. Renamed from **Lore** on 2026-11-27; the `lore` commands still work.
+
+Annuli collects the session histories that AI coding tools already write to disk and
 puts them into one local, searchable archive. It reads Claude Code, Codex, Gemini
 CLI, Cursor and 17 more tools, normalizes their transcripts, and keeps the result
-in SQLite under `~/.lore`. You can list, search, export and browse that archive in
+in SQLite under `~/.annuli`. You can list, search, export and browse that archive in
 a local web UI, or query it over MCP from inside an agent. On top of the archive
 sits a shared memory store: facts, decisions, lessons and links that any of those
 tools can write to and recall later. Everything runs on this machine by default,
@@ -11,15 +14,15 @@ and the source directories are only ever read.
 
 ## Status
 
-Lore 2.4.0 is the latest tagged release; `main` carries the work toward 2.5.0. The
+Annuli 2.4.0 is the latest tagged release; `main` carries the work toward 2.5.0. The
 release notes are in [CHANGELOG.md](CHANGELOG.md). `pyproject.toml` declares the
 classifier `Development Status :: 3 - Alpha`.
 
 Stable, used daily by the maintainer:
 
-- install, `lore sync`, `lore export`, `lore list`, `lore search`, `lore stats`
+- install, `annuli sync`, `annuli export`, `annuli list`, `annuli search`, `annuli stats`
 - the local web UI in read mode
-- `lore check`
+- `annuli check`
 
 Experimental:
 
@@ -42,17 +45,17 @@ Prerequisites: Git, `pipx`, and a `PATH` that includes pipx's binary directory
 
 ```bash
 pipx install git+https://github.com/DnaMes/lore
-lore --version
-lore check
-lore export --all
-lore list --limit 5
-lore search "docker"
-lore-web   # then open http://127.0.0.1:5000
+annuli --version
+annuli check
+annuli export --all
+annuli list --limit 5
+annuli search "docker"
+annuli-web   # then open http://127.0.0.1:5000
 ```
 
-The name `lore` on PyPI belongs to an unrelated project, so the install comes from
+The name `annuli` on PyPI belongs to an unrelated project, so the install comes from
 the Git repository. Other options (uv tool, virtual environment, editable clone)
-are in [docs/INSTALL.md](docs/INSTALL.md); if `lore check` lists no tools, see
+are in [docs/INSTALL.md](docs/INSTALL.md); if `annuli check` lists no tools, see
 Troubleshooting below.
 
 ## Supported platforms
@@ -74,7 +77,7 @@ with Python 3.11, 3.12 and 3.13.
 Not verified: real tool histories on macOS or Windows (the smoke test uses synthetic
 Claude Code and Codex sessions, so the extractors' default locations for each tool on
 macOS and Windows are not exercised), and the `semantic` extra, Python 3.12 and `pipx`
-on macOS and Windows, `lore run` with a pseudo-terminal on Windows (it falls back to
+on macOS and Windows, `annuli run` with a pseudo-terminal on Windows (it falls back to
 running without one), and the Docker image on anything but Linux hosts.
 
 Details: [docs/INSTALL.md](docs/INSTALL.md) (Platforms and verification).
@@ -106,50 +109,50 @@ Details: [docs/INSTALL.md](docs/INSTALL.md) (Platforms and verification).
 | `zed` | Scratch copy of `~/.local/share/zed/threads/threads.db` | Reads its own store; fixture-only; zstd needs `zstandard` |
 | `factory-droid` | `~/.factory/sessions/<project-slug>/<session-uuid>.jsonl` | Fixture-only coverage |
 
-A tool is listed as `Not found` by `lore check` when its data directory is absent.
-Lore reads what the tools already store on disk; it never writes into them.
+A tool is listed as `Not found` by `annuli check` when its data directory is absent.
+Annuli reads what the tools already store on disk; it never writes into them.
 
 ## Commands at a glance
 
 | Command | What it does |
 | --- | --- |
-| `lore list` | List the sessions found in the tool directories, filtered by tool, project or date |
-| `lore export` | Export sessions to Markdown and rebuild the index |
-| `lore library` | Build a browsable, Obsidian-compatible Markdown library from the archive |
-| `lore search` | Full-text search across archived sessions |
-| `lore stats` | Print counts and breakdowns from the existing index |
-| `lore digest` | Print an activity digest for a recent window, 7 days by default |
-| `lore memory` | Manage shared memory: add, list, search, context, import, dedupe, rate |
-| `lore sync` | Sync the sessions of a single tool |
-| `lore watch` | Poll for new sessions and export them as they appear |
-| `lore check` | Report which tool extractors are available; `--deep` dry-runs them |
-| `lore run` | Run a tool and sync its sessions after it exits |
-| `lore reindex` | Rebuild the index from all sources on disk |
-| `lore-session` | Session manager: list, switch between tools, continue |
-| `lore-web` | Serve the web UI on 127.0.0.1:5000 |
-| `lore-mcp` | Stdio MCP server, JSON-RPC on stdin and stdout |
+| `annuli list` | List the sessions found in the tool directories, filtered by tool, project or date |
+| `annuli export` | Export sessions to Markdown and rebuild the index |
+| `annuli library` | Build a browsable, Obsidian-compatible Markdown library from the archive |
+| `annuli search` | Full-text search across archived sessions |
+| `annuli stats` | Print counts and breakdowns from the existing index |
+| `annuli digest` | Print an activity digest for a recent window, 7 days by default |
+| `annuli memory` | Manage shared memory: add, list, search, context, import, dedupe, rate |
+| `annuli sync` | Sync the sessions of a single tool |
+| `annuli watch` | Poll for new sessions and export them as they appear |
+| `annuli check` | Report which tool extractors are available; `--deep` dry-runs them |
+| `annuli run` | Run a tool and sync its sessions after it exits |
+| `annuli reindex` | Rebuild the index from all sources on disk |
+| `annuli-session` | Session manager: list, switch between tools, continue |
+| `annuli-web` | Serve the web UI on 127.0.0.1:5000 |
+| `annuli-mcp` | Stdio MCP server, JSON-RPC on stdin and stdout |
 
 Full reference, flags and examples: [docs/CLI.md](docs/CLI.md).
 
 ## Web UI
 
-Start it with `lore-web`; it serves `http://127.0.0.1:5000` by default.
+Start it with `annuli-web`; it serves `http://127.0.0.1:5000` by default.
 
 The dashboard at `/` is the library home: it shows what to continue, the projects
 with their newest sessions, and the recent days. Every project on the dashboard
 links into the projects overview at `/projects?project=<path>`, which lists every
 session of that workspace. A session view renders the transcript as turn cards:
 one card per agent turn, with its steps and tool calls inside. The Markdown
-export (`lore library`) uses the same turn layout, so an exported session
+export (`annuli library`) uses the same turn layout, so an exported session
 follows the same turn structure as the session view.
 
 The bind is loopback only and the UI has no login. Any other exposure needs a
 reverse proxy that enforces authentication and TLS. The Docker stack publishes the
-same UI on `${LORE_BIND:-127.0.0.1}:${LORE_PORT:-5000}`.
+same UI on `${ANNULI_BIND:-127.0.0.1}:${ANNULI_PORT:-5000}`.
 
 The `Host` header is checked on every request: it must name `localhost`,
-`127.0.0.1` or `[::1]`, the bind host, a host from `LORE_PUBLIC_ORIGINS`, or one
-listed in `LORE_ALLOWED_HOSTS` (comma-separated). Other hosts get a 400. Mutating
+`127.0.0.1` or `[::1]`, the bind host, a host from `ANNULI_PUBLIC_ORIGINS`, or one
+listed in `ANNULI_ALLOWED_HOSTS` (comma-separated). Other hosts get a 400. Mutating
 requests that carry an `Origin` header must match the request's own origin or a
 configured public origin, otherwise they get a 403.
 
@@ -158,25 +161,25 @@ Routes, flags and deployment: [docs/WEB-UI.md](docs/WEB-UI.md). Security policy:
 
 ## MCP server
 
-`lore-mcp` speaks MCP over stdio and exposes 13 tools: the read tools plus
+`annuli-mcp` speaks MCP over stdio and exposes 13 tools: the read tools plus
 `memory_write`, `memory_recall`, `memory_feedback`, and `summarize_session`, which
-stays disabled until `LORE_MCP_ALLOW_SUMMARIZE=1` is set.
+stays disabled until `ANNULI_MCP_ALLOW_SUMMARIZE=1` is set.
 
 Registration examples for Claude Code, Codex and Cursor, plus the full tool table,
 are in [docs/MCP.md](docs/MCP.md).
 
 ## Shared memory
 
-`lore memory add`, `search`, `context`, `import-claude` and `dedupe` drive the
+`annuli memory add`, `search`, `context`, `import-claude` and `dedupe` drive the
 store from the shell; `list`, `show` and `rate` complete the command set.
 
 Agents read a budgeted block with
-`lore memory context --project /path/to/repo --budget 2000`.
+`annuli memory context --project /path/to/repo --budget 2000`.
 
 Kinds, statuses, ranking and the import rules: [docs/MEMORY.md](docs/MEMORY.md).
 
 Agents that should follow the rules on their own load
-[`skills/lore-memory/SKILL.md`](skills/lore-memory/SKILL.md), which is the same
+[`skills/annuli-memory/SKILL.md`](skills/annuli-memory/SKILL.md), which is the same
 material as a skill package; [docs/MEMORY.md](docs/MEMORY.md#install-it-into-a-tool)
 shows the copy step for Claude Code, Codex and Cursor.
 
@@ -187,19 +190,19 @@ export.
 
 A provider receives text only when you run an AI command with one. Every command that
 can send session text to a non-local provider requires the opt-in, `--allow-cloud` or
-`LORE_ALLOW_CLOUD=1`: `analyze`, `knowledge`, `format`, `summarize`, `improve`, and
+`ANNULI_ALLOW_CLOUD=1`: `analyze`, `knowledge`, `format`, `summarize`, `improve`, and
 `generate-titles` with `--provider gemini-cli`, plus the session handoff
-(`lore-session switch` / `lore-session continue` and the MCP `switch_to_tool`) when
+(`annuli-session switch` / `annuli-session continue` and the MCP `switch_to_tool`) when
 the target tool is `gemini` or `codex`. Without it they exit with code 2 and send
 nothing. The handoff redacts the context before it is written or passed and keeps it
 in a mode-0600 file under `~/.lore/handoff/`, removed again once the launched tool
 exits; `claude --continue` and the manual tools (`cursor`, `vscode`: a file for you
 to paste) send nothing. The opt-in is enforced in the library as well as the
-CLI (`get_provider()` in `lore/llm/factory.py` and friends raise
-`CloudOptInRequired`), and `ollama` counts as local only on a loopback host. `lore knowledge` has no default provider: it exits with
+CLI (`get_provider()` in `annuli/llm/factory.py` and friends raise
+`CloudOptInRequired`), and `ollama` counts as local only on a loopback host. `annuli knowledge` has no default provider: it exits with
 code 2 until you pass `--provider`. `analyze` and `format` default to `gemini`, a cloud
 provider; to stay local, pass `--no-llm` (`analyze` only) or `--provider ollama`.
-`improve` sends text only when `--provider` or `LORE_LLM_PROVIDER` is set, and
+`improve` sends text only when `--provider` or `ANNULI_LLM_PROVIDER` is set, and
 `--dry-run` sends nothing. `generate-titles` uses the local provider by default and needs
 no opt-in; the transcript excerpt a title is built from is redacted before it is sent to
 any provider. The full per-command provider table is in
@@ -207,10 +210,10 @@ any provider. The full per-command provider table is in
 
 ## Configuration
 
-All settings are `LORE_*` environment variables, listed in
-[docs/CONFIGURATION.md](docs/CONFIGURATION.md). The data directory is `~/.lore`
+All settings are `ANNULI_*` environment variables, listed in
+[docs/CONFIGURATION.md](docs/CONFIGURATION.md). The data directory is `~/.annuli`
 and can be changed with `--output-dir`; the tool source directories are read-only.
-The cloud opt-in can also be set with `LORE_ALLOW_CLOUD=1` (see docs/CONFIGURATION.md).
+The cloud opt-in can also be set with `ANNULI_ALLOW_CLOUD=1` (see docs/CONFIGURATION.md).
 
 ## Worker
 
@@ -220,10 +223,10 @@ changes). It writes state under `<output-dir>/worker/` (`state.json` and a
 
 On each pass it runs three jobs in order:
 
-1. **library** — export the Markdown library (`lore library`, run as a child
+1. **library** — export the Markdown library (`annuli library`, run as a child
    process; skipped when the command is not available).
 2. **embed_messages** — backfill message embeddings when the semantic extra is
-   installed, in a budgeted child process (`lore embed-messages --budget N`).
+   installed, in a budgeted child process (`annuli embed-messages --budget N`).
 3. **summaries** — generate session summaries for idle candidates (local provider
    only (ollama by default for the worker); non-local providers are skipped
    without cloud opt-in).
@@ -232,30 +235,30 @@ Environment variables:
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `LORE_WORKER_INTERVAL` | `300` | Seconds between loop iterations. |
-| `LORE_WORKER_SUMMARY_DAILY_CAP` | `20` | Max summaries written per UTC day. |
-| `LORE_WORKER_EMBED_BUDGET` | `120` | Seconds of message embedding per pass (child process); a pass that embedded something runs again on the next pass until the backlog is drained. |
-| `LORE_SUMMARY_PROVIDER` | ollama (worker; unset means ollama) | Default ollama for the worker (unset means ollama); the web UI needs it set to `ollama`. |
+| `ANNULI_WORKER_INTERVAL` | `300` | Seconds between loop iterations. |
+| `ANNULI_WORKER_SUMMARY_DAILY_CAP` | `20` | Max summaries written per UTC day. |
+| `ANNULI_WORKER_EMBED_BUDGET` | `120` | Seconds of message embedding per pass (child process); a pass that embedded something runs again on the next pass until the backlog is drained. |
+| `ANNULI_SUMMARY_PROVIDER` | ollama (worker; unset means ollama) | Default ollama for the worker (unset means ollama); the web UI needs it set to `ollama`. |
 
 ```bash
-lore worker                    # loop until Ctrl+C or SIGTERM
-lore worker run-once           # one pass, then exit
-lore worker status             # human-readable job state
-lore worker status --json      # machine-readable state
-lore worker status --check     # exit 1 when heartbeat is older than 3× the interval
+annuli worker                    # loop until Ctrl+C or SIGTERM
+annuli worker run-once           # one pass, then exit
+annuli worker status             # human-readable job state
+annuli worker status --json      # machine-readable state
+annuli worker status --check     # exit 1 when heartbeat is older than 3× the interval
 ```
 
-Running `lore worker` without a subcommand starts the loop; `run-once` runs a
+Running `annuli worker` without a subcommand starts the loop; `run-once` runs a
 single pass and exits. All of them accept `--output-dir` to work on a data
-directory other than the default `~/.lore`.
+directory other than the default `~/.annuli`.
 
-`lore worker` installs SIGINT/SIGTERM handlers that set an internal stop event. The
+`annuli worker` installs SIGINT/SIGTERM handlers that set an internal stop event. The
 loop waits on that event between passes (`event.wait(interval)`), so stop is picked up
 promptly after the current job or wait finishes; handlers are restored on exit.
 Failed jobs do not advance `last_stamp`; they are retried later with per-job backoff
-(`max(LORE_WORKER_INTERVAL, 15 minutes)`), tracked in `state.json`.
+(`max(ANNULI_WORKER_INTERVAL, 15 minutes)`), tracked in `state.json`.
 
-With Docker, `docker-compose.yml` also starts `lore-worker` (`lore worker`) sharing
+With Docker, `docker-compose.yml` also starts `lore-worker` (`annuli worker`) sharing
 the same data volume as `lore-app`.
 
 ## Docker
@@ -265,18 +268,18 @@ the same data volume as `lore-app`.
 
 - **Build:** the image build downloads the semantic embedding model from Hugging Face
   unless you pass `--build-arg PREFETCH_EMBEDDING_MODEL=off`.
-- **Port:** published on `${LORE_BIND:-127.0.0.1}:${LORE_PORT:-5000}`. Loopback only by
-  default. Set `LORE_PORT=5001` if port 5000 is taken (macOS AirPlay often uses it).
-- **Data:** the named volume `lore-data` is mounted at `/home/ai/.lore`. It is owned by
-  the image user (uid 10001), so no `chown` is needed. `LORE_DATA_DIR=/host/path` switches
+- **Port:** published on `${ANNULI_BIND:-127.0.0.1}:${ANNULI_PORT:-5000}`. Loopback only by
+  default. Set `ANNULI_PORT=5001` if port 5000 is taken (macOS AirPlay often uses it).
+- **Data:** the named volume `annuli-data` is mounted at `/home/ai/.annuli`. It is owned by
+  the image user (uid 10001), so no `chown` is needed. `ANNULI_DATA_DIR=/host/path` switches
   to a bind mount; that path must be writable by uid 10001.
 - **Tool history** is not mounted by default. For the sources overlay, run
-  `export LORE_UID=$(id -u) LORE_GID=$(id -g)` and add `-f docker-compose.sources.yml`. That
-  overlay bind-mounts `${LORE_DATA_DIR:-./lore-data}` writable by your uid and mounts your
+  `export ANNULI_UID=$(id -u) ANNULI_GID=$(id -g)` and add `-f docker-compose.sources.yml`. That
+  overlay bind-mounts `${ANNULI_DATA_DIR:-./annuli-data}` writable by your uid and mounts your
   AI tool directories read-only.
 - **Reverse proxy:** the only Traefik config is `docker-compose.traefik.example.yml`. It
   needs `docker network create traefik_local`, your hostname in the router rule and
-  `LORE_PUBLIC_ORIGINS` (both set in that file), and an auth middleware, because Lore has
+  `ANNULI_PUBLIC_ORIGINS` (both set in that file), and an auth middleware, because Annuli has
   no login. The base file still publishes the port on loopback, which skips the proxy.
 - **Secret key:** set `FLASK_SECRET_KEY` in `.env`, so sessions survive a restart.
 
@@ -285,30 +288,30 @@ Details, upgrade and backup: [docs/DOCKER.md](docs/DOCKER.md).
 ## Uninstall
 
 ```bash
-pipx uninstall lore
+pipx uninstall annuli
 ```
 
-Deleting `~/.lore` removes the archive, memory and embeddings permanently. The
+Deleting `~/.annuli` removes the archive, memory and embeddings permanently. The
 data in your tool directories is not touched.
 
 ## Troubleshooting
 
-- `lore: command not found`: add the binary directory of pipx or your virtual
+- `annuli: command not found`: add the binary directory of pipx or your virtual
   environment to `PATH`, or run `pipx ensurepath`.
-- A tool shows `Not found` in `lore check`: its data directory does not exist, or
+- A tool shows `Not found` in `annuli check`: its data directory does not exist, or
   the tool has not created local sessions yet.
 - Claude sessions are missing: older transcripts may have been pruned by the
-  tool's retention setting before Lore synced them.
-- A session is missing from `lore list` but still found by `lore search`:
-  `lore list` reads the live tool directories, not the archive index, so a
-  session whose source file was deleted disappears from `lore list` while it
-  stays in `lore search`, `lore stats` and the web UI.
-- Search returns nothing: build the index first with `lore export --all` or
-  `lore sync <tool>`.
-- Port 5000 is busy: start the UI with `lore-web --port 5001` or set
-  `LORE_WEB_PORT`. For Docker, use `LORE_PORT=5001 docker compose up -d`.
-- Semantic search behaves like keyword search: run `pipx inject lore fastembed sqlite-vec`,
-  or install the `semantic` extra from the Git repository (PyPI `lore` is a different
+  tool's retention setting before Annuli synced them.
+- A session is missing from `annuli list` but still found by `annuli search`:
+  `annuli list` reads the live tool directories, not the archive index, so a
+  session whose source file was deleted disappears from `annuli list` while it
+  stays in `annuli search`, `annuli stats` and the web UI.
+- Search returns nothing: build the index first with `annuli export --all` or
+  `annuli sync <tool>`.
+- Port 5000 is busy: start the UI with `annuli-web --port 5001` or set
+  `ANNULI_WEB_PORT`. For Docker, use `ANNULI_PORT=5001 docker compose up -d`.
+- Semantic search behaves like keyword search: run `pipx inject annuli fastembed sqlite-vec`,
+  or install the `semantic` extra from the Git repository (PyPI `annuli` is a different
   project).
 
 These match the troubleshooting section of [docs/INSTALL.md](docs/INSTALL.md),

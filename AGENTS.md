@@ -1,16 +1,16 @@
-# Lore — Agent Guidelines
+# Annuli — Agent Guidelines
 
-Local-first AI chat history manager for Claude Code, Cursor, VSCode Copilot, Gemini CLI, Codex, OpenCode. Product/CLI = **Lore**; the Python import package stays `lore`.
+Local-first AI chat history manager for Claude Code, Cursor, VSCode Copilot, Gemini CLI, Codex, OpenCode. Product, CLI and Python package = **Annuli** (`annuli`), renamed from Lore on 2026-11-27; the `lore*` commands, `LORE_*` env vars and `~/.lore` stay as compatibility fallbacks.
 
 ## Project Structure
 
 ```
-lore/
-├── lore_cli.py           # CLI entry point (`lore`)
-├── lore_session_cli.py           # Session switching CLI (`lore-session`)
-├── lore/
-│   ├── cli/web.py              # Web UI entry point (`lore-web`)
-│   ├── cli/mcp.py              # MCP server entry point (`lore-mcp`)
+annuli/
+├── annuli_cli.py           # CLI entry point (`annuli`)
+├── annuli_session_cli.py           # Session switching CLI (`annuli-session`)
+├── annuli/
+│   ├── cli/web.py              # Web UI entry point (`annuli-web`)
+│   ├── cli/mcp.py              # MCP server entry point (`annuli-mcp`)
 │   ├── extractors/            # Tool-specific data extractors
 │   ├── interfaces/            # Web UI (web_templates.py, web.py)
 │   ├── exporters/             # Markdown/JSON export
@@ -30,8 +30,8 @@ pip install -e . && pre-commit install
 
 # Lint & Type Check — ruff replaces black/isort/flake8
 ruff format . && ruff check --fix .
-mypy lore/ --ignore-missing-imports
-bandit -r lore/
+mypy annuli/ --ignore-missing-imports
+bandit -r annuli/
 
 # Run Tests
 pytest tests/                              # All tests
@@ -44,10 +44,10 @@ docker compose build app && docker compose up -d app
 docker compose logs -f app
 
 # CLI
-lore check && lore list --since 7d
-lore search "query" --context 3
-lore export --all
-lore-web  # http://localhost:5000
+annuli check && annuli list --since 7d
+annuli search "query" --context 3
+annuli export --all
+annuli-web  # http://localhost:5000
 ```
 
 ## Code Style Guidelines
@@ -56,7 +56,7 @@ lore-web  # http://localhost:5000
 
 1. Standard library (`os`, `sys`, `json`, `re`, etc.)
 2. Third-party (`flask`, `markdown`, etc.)
-3. Local (`lore.core`, `lore.utils`, etc.)
+3. Local (`annuli.core`, `annuli.utils`, etc.)
 4. **Alphabetical within groups, explicit only - no `from X import *`**
 
 ### Formatting
@@ -151,16 +151,16 @@ const DARK_THEMES = [
 - ❌ Add cloud dependencies → local-first philosophy
 - ❌ `from X import *` → explicit imports only
 - ❌ Bare `except:` → catch specific exceptions
-- ❌ Rename the `lore/` package → import name is deliberately kept; edit inside it
+- ❌ Remove the `lore*` aliases, `LORE_*` fallback or `~/.lore` fallback → stored rows hold absolute `/.lore/` paths and hooks across the stack still call `lore`
 
 ## Debugging
 
 ```bash
 # Test extractor
-python3 -c "from lore.extractors.claude import ClaudeCodeExtractor; print(list(ClaudeCodeExtractor().extract_sessions()))"
+python3 -c "from annuli.extractors.claude import ClaudeCodeExtractor; print(list(ClaudeCodeExtractor().extract_sessions()))"
 
 # Check tools
-lore check
+annuli check
 
 # Docker debugging
 docker compose logs -f app

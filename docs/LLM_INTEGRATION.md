@@ -1,74 +1,74 @@
-# Lore LLM Integration
+# Annuli LLM Integration
 
 This module provides LLM-powered features for analyzing and processing your AI coding sessions.
 
 ## Any OpenAI-compatible server
 
-Use `--provider openai-compatible` (or `LORE_SUMMARY_PROVIDER=openai-compatible` for web/worker summaries) to point Lore at any server implementing `POST /chat/completions`.
+Use `--provider openai-compatible` (or `ANNULI_SUMMARY_PROVIDER=openai-compatible` for web/worker summaries) to point Annuli at any server implementing `POST /chat/completions`.
 
 | Variable | Purpose |
 | --- | --- |
-| `LORE_LLM_BASE_URL` | Base URL including version path (e.g. `http://127.0.0.1:11434/v1`). `http://` is allowed for loopback/private hosts; `https://` is required elsewhere. |
-| `LORE_LLM_MODEL` | Model name sent in the request payload. |
-| `LORE_LLM_API_KEY` | Optional bearer token (never logged or stored). |
-| `LORE_LLM_API_KEY_ENV` | Name of an existing env var holding the bearer token (used when `LORE_LLM_API_KEY` is unset). |
-| `LORE_LLM_TIMEOUT` | Request timeout in seconds (default `90`). |
-| `LORE_SUMMARY_PROVIDER` | Set to `openai-compatible` to enable web UI summaries when `LORE_LLM_BASE_URL` is loopback. |
+| `ANNULI_LLM_BASE_URL` | Base URL including version path (e.g. `http://127.0.0.1:11434/v1`). `http://` is allowed for loopback/private hosts; `https://` is required elsewhere. |
+| `ANNULI_LLM_MODEL` | Model name sent in the request payload. |
+| `ANNULI_LLM_API_KEY` | Optional bearer token (never logged or stored). |
+| `ANNULI_LLM_API_KEY_ENV` | Name of an existing env var holding the bearer token (used when `ANNULI_LLM_API_KEY` is unset). |
+| `ANNULI_LLM_TIMEOUT` | Request timeout in seconds (default `90`). |
+| `ANNULI_SUMMARY_PROVIDER` | Set to `openai-compatible` to enable web UI summaries when `ANNULI_LLM_BASE_URL` is loopback. |
 
 Examples:
 
 ```bash
 # 1. Ollama via its /v1 endpoint (local)
-LORE_LLM_BASE_URL=http://127.0.0.1:11434/v1 LORE_LLM_MODEL=llama3.2 \
-  lore summarize --provider openai-compatible
+ANNULI_LLM_BASE_URL=http://127.0.0.1:11434/v1 ANNULI_LLM_MODEL=llama3.2 \
+  annuli summarize --provider openai-compatible
 
 # 2. Local llama.cpp or LM Studio server (local)
-LORE_LLM_BASE_URL=http://127.0.0.1:1234/v1 LORE_LLM_MODEL=local-model \
-  lore summarize --provider openai-compatible
+ANNULI_LLM_BASE_URL=http://127.0.0.1:1234/v1 ANNULI_LLM_MODEL=local-model \
+  annuli summarize --provider openai-compatible
 
-# 3. Hosted provider with LORE_LLM_API_KEY_ENV (cloud opt-in required)
-LORE_LLM_BASE_URL=https://api.example.com/v1 LORE_LLM_MODEL=gpt-4o-mini \
-  LORE_LLM_API_KEY_ENV=MY_PROVIDER_KEY \
-  lore summarize --provider openai-compatible --allow-cloud
+# 3. Hosted provider with ANNULI_LLM_API_KEY_ENV (cloud opt-in required)
+ANNULI_LLM_BASE_URL=https://api.example.com/v1 ANNULI_LLM_MODEL=gpt-4o-mini \
+  ANNULI_LLM_API_KEY_ENV=MY_PROVIDER_KEY \
+  annuli summarize --provider openai-compatible --allow-cloud
 ```
 
 ### Subscription CLIs
 
-`claude-cli`, `codex-cli`, and `gemini-cli` are cloud providers that invoke the installed CLI using its own login; they require `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. `antigravity-cli` is not available.
+`claude-cli`, `codex-cli`, and `gemini-cli` are cloud providers that invoke the installed CLI using its own login; they require `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`. `antigravity-cli` is not available.
 
 ## Features
 
-### 1. `lore analyze` - Statistics & Insights
+### 1. `annuli analyze` - Statistics & Insights
 
 Generate AI-powered statistics and insights about your coding sessions.
 
 ```bash
 # Basic stats (no LLM required)
-lore analyze --no-llm
+annuli analyze --no-llm
 
 # AI-powered insights (requires Gemini API key)
-lore analyze
+annuli analyze
 
 # Use specific model
-lore analyze --model gemini-2.0-flash
+annuli analyze --model gemini-2.0-flash
 
 # Save to specific file
-lore analyze --output ~/my-stats.json
+annuli analyze --output ~/my-stats.json
 ```
 
-### 2. `lore knowledge` - Knowledge Extraction
+### 2. `annuli knowledge` - Knowledge Extraction
 
 Extract structured knowledge from your sessions using LLM.
 
 ```bash
 # Extract knowledge from last 50 sessions
-lore knowledge
+annuli knowledge
 
 # Extract from specific tool
-lore knowledge --tool opencode
+annuli knowledge --tool opencode
 
 # Limit to 20 sessions
-lore knowledge --limit 20
+annuli knowledge --limit 20
 ```
 
 The conversation text of each session is sent to the configured provider (the
@@ -77,7 +77,7 @@ provider is named before anything is sent). Results are stored per session in
 deleted sessions are excluded. `--tool` also scopes the printed output. The command
 exits 1 when every provider call fails.
 
-### 3. `lore improve` - Memory candidate pipeline
+### 3. `annuli improve` - Memory candidate pipeline
 
 Runs ordered stages: backfill memory embeddings, optional knowledge extraction,
 deterministic promotion of stored knowledge into memory candidates, and proposals
@@ -85,20 +85,20 @@ from session summaries. Model output can only create `candidate` rows for review
 
 ```bash
 # Local-only stages (no LLM, no embedding backend): reports skip reasons, exits 0
-lore improve
+annuli improve
 
 # Run one stage, dry-run counts, or machine-readable report
-lore improve --stage distill_lessons --dry-run
-lore improve --json
+annuli improve --stage distill_lessons --dry-run
+annuli improve --json
 
 # LLM extraction when a provider is configured (no cloud default)
-LORE_LLM_PROVIDER=ollama lore improve --provider ollama
+ANNULI_LLM_PROVIDER=ollama annuli improve --provider ollama
 ```
 
-The `extract_knowledge` stage uses `--provider` or `LORE_LLM_PROVIDER`; if neither
-is set it is skipped with `no_llm`. A non-local provider also needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`; without it the command exits 2 and sends nothing. Exit code 1 only when a stage errors.
+The `extract_knowledge` stage uses `--provider` or `ANNULI_LLM_PROVIDER`; if neither
+is set it is skipped with `no_llm`. A non-local provider also needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`; without it the command exits 2 and sends nothing. Exit code 1 only when a stage errors.
 
-### 4. `lore summarize` - AI session summaries
+### 4. `annuli summarize` - AI session summaries
 
 Generate structured per-session summaries (goal, outcome, decisions with cites) from
 archived transcript data. Rows live in the v2 store (`session_summaries`); the web UI
@@ -106,13 +106,13 @@ reads them later.
 
 ```bash
 # Local-first default (Ollama); estimate cost first
-lore summarize --dry-run
+annuli summarize --dry-run
 
 # One session (full id or unique prefix)
-lore summarize --session abc123
+annuli summarize --session abc123
 
 # Cloud provider — transcript text leaves the machine; requires opt-in
-lore summarize --provider gemini --allow-cloud --max-sessions 5
+annuli summarize --provider gemini --allow-cloud --max-sessions 5
 ```
 
 Default provider is **Ollama** (local). Cloud providers require `--allow-cloud` or the
@@ -120,27 +120,27 @@ command exits without sending anything. Prompts are redacted before send; transc
 disable the LLM disk cache. Use `--dry-run` to preview token/call estimates. Summaries can
 still be wrong or costly on large backlogs — cap with `--max-sessions` and `--max-input-tokens`.
 
-### 4. `lore format` - Session Formatting
+### 4. `annuli format` - Session Formatting
 
 Format sessions with AI-generated summaries and tags.
 
 ```bash
 # Format last 10 sessions
-lore format
+annuli format
 
 # Format specific session
-lore format --session-id abc123
+annuli format --session-id abc123
 
 # Format sessions from specific tool
-lore format --tool claude-code --limit 20
+annuli format --tool claude-code --limit 20
 ```
 
 ### 5. Archived body and analysis coverage (#177, #178)
 
 Every AI task above reads one canonical body: the archived message rows of the v2
-store, in store (`seq`) order, with the full content. `lore summarize`, `lore
-knowledge`, `lore format` and the improvement pipeline all go through
-`lore.services.hydration` — a session's index metadata or a lossy live excerpt is
+store, in store (`seq`) order, with the full content. `annuli summarize`, `annuli
+knowledge`, `annuli format` and the improvement pipeline all go through
+`annuli.services.hydration` — a session's index metadata or a lossy live excerpt is
 replaced, never analysed.
 
 Hydration is explicit about failure. `HydrationError.reason` is one of a closed set,
@@ -153,8 +153,8 @@ and a task reports it instead of prompting with an empty conversation:
 | `messages-not-synced` | the row exists but its message rows were never written |
 | `empty-transcript` | the row is marked synced but has zero message rows |
 
-`lore knowledge` counts skips per reason (`hydration_reasons`, printed as e.g.
-`1 messages-not-synced, 1 session-not-archived`); `lore format` prints
+`annuli knowledge` counts skips per reason (`hydration_reasons`, printed as e.g.
+`1 messages-not-synced, 1 session-not-archived`); `annuli format` prints
 `Skipped <id>: <reason>` per session, summarises the rest, and exits 1 when nothing
 could be hydrated. The formatted page and the knowledge entry both record the
 archived revision (`source_revision`) they were produced from. With AI disabled,
@@ -179,14 +179,14 @@ carries a `coverage` object:
 
 `complete: false` (and `truncated: true`) always comes with non-empty
 `omitted_chunks` and `omitted_seq_ranges`, so a partial summary is never reported as
-a complete analysis. `lore summarize --dry-run` uses the same plan as the run, so its
+a complete analysis. `annuli summarize --dry-run` uses the same plan as the run, so its
 expected call count matches what the run actually sends.
 
 ### 6. Message-level retrieval (#190)
 
 A session hit tells you *which* transcript; a long German/English session still
-hides *where* the answer is. `lore search QUERY --messages` (API:
-`lore.storage.search_messages`) returns the archived messages themselves, one
+hides *where* the answer is. `annuli search QUERY --messages` (API:
+`annuli.storage.search_messages`) returns the archived messages themselves, one
 dict per hit:
 
 ```json
@@ -213,15 +213,15 @@ Two paths, and the result's `path` field names the one that ran:
 
 | `path` | When | What it means |
 |--------|------|---------------|
-| `vector` | the optional `semantic` extra is installed *and* `lore embed-messages` has populated `message_embeddings` | KNN over per-message vectors; finds a passage by meaning, also late in a session. Neighbours farther than `LORE_MESSAGE_SEMANTIC_MAX_DISTANCE` (default 0.72, calibrated on the labelled set in `tools/calibration/message-retrieval-eval.json`) are dropped, so an unrelated query returns nothing instead of a meaningless nearest neighbour (#92). Set the variable to `0` to disable the cutoff. |
+| `vector` | the optional `semantic` extra is installed *and* `annuli embed-messages` has populated `message_embeddings` | KNN over per-message vectors; finds a passage by meaning, also late in a session. Neighbours farther than `ANNULI_MESSAGE_SEMANTIC_MAX_DISTANCE` (default 0.72, calibrated on the labelled set in `tools/calibration/message-retrieval-eval.json`) are dropped, so an unrelated query returns nothing instead of a meaningless nearest neighbour (#92). Set the variable to `0` to disable the cutoff. |
 | `fts` | otherwise, or when the vector neighbourhood is empty | Keyword search over message *bodies*: the session FTS index picks bounded candidate sessions, their messages are copied into a throwaway in-memory FTS5 index and ranked there. It can miss a paraphrase, but it never invents a hit. |
 
 `score` is smaller-is-better on both paths but not comparable between them:
-L2 distance on `vector`, bm25 on `fts`. `lore search --messages` prints the path
+L2 distance on `vector`, bm25 on `fts`. `annuli search --messages` prints the path
 and the excerpt, so a fallback is visible rather than silent.
 
 Populating the vector path is a separate, bounded, resumable step —
-`lore embed-messages [--budget SECONDS]` — because embedding every message of
+`annuli embed-messages [--budget SECONDS]` — because embedding every message of
 an archive is far more work than indexing the sessions. It is incremental by
 `(session_id, seq, model)`: a message that already has a vector from the current
 model is skipped, a model change re-embeds it, and an interrupted run resumes on
@@ -294,41 +294,41 @@ gcloud auth application-default login
 3. Use with `--provider ollama`:
 
 ```bash
-lore analyze --provider ollama --model llama3.2
+annuli analyze --provider ollama --model llama3.2
 ```
 
 ### OpenRouter provider
 
 Cloud access to many models via [OpenRouter](https://openrouter.ai/). Set
-`OPENROUTER_API_KEY`. Optional overrides: `LORE_OPENROUTER_MODEL` (default
-`nvidia/nemotron-3-ultra-550b-a55b:free`), `LORE_OPENROUTER_BASE_URL` (default
+`OPENROUTER_API_KEY`. Optional overrides: `ANNULI_OPENROUTER_MODEL` (default
+`nvidia/nemotron-3-ultra-550b-a55b:free`), `ANNULI_OPENROUTER_BASE_URL` (default
 OpenRouter API v1). Custom base URLs must use `https://`; plain `http://` is
 accepted only for loopback hosts (local OpenAI-compatible servers).
 
 A faster free alternative is `nvidia/nemotron-3.5-lightning:free` — set
-`LORE_OPENROUTER_MODEL` or pass `--model` explicitly.
+`ANNULI_OPENROUTER_MODEL` or pass `--model` explicitly.
 
 **Free-only by default.** The shared account is not on the free tier, so a
-non-free model id costs real money. Lore therefore refuses any model id that
+non-free model id costs real money. Annuli therefore refuses any model id that
 does not end in `:free` — before the request is sent — whether it comes from the
-default, from `LORE_OPENROUTER_MODEL` or from `--model`. The refusal names the
+default, from `ANNULI_OPENROUTER_MODEL` or from `--model`. The refusal names the
 model and never the API key.
 
 ```bash
-LORE_OPENROUTER_ALLOW_PAID=1 lore summarize --provider openrouter --allow-cloud ...
+ANNULI_OPENROUTER_ALLOW_PAID=1 annuli summarize --provider openrouter --allow-cloud ...
 ```
 
-Set `LORE_OPENROUTER_ALLOW_PAID=1` only when spending credit is intended. Any
+Set `ANNULI_OPENROUTER_ALLOW_PAID=1` only when spending credit is intended. Any
 response whose `usage.cost` (or top-level `cost`) is non-zero additionally prints
 `warning: OpenRouter reported a cost of ...` on stderr; with a `:free` model the
 amount is always 0.
 
-**Privacy:** free OpenRouter endpoints may log prompts. Lore only sends archived
+**Privacy:** free OpenRouter endpoints may log prompts. Annuli only sends archived
 transcript text to OpenRouter when you opt in with `--allow-cloud` (e.g. on
 `summarize`, `knowledge`, or `format`).
 
 ```bash
-lore summarize --provider openrouter --allow-cloud
+annuli summarize --provider openrouter --allow-cloud
 ```
 
 #### Measured (2026-10-14)
@@ -396,7 +396,7 @@ gcloud auth application-default login
 3. Use with `--provider ollama`:
 
 ```bash
-lore analyze --provider ollama --model llama3.2
+annuli analyze --provider ollama --model llama3.2
 ```
 
 ## Configuration
@@ -450,14 +450,14 @@ Create `~/.lore/config.json`:
 because they need it: **jev** walks a delegate lane chain (default **180 s**)
 and **openrouter** talks to a free-tier endpoint (default **90 s**).
 
-`LORE_LLM_TIMEOUT` (integer seconds) overrides both — and only those two;
+`ANNULI_LLM_TIMEOUT` (integer seconds) overrides both — and only those two;
 `gemini` and `ollama` keep their defaults so a global variable never changes a
 local setup. An explicit `timeout=` argument passed to `get_provider()` wins
 over the env var. An unparsable value (empty, `0`, negative, `soon`) is ignored
 with a warning on stderr and the provider default applies.
 
 ```bash
-LORE_LLM_TIMEOUT=240 lore summarize --provider jev --allow-cloud --dry-run
+ANNULI_LLM_TIMEOUT=240 annuli summarize --provider jev --allow-cloud --dry-run
 ```
 
 ## Output Locations
@@ -470,13 +470,13 @@ LORE_LLM_TIMEOUT=240 lore summarize --provider jev --allow-cloud --dry-run
 
 LLM responses are cached in `~/.lore/llm_cache/` for tasks that do not send session
 transcript text (for example aggregate statistics insights); transcript-bearing tasks such as
-`lore knowledge`, `lore summarize`, and session formatting summaries never use the disk
+`annuli knowledge`, `annuli summarize`, and session formatting summaries never use the disk
 cache, and no environment variable re-enables that caching.
 
-Before any transcript text is sent to a provider, Lore runs prompt redaction so secret-shaped
+Before any transcript text is sent to a provider, Annuli runs prompt redaction so secret-shaped
 strings are replaced with markers and are not logged or transmitted.
 
-For Ollama, set `LORE_OLLAMA_NUM_CTX` (default 8192, clamped 2048–131072) to control the
+For Ollama, set `ANNULI_OLLAMA_NUM_CTX` (default 8192, clamped 2048–131072) to control the
 context window passed as `num_ctx` on each chat request.
 
 Cached non-transcript responses help:
@@ -486,19 +486,19 @@ Cached non-transcript responses help:
 - Enable offline access to previous results
 
 An entry is written to a hidden `.<key>.<random>.tmp` file and renamed into place, so a
-reader never sees half a JSON document; `lore/llm/cache_io.py` removes such temp files
+reader never sees half a JSON document; `annuli/llm/cache_io.py` removes such temp files
 when they are older than an hour, because a `SIGKILL` between the write and the rename
 would otherwise strand one forever.
 
 ## Session titles
 
-`lore generate-titles` sends a transcript excerpt (first six messages, capped) to the selected
+`annuli generate-titles` sends a transcript excerpt (first six messages, capped) to the selected
 provider, so the provider is explicit and defaults to **local**:
 
 | Flag | Effect |
 | --- | --- |
 | `--provider local` (default) | Ollama with `--model` or `phi3:mini`. Nothing leaves the machine. |
-| `--provider gemini-cli` | The Gemini CLI on `PATH` — **cloud**, used only when selected here, and it also needs `--allow-cloud` or `LORE_ALLOW_CLOUD=1`. |
+| `--provider gemini-cli` | The Gemini CLI on `PATH` — **cloud**, used only when selected here, and it also needs `--allow-cloud` or `ANNULI_ALLOW_CLOUD=1`. |
 | `--model NAME` | Model for the selected provider. |
 
 The Gemini CLI is no longer picked because its binary happens to exist: before this change a
@@ -529,26 +529,26 @@ are never used, because session transcripts are untrusted input.
 ### Requirements
 
 - `delegate` on `PATH` (ai-stack harness)
-- For transcript-bearing commands (`lore summarize`, `lore knowledge`, …), pass
+- For transcript-bearing commands (`annuli summarize`, `annuli knowledge`, …), pass
   `--allow-cloud` (jev is classified as cloud for locality policy)
-- Optional: `LORE_JEV_LANES` — comma-separated lane order (default `local,fastcheap`)
+- Optional: `ANNULI_JEV_LANES` — comma-separated lane order (default `local,fastcheap`)
 
 ### Example
 
 ```bash
-lore summarize --provider jev --allow-cloud --dry-run
-lore analyze --provider jev --allow-cloud --limit 5
+annuli summarize --provider jev --allow-cloud --dry-run
+annuli analyze --provider jev --allow-cloud --limit 5
 ```
 
 System prompts are prefixed to stdin (`system`, blank line, user prompt). The broker
-timeout follows `DELEGATE_TIMEOUT_SECONDS` (default 300s) inside `delegate`; Lore’s
+timeout follows `DELEGATE_TIMEOUT_SECONDS` (default 300s) inside `delegate`; Annuli’s
 timeout wraps each lane attempt — **180 s by default**, overridable with
-`LORE_LLM_TIMEOUT` (see [Timeouts](#timeouts)).
+`ANNULI_LLM_TIMEOUT` (see [Timeouts](#timeouts)).
 
 `max_tokens` and `temperature` are **ignored** by this provider — the broker decides
-the limits per lane, so Lore passes neither through. `LLMResponse.model` is
+the limits per lane, so Annuli passes neither through. `LLMResponse.model` is
 `jev/<lane>` for the lane that actually answered, and `get_model_info()["model"]`
-is the configured lane list (`LORE_JEV_LANES`).
+is the configured lane list (`ANNULI_JEV_LANES`).
 
 ## Caching and the request identity
 
@@ -573,11 +573,11 @@ this key work applies to any provider call that does use it.
 
 Four provider names are answered by an installed CLI rather than by an API client:
 `claude-cli` (#182), `codex-cli` (#181), `gemini-cli` (#184) and
-`antigravity-cli` (#183). They live in `lore/llm/adapters/`, and the boundary is
-explicit: one persisted request descriptor (`lore/llm/adapters/contract.py` —
+`antigravity-cli` (#183). They live in `annuli/llm/adapters/`, and the boundary is
+explicit: one persisted request descriptor (`annuli/llm/adapters/contract.py` —
 provider identity, model, auth mode, timeout, cancellation token, execution
 policy), one selection table (`selection.py`), one invocation path
-(`native_cli.py`). `lore.llm.factory.get_provider()` builds every provider from
+(`native_cli.py`). `annuli.llm.factory.get_provider()` builds every provider from
 that descriptor, so a name cannot mean one thing in the factory and another in the
 adapter.
 
@@ -591,8 +591,8 @@ adapter.
 Select one with the factory (it is a cloud provider, so the opt-in applies):
 
 ```bash
-export LORE_ALLOW_CLOUD=1   # or pass allow_cloud=True in the library
-LORE_LLM_PROVIDER=claude-cli lore improve --stage extract_knowledge --allow-cloud
+export ANNULI_ALLOW_CLOUD=1   # or pass allow_cloud=True in the library
+ANNULI_LLM_PROVIDER=claude-cli annuli improve --stage extract_knowledge --allow-cloud
 ```
 
 ### Availability
@@ -613,13 +613,13 @@ unavailable with a reason (distinguishing "not installed" from "installed but no
 confirmed contract") and invokes nothing. The open questions that block it —
 executable name and channel, prompt transport, structured-output format and flag,
 credit/limit behaviour, pinnable version range — are listed in the module
-docstring `lore/llm/adapters/antigravity.py`. Antigravity conversations stay
+docstring `annuli/llm/adapters/antigravity.py`. Antigravity conversations stay
 archived source artifacts until then.
 
 ### Authentication
 
 Native only. The adapter runs the unmodified CLI and lets it use the login it
-already has; Lore never reads, copies or forwards a credential:
+already has; Annuli never reads, copies or forwards a credential:
 
 - No credential file is opened (`~/.claude/.credentials.json`,
   `~/.codex/auth.json`, `~/.gemini/oauth_creds.json` and friends are never touched
@@ -628,19 +628,19 @@ already has; Lore never reads, copies or forwards a credential:
   `GOOGLE_API_KEY`, `GOOGLE_APPLICATION_CREDENTIALS`, `GOOGLE_CLIENT_ID/SECRET`,
   `GOOGLE_REFRESH_TOKEN`, `OPENROUTER_API_KEY`) are removed from the child
   environment, so only the CLI's own login can answer. If the CLI has no login, the
-  call fails with `AdapterAuthError` rather than borrowing a key Lore holds for a
+  call fails with `AdapterAuthError` rather than borrowing a key Annuli holds for a
   different provider.
 - The rest of the environment is inherited untouched; nothing is added.
 - An API key offered to a native CLI is refused
   (`UnsupportedProviderCombination`), and so is a `base_url` for a subprocess
   provider — before anything runs.
-- `lore/llm/gemini.py` no longer reads `~/.gemini/oauth_creds.json` for the
+- `annuli/llm/gemini.py` no longer reads `~/.gemini/oauth_creds.json` for the
   `gemini` API provider (#184): API credentials and the CLI's login stay separate.
 
 ### Limits
 
 `ProviderRequest.timeout` bounds each call (default 60 s; `timeout=` or, for the
-hosted API providers only, `LORE_LLM_TIMEOUT`). The prompt is bounded by the
+hosted API providers only, `ANNULI_LLM_TIMEOUT`). The prompt is bounded by the
 execution policy's `max_prompt_chars` (400 000) and refused with
 `AdapterPromptTooLarge` beyond it. The child runs in a temporary working directory,
 in its own process group, with no shell. The prompt travels on standard input, so
@@ -651,7 +651,7 @@ CLI's own configuration and inventing flags for them would be guessing.
 ### Cancellation
 
 Every request carries a `CancellationToken`
-(`lore/llm/adapters/contract.py`). The adapter polls the token while the CLI runs;
+(`annuli/llm/adapters/contract.py`). The adapter polls the token while the CLI runs;
 cancelling kills the process group and raises `AdapterCancelled`. The same path
 enforces the timeout (`AdapterTimeout`). Both leave no orphaned process behind.
 
@@ -671,14 +671,14 @@ not as failure).
 - **`<cli> login` on the user's behalf** — authentication is the user's step.
 - **Translating or validating model names**: `--model` is passed through as the CLI
   documents it (`sonnet`, a full id, …); an unknown name fails with the CLI's own
-  error. With no model named, Lore passes no `--model` and the CLI uses its own
+  error. With no model named, Annuli passes no `--model` and the CLI uses its own
   configured default.
 - **Disk caching**: CLI results are not written to `~/.lore/llm_cache` (the requests
   carry transcripts). `cache_identity()` still covers the whole request —
   provider, model, auth mode, timeout, execution policy and the resolved CLI version
   — so two adapters can never answer for each other.
-- **CLI `--provider` choice lists**: `lore analyze|knowledge|summarize|format
+- **CLI `--provider` choice lists**: `annuli analyze|knowledge|summarize|format
   --provider` still enumerates `gemini`, `jev`, `ollama`, `openrouter`. The adapters
-  are reachable through `get_provider()` and `LORE_LLM_PROVIDER` (e.g. `lore
+  are reachable through `get_provider()` and `ANNULI_LLM_PROVIDER` (e.g. `annuli
   improve`); adding them to every command's choice list is a separate CLI change.
 

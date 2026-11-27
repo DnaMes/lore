@@ -1,4 +1,4 @@
-# Multi-stage image for Lore (JSON + SQLite; no Postgres/Redis).
+# Multi-stage image for Annuli (JSON + SQLite; no Postgres/Redis).
 # Pin: concrete 3.11 slim tag (not :latest). Rebuild periodically to pick up patches.
 FROM python:3.11.17-slim AS builder
 
@@ -13,8 +13,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md ./
-COPY lore ./lore/
-COPY lore_cli.py lore_session_cli.py ./
+COPY annuli ./annuli/
+COPY annuli_cli.py annuli_session_cli.py lore_cli.py lore_session_cli.py ./
 
 # Install from pyproject (versions pinned there). Prefetch embedding model (default on).
 # Offline HuggingFace failures must fail the build with a clear message.
@@ -22,11 +22,11 @@ COPY lore_cli.py lore_session_cli.py ./
 ARG PREFETCH_EMBEDDING_MODEL=on
 ENV FASTEMBED_CACHE_PATH=/opt/fastembed-cache
 # hadolint ignore=DL3013
-RUN chmod -R a+rX /app/lore /app/pyproject.toml /app/README.md \
-        /app/lore_cli.py /app/lore_session_cli.py \
+RUN chmod -R a+rX /app/annuli /app/pyproject.toml /app/README.md \
+        /app/annuli_cli.py /app/annuli_session_cli.py /app/lore_cli.py /app/lore_session_cli.py \
     && pip install --no-cache-dir ".[semantic,ollama]" gunicorn \
     && if [ "$PREFETCH_EMBEDDING_MODEL" = "on" ]; then \
-         if ! python -c "from lore.storage.embeddings import embed_text; \
+         if ! python -c "from annuli.storage.embeddings import embed_text; \
 v = embed_text('warmup'); \
 assert v and len(v) == 384, 'model warmup failed'"; then \
            echo "ERROR: Failed to prefetch the embedding model (network/HuggingFace unavailable)."; \
@@ -51,8 +51,8 @@ RUN apt-get update \
         sqlite3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 10001 ai \
-    && mkdir -p /home/ai/.lore \
-    && chown -R ai:ai /home/ai/.lore \
+    && mkdir -p /home/ai/.annuli \
+    && chown -R ai:ai /home/ai/.annuli \
     && chmod 0711 /home/ai
 
 COPY --from=builder /usr/local /usr/local
@@ -72,4 +72,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 CMD ["gunicorn", "--workers", "1", "--threads", "8", "--bind", "0.0.0.0:5000", \
      "--no-control-socket", "--access-logfile", "-", "--error-logfile", "-", \
-     "lore.interfaces.web:app"]
+     "annuli.interfaces.web:app"]
