@@ -84,7 +84,7 @@ def test_missing_zstandard_skips_with_one_warning_per_run(home, monkeypatch, cap
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1
     assert "zstandard" in warnings[0].getMessage()
-    assert "lore[zstd]" in warnings[0].getMessage()
+    assert "lore[" not in warnings[0].getMessage()
 
     # A second run resets the counter, so the warning is emitted once again.
     caplog.clear()

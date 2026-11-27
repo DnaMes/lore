@@ -307,7 +307,7 @@ the "Deferral decisions" section below).
 | #202, #203, #204, #206, #207, #209, #211-#215 | CLOSED (superseded) | closed with a comment pointing at `3e0ebfd` and its measurement |
 | #176 | CLOSED (already done) | `pytest tests/test_session_detail_markup.py tests/test_render_smoke.py -o addopts="" -q` -> 25 passed; browser proof stays with #194 |
 | #192 | CLOSED (already done) | `docker compose -f docker-compose.yml config --quiet` -> exit 0; overlay -> exit 0; shipped in `9dbff6d` |
-| #191 | CLOSED (decision) | no PyPI publication; `grep -rn "pip install lore" README.md docs/` -> no output |
+| #191 | CLOSED (decision) | no PyPI publication; the old grep missed `pip install 'lore[...]'` hints (fixed 2026-11-27, guard `tests/test_install_hints.py`) |
 | #29, #48 | OPEN, labelled `deferred` | owner decision, recorded in the "Deferral decisions" section below (`#29` after #174/#175, `#48` after the CI equivalence test) |
 | #151, #153-#175, #177-#190, #194, #197 | OPEN, decision recorded | confirmed gaps, each with the recommended order in the "Deferral decisions" section below; sizes and file:line evidence in the group tables above |
 

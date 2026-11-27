@@ -352,7 +352,7 @@ class CodexExtractor(BaseExtractor):
                 if not self.discovery.get("skipped_compressed"):
                     logger.warning(
                         "Skipping zstd-compressed Codex rollouts: the 'zstandard' package is "
-                        "not installed. Install it with: pip install 'lore[zstd]' "
+                        "not installed. Install it with: pip install zstandard "
                         "(or: pipx inject lore zstandard)"
                     )
                 self._count("skipped_compressed")

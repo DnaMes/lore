@@ -12,8 +12,8 @@ The version is the single source of truth in `lore/__init__.py`.
 
 ### Changed
 
-- `google-generativeai` is now the optional `gemini` extra (`pip install 'lore[gemini]'`) instead of a core dependency.
-- `ollama` is now an optional extra (`pip install 'lore[ollama]'`).
+- `google-generativeai` is now the optional `gemini` extra (`pip install google-generativeai`, not PyPI `lore`, which is an unrelated project) instead of a core dependency.
+- `ollama` is now an optional extra (`pip install ollama`).
 
 ### Changed
 

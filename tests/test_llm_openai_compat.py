@@ -236,5 +236,5 @@ def test_gemini_lazy_import_error_message(monkeypatch: pytest.MonkeyPatch) -> No
         LLMConfig(provider="gemini", model="gemini-2.0-flash", cache_enabled=False),
         allow_cloud=True,
     )
-    with pytest.raises(ImportError, match=r"pip install 'lore\[gemini\]'"):
+    with pytest.raises(ImportError, match=r"pip install google-generativeai"):
         provider._get_client()
