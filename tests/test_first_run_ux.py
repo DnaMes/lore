@@ -8,8 +8,8 @@ import logging
 
 import pytest
 
-import lore_cli
-from lore.storage import embeddings
+import annuli_cli
+from annuli.storage import embeddings
 
 
 class _FakeExtractor:
@@ -22,12 +22,12 @@ class _FakeExtractor:
 
 
 def test_skip_summary_explains_too_few_prompts(capsys):
-    lore_cli._print_skip_summary([_FakeExtractor({"too_few_user_prompts": 2})])
+    annuli_cli._print_skip_summary([_FakeExtractor({"too_few_user_prompts": 2})])
     captured = capsys.readouterr()
     assert captured.out == ""
     assert (
         "Skipped 2 sessions with fewer than 3 user prompts "
-        "(set LORE_MIN_USER_PROMPTS=1 to include them)"
+        "(set ANNULI_MIN_USER_PROMPTS=1 to include them)"
     ) in captured.err
 
 
@@ -36,7 +36,7 @@ def test_skip_summary_sums_reasons_across_extractors(capsys):
         _FakeExtractor({"too_few_user_prompts": 1, "parse_error": 1}),
         _FakeExtractor({"too_few_user_prompts": 1, "too_little_content": 3}),
     ]
-    lore_cli._print_skip_summary(extractors)
+    annuli_cli._print_skip_summary(extractors)
     err = capsys.readouterr().err
     assert "Skipped 2 sessions with fewer than 3 user prompts" in err
     assert "Skipped 3 sessions with too little content" in err
@@ -44,7 +44,7 @@ def test_skip_summary_sums_reasons_across_extractors(capsys):
 
 
 def test_skip_summary_silent_when_nothing_skipped(capsys):
-    lore_cli._print_skip_summary([_FakeExtractor({}), _FakeExtractor({"x": 0})])
+    annuli_cli._print_skip_summary([_FakeExtractor({}), _FakeExtractor({"x": 0})])
     assert capsys.readouterr().err == ""
 
 
@@ -56,9 +56,9 @@ def test_search_without_index_prints_stats_message(tmp_path, capsys):
         project=None,
         include_automated=False,
     )
-    rc = lore_cli.cmd_search(args)
+    rc = annuli_cli.cmd_search(args)
     assert rc is None
-    assert capsys.readouterr().out.strip() == "No index found. Run 'lore export --all' first."
+    assert capsys.readouterr().out.strip() == "No index found. Run 'annuli export --all' first."
 
 
 def _search_args(tmp_path, query="q"):
@@ -84,8 +84,8 @@ def _hit(score: float) -> list[dict]:
 
 
 def test_search_singular_result_and_rounded_score(tmp_path, capsys, monkeypatch):
-    monkeypatch.setattr("lore.services.index.search_index", lambda *a, **k: _hit(-1.63e-06))
-    lore_cli.cmd_search(_search_args(tmp_path))
+    monkeypatch.setattr("annuli.services.index.search_index", lambda *a, **k: _hit(-1.63e-06))
+    annuli_cli.cmd_search(_search_args(tmp_path))
     out = capsys.readouterr().out
     assert "Found 1 result for 'q':" in out
     assert "Score: -0.000 |" in out
@@ -94,8 +94,8 @@ def test_search_singular_result_and_rounded_score(tmp_path, capsys, monkeypatch)
 
 def test_search_plural_results_keeps_three_decimals(tmp_path, capsys, monkeypatch):
     hits = _hit(0.123456) * 2
-    monkeypatch.setattr("lore.services.index.search_index", lambda *a, **k: hits)
-    lore_cli.cmd_search(_search_args(tmp_path))
+    monkeypatch.setattr("annuli.services.index.search_index", lambda *a, **k: hits)
+    annuli_cli.cmd_search(_search_args(tmp_path))
     out = capsys.readouterr().out
     assert "Found 2 results for 'q':" in out
     assert out.count("Score: 0.123 |") == 2
@@ -118,7 +118,7 @@ def test_semantic_unavailable_hint_when_fastembed_missing(monkeypatch, caplog):
     assert message.startswith(
         "Embedding model unavailable, semantic search disabled: No module named 'fastembed'"
     )
-    assert "pipx inject lore fastembed sqlite-vec" in message
+    assert "pipx inject annuli fastembed sqlite-vec" in message
 
 
 @pytest.mark.parametrize("exc", [RuntimeError("boom")])

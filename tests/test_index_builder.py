@@ -1,4 +1,4 @@
-"""Tests for lore/exporters/index.py — IndexBuilder and _stat_mtime_ns."""
+"""Tests for annuli/exporters/index.py — IndexBuilder and _stat_mtime_ns."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder, _stat_mtime_ns
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder, _stat_mtime_ns
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -199,7 +199,7 @@ def test_build_index_invalid_ignored_json(tmp_path):
 @pytest.fixture
 def _fresh_ignored_warning(monkeypatch):
     # The shared loader warns once per process; reset it so each test sees its warning.
-    from lore.storage import reader
+    from annuli.storage import reader
 
     monkeypatch.setattr(reader, "_IGNORED_JSON_WARNED", False)
 

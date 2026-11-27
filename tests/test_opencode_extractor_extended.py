@@ -1,4 +1,4 @@
-"""Extended tests for lore/extractors/opencode.py."""
+"""Extended tests for annuli/extractors/opencode.py."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from lore.core.models import Role, Tool
-from lore.extractors.opencode import LoadStats, OpenCodeExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.opencode import LoadStats, OpenCodeExtractor
 
 # ---------------------------------------------------------------------------
 # Helpers for building OpenCode storage layout

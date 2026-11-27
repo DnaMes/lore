@@ -1,7 +1,7 @@
 """Golden render snapshots for every page route (#30 safety net).
 
 Captures the rendered HTML of each route so the Jinja-template extraction
-(strings in web_templates.py → lore/templates/*.html) can be proven
+(strings in web_templates.py → annuli/templates/*.html) can be proven
 output-neutral. The per-request CSP nonce is normalized out before
 comparison since it varies by request.
 
@@ -25,8 +25,8 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
 
 SNAPSHOT_DIR = Path(__file__).parent / "snapshots" / "templates"
 
@@ -116,7 +116,7 @@ _FIXED_NOISE_RULES = {
 
 @pytest.fixture()
 def client(monkeypatch, tmp_path):
-    # INDEX_PATH/OUTPUT_DIR are bound at import from the real ~/.lore; patch for hermetic renders.
+    # INDEX_PATH/OUTPUT_DIR are bound at import from the real ~/.annuli; patch for hermetic renders.
     fake_output = tmp_path / ".annuli"
     fake_output.mkdir()
     fake_index = fake_output / "index.json"
@@ -180,7 +180,7 @@ def test_nonce_is_normalized_so_snapshots_are_stable(client):
 
 def test_environment_built_once(monkeypatch):
     """R3 (#30) — the Jinja Environment is constructed once, not per render()."""
-    from lore.interfaces import web as web_mod
+    from annuli.interfaces import web as web_mod
 
     web_mod._template_env.cache_clear()
     calls = {"n": 0}
@@ -206,4 +206,4 @@ def test_web_templates_module_is_gone():
     """#30 — the old string-template module must no longer exist."""
     import importlib.util
 
-    assert importlib.util.find_spec("lore.interfaces.web_templates") is None
+    assert importlib.util.find_spec("annuli.interfaces.web_templates") is None

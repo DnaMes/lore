@@ -1,4 +1,4 @@
-"""Tests for lore/extractors/cursor.py.
+"""Tests for annuli/extractors/cursor.py.
 
 Cursor stores chat history in a SQLite database at
 ``~/.config/Cursor/User/globalStorage/state.vscdb``. The ``cursorDiskKV``
@@ -14,8 +14,8 @@ import json
 import sqlite3
 from pathlib import Path
 
-from lore.core.models import Role, Tool
-from lore.extractors.cursor import CursorExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.cursor import CursorExtractor
 
 
 def _db_path(home: Path) -> Path:

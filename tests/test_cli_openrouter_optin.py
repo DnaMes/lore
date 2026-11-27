@@ -1,4 +1,4 @@
-"""Cloud providers need --allow-cloud (or LORE_ALLOW_CLOUD) on analyze/knowledge/format."""
+"""Cloud providers need --allow-cloud (or ANNULI_ALLOW_CLOUD) on analyze/knowledge/format."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-import lore_cli
+import annuli_cli
 
 
 def _args(tmp_path: Path, **overrides) -> Namespace:
@@ -35,21 +35,23 @@ def test_cloud_optin_provider_without_allow_cloud_exits_2(
 ) -> None:
     (tmp_path / "index.json").write_text(json.dumps({"sessions": []}))
 
-    rc = getattr(lore_cli, command)(_args(tmp_path, provider=provider))
+    rc = getattr(annuli_cli, command)(_args(tmp_path, provider=provider))
 
     assert rc == 2
     err = capsys.readouterr().err
     assert "--allow-cloud" in err
-    assert "LORE_ALLOW_CLOUD" in err
+    assert "ANNULI_ALLOW_CLOUD" in err
     assert provider in err
 
 
 def test_ollama_and_explicit_opt_in_pass(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
-    assert lore_cli._cloud_optin_error(_args(tmp_path, provider="ollama")) is None
-    assert lore_cli._cloud_optin_error(_args(tmp_path, provider="gemini", allow_cloud=True)) is None
+    assert annuli_cli._cloud_optin_error(_args(tmp_path, provider="ollama")) is None
+    assert (
+        annuli_cli._cloud_optin_error(_args(tmp_path, provider="gemini", allow_cloud=True)) is None
+    )
 
 
-def test_lore_allow_cloud_env_grants_opt_in(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
-    assert lore_cli._cloud_optin_error(_args(tmp_path, provider="gemini")) is None
+def test_annuli_allow_cloud_env_grants_opt_in(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
+    assert annuli_cli._cloud_optin_error(_args(tmp_path, provider="gemini")) is None

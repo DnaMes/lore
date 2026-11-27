@@ -1,14 +1,14 @@
-"""Tests for lore_home(): ~/.lore is the data dir; the legacy ~/.ai-history is ignored."""
+"""Tests for annuli_home(): ~/.annuli is the data dir; the legacy ~/.ai-history is ignored."""
 
 from __future__ import annotations
 
-import lore.utils.paths as paths
+import annuli.utils.paths as paths
 
 
-def test_lore_home_returns_dot_lore(tmp_path, monkeypatch):
+def test_annuli_home_returns_dot_annuli(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(paths.Path, "home", classmethod(lambda cls: tmp_path))
-    home = paths.lore_home()
+    home = paths.annuli_home()
     assert home == tmp_path / ".annuli"
 
 
@@ -19,7 +19,7 @@ def test_legacy_ai_history_dir_is_not_migrated(tmp_path, monkeypatch):
     legacy.mkdir()
     (legacy / "index.json").write_text("{}", encoding="utf-8")
 
-    home = paths.lore_home()
+    home = paths.annuli_home()
 
     assert home == tmp_path / ".annuli"
     assert not home.exists()

@@ -9,12 +9,12 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse, prepare_prompt
-from lore.llm.gemini import GeminiProvider
-from lore.llm.ollama import OllamaProvider, resolve_ollama_num_ctx
-from lore.llm.tasks.knowledge import KnowledgeExtractor
-from lore.llm.tasks.stats import StatsGenerator
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse, prepare_prompt
+from annuli.llm.gemini import GeminiProvider
+from annuli.llm.ollama import OllamaProvider, resolve_ollama_num_ctx
+from annuli.llm.tasks.knowledge import KnowledgeExtractor
+from annuli.llm.tasks.stats import StatsGenerator
 
 VALID_JSON = json.dumps(
     {
@@ -85,7 +85,7 @@ def _session_with_secret() -> UnifiedSession:
 
 
 @pytest.fixture
-def lore_tmp_home(monkeypatch, tmp_path):
+def annuli_tmp_home(monkeypatch, tmp_path):
     monkeypatch.setenv("HOME", str(tmp_path))
     return tmp_path
 
@@ -95,8 +95,8 @@ def test_for_transcripts_disables_cache():
     assert cfg.cache_enabled is False
 
 
-def test_gemini_transcript_task_no_cache_dir(lore_tmp_home, monkeypatch):
-    cache_root = lore_tmp_home / "llm_cache"
+def test_gemini_transcript_task_no_cache_dir(annuli_tmp_home, monkeypatch):
+    cache_root = annuli_tmp_home / "llm_cache"
     captured: Dict[str, Any] = {}
     config = LLMConfig.for_transcripts(
         provider="gemini",
@@ -111,8 +111,8 @@ def test_gemini_transcript_task_no_cache_dir(lore_tmp_home, monkeypatch):
     assert not cache_root.exists()
 
 
-def test_ollama_transcript_task_no_cache_dir(lore_tmp_home, monkeypatch):
-    cache_root = lore_tmp_home / "llm_cache"
+def test_ollama_transcript_task_no_cache_dir(annuli_tmp_home, monkeypatch):
+    cache_root = annuli_tmp_home / "llm_cache"
     calls: List[Dict[str, Any]] = []
 
     def chat(**kwargs: Any) -> Dict[str, Any]:
@@ -134,8 +134,8 @@ def test_ollama_transcript_task_no_cache_dir(lore_tmp_home, monkeypatch):
     assert calls
 
 
-def test_non_transcript_task_still_caches(lore_tmp_home, monkeypatch):
-    cache_root = lore_tmp_home / "llm_cache"
+def test_non_transcript_task_still_caches(annuli_tmp_home, monkeypatch):
+    cache_root = annuli_tmp_home / "llm_cache"
     captured: Dict[str, Any] = {}
     config = LLMConfig(
         provider="gemini",
@@ -153,33 +153,33 @@ def test_non_transcript_task_still_caches(lore_tmp_home, monkeypatch):
     assert list(cache_root.glob("*.json"))
 
 
-def test_ollama_num_ctx_default(lore_tmp_home, monkeypatch):
-    monkeypatch.delenv("LORE_OLLAMA_NUM_CTX", raising=False)
+def test_ollama_num_ctx_default(annuli_tmp_home, monkeypatch):
+    monkeypatch.delenv("ANNULI_OLLAMA_NUM_CTX", raising=False)
     assert resolve_ollama_num_ctx(LLMConfig()) == 8192
 
 
-def test_ollama_num_ctx_from_config(lore_tmp_home, monkeypatch):
-    monkeypatch.delenv("LORE_OLLAMA_NUM_CTX", raising=False)
+def test_ollama_num_ctx_from_config(annuli_tmp_home, monkeypatch):
+    monkeypatch.delenv("ANNULI_OLLAMA_NUM_CTX", raising=False)
     assert resolve_ollama_num_ctx(LLMConfig(num_ctx=12000)) == 12000
 
 
-def test_ollama_num_ctx_from_env(lore_tmp_home, monkeypatch):
-    monkeypatch.setenv("LORE_OLLAMA_NUM_CTX", "10000")
+def test_ollama_num_ctx_from_env(annuli_tmp_home, monkeypatch):
+    monkeypatch.setenv("ANNULI_OLLAMA_NUM_CTX", "10000")
     assert resolve_ollama_num_ctx(LLMConfig()) == 10000
 
 
-def test_ollama_num_ctx_clamped(lore_tmp_home, monkeypatch):
-    monkeypatch.delenv("LORE_OLLAMA_NUM_CTX", raising=False)
+def test_ollama_num_ctx_clamped(annuli_tmp_home, monkeypatch):
+    monkeypatch.delenv("ANNULI_OLLAMA_NUM_CTX", raising=False)
     assert resolve_ollama_num_ctx(LLMConfig(num_ctx=999)) == 2048
     assert resolve_ollama_num_ctx(LLMConfig(num_ctx=200000)) == 131072
 
 
-def test_ollama_num_ctx_invalid_env_ignored(lore_tmp_home, monkeypatch):
-    monkeypatch.setenv("LORE_OLLAMA_NUM_CTX", "not-a-number")
+def test_ollama_num_ctx_invalid_env_ignored(annuli_tmp_home, monkeypatch):
+    monkeypatch.setenv("ANNULI_OLLAMA_NUM_CTX", "not-a-number")
     assert resolve_ollama_num_ctx(LLMConfig()) == 8192
 
 
-def test_ollama_options_passthrough_and_temperature_wins(lore_tmp_home, monkeypatch):
+def test_ollama_options_passthrough_and_temperature_wins(annuli_tmp_home, monkeypatch):
     calls: List[Dict[str, Any]] = []
 
     def chat(**kwargs: Any) -> Dict[str, Any]:
@@ -202,7 +202,7 @@ def test_ollama_options_passthrough_and_temperature_wins(lore_tmp_home, monkeypa
     assert opts["temperature"] == 0.9
 
 
-def test_knowledge_extractor_redacts_secret_in_prompt(lore_tmp_home):
+def test_knowledge_extractor_redacts_secret_in_prompt(annuli_tmp_home):
     secret = "sk-" + "a" * 24
     session = _session_with_secret()
     prompts: List[str] = []
@@ -227,7 +227,7 @@ def test_knowledge_extractor_redacts_secret_in_prompt(lore_tmp_home):
             return {}
 
     provider = _Prov()
-    extractor = KnowledgeExtractor(provider, lore_tmp_home / "knowledge")
+    extractor = KnowledgeExtractor(provider, annuli_tmp_home / "knowledge")
     entry = extractor.extract_from_session(session)
 
     assert entry is not None
@@ -237,7 +237,7 @@ def test_knowledge_extractor_redacts_secret_in_prompt(lore_tmp_home):
     assert "Extract structured knowledge" in prompts[0]
 
 
-def test_knowledge_extractor_no_secrets_unchanged_prompt(lore_tmp_home):
+def test_knowledge_extractor_no_secrets_unchanged_prompt(annuli_tmp_home):
     session = UnifiedSession(
         tool=Tool.CLAUDE_CODE,
         session_id="s2",
@@ -272,7 +272,7 @@ def test_knowledge_extractor_no_secrets_unchanged_prompt(lore_tmp_home):
         def get_model_info(self) -> Dict[str, Any]:
             return {}
 
-    extractor = KnowledgeExtractor(_Prov(), lore_tmp_home / "knowledge")
+    extractor = KnowledgeExtractor(_Prov(), annuli_tmp_home / "knowledge")
     entry = extractor.extract_from_session(session)
 
     assert entry is not None
@@ -289,9 +289,9 @@ def test_prepare_prompt():
 
 
 def test_tasks_force_cache_off_on_a_cache_enabled_provider(tmp_path):
-    from lore.llm.base import LLMConfig, LLMProvider, LLMResponse
-    from lore.llm.tasks.format import SessionFormatter
-    from lore.llm.tasks.knowledge import KnowledgeExtractor
+    from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse
+    from annuli.llm.tasks.format import SessionFormatter
+    from annuli.llm.tasks.knowledge import KnowledgeExtractor
 
     class Fake(LLMProvider):
         def generate(self, prompt, system_prompt=None, max_tokens=None, temperature=None):
@@ -313,7 +313,7 @@ def test_tasks_force_cache_off_on_a_cache_enabled_provider(tmp_path):
 
 
 def test_llm_config_positional_oauth_arguments_keep_their_meaning():
-    from lore.llm.base import LLMConfig
+    from annuli.llm.base import LLMConfig
 
     config = LLMConfig("gemini", "m", "key", None, 4096, 0.7, 60, True, None, "cid", "csecret")
     assert config.oauth_client_id == "cid"

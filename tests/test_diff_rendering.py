@@ -1,10 +1,10 @@
-"""Tests for Edit/Write diff rendering (lore/utils/text_processing.format_diff)."""
+"""Tests for Edit/Write diff rendering (annuli/utils/text_processing.format_diff)."""
 
 from __future__ import annotations
 
 import json
 
-from lore.utils.text_processing import _diff_rows, format_diff, format_tool_display
+from annuli.utils.text_processing import _diff_rows, format_diff, format_tool_display
 
 
 def test_diff_rows_basic_add_and_delete():

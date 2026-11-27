@@ -16,9 +16,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.utils.rules import (
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.utils.rules import (
     STORE_FORMAT,
     activate_recommendation,
     build_recommendations,
@@ -390,10 +390,10 @@ class _FakeExtractor:
 
 def _run_cli(monkeypatch, argv):
     monkeypatch.setattr(
-        lore_cli, "get_all_extractors", lambda: [_FakeExtractor(fixture_sessions())]
+        annuli_cli, "get_all_extractors", lambda: [_FakeExtractor(fixture_sessions())]
     )
-    monkeypatch.setattr("sys.argv", ["lore", *argv])
-    return lore_cli.main()
+    monkeypatch.setattr("sys.argv", ["annuli", *argv])
+    return annuli_cli.main()
 
 
 def test_cli_export_json(tmp_path, monkeypatch, capsys):

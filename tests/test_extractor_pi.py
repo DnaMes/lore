@@ -13,10 +13,10 @@ from typing import Any
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.pi import PiExtractor
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.pi import PiExtractor
+from annuli.utils.tooling import normalize_tool_name
 
 SESSION_ID = "00000000-aaaa-bbbb-cccc-000000000001"
 CWD = "/work/example-app"
@@ -504,7 +504,7 @@ def test_wrongly_typed_ids_are_ignored(home):
 
 
 def test_oversized_line_is_counted_and_the_rest_of_the_file_is_read(home, monkeypatch):
-    import lore.extractors.pi as pi_module
+    import annuli.extractors.pi as pi_module
 
     monkeypatch.setattr(pi_module, "_MAX_LINE_CHARS", 4096)
     records: list[Any] = [_header()] + _chain()[:4]
@@ -521,7 +521,7 @@ def test_oversized_line_is_counted_and_the_rest_of_the_file_is_read(home, monkey
 
 
 def test_oversize_file_is_skipped_and_counted(home, monkeypatch):
-    import lore.extractors.pi as pi_module
+    import annuli.extractors.pi as pi_module
 
     monkeypatch.setattr(pi_module, "_MAX_FILE_BYTES", 500)
     _session_file(home, [_header()] + _chain())
@@ -546,7 +546,7 @@ def test_symlinked_session_is_ignored(home, tmp_path):
 
 
 def test_session_below_quality_threshold_is_skipped(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")
     _session_file(home, [_header()] + _chain(1))
     extractor, sessions = _extract()
 

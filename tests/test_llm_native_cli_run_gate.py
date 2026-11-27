@@ -19,8 +19,8 @@ from typing import Any, Dict, List, Tuple
 
 import pytest
 
-from lore.llm import CloudOptInRequired, LLMConfig
-from lore.llm.adapters import (
+from annuli.llm import CloudOptInRequired, LLMConfig
+from annuli.llm.adapters import (
     AdapterUnavailable,
     AntigravityCliAdapter,
     ClaudeCliAdapter,
@@ -83,7 +83,7 @@ def test_run_without_opt_in_raises_and_never_reaches_the_transport(
     adapter_cls: type, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     executable = EXECUTABLES[ADAPTERS[adapter_cls]]
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
     adapter = _build(adapter_cls, executable, allow_cloud=False)
     argvs: List[List[str]] = []
     adapter._invoke = _patched(argvs, FAKE_OUTPUTS[ADAPTERS[adapter_cls]])  # type: ignore[method-assign]
@@ -101,7 +101,7 @@ def test_run_with_opt_in_reaches_the_transport_once(
     adapter_cls: type, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     executable = EXECUTABLES[ADAPTERS[adapter_cls]]
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
     adapter = _build(adapter_cls, executable, allow_cloud=True)
     argvs: List[List[str]] = []
     adapter._invoke = _patched(argvs, FAKE_OUTPUTS[ADAPTERS[adapter_cls]])  # type: ignore[method-assign]
@@ -116,7 +116,7 @@ def test_run_with_opt_in_for_antigravity_is_still_availability_gated(
 ) -> None:
     """The documented stub (#183) reports unavailable; the transport is never invoked."""
     monkeypatch.setenv("PATH", str(tmp_path))  # no antigravity executable installed
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
     adapter = AntigravityCliAdapter(
         LLMConfig(provider="antigravity-cli", model="", timeout=10), allow_cloud=True
     )
@@ -133,12 +133,12 @@ def test_run_with_opt_in_for_antigravity_is_still_availability_gated(
 
 
 @pytest.mark.parametrize("adapter_cls", list(ADAPTERS))
-def test_run_honours_the_lore_allow_cloud_environment_override(
+def test_run_honours_the_annuli_allow_cloud_environment_override(
     adapter_cls: type, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``LORE_ALLOW_CLOUD=1`` opts in for ``run()`` exactly as it does for ``generate()``."""
+    """``ANNULI_ALLOW_CLOUD=1`` opts in for ``run()`` exactly as it does for ``generate()``."""
     executable = EXECUTABLES[ADAPTERS[adapter_cls]]
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
     adapter = _build(adapter_cls, executable, allow_cloud=False)
     if adapter_cls is AntigravityCliAdapter:
         pytest.skip("antigravity's availability stub blocks before any invocation")

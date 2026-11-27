@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from lore.storage import add_memory, recall_memory
-from lore.storage.embeddings import (
+from annuli.storage import add_memory, recall_memory
+from annuli.storage.embeddings import (
     cosine_similarity,
     embeddings_available,
     pack_vector,
@@ -59,7 +59,7 @@ def test_cosine_length_mismatch_is_safe():
 
 def test_recall_semantic_falls_back_without_backend(tmp_path, monkeypatch):
     """With embeddings forced unavailable, semantic recall falls back to FTS."""
-    import lore.storage.embeddings as emb
+    import annuli.storage.embeddings as emb
 
     monkeypatch.setattr(emb, "embed_text", lambda _text: None)
 
@@ -71,7 +71,7 @@ def test_recall_semantic_falls_back_without_backend(tmp_path, monkeypatch):
 
 def test_add_memory_works_without_embeddings(tmp_path, monkeypatch):
     """A missing embedding backend must not block writing memory."""
-    import lore.storage.memory as mem
+    import annuli.storage.memory as mem
 
     # Force the embedding store helper to behave as if the backend is absent.
     monkeypatch.setattr(mem, "_store_embedding", lambda *a, **k: None)
@@ -109,7 +109,7 @@ def test_semantic_recall_ranks_by_meaning(tmp_path):
 def test_embedding_stored_on_add(tmp_path):
     import sqlite3
 
-    from lore.storage import v2_db_path
+    from annuli.storage import v2_db_path
 
     mid = add_memory(tmp_path, "fact", "Embedded memory", "this gets a vector")
     conn = sqlite3.connect(v2_db_path(tmp_path))
@@ -143,7 +143,7 @@ def test_warmup_layer_supports_offline_embed(tmp_path, monkeypatch):
 
     # Reset the lazily-built singleton so the new cache path takes effect
     # for both the warmup call and the offline call below.
-    import lore.storage.embeddings as emb
+    import annuli.storage.embeddings as emb
 
     monkeypatch.setattr(emb, "_model", None)
     monkeypatch.setattr(emb, "_model_failed", False)
@@ -176,7 +176,7 @@ def test_warmup_layer_supports_offline_embed(tmp_path, monkeypatch):
     ]:
         sys.modules.pop(mod_name, None)
     importlib.import_module("fastembed")
-    importlib.import_module("lore.storage.embeddings")  # re-bind module ref
+    importlib.import_module("annuli.storage.embeddings")  # re-bind module ref
 
     offline_vec = emb.embed_text("hello offline")
     assert offline_vec is not None, (

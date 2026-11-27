@@ -1,8 +1,8 @@
 """Guard the console-script entry points declared in pyproject.
 
-Regression cover for the empty-module bug (issue #66): `lore/cli/web.py` and
-`lore/cli/mcp.py` were 0 bytes while pyproject declared them as entry points, so
-`lore-web` / `lore-mcp` crashed with ImportError. These tests fail if the
+Regression cover for the empty-module bug (issue #66): `annuli/cli/web.py` and
+`annuli/cli/mcp.py` were 0 bytes while pyproject declared them as entry points, so
+`annuli-web` / `annuli-mcp` crashed with ImportError. These tests fail if the
 entry-point callables go missing again.
 """
 
@@ -20,14 +20,14 @@ def _declared_scripts() -> dict[str, str]:
 
 
 def test_web_entry_point_is_importable_and_callable():
-    from lore.cli.web import build_parser, main
+    from annuli.cli.web import build_parser, main
 
     assert callable(main)
     assert isinstance(build_parser(), argparse.ArgumentParser)
 
 
 def test_mcp_entry_point_is_importable_and_callable():
-    from lore.cli.mcp import main, main_sync
+    from annuli.cli.mcp import main, main_sync
 
     assert callable(main)
     assert callable(main_sync)
@@ -44,11 +44,11 @@ def test_pyproject_entry_targets_resolve():
 
 
 def test_web_parser_defaults_and_overrides(monkeypatch):
-    from lore.cli.web import build_parser
+    from annuli.cli.web import build_parser
 
-    monkeypatch.delenv("LORE_WEB_HOST", raising=False)
-    monkeypatch.delenv("LORE_WEB_PORT", raising=False)
-    monkeypatch.delenv("LORE_WEB_DEBUG", raising=False)
+    monkeypatch.delenv("ANNULI_WEB_HOST", raising=False)
+    monkeypatch.delenv("ANNULI_WEB_PORT", raising=False)
+    monkeypatch.delenv("ANNULI_WEB_DEBUG", raising=False)
     args = build_parser().parse_args([])
     assert args.host == "127.0.0.1"
     assert args.port == 5000
@@ -62,7 +62,7 @@ def test_web_parser_defaults_and_overrides(monkeypatch):
 
 def test_web_main_invokes_start_web_ui(monkeypatch):
     """`main()` wires parsed args into start_web_ui without actually serving."""
-    import lore.interfaces.web as web
+    import annuli.interfaces.web as web
 
     captured: dict[str, object] = {}
 
@@ -71,7 +71,7 @@ def test_web_main_invokes_start_web_ui(monkeypatch):
 
     monkeypatch.setattr(web, "start_web_ui", fake_start)
 
-    from lore.cli.web import main
+    from annuli.cli.web import main
 
     rc = main(["--host", "127.0.0.1", "--port", "5099"])
     assert rc == 0

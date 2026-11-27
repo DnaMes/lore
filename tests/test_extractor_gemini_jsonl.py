@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.gemini import GeminiCLIExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.gemini import GeminiCLIExtractor
 
 SESSION_ID = "11111111-aaaa-bbbb-cccc-000000000001"
 
@@ -290,7 +290,7 @@ def test_thoughts_tokens_and_model_are_kept(home):
 
 
 def test_session_below_quality_threshold_is_skipped(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")
     _write_lines(
         _chats(home) / "session-x.jsonl",
         [_header(), {"$set": {"messages": _three_prompts()[:4]}}],
@@ -450,7 +450,7 @@ def test_nine_megabyte_line_is_counted_and_skipped(home):
 
 
 def test_oversize_file_is_skipped_and_counted(home, monkeypatch):
-    import lore.extractors.gemini as gemini_module
+    import annuli.extractors.gemini as gemini_module
 
     monkeypatch.setattr(gemini_module, "_MAX_FILE_BYTES", 500)
     _write_lines(

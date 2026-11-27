@@ -1,12 +1,12 @@
-"""Extended tests for lore/exporters/markdown.py."""
+"""Extended tests for annuli/exporters/markdown.py."""
 
 from __future__ import annotations
 
 import time
 from datetime import datetime, timedelta
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.markdown import MarkdownExporter
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.markdown import MarkdownExporter
 
 # ---------------------------------------------------------------------------
 # Helpers

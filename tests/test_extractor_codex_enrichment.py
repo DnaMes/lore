@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedSession
-from lore.extractors.codex import CodexExtractor
-from lore.storage.reader import load_session_messages_v2
-from lore.storage.writer import write_sessions
+from annuli.core.models import Role, Tool, UnifiedSession
+from annuli.extractors.codex import CodexExtractor
+from annuli.storage.reader import load_session_messages_v2
+from annuli.storage.writer import write_sessions
 
 
 def _write_jsonl(path: Path, records: list[dict]) -> None:
@@ -343,7 +343,7 @@ def test_unknown_record_type_counted_once(home):
 
 
 def test_hostile_inputs_do_not_abort(home, monkeypatch):
-    import lore.extractors.codex as codex_module
+    import annuli.extractors.codex as codex_module
 
     monkeypatch.setattr(codex_module, "_MAX_LINE_CHARS", 4096)
     records = [
@@ -426,12 +426,12 @@ def test_user_prompt_count_default_kind_unchanged():
         created_at=__import__("datetime").datetime(2025, 1, 1),
         last_updated=__import__("datetime").datetime(2025, 1, 1),
         messages=[
-            __import__("lore.core.models", fromlist=["UnifiedMessage"]).UnifiedMessage(
+            __import__("annuli.core.models", fromlist=["UnifiedMessage"]).UnifiedMessage(
                 role=Role.USER,
                 content="hello",
                 timestamp=__import__("datetime").datetime(2025, 1, 1),
             ),
-            __import__("lore.core.models", fromlist=["UnifiedMessage"]).UnifiedMessage(
+            __import__("annuli.core.models", fromlist=["UnifiedMessage"]).UnifiedMessage(
                 role=Role.USER,
                 content="",
                 timestamp=__import__("datetime").datetime(2025, 1, 1),
@@ -442,7 +442,7 @@ def test_user_prompt_count_default_kind_unchanged():
 
 
 def test_agents_md_block_is_injected_context(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     records = [
         _meta(),
         {
@@ -521,7 +521,7 @@ def _call_output(call_id: str, output: str = "ok", ts: str = "2025-06-15T10:20:0
 
 
 def test_duplicate_call_ids_are_matched_in_order(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     records = [
         _meta(),
         _call("dup", "first_tool", "2025-06-15T10:20:00"),
@@ -540,7 +540,7 @@ def test_duplicate_call_ids_are_matched_in_order(home, monkeypatch):
 
 
 def test_call_without_output_gets_an_explicit_status(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     records = [_meta(), _call("lost", "shell")]
     _rollout(home, records)
     _, sessions = _extract(home)
@@ -552,7 +552,7 @@ def test_call_without_output_gets_an_explicit_status(home, monkeypatch):
 
 
 def test_tool_event_names_follow_their_own_call(home, monkeypatch):
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     records = [
         _meta(),
         _call("c1", "alpha", "2025-06-15T10:20:00"),
@@ -570,7 +570,7 @@ def test_tool_event_names_follow_their_own_call(home, monkeypatch):
 def test_many_token_count_events_stay_linear(home, monkeypatch):
     import time
 
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     records: list[dict] = [_meta()]
     for i in range(3000):
         records.append(
@@ -629,7 +629,7 @@ def test_custom_tool_call_string_input_is_rendered(home):
 
 
 def test_zst_skipped_line_bytes_count_toward_decode_limit(home, monkeypatch):
-    import lore.extractors.codex as codex_module
+    import annuli.extractors.codex as codex_module
 
     zstd = pytest.importorskip("zstandard")
     monkeypatch.setattr(codex_module, "_MAX_FILE_BYTES", 50_000)

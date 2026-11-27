@@ -1,7 +1,7 @@
 import json
 import sqlite3
 
-from lore.extractors.opencode import OpenCodeExtractor
+from annuli.extractors.opencode import OpenCodeExtractor
 
 
 def test_opencode_sqlite_batches_parts_per_session(tmp_path, monkeypatch):

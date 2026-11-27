@@ -1,4 +1,4 @@
-"""Browsable on-disk library from the v2 store (``lore library``)."""
+"""Browsable on-disk library from the v2 store (``annuli library``)."""
 
 from __future__ import annotations
 
@@ -9,15 +9,15 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.library.builder import _fingerprint, build_library
-from lore.services.index import load_deleted_session_ids, save_deleted_session_ids
-from lore.storage import retention
-from lore.storage.reader import load_session_messages_v2
-from lore.storage.schema import initialise
-from lore.storage.summaries import save_summary, summary_fingerprint
-from lore.storage.tags import add_session_tag
-from lore.storage.writer import v2_db_path, write_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.library.builder import _fingerprint, build_library
+from annuli.services.index import load_deleted_session_ids, save_deleted_session_ids
+from annuli.storage import retention
+from annuli.storage.reader import load_session_messages_v2
+from annuli.storage.schema import initialise
+from annuli.storage.summaries import save_summary, summary_fingerprint
+from annuli.storage.tags import add_session_tag
+from annuli.storage.writer import v2_db_path, write_sessions
 
 T0 = datetime(2026, 11, 8, 10, 0, 0, tzinfo=timezone.utc)
 PROJECT = "/home/user/alpha"
@@ -444,7 +444,7 @@ def test_incremental_skips_message_load_for_unchanged_sessions(
         calls.append(session_id)
         return real(output_dir, session_id, **kwargs)
 
-    monkeypatch.setattr("lore.library.builder.load_session_messages_v2", _track)
+    monkeypatch.setattr("annuli.library.builder.load_session_messages_v2", _track)
     add_session_tag(store, "human-interactive", "another-tag")
     calls.clear()
     build_library(store, library, full=False)
@@ -494,13 +494,13 @@ def test_cli_library_prints_stats(
 
     store, library = store_and_library
     _seed_store(store)
-    import lore_cli
+    import annuli_cli
 
     monkeypatch.setattr(
         sys,
         "argv",
         [
-            "lore",
+            "annuli",
             "--output-dir",
             str(store),
             "library",
@@ -509,7 +509,7 @@ def test_cli_library_prints_stats(
             "--full",
         ],
     )
-    lore_cli.main()
+    annuli_cli.main()
     out = capsys.readouterr().out.strip()
     payload = json.loads(out)
     assert payload["sessions_written"] >= 3
@@ -518,7 +518,7 @@ def test_cli_library_prints_stats(
 def test_session_paths_do_not_collide_on_a_shared_id_prefix():
     """Time-ordered ids (OpenCode ``ses_…``, UUIDv7) share their first characters;
     two such sessions with the same day and title must still get two pages."""
-    from lore.library.builder import _session_stem
+    from annuli.library.builder import _session_stem
 
     base = {"title": "One word reply", "created": "2026-06-24T10:00:00", "project": "/p"}
     _, first = _session_stem({**base, "id": "ses_1046bec12ffeYABmVqhiLqOC7l"})

@@ -6,8 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from lore.interfaces import web
-from lore.interfaces.library_home import (
+from annuli.interfaces import web
+from annuli.interfaces.library_home import (
     CONTINUE_LIMIT,
     PROJECTS_LIMIT,
     RECENT_DAYS_LIMIT,
@@ -16,7 +16,7 @@ from lore.interfaces.library_home import (
     project_page_url,
     short_project_label,
 )
-from lore.storage.summaries import save_summary
+from annuli.storage.summaries import save_summary
 
 
 def _session(
@@ -24,7 +24,7 @@ def _session(
     *,
     updated: str,
     created: str | None = None,
-    project: str = "/home/user/projects/ai-stack/lore",
+    project: str = "/home/user/projects/ai-stack/annuli",
     origin: str = "",
     title: str = "Title",
     display_title: str | None = None,
@@ -146,11 +146,11 @@ def test_list_summaries_single_batch_call(monkeypatch, tmp_path: Path) -> None:
     def spy(output_dir, level=None, session_ids=None):
         ids = list(session_ids or [])
         calls.append(len(ids))
-        from lore.storage.summaries import list_summaries as real
+        from annuli.storage.summaries import list_summaries as real
 
         return real(output_dir, level=level, session_ids=ids)
 
-    monkeypatch.setattr("lore.interfaces.library_home.list_summaries", spy)
+    monkeypatch.setattr("annuli.interfaces.library_home.list_summaries", spy)
     sessions = [
         _session(f"s{i}", updated=f"2026-11-{i:02d}T10:00:00", project=f"/p/{i}")
         for i in range(1, 8)
@@ -165,7 +165,7 @@ def test_short_project_label_uses_last_two_segments() -> None:
 
 
 def test_project_page_url_under_projects() -> None:
-    path = "/home/user/projects/ai-stack/lore"
+    path = "/home/user/projects/ai-stack/annuli"
     assert project_page_url(path) == f"/projects?project={quote(path, safe='')}"
 
 
@@ -224,7 +224,7 @@ def test_dashboard_escapes_html_in_titles(monkeypatch, tmp_path: Path) -> None:
 def test_projects_page_filters_to_one_project_and_lists_all_its_sessions(monkeypatch):
     """The dashboard's project links (/projects?project=<path>) open that project alone,
     with every session instead of the overview's three."""
-    from lore.interfaces import web
+    from annuli.interfaces import web
 
     sessions = [
         {

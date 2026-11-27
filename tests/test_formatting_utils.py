@@ -1,8 +1,8 @@
-"""Tests for lore/utils/formatting.py — MessageFormatter."""
+"""Tests for annuli/utils/formatting.py — MessageFormatter."""
 
 from __future__ import annotations
 
-from lore.utils.formatting import (
+from annuli.utils.formatting import (
     MessageFormatter,
     format_message,
     format_tool_output,

@@ -5,7 +5,7 @@ an ``input`` blob, so a call's output, error state, identity and truncation were
 lost, and the compact ``tool_events`` the v2 store keeps were ignored entirely —
 which is where "Unknown Tool" and the missing results came from.
 
-These tests pin the canonical envelope (``lore/exporters/tool_calls.py``) and the
+These tests pin the canonical envelope (``annuli/exporters/tool_calls.py``) and the
 completeness of the transcript: every message in order (including empty, system
 and unmatched tool messages), exact code whitespace, and derived metadata that is
 labelled instead of replacing transcript content.
@@ -18,10 +18,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, TitleSource, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.html import render_session_html
-from lore.exporters.markdown import MarkdownExporter
-from lore.exporters.tool_calls import canonical_tool_calls, tool_call_markdown
+from annuli.core.models import Role, TitleSource, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.html import render_session_html
+from annuli.exporters.markdown import MarkdownExporter
+from annuli.exporters.tool_calls import canonical_tool_calls, tool_call_markdown
 
 START = datetime(2026, 3, 1, 10, 0, 0)
 
@@ -40,7 +40,7 @@ def structured_session() -> UnifiedSession:
         session_id="ses_export",
         created_at=START,
         last_updated=START + timedelta(minutes=10),
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         title="Export fixture",
         title_source=TitleSource.LLM,
         summary="A generated summary that must not replace the transcript.",
@@ -208,7 +208,7 @@ def test_empty_session_is_explicit_in_both_formats():
         session_id="ses_empty",
         created_at=START,
         last_updated=START,
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         messages=[],
     )
     assert "_No messages were captured for this session._" in _markdown(session)
@@ -217,7 +217,7 @@ def test_empty_session_is_explicit_in_both_formats():
 
 def test_exports_work_with_every_provider_unavailable(monkeypatch, structured_session):
     """An export must never need a cloud or local model to succeed."""
-    import lore.llm.factory as factory
+    import annuli.llm.factory as factory
 
     def explode(*_args, **_kwargs):
         raise AssertionError("an export must not construct an LLM provider")

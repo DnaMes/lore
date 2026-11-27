@@ -11,8 +11,8 @@ from typing import List, Optional
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import (
     current_version,
     initialise,
     load_index_v2,
@@ -21,9 +21,9 @@ from lore.storage import (
     search_sessions,
     semantic_search_sessions,
 )
-from lore.storage.embeddings import EMBEDDING_DIM, sqlite_vec_available
-from lore.storage.schema import MIGRATIONS, ensure_session_vec_table
-from lore.storage.writer import (
+from annuli.storage.embeddings import EMBEDDING_DIM, sqlite_vec_available
+from annuli.storage.schema import MIGRATIONS, ensure_session_vec_table
+from annuli.storage.writer import (
     _MAX_SESSION_REASONING_CHARS,
     StreamingV2Writer,
     _replace_session_fts,
@@ -489,7 +489,7 @@ def test_semantic_search_falls_back_on_unmigrated_store(tmp_path, monkeypatch):
         )
     finally:
         conn.close()
-    monkeypatch.setattr("lore.storage.embeddings.embed_text", lambda text: [0.25] * EMBEDDING_DIM)
+    monkeypatch.setattr("annuli.storage.embeddings.embed_text", lambda text: [0.25] * EMBEDDING_DIM)
     hits = semantic_search_sessions(tmp_path, "anything")
     assert [h["session"]["id"] for h in hits] == ["old"]
     assert hits[0]["session"]["origin"] == "unknown"
@@ -497,8 +497,8 @@ def test_semantic_search_falls_back_on_unmigrated_store(tmp_path, monkeypatch):
 
 def test_default_views_work_on_an_unmigrated_store(tmp_path):
     """The origin exclusion needs migration 17; a v16 store is read unfiltered, not broken."""
-    from lore.services.index import search_index
-    from lore.storage.reader import automated_exclusion_sql
+    from annuli.services.index import search_index
+    from annuli.storage.reader import automated_exclusion_sql
 
     conn = _v16_store(tmp_path)
     try:

@@ -5,9 +5,9 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.markdown import MarkdownExporter
-from lore.formatting.turns import build_session_turns
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.markdown import MarkdownExporter
+from annuli.formatting.turns import build_session_turns
 
 
 def _session(messages, **kwargs) -> UnifiedSession:

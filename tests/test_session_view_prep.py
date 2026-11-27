@@ -1,8 +1,8 @@
-"""Tests for the session-view prep-layer (lore/interfaces/session_view_prep.py)."""
+"""Tests for the session-view prep-layer (annuli/interfaces/session_view_prep.py)."""
 
 from __future__ import annotations
 
-from lore.interfaces.session_view_prep import (
+from annuli.interfaces.session_view_prep import (
     has_structured_tool_calls,
     render_message_body,
     strip_tool_blocks,
@@ -101,7 +101,7 @@ def test_render_empty_message():
 
 
 def test_fold_tool_bursts_collapses_identical_consecutive():
-    from lore.interfaces.session_view_prep import fold_tool_bursts
+    from annuli.interfaces.session_view_prep import fold_tool_bursts
 
     calls = [
         {"tool": "read", "input": {"f": "a"}, "output": "x"},
@@ -116,7 +116,7 @@ def test_fold_tool_bursts_collapses_identical_consecutive():
 
 
 def test_fold_tool_bursts_does_not_fold_non_consecutive():
-    from lore.interfaces.session_view_prep import fold_tool_bursts
+    from annuli.interfaces.session_view_prep import fold_tool_bursts
 
     calls = [
         {"tool": "a", "input": {}, "output": "1"},
@@ -128,7 +128,7 @@ def test_fold_tool_bursts_does_not_fold_non_consecutive():
 
 def test_fold_tool_bursts_normalizes_mixed_key_formats():
     """claude 'name' and opencode 'tool' for the same call still fold (#79 + #83)."""
-    from lore.interfaces.session_view_prep import fold_tool_bursts
+    from annuli.interfaces.session_view_prep import fold_tool_bursts
 
     calls = [
         {"name": "read", "input": {"f": "a"}, "output": "x"},
@@ -140,8 +140,8 @@ def test_fold_tool_bursts_normalizes_mixed_key_formats():
 
 
 def test_burst_count_renders_as_multiplier():
-    from lore.interfaces.session_view_prep import fold_tool_bursts
-    from lore.interfaces.web_formatting import format_tool_calls
+    from annuli.interfaces.session_view_prep import fold_tool_bursts
+    from annuli.interfaces.web_formatting import format_tool_calls
 
     calls = [{"tool": "read", "input": {"f": "a"}, "output": "x"}] * 3
     out = format_tool_calls(fold_tool_bursts(calls))

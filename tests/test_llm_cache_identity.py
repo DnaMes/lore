@@ -15,11 +15,11 @@ from pathlib import Path
 
 import pytest
 
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse
-from lore.llm.gemini import GeminiProvider
-from lore.llm.jev import JevProvider
-from lore.llm.ollama import OllamaProvider
-from lore.llm.openrouter import OpenRouterProvider
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse
+from annuli.llm.gemini import GeminiProvider
+from annuli.llm.jev import JevProvider
+from annuli.llm.ollama import OllamaProvider
+from annuli.llm.openrouter import OpenRouterProvider
 
 PROMPT = "Summmarise this session: the build broke on a float version."
 SYSTEM = "You write short titles."

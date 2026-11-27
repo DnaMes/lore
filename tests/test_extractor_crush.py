@@ -10,10 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.crush import CrushExtractor
-from lore.extractors.factory import get_all_extractors
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.crush import CrushExtractor
+from annuli.extractors.factory import get_all_extractors
+from annuli.utils.tooling import normalize_tool_name
 
 SESSION_ID = "crush-sess-001"
 DUP_ID = "crush-dup-id"
@@ -24,7 +24,7 @@ SECRET_SENTINEL = "SENTINEL_NEVER_IN_OUTPUT"
 @pytest.fixture
 def home(monkeypatch, tmp_path) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     return tmp_path
 
 
@@ -477,7 +477,7 @@ def test_crush_malformed_tool_input_never_leaks_secret_prefix(home):
 
 
 def test_crush_oversized_registry_ignored(home, monkeypatch):
-    import lore.extractors.crush as crush_mod
+    import annuli.extractors.crush as crush_mod
 
     _setup_project(home, _project(home, "big-registry"))
     monkeypatch.setattr(crush_mod, "_MAX_REGISTRY_BYTES", 8)

@@ -1,19 +1,19 @@
 # MCP server
 
-`lore-mcp` exposes the local Lore archive and the shared cross-tool memory store to any Model Context Protocol client over stdio (the default) or streamable HTTP.
+`annuli-mcp` exposes the local Annuli archive and the shared cross-tool memory store to any Model Context Protocol client over stdio (the default) or streamable HTTP.
 
 ## What it is
 
-`lore-mcp` is the console entry point declared in `pyproject.toml` (`lore-mcp = "lore.cli.mcp:main_sync"`). It calls `create_server()` in `lore/interfaces/mcp.py`, which builds an `MCPServer` (transport in `lore/interfaces/server.py`) and registers the tool groups from `lore/interfaces/mcp_tools/`: `search.py`, `sessions.py`, `memory.py`, `summaries.py`.
+`annuli-mcp` is the console entry point declared in `pyproject.toml` (`annuli-mcp = "annuli.cli.mcp:main_sync"`). It calls `create_server()` in `annuli/interfaces/mcp.py`, which builds an `MCPServer` (transport in `annuli/interfaces/server.py`) and registers the tool groups from `annuli/interfaces/mcp_tools/`: `search.py`, `sessions.py`, `memory.py`, `summaries.py`.
 
 The server speaks JSON-RPC 2.0 over stdin/stdout. Requests are read line by line, or framed with `Content-Length` headers; responses go to stdout and the loop ends when stdin closes. It is a stdio server, so it waits for input and prints nothing on its own: do not run it by hand to "see what it does".
 
-The same server (`create_server()` in `lore/interfaces/mcp.py`, one tool set) can also be served over streamable HTTP with `lore-mcp --http`; see `## Streamable HTTP transport` below. Stdio stays the default and is unchanged.
+The same server (`create_server()` in `annuli/interfaces/mcp.py`, one tool set) can also be served over streamable HTTP with `annuli-mcp --http`; see `## Streamable HTTP transport` below. Stdio stays the default and is unchanged.
 
 Read versus write:
 
 - `memory_write` and `memory_feedback` are the only tools that write to the shared memory store (the `memory` and `memory_feedback` tables in `<output-dir>/index_v2.sqlite`, default `~/.lore/index_v2.sqlite`).
-- Every other tool reads. `switch_to_tool` is read-only for Lore but shells out to `lore-session switch`, which prepares a handoff for another tool. When the target is `gemini` or `codex` (they receive the context as a referenced file), the server needs the cloud opt-in `LORE_ALLOW_CLOUD=1` in its environment; the context is redacted before it is written or passed and kept in a private mode-0600 file under `~/.lore/handoff/`. `claude` and the manual tools (`cursor`, `vscode`) send nothing.
+- Every other tool reads. `switch_to_tool` is read-only for Annuli but shells out to `annuli-session switch`, which prepares a handoff for another tool. When the target is `gemini` or `codex` (they receive the context as a referenced file), the server needs the cloud opt-in `ANNULI_ALLOW_CLOUD=1` in its environment; the context is redacted before it is written or passed and kept in a private mode-0600 file under `~/.lore/handoff/`. `claude` and the manual tools (`cursor`, `vscode`) send nothing.
 - `summarize_session` is the one exception outside the memory store: when enabled it can persist an AI summary row for a session.
 
 ## Tools
@@ -27,14 +27,14 @@ Read versus write:
 | `list_recent_sessions` | List recently updated sessions. | no |
 | `list_projects` | List projects present in the history index. | no |
 | `get_thread` | Get a thread overview and optional messages. | no |
-| `switch_to_tool` | Switch to another AI tool with context (runs `lore-session switch`). Requires the cloud opt-in `LORE_ALLOW_CLOUD=1` in the server environment when the target is `gemini` or `codex`; `claude` and the manual tools send nothing. | no |
+| `switch_to_tool` | Switch to another AI tool with context (runs `annuli-session switch`). Requires the cloud opt-in `ANNULI_ALLOW_CLOUD=1` in the server environment when the target is `gemini` or `codex`; `claude` and the manual tools send nothing. | no |
 | `memory_write` | Record a durable memory (fact, decision, todo, snippet, link, lesson, note) into the shared cross-tool store. The response lists near-duplicates in `similar`; pass `supersedes` with one of their ids to replace it. | yes (memory store) |
 | `memory_recall` | Search the shared memory store for facts, decisions and lessons recorded earlier by any tool. Matches keywords and, when the embedding backend is installed, meaning; a query in double quotes is an exact phrase. `semantic=false` forces keywords only. | no |
 | `memory_feedback` | Rate a confirmed memory from 1 (wrong or unhelpful) to 5 (right and useful). Candidates and rejected memories cannot be rated; one rating per rater and memory, a new rating replaces the old one. The weight is shown with the memory in `memory_recall`. | yes (memory store) |
 | `get_session_summary` | Read the stored AI summary for a session (JSON data only, no transcript text). | no |
-| `summarize_session` | Generate or refresh the AI summary for one session. Local Ollama only, and refused unless `LORE_MCP_ALLOW_SUMMARIZE=1`. Does not return summary text. | summary row, when enabled |
+| `summarize_session` | Generate or refresh the AI summary for one session. Local Ollama only, and refused unless `ANNULI_MCP_ALLOW_SUMMARIZE=1`. Does not return summary text. | summary row, when enabled |
 
-Verified via `tools/list` (the list is produced by the registrations in `lore/interfaces/mcp_tools/*.py`, not hand-maintained):
+Verified via `tools/list` (the list is produced by the registrations in `annuli/interfaces/mcp_tools/*.py`, not hand-maintained):
 
 ```text
 ['search_history', 'list_sessions', 'get_session', 'get_session_messages', 'list_recent_sessions', 'list_projects', 'get_thread', 'switch_to_tool', 'memory_write', 'memory_recall', 'memory_feedback', 'get_session_summary', 'summarize_session']
@@ -42,37 +42,37 @@ Verified via `tools/list` (the list is produced by the registrations in `lore/in
 
 ## The summarize_session gate
 
-`summarize_session` is always advertised in `tools/list`, but the handler refuses to run unless `LORE_MCP_ALLOW_SUMMARIZE=1` is set in the server's environment. Without it the call returns:
+`summarize_session` is always advertised in `tools/list`, but the handler refuses to run unless `ANNULI_MCP_ALLOW_SUMMARIZE=1` is set in the server's environment. Without it the call returns:
 
 ```json
-{"error": "summarize_session is disabled", "hint": "set LORE_MCP_ALLOW_SUMMARIZE=1"}
+{"error": "summarize_session is disabled", "hint": "set ANNULI_MCP_ALLOW_SUMMARIZE=1"}
 ```
 
-The provider is fixed to local Ollama (`MCP_SUMMARIZE_PROVIDER = "ollama"` in `lore/services/summarize_cli.py`), so untrusted session text is never sent to a cloud API:
+The provider is fixed to local Ollama (`MCP_SUMMARIZE_PROVIDER = "ollama"` in `annuli/services/summarize_cli.py`), so untrusted session text is never sent to a cloud API:
 
-- `LORE_SUMMARY_MODEL` selects the model; the default is `llama3.2`.
+- `ANNULI_SUMMARY_MODEL` selects the model; the default is `llama3.2`.
 - `OLLAMA_HOST` must resolve to a loopback address, otherwise the call fails with a locality error.
-- `LORE_SUMMARY_PROVIDER` is used by the web UI summarize path, not by the MCP tool.
+- `ANNULI_SUMMARY_PROVIDER` is used by the web UI summarize path, not by the MCP tool.
 
 The environment variable has to be set for the server process, not for the shell that registers it: pass it through the client (`-e` in Claude Code, `--env` in Codex) as shown under `## Client registration`.
 
-## Finding the lore-mcp path
+## Finding the annuli-mcp path
 
-Install Lore first (see the installation section in `../README.md`); the entry point is created by that install.
-
-```bash
-command -v lore-mcp
-# /home/<user>/.local/bin/lore-mcp
-```
-
-A pipx install links the binary into `~/.local/bin`, a `uv tool install` links it into `~/.local/share/uv/tools/<env>/bin`, and a virtualenv puts it in `<venv>/bin`. `readlink -f "$(command -v lore-mcp)"` shows the real target, which is the most robust value to put into a client configuration:
+Install Annuli first (see the installation section in `../README.md`); the entry point is created by that install.
 
 ```bash
-readlink -f "$(command -v lore-mcp)"
-# /home/<user>/.local/share/uv/tools/lore/bin/lore-mcp
+command -v annuli-mcp
+# /home/<user>/.local/bin/annuli-mcp
 ```
 
-The examples below use `<path-to-lore-mcp>`; substitute the absolute path from `command -v` if the client does not inherit your shell `PATH`.
+A pipx install links the binary into `~/.local/bin`, a `uv tool install` links it into `~/.local/share/uv/tools/<env>/bin`, and a virtualenv puts it in `<venv>/bin`. `readlink -f "$(command -v annuli-mcp)"` shows the real target, which is the most robust value to put into a client configuration:
+
+```bash
+readlink -f "$(command -v annuli-mcp)"
+# /home/<user>/.local/share/uv/tools/annuli/bin/annuli-mcp
+```
+
+The examples below use `<path-to-annuli-mcp>`; substitute the absolute path from `command -v` if the client does not inherit your shell `PATH`.
 
 ## Client registration
 
@@ -81,25 +81,25 @@ MCP clients each keep their own server list. The examples only show what to writ
 ### Claude Code
 
 ```bash
-claude mcp add lore -- <path-to-lore-mcp>
+claude mcp add annuli -- <path-to-annuli-mcp>
 ```
 
-Verified against the `claude mcp add` usage text (`claude --version` = 2.1.310), which documents `claude mcp add <name> -- <command> [args...]` for stdio servers. The command was not executed here, because it would write to the Claude Code configuration. Add `-e LORE_MCP_ALLOW_SUMMARIZE=1` to the same command to enable `summarize_session`.
+Verified against the `claude mcp add` usage text (`claude --version` = 2.1.310), which documents `claude mcp add <name> -- <command> [args...]` for stdio servers. The command was not executed here, because it would write to the Claude Code configuration. Add `-e ANNULI_MCP_ALLOW_SUMMARIZE=1` to the same command to enable `summarize_session`.
 
 ### Codex
 
 Add to `~/.codex/config.toml`:
 
 ```toml
-[mcp_servers.lore]
-command = "<path-to-lore-mcp>"
+[mcp_servers.annuli]
+command = "<path-to-annuli-mcp>"
 args = []
 ```
 
-NOT VERIFIED against the current Codex version. The table name and the `command` / `args` keys match the entries already present in this machine's `~/.codex/config.toml` and the `codex mcp add` usage text (`codex-cli 0.164.0`), but no Lore entry was added or started. To let Codex write the entry itself:
+NOT VERIFIED against the current Codex version. The table name and the `command` / `args` keys match the entries already present in this machine's `~/.codex/config.toml` and the `codex mcp add` usage text (`codex-cli 0.164.0`), but no Annuli entry was added or started. To let Codex write the entry itself:
 
 ```bash
-codex mcp add lore -- <path-to-lore-mcp>
+codex mcp add annuli -- <path-to-annuli-mcp>
 ```
 
 ### Cursor
@@ -109,27 +109,27 @@ Add to `~/.cursor/mcp.json`:
 ```json
 {
   "mcpServers": {
-    "lore": {
-      "command": "<path-to-lore-mcp>"
+    "annuli": {
+      "command": "<path-to-annuli-mcp>"
     }
   }
 }
 ```
 
-NOT VERIFIED against the current Cursor version. The `mcpServers` object with a per-server `command` matches this machine's existing `~/.cursor/mcp.json`, but no Lore entry was added and Cursor was not restarted against it.
+NOT VERIFIED against the current Cursor version. The `mcpServers` object with a per-server `command` matches this machine's existing `~/.cursor/mcp.json`, but no Annuli entry was added and Cursor was not restarted against it.
 
 ## Streamable HTTP transport
 
-For hosts that cannot spawn a local process (Cursor over a remote session, a browser-based client, another machine on a private network) the same server can be reached over MCP streamable HTTP. The transport lives in `lore/interfaces/mcp_http.py`; the tool surface is the identical `create_server()` result, so both transports advertise the same tools.
+For hosts that cannot spawn a local process (Cursor over a remote session, a browser-based client, another machine on a private network) the same server can be reached over MCP streamable HTTP. The transport lives in `annuli/interfaces/mcp_http.py`; the tool surface is the identical `create_server()` result, so both transports advertise the same tools.
 
 Start it instead of stdio:
 
 ```bash
-lore-mcp --http                                  # http://127.0.0.1:8787/mcp
-lore-mcp --http --port 9137 --path /mcp          # loopback, different port
+annuli-mcp --http                                  # http://127.0.0.1:8787/mcp
+annuli-mcp --http --port 9137 --path /mcp          # loopback, different port
 token="$(python -c 'import secrets; print(secrets.token_urlsafe(32))')"
 printf '%s\n' "$token" > ~/.lore/mcp-http-token && chmod 600 ~/.lore/mcp-http-token
-lore-mcp --http --host 192.168.1.10 --token-file ~/.lore/mcp-http-token
+annuli-mcp --http --host 192.168.1.10 --token-file ~/.lore/mcp-http-token
 ```
 
 Flags (each also reads an environment variable):
@@ -137,13 +137,13 @@ Flags (each also reads an environment variable):
 | flag | env | default | meaning |
 |------|-----|---------|---------|
 | `--http` | — | off (stdio) | serve the streamable-HTTP transport |
-| `--host` | `LORE_MCP_HTTP_HOST` | `127.0.0.1` | bind host; non-loopback needs a token |
-| `--port` | `LORE_MCP_HTTP_PORT` | `8787` | bind port (`0` picks an ephemeral one) |
-| `--path` | `LORE_MCP_HTTP_PATH` | `/mcp` | endpoint path |
-| `--token-file` | `LORE_MCP_HTTP_TOKEN_FILE` | — | file holding the bearer token |
-| `--timeout` | `LORE_MCP_HTTP_TIMEOUT` | `60` | per-request deadline in seconds |
+| `--host` | `ANNULI_MCP_HTTP_HOST` | `127.0.0.1` | bind host; non-loopback needs a token |
+| `--port` | `ANNULI_MCP_HTTP_PORT` | `8787` | bind port (`0` picks an ephemeral one) |
+| `--path` | `ANNULI_MCP_HTTP_PATH` | `/mcp` | endpoint path |
+| `--token-file` | `ANNULI_MCP_HTTP_TOKEN_FILE` | — | file holding the bearer token |
+| `--timeout` | `ANNULI_MCP_HTTP_TIMEOUT` | `60` | per-request deadline in seconds |
 
-The bearer token can also come from `LORE_MCP_HTTP_TOKEN`; `--token-file` wins when both are set. The token is only ever read from the file or the environment, never from `argv`, and it is never logged.
+The bearer token can also come from `ANNULI_MCP_HTTP_TOKEN`; `--token-file` wins when both are set. The token is only ever read from the file or the environment, never from `argv`, and it is never logged.
 
 Protocol shape: `POST <path>` with a JSON-RPC 2.0 body and `Content-Type: application/json`, answered with `application/json`. The server is stateless (no `Mcp-Session-Id`), so `initialize`, `tools/list` and `tools/call` may travel on separate connections; a notification such as `notifications/initialized` is acknowledged with `202 Accepted` and an empty body. `GET` returns `405` because no standalone SSE stream is offered.
 
@@ -160,7 +160,7 @@ curl -s http://127.0.0.1:8787/mcp \
 ```json
 {
   "mcpServers": {
-    "lore": {
+    "annuli": {
       "url": "http://127.0.0.1:8787/mcp",
       "headers": { "Authorization": "Bearer <token-if-one-is-configured>" }
     }
@@ -168,35 +168,35 @@ curl -s http://127.0.0.1:8787/mcp \
 }
 ```
 
-NOT VERIFIED against the current Cursor version: the `url` + `headers` form follows the MCP streamable-HTTP client convention, but no Lore entry was added and Cursor was not restarted against it. A loopback URL only works when Cursor runs on the same machine; a remote Cursor needs `--host` set to an address it can reach plus a token.
+NOT VERIFIED against the current Cursor version: the `url` + `headers` form follows the MCP streamable-HTTP client convention, but no Annuli entry was added and Cursor was not restarted against it. A loopback URL only works when Cursor runs on the same machine; a remote Cursor needs `--host` set to an address it can reach plus a token.
 
 ### Security rules
 
 The archive is private, so the transport refuses the obvious accidents instead of documenting them:
 
-- **Loopback by default.** `127.0.0.1` / `localhost` / `::1` need no token. Any other bind host is an explicit opt-in and **refuses to start without a token** (`LORE_MCP_HTTP_TOKEN` or `--token-file`); an unreadable or empty token file is a refusal too, not an unauthenticated server. Exit code `2` and a message on stderr.
+- **Loopback by default.** `127.0.0.1` / `localhost` / `::1` need no token. Any other bind host is an explicit opt-in and **refuses to start without a token** (`ANNULI_MCP_HTTP_TOKEN` or `--token-file`); an unreadable or empty token file is a refusal too, not an unauthenticated server. Exit code `2` and a message on stderr.
 - **Bearer auth.** With a token configured, every request needs `Authorization: Bearer <token>`; missing or wrong gets `401` with `WWW-Authenticate: Bearer` and JSON-RPC error `-32001`. The comparison is constant time.
-- **Host allowlist.** A `Host` header naming a foreign domain is rejected with `400`, using the same allowlist as `lore-web` (`lore/interfaces/web_utils.py`: loopback names, the bind host, `LORE_ALLOWED_HOSTS`, and the hosts of `LORE_PUBLIC_ORIGINS`).
-- **Origin policy.** When an `Origin` header is present it must name this server's own origin (or a `LORE_PUBLIC_ORIGINS` entry while `TRUSTED_PROXY` is set); anything else is `403`. MCP clients and `curl` send no `Origin` and are unaffected.
+- **Host allowlist.** A `Host` header naming a foreign domain is rejected with `400`, using the same allowlist as `annuli-web` (`annuli/interfaces/web_utils.py`: loopback names, the bind host, `ANNULI_ALLOWED_HOSTS`, and the hosts of `ANNULI_PUBLIC_ORIGINS`).
+- **Origin policy.** When an `Origin` header is present it must name this server's own origin (or a `ANNULI_PUBLIC_ORIGINS` entry while `TRUSTED_PROXY` is set); anything else is `403`. MCP clients and `curl` send no `Origin` and are unaffected.
 - **Bounded requests.** Bodies are capped at 1 MiB (`413` above), 4 requests may be in flight at once (`503` with `Retry-After: 1` above), and every request has the `--timeout` deadline: a tool call still running then is cancelled and answered with JSON-RPC error `-32000` instead of hanging the client.
 - **No secrets in logs.** The token is never logged or echoed; the startup line names the origin and whether auth is required, not the token.
 
-The HTTP listener is Werkzeug's threaded server, the same one `lore-web` uses for local/dev use. For anything beyond a trusted network, terminate TLS in a reverse proxy and set `LORE_PUBLIC_ORIGINS` (with `TRUSTED_PROXY=1`) so the proxy's host and origin are the allowed ones.
+The HTTP listener is Werkzeug's threaded server, the same one `annuli-web` uses for local/dev use. For anything beyond a trusted network, terminate TLS in a reverse proxy and set `ANNULI_PUBLIC_ORIGINS` (with `TRUSTED_PROXY=1`) so the proxy's host and origin are the allowed ones.
 
 ## Troubleshooting
 
 - **Empty results from `search_history`, `list_sessions` or `list_projects`.** There is no index yet for the tool you are asking about. Build it first:
 
   ```bash
-  lore export --all          # every detected tool
-  lore sync <tool>           # one tool, e.g. lore sync claude-code
+  annuli export --all          # every detected tool
+  annuli sync <tool>           # one tool, e.g. annuli sync claude-code
   ```
 
-  See `./CLI.md` for the full command set. `lore export --full` re-parses sources that look unchanged.
+  See `./CLI.md` for the full command set. `annuli export --full` re-parses sources that look unchanged.
 - **Memory tools return nothing.** The shared memory store is empty; `memory_write` has to run before `memory_recall` or `memory_feedback` can return anything. See `./MEMORY.md`.
-- **The client shows no tools.** Check the command path with `command -v lore-mcp`, then use the absolute path in the client configuration. A stdio server started without a client that speaks JSON-RPC simply blocks on stdin.
-- **`--http` exits with code 2.** It refused to start: the bind host is not loopback and no token was configured, or the token file is missing/empty. Set `LORE_MCP_HTTP_TOKEN` or `--token-file`, or bind to `127.0.0.1`.
-- **Do not print to stdout.** Stdout carries protocol messages only; anything else corrupts the stream. This is why `lore/interfaces/server.py` and `lore/cli/mcp.py` contain no `print()` calls, and why logs go to stderr: the modules use `logging.getLogger(__name__)` without installing a stdout handler, so Python's default last-resort handler writes warnings and errors to stderr. Redirect or capture stderr separately when debugging.
+- **The client shows no tools.** Check the command path with `command -v annuli-mcp`, then use the absolute path in the client configuration. A stdio server started without a client that speaks JSON-RPC simply blocks on stdin.
+- **`--http` exits with code 2.** It refused to start: the bind host is not loopback and no token was configured, or the token file is missing/empty. Set `ANNULI_MCP_HTTP_TOKEN` or `--token-file`, or bind to `127.0.0.1`.
+- **Do not print to stdout.** Stdout carries protocol messages only; anything else corrupts the stream. This is why `annuli/interfaces/server.py` and `annuli/cli/mcp.py` contain no `print()` calls, and why logs go to stderr: the modules use `logging.getLogger(__name__)` without installing a stdout handler, so Python's default last-resort handler writes warnings and errors to stderr. Redirect or capture stderr separately when debugging.
 
 ## See also
 

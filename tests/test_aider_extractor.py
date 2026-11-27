@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from lore.core.models import Role, Tool
-from lore.extractors.aider import AiderExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.aider import AiderExtractor
 
 SAMPLE_HISTORY = """
 # aider chat started at 2024-01-15 14:30:45

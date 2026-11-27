@@ -1,11 +1,11 @@
-"""Tests for utility functions in lore/interfaces/web_data.py."""
+"""Tests for utility functions in annuli/interfaces/web_data.py."""
 
 from __future__ import annotations
 
 import json
 
-from lore.interfaces import web_data
-from lore.interfaces.web_data import (
+from annuli.interfaces import web_data
+from annuli.interfaces.web_data import (
     _apply_deleted_filter,
     _sanitize_next_url,
     clear_index_cache,

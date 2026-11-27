@@ -8,14 +8,14 @@ from pathlib import Path
 
 import pytest
 
-import lore.storage.embeddings as embeddings
-import lore_cli
-from lore.services.claude_memory_import import import_claude_memory
-from lore.services.memory_context import select_context_memories
-from lore.services.memory_dedupe import dedupe_memories
-from lore.storage import add_memory, get_memory, list_memory, record_feedback, set_memory_status
-from lore.storage.memory import reject_memories_bulk, restore_rejected_memories_bulk
-from lore.storage.writer import v2_db_path
+import annuli.storage.embeddings as embeddings
+import annuli_cli
+from annuli.services.claude_memory_import import import_claude_memory
+from annuli.services.memory_context import select_context_memories
+from annuli.services.memory_dedupe import dedupe_memories
+from annuli.storage import add_memory, get_memory, list_memory, record_feedback, set_memory_status
+from annuli.storage.memory import reject_memories_bulk, restore_rejected_memories_bulk
+from annuli.storage.writer import v2_db_path
 
 
 @pytest.fixture(autouse=True)
@@ -24,10 +24,10 @@ def _no_embeddings(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _run_cli(store: Path, *arguments: str) -> None:
-    args = lore_cli.build_parser().parse_args(
+    args = annuli_cli.build_parser().parse_args(
         ["--output-dir", str(store), "memory", "dedupe", *arguments]
     )
-    lore_cli.cmd_memory(args)
+    annuli_cli.cmd_memory(args)
 
 
 def _set_updated(store: Path, memory_id: int, updated: str) -> None:
@@ -334,11 +334,11 @@ def test_import_cli_reports_duplicates(tmp_path: Path, capsys: pytest.CaptureFix
     add_memory(store, "fact", "Risk Posture", 'Use "care".')
     root = tmp_path / "claude"
     _import_file(root)
-    args = lore_cli.build_parser().parse_args(
+    args = annuli_cli.build_parser().parse_args(
         ["--output-dir", str(store), "memory", "import-claude", "--root", str(root)]
     )
 
-    lore_cli.cmd_memory(args)
+    annuli_cli.cmd_memory(args)
 
     assert "1 duplicates" in capsys.readouterr().out
 
@@ -390,7 +390,7 @@ def _duplicate_pair(store: Path) -> tuple[int, int]:
 
 
 def test_two_applies_never_share_an_undo_log(tmp_path: Path) -> None:
-    from lore.services.memory_dedupe import _write_undo_log
+    from annuli.services.memory_dedupe import _write_undo_log
 
     groups, _ = dedupe_memories(tmp_path)
     assert groups == []
@@ -400,7 +400,7 @@ def test_two_applies_never_share_an_undo_log(tmp_path: Path) -> None:
 
 
 def test_failed_apply_leaves_no_undo_log(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    import lore.services.memory_dedupe as service
+    import annuli.services.memory_dedupe as service
 
     _duplicate_pair(tmp_path)
 
@@ -425,7 +425,7 @@ def test_restore_skips_superseded_rows(tmp_path: Path) -> None:
 
 
 def test_malformed_undo_log_is_a_value_error(tmp_path: Path) -> None:
-    from lore.services.memory_dedupe import restore_dedupe_undo
+    from annuli.services.memory_dedupe import restore_dedupe_undo
 
     for text in ('{"groups": 5}', '{"groups": [{"rejected_ids": "x"}]}', "{}", "[]"):
         log = tmp_path / "undo.json"
@@ -435,7 +435,7 @@ def test_malformed_undo_log_is_a_value_error(tmp_path: Path) -> None:
 
 
 def test_list_superseded_by_queries_predecessors_directly(tmp_path: Path) -> None:
-    from lore.storage.memory import list_superseded_by
+    from annuli.storage.memory import list_superseded_by
 
     old = add_memory(tmp_path, "fact", "topic", "old body")
     new = add_memory(tmp_path, "fact", "topic", "new body", supersedes=old)

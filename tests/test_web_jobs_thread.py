@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import time
 
-from lore.interfaces import web, web_jobs
-from lore.interfaces.web_jobs import (
+from annuli.interfaces import web, web_jobs
+from annuli.interfaces.web_jobs import (
     RELOAD_JOBS,
     RELOAD_JOBS_LOCK,
     _get_reload_job,
     _start_audit_job,
     _start_reload_job,
 )
-from lore.interfaces.web_utils import ActionJobCancelledError, ActionJobTimeoutError
+from annuli.interfaces.web_utils import ActionJobCancelledError, ActionJobTimeoutError
 
 # ---------------------------------------------------------------------------
 # Helpers

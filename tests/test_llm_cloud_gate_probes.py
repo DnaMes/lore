@@ -20,20 +20,20 @@ from typing import Any, Dict, List
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.llm import CloudOptInRequired, LLMConfig
-from lore.llm.factory import get_provider
-from lore.llm.gemini import GeminiProvider
-from lore.llm.jev import JevProvider
-from lore.llm.openrouter import OpenRouterProvider
-from lore.titles.generator import TitleGenerator, TitleStrategy
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.llm import CloudOptInRequired, LLMConfig
+from annuli.llm.factory import get_provider
+from annuli.llm.gemini import GeminiProvider
+from annuli.llm.jev import JevProvider
+from annuli.llm.openrouter import OpenRouterProvider
+from annuli.titles.generator import TitleGenerator, TitleStrategy
 
 
 @pytest.fixture(autouse=True)
 def _clean_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("LORE_ALLOW_CLOUD", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOW_CLOUD", raising=False)
     monkeypatch.delenv("OLLAMA_HOST", raising=False)
-    monkeypatch.delenv("LORE_JEV_LANES", raising=False)
+    monkeypatch.delenv("ANNULI_JEV_LANES", raising=False)
 
 
 def _session(project_path: str = "/work/repo") -> UnifiedSession:
@@ -59,7 +59,7 @@ def _session(project_path: str = "/work/repo") -> UnifiedSession:
 @pytest.fixture(autouse=True)
 def _ollama_available(monkeypatch: pytest.MonkeyPatch) -> None:
     """Pretend the ollama module is importable; monkeypatch restores it after each test."""
-    monkeypatch.setattr("lore.titles.generator.OLLAMA_AVAILABLE", True)
+    monkeypatch.setattr("annuli.titles.generator.OLLAMA_AVAILABLE", True)
 
 
 def _title_generator(tmp_path: Path, **kwargs: Any) -> TitleGenerator:
@@ -95,7 +95,7 @@ def test_remote_ollama_title_refuses_without_optin(
 ) -> None:
     monkeypatch.setenv("OLLAMA_HOST", "http://192.0.2.1:11434")
     recorder = _RecordingOllama()
-    monkeypatch.setattr("lore.titles.generator.ollama", recorder.module())
+    monkeypatch.setattr("annuli.titles.generator.ollama", recorder.module())
     gen = _title_generator(tmp_path, strategy=TitleStrategy.SMART, provider="local")
 
     with pytest.raises(CloudOptInRequired) as exc_info:
@@ -112,12 +112,12 @@ def test_remote_ollama_title_with_optin_reaches_chat(
 ) -> None:
     monkeypatch.setenv("OLLAMA_HOST", "http://192.0.2.1:11434")
     if optin == "env":
-        monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+        monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
         kwargs: Dict[str, Any] = {}
     else:
         kwargs = {"allow_cloud": True}
     recorder = _RecordingOllama()
-    monkeypatch.setattr("lore.titles.generator.ollama", recorder.module())
+    monkeypatch.setattr("annuli.titles.generator.ollama", recorder.module())
     gen = _title_generator(tmp_path, strategy=TitleStrategy.SMART, provider="local", **kwargs)
 
     title = gen.generate(_session(), force=True)
@@ -131,7 +131,7 @@ def test_loopback_ollama_title_still_works_without_optin(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     recorder = _RecordingOllama()
-    monkeypatch.setattr("lore.titles.generator.ollama", recorder.module())
+    monkeypatch.setattr("annuli.titles.generator.ollama", recorder.module())
     gen = _title_generator(tmp_path, strategy=TitleStrategy.SMART, provider="local")
 
     title = gen.generate(_session(), force=True)
@@ -219,7 +219,7 @@ def test_openrouter_direct_without_optin_never_calls_transport(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: List[Any] = []
-    monkeypatch.setattr("lore.llm.openrouter.urlopen", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr("annuli.llm.openrouter.urlopen", lambda *a, **k: calls.append(a))
     provider = OpenRouterProvider(
         LLMConfig(provider="openrouter", model="m:free", cache_enabled=False, api_key="k" * 16)
     )
@@ -240,7 +240,7 @@ def test_openrouter_direct_with_allow_cloud_works(monkeypatch: pytest.MonkeyPatc
         calls.append(request)
         return _FakeHTTPResponse(body)
 
-    monkeypatch.setattr("lore.llm.openrouter.urlopen", fake_urlopen)
+    monkeypatch.setattr("annuli.llm.openrouter.urlopen", fake_urlopen)
     provider = OpenRouterProvider(
         LLMConfig(provider="openrouter", model="m:free", cache_enabled=False, api_key="k" * 16),
         allow_cloud=True,
@@ -253,10 +253,10 @@ def test_openrouter_direct_with_allow_cloud_works(monkeypatch: pytest.MonkeyPatc
 
 
 def test_jev_direct_without_optin_never_calls_subprocess(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LORE_JEV_LANES", "local")
+    monkeypatch.setenv("ANNULI_JEV_LANES", "local")
     runs: List[Any] = []
     monkeypatch.setattr(
-        "lore.llm.jev.subprocess.run",
+        "annuli.llm.jev.subprocess.run",
         lambda *a, **k: runs.append(a) or subprocess.CompletedProcess(a[0], 0, stdout="ok"),
     )
     provider = JevProvider(LLMConfig(provider="jev", model="local", cache_enabled=False))
@@ -268,14 +268,14 @@ def test_jev_direct_without_optin_never_calls_subprocess(monkeypatch: pytest.Mon
 
 
 def test_jev_direct_with_allow_cloud_works(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LORE_JEV_LANES", "local")
+    monkeypatch.setenv("ANNULI_JEV_LANES", "local")
     runs: List[Any] = []
 
     def fake_run(cmd: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         runs.append(cmd)
         return subprocess.CompletedProcess(cmd, 0, stdout="ok\n", stderr="")
 
-    monkeypatch.setattr("lore.llm.jev.subprocess.run", fake_run)
+    monkeypatch.setattr("annuli.llm.jev.subprocess.run", fake_run)
     provider = JevProvider(
         LLMConfig(provider="jev", model="local", cache_enabled=False), allow_cloud=True
     )

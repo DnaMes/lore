@@ -1,6 +1,6 @@
 """Unit tests for the pure helpers of scripts/smoke_install.py.
 
-The end-to-end run (venv, pip install, lore subprocesses) lives in the script itself
+The end-to-end run (venv, pip install, annuli subprocesses) lives in the script itself
 and is never executed from the test suite; these tests only cover its helpers.
 """
 
@@ -30,7 +30,12 @@ smoke = _load_script()
 
 
 def test_isolated_env_points_every_root_into_home(tmp_path):
-    base = {"PATH": "/bin", "LORE_OUTPUT_DIR": "/real/.lore", "PYTHONPATH": "/src", "HOME": "/x"}
+    base = {
+        "PATH": "/bin",
+        "ANNULI_OUTPUT_DIR": "/real/.annuli",
+        "PYTHONPATH": "/src",
+        "HOME": "/x",
+    }
     env = smoke.isolated_env(tmp_path, base)
     for key in (
         "HOME",
@@ -44,7 +49,7 @@ def test_isolated_env_points_every_root_into_home(tmp_path):
     ):
         assert env[key].startswith(str(tmp_path)), key
     assert env["PATH"] == "/bin"
-    assert "LORE_OUTPUT_DIR" not in env
+    assert "ANNULI_OUTPUT_DIR" not in env
     assert "PYTHONPATH" not in env
     assert base["HOME"] == "/x"  # the base mapping is not mutated
 
@@ -63,7 +68,7 @@ def test_isolated_env_strips_every_cloud_credential_prefix(tmp_path):
         "DEEPSEEK_API_KEY": "d",
         "MINIMAX_API_KEY": "mm",
         "COHERE_API_KEY": "c",
-        "LORE_ALLOW_CLOUD": "1",
+        "ANNULI_ALLOW_CLOUD": "1",
         "HF_TOKEN": "hf",
         "AWS_SECRET_ACCESS_KEY": "aws",
     }
@@ -79,9 +84,9 @@ def test_isolated_env_strips_every_cloud_credential_prefix(tmp_path):
 
 
 def test_isolated_env_defaults_to_process_environment(tmp_path, monkeypatch):
-    monkeypatch.setenv("LORE_ALLOW_CLOUD", "1")
+    monkeypatch.setenv("ANNULI_ALLOW_CLOUD", "1")
     env = smoke.isolated_env(tmp_path)
-    assert "LORE_ALLOW_CLOUD" not in env
+    assert "ANNULI_ALLOW_CLOUD" not in env
     assert env["HOME"] == str(tmp_path)
 
 
@@ -112,9 +117,9 @@ def test_bad_host_cases_cover_required_forms():
 
 
 def test_with_extra_handles_wheel_and_requirement(tmp_path):
-    assert smoke.with_extra("lore", "semantic") == "lore[semantic]"
-    assert smoke.with_extra("lore==2.4.0", "semantic") == "lore[semantic]==2.4.0"
-    wheel = str(tmp_path / "lore-2.4.0-py3-none-any.whl")
+    assert smoke.with_extra("annuli", "semantic") == "annuli[semantic]"
+    assert smoke.with_extra("annuli==2.4.0", "semantic") == "annuli[semantic]==2.4.0"
+    wheel = str(tmp_path / "annuli-2.4.0-py3-none-any.whl")
     assert smoke.with_extra(wheel, "semantic") == wheel + "[semantic]"
 
 
@@ -122,7 +127,7 @@ def test_mcp_tool_names_skips_noise_and_reads_id_2():
     stdout = "\n".join(
         [
             "log line that is not JSON",
-            '{"jsonrpc": "2.0", "id": 1, "result": {"serverInfo": {"name": "lore"}}}',
+            '{"jsonrpc": "2.0", "id": 1, "result": {"serverInfo": {"name": "annuli"}}}',
             '{"jsonrpc": "2.0", "id": 2, "result": {"tools": ['
             '{"name": "search_history"}, {"name": "memory_write"}, {"description": "no name"}'
             "]}}",
@@ -151,9 +156,9 @@ def test_exit_code_zero_on_success_and_capped_at_255():
 
 def test_expect_fails_on_wrong_exit_missing_needle_or_traceback():
     def proc(rc: int, out: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(["lore"], rc, stdout=out, stderr="")
+        return subprocess.CompletedProcess(["annuli"], rc, stdout=out, stderr="")
 
-    assert smoke.expect("ok", proc(0, "hint: lore export --all"), needles=("export",)).status == (
+    assert smoke.expect("ok", proc(0, "hint: annuli export --all"), needles=("export",)).status == (
         "PASS"
     )
     assert smoke.expect("rc", proc(1, "x")).status == "FAIL"
@@ -163,11 +168,11 @@ def test_expect_fails_on_wrong_exit_missing_needle_or_traceback():
 
 
 def test_shebang_python_reads_interpreter_but_not_env_wrappers(tmp_path):
-    pipx = tmp_path / "lore"
-    pipx.write_text("#!/home/u/.local/pipx/venvs/lore/bin/python3\nprint(1)\n", encoding="utf-8")
+    pipx = tmp_path / "annuli"
+    pipx.write_text("#!/home/u/.local/pipx/venvs/annuli/bin/python3\nprint(1)\n", encoding="utf-8")
     env_wrapper = tmp_path / "other"
     env_wrapper.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
-    assert smoke.shebang_python(str(pipx)) == "/home/u/.local/pipx/venvs/lore/bin/python3"
+    assert smoke.shebang_python(str(pipx)) == "/home/u/.local/pipx/venvs/annuli/bin/python3"
     assert smoke.shebang_python(str(env_wrapper)) is None
     assert smoke.shebang_python(str(tmp_path / "missing")) is None
     assert smoke.shebang_python(None) is None

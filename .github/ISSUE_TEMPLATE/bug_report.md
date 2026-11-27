@@ -17,7 +17,7 @@ What should have happened.
 **Environment**
 - OS: [e.g. macOS 14, Ubuntu 22.04, Windows 11 WSL]
 - Python version: `python --version`
-- lore version: `lore --version` or `pip show lore`
+- annuli version: `annuli --version` or `pip show annuli`
 - Affected AI tool: [Claude Code / Cursor / Gemini CLI / Codex / VSCode Copilot / OpenCode]
 
 **Logs / Output**

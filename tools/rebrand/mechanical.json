@@ -1,0 +1,5 @@
+{
+  "script": "tools/rebrand/rename.py",
+  "moves": "tools/rebrand/moves.tsv",
+  "files": "tools/rebrand/files.txt"
+}

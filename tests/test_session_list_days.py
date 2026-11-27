@@ -8,8 +8,8 @@ from html.parser import HTMLParser
 
 import pytest
 
-from lore.interfaces import web
-from lore.interfaces.web_formatting import (
+from annuli.interfaces import web
+from annuli.interfaces.web_formatting import (
     format_day_header_label,
     group_sessions_for_list,
     session_day_iso,
@@ -39,7 +39,7 @@ def _session(sid: str, updated: str, **extra) -> dict:
         "display_title": f"Session {sid}",
         "created": updated,
         "updated": updated,
-        "project": "/repo/lore",
+        "project": "/repo/annuli",
         "messages": 2,
         "prompts": 1,
         "tokens": 100,
@@ -223,7 +223,7 @@ def test_session_day_iso_uses_updated():
 
 
 def test_sessions_without_dates_get_a_readable_group_label():
-    from lore.interfaces.web_formatting import group_sessions_for_list
+    from annuli.interfaces.web_formatting import group_sessions_for_list
 
     groups = group_sessions_for_list([{"id": "a"}, {"id": "b", "created": "garbage"}])
 

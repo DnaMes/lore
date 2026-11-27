@@ -1,7 +1,7 @@
 """Tests for vendored web assets — offline / air-gapped support (issues #19, #129).
 
 The web UI must not depend on any CDN: highlight.js is checked into
-``lore/interfaces/static/`` and served by Flask. Tailwind is a build-time
+``annuli/interfaces/static/`` and served by Flask. Tailwind is a build-time
 compiled stylesheet (#129) — also checked in, but produced by
 ``scripts/build_tailwind.sh`` rather than downloaded.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from lore.interfaces import web
+from annuli.interfaces import web
 
 STATIC_DIR = Path(web.__file__).parent / "static"
 
@@ -62,9 +62,9 @@ def test_templates_reference_no_cdn():
     """No CDN host may appear in any template file (#30 — templates are now files)."""
     from pathlib import Path
 
-    templates_dir = Path(__file__).resolve().parent.parent / "lore" / "templates"
+    templates_dir = Path(__file__).resolve().parent.parent / "annuli" / "templates"
     template_files = sorted(templates_dir.glob("*.html"))
-    assert template_files, "no template files found under lore/templates/"
+    assert template_files, "no template files found under annuli/templates/"
 
     cdn_hosts = (
         "cdn.tailwindcss.com",
@@ -87,7 +87,7 @@ def test_dashboard_links_local_assets(client):
 
 def test_templates_load_no_tailwind_jit_runtime():
     """The Play-CDN JIT runtime must be gone from every template (#129)."""
-    templates_dir = Path(__file__).resolve().parent.parent / "lore" / "templates"
+    templates_dir = Path(__file__).resolve().parent.parent / "annuli" / "templates"
     for tpl in sorted(templates_dir.glob("*.html")):
         value = tpl.read_text(encoding="utf-8")
         assert "tailwind-3.4.16.min.js" not in value, (

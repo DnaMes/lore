@@ -17,13 +17,13 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.services import index as index_service
-from lore.storage import add_memory, add_session_tag
-from lore.storage.freshness import store_freshness
-from lore.storage.reader import load_ignored_session_ids
-from lore.storage.retention import record_ignored
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.services import index as index_service
+from annuli.storage import add_memory, add_session_tag
+from annuli.storage.freshness import store_freshness
+from annuli.storage.reader import load_ignored_session_ids
+from annuli.storage.retention import record_ignored
 
 # Fields both payloads must carry with the same value. ``source_mtime`` is
 # excluded on purpose: it is a stat artifact (the stored ns timestamp versus the
@@ -57,7 +57,7 @@ def _session(
     tool: Tool,
     *,
     day: int,
-    project: str = "/repo/lore",
+    project: str = "/repo/annuli",
     thread_id: str | None = None,
     turns: int = 3,
 ) -> UnifiedSession:
@@ -139,7 +139,7 @@ def archive(tmp_path, monkeypatch):
         kind="decision",
         title="Retire the JSON dual-path",
         body="The v2 store is the source of truth; JSON is export-only.",
-        scope_project="/repo/lore",
+        scope_project="/repo/annuli",
         tags=["architecture"],
         source_session="claude-1",
     )
@@ -153,7 +153,7 @@ def archive(tmp_path, monkeypatch):
 
 
 def _load(tmp_path, monkeypatch, *, use_v2: bool) -> dict:
-    monkeypatch.setenv("LORE_USE_V2", "1" if use_v2 else "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "1" if use_v2 else "0")
     index_service.clear_index_cache()
     deleted = index_service.load_deleted_session_ids(tmp_path / "deleted_sessions.json")
     return index_service.load_index(tmp_path / "index.json", tmp_path, deleted)

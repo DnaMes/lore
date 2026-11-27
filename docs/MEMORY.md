@@ -1,10 +1,10 @@
 # Shared memory
 
-Lore keeps a shared local store of facts, decisions, lessons and links that any AI tool
+Annuli keeps a shared local store of facts, decisions, lessons and links that any AI tool
 can write to and recall later, either through the CLI or over MCP. Memories live in the
-same SQLite index as the extracted sessions, under `~/.lore`; the memory tables
+same SQLite index as the extracted sessions, under `~/.annuli`; the memory tables
 (`memory`, `memory_tags`, `memory_sources`, `memory_embeddings`, `memory_feedback`) are
-defined in `lore/storage/schema.py`. Because they share the unified search index, a
+defined in `annuli/storage/schema.py`. Because they share the unified search index, a
 single query can surface both past sessions and recorded knowledge. Nothing leaves the
 machine.
 
@@ -26,7 +26,7 @@ points at it, in a single transaction. The old belief remains visible for audit.
 ## Record
 
 ```bash
-lore memory add \
+annuli memory add \
     --kind decision \
     --title "Use Postgres 16" \
     --body "Standardise the stack on PG16" \
@@ -46,37 +46,37 @@ lore memory add \
 ## Find
 
 ```bash
-lore memory list
-lore memory list --kind decision --project /path/to/repo --limit 20
-lore memory list --all                      # include superseded memories
-lore memory search postgres
-lore memory search "database performance"   # keyword plus meaning when available
-lore memory search "database performance" --semantic
-lore memory search '"exact phrase"'         # quoted phrase
-lore memory show 7
+annuli memory list
+annuli memory list --kind decision --project /path/to/repo --limit 20
+annuli memory list --all                      # include superseded memories
+annuli memory search postgres
+annuli memory search "database performance"   # keyword plus meaning when available
+annuli memory search "database performance" --semantic
+annuli memory search '"exact phrase"'         # quoted phrase
+annuli memory show 7
 ```
 
-- `lore memory list` filters by `--kind`, `--project`, `--limit`, and hides superseded
+- `annuli memory list` filters by `--kind`, `--project`, `--limit`, and hides superseded
   rows unless `--all` is given.
-- `lore memory search QUERY` filters by `--kind`, `--project`, `--limit`.
+- `annuli memory search QUERY` filters by `--kind`, `--project`, `--limit`.
 - `--semantic` ranks by meaning only, with no relevance floor. Without the flag, search
   uses keywords plus meaning when the optional semantic extra is installed, and stays
   keyword-only otherwise. See `./INSTALL.md` for the extra.
 
 In the default mode only semantic candidates above the calibrated recall floor are added
 to the keyword results, so an unrelated query is not padded with nearest neighbours. The
-floor is configurable through `LORE_MEMORY_RECALL_MIN_SIMILARITY`; see
+floor is configurable through `ANNULI_MEMORY_RECALL_MIN_SIMILARITY`; see
 `./CONFIGURATION.md` for the value and the calibration record.
 
 By default only confirmed memories are returned.
 
 ## Context for an agent
 
-`lore memory context` renders a prompt block for injection into an agent session:
+`annuli memory context` renders a prompt block for injection into an agent session:
 
 ```bash
-lore memory context --project /path/to/repo --budget 2000
-lore memory context --project /path/to/repo --tool claude --format json
+annuli memory context --project /path/to/repo --budget 2000
+annuli memory context --project /path/to/repo --tool claude --format json
 ```
 
 - `--project` project scope, default the current working directory, resolved
@@ -102,14 +102,14 @@ project path):
 
 ```text
 Recently in this project:
-- 2026-11-10 claude-code "Lore-Widget für Omarchy-Leiste": Added the widget, tests green https://lore.local.erdlabs.com/session/237eb581-…
+- 2026-11-10 claude-code "Annuli-Widget für Omarchy-Leiste": Added the widget, tests green https://lore.local.erdlabs.com/session/237eb581-…
 ```
 
 - The line shows the date, the tool, and the title when one exists. When a stored one-line
   summary exists it is shown after the title. Without a title, the first prompt line (cut
   to 120 characters) stands in instead; a title without a stored summary is left unadorned.
-  A Lore web link follows when configured.
-- The web base comes from `LORE_WEB_URL` (default `https://lore.local.erdlabs.com`). Set
+  A Annuli web link follows when configured.
+- The web base comes from `ANNULI_WEB_URL` (default `https://lore.local.erdlabs.com`). Set
   it to an empty value to drop the links.
 - Automated sessions (`exec`, `cron`, `subagent`), deleted or ignored sessions and the
   running session (`CLAUDE_CODE_SESSION_ID`) are never listed.
@@ -120,12 +120,12 @@ Recently in this project:
 
 ## Import from Claude Code
 
-`lore memory import-claude` seeds the store from Claude Code auto-memory files:
+`annuli memory import-claude` seeds the store from Claude Code auto-memory files:
 
 ```bash
-lore memory import-claude                  # dry run: count what would be imported
-lore memory import-claude --apply           # write the memories
-lore memory import-claude --root /path/to/.claude/projects --apply
+annuli memory import-claude                  # dry run: count what would be imported
+annuli memory import-claude --apply           # write the memories
+annuli memory import-claude --root /path/to/.claude/projects --apply
 ```
 
 - Dry run is the default; `--apply` writes.
@@ -143,12 +143,12 @@ lore memory import-claude --root /path/to/.claude/projects --apply
 
 ## Dedupe
 
-`lore memory dedupe` finds exact duplicate groups among confirmed memories:
+`annuli memory dedupe` finds exact duplicate groups among confirmed memories:
 
 ```bash
-lore memory dedupe                          # dry run: print groups with kept/rejected ids
-lore memory dedupe --apply                  # reject the planned duplicates
-lore memory dedupe --restore dedupe-undo-2026-10-14T10-00-00Z.json
+annuli memory dedupe                          # dry run: print groups with kept/rejected ids
+annuli memory dedupe --apply                  # reject the planned duplicates
+annuli memory dedupe --restore dedupe-undo-2026-10-14T10-00-00Z.json
 ```
 
 - Dry run is the default. `--apply` rejects the planned duplicates in one transaction and
@@ -176,8 +176,8 @@ and how it was produced.
 | `request` | `{provider, model, prompt_version}` — what produced it |
 
 ```bash
-lore memory list --status candidate          # what waits for review
-lore memory list --status confirmed --json   # audit export with claim + evidence
+annuli memory list --status candidate          # what waits for review
+annuli memory list --status confirmed --json   # audit export with claim + evidence
 ```
 
 `record_claim()` (Python) stores these as a **candidate** by default: generation
@@ -193,28 +193,28 @@ A memory written by an agent can arrive as `candidate`: stored, but outside reca
 until a human accepts it.
 
 ```bash
-lore memory review                      # list what is waiting
-lore memory review accept 12 15         # confirm them
-lore memory review reject 14            # keep the row, exclude it from recall
-lore memory review --json               # machine-readable listing
+annuli memory review                      # list what is waiting
+annuli memory review accept 12 15         # confirm them
+annuli memory review reject 14            # keep the row, exclude it from recall
+annuli memory review --json               # machine-readable listing
 ```
 
 The web UI has the same queue at `/memory?status=candidate`, with Accept and Reject
 on each card; both post to `/memory/<id>/review`. Rejection is a status change, not
 a delete: `set_memory_status(..., "confirmed", from_status="rejected")` restores a
-memory, and `lore memory review` never touches a memory that is not a candidate
+memory, and `annuli memory review` never touches a memory that is not a candidate
 (it reports the id as unchanged).
 
 ## Rate
 
 ```bash
-lore memory rate 7 5
-lore memory rate 7 2 --rater alice
+annuli memory rate 7 5
+annuli memory rate 7 2 --rater alice
 ```
 
 `ID` is the memory id, `SCORE` runs from 1 (wrong) to 5 (right and useful), and `--rater`
 defaults to `human`. Feedback is stored as a bounded weight. It changes recall ranking
-only when `LORE_FEEDBACK_INFLUENCE` is above 0; see `./CONFIGURATION.md`.
+only when `ANNULI_FEEDBACK_INFLUENCE` is above 0; see `./CONFIGURATION.md`.
 
 ## Agents over MCP
 
@@ -229,7 +229,7 @@ schemas.
 
 ## The skill
 
-`skills/lore-memory/SKILL.md` is the agent-facing form of this page: when to recall, how
+`skills/annuli-memory/SKILL.md` is the agent-facing form of this page: when to recall, how
 to record one fact per memory, the review queue and the MCP tools. It ships in the sdist
 (`graft skills` in `MANIFEST.in`), so an install carries the same instructions this
 repository documents — point an agent harness at it instead of restating the rules.
@@ -237,20 +237,20 @@ repository documents — point an agent harness at it instead of restating the r
 ### Install it into a tool
 
 A skill is one directory with the `SKILL.md` inside it. Copy the file where the tool
-looks for user-level skills, then start a new session; no restart of Lore is involved.
+looks for user-level skills, then start a new session; no restart of Annuli is involved.
 
 ```bash
 # Claude Code — verified: ~/.claude/skills exists on this host
-mkdir -p ~/.claude/skills/lore-memory
-cp skills/lore-memory/SKILL.md ~/.claude/skills/lore-memory/
+mkdir -p ~/.claude/skills/annuli-memory
+cp skills/annuli-memory/SKILL.md ~/.claude/skills/annuli-memory/
 
 # Codex — verified: ~/.codex/skills exists on this host
-mkdir -p ~/.codex/skills/lore-memory
-cp skills/lore-memory/SKILL.md ~/.codex/skills/lore-memory/
+mkdir -p ~/.codex/skills/annuli-memory
+cp skills/annuli-memory/SKILL.md ~/.codex/skills/annuli-memory/
 
 # Cursor — project level, next to the code the agent works on
-mkdir -p .cursor/skills/lore-memory
-cp skills/lore-memory/SKILL.md .cursor/skills/lore-memory/
+mkdir -p .cursor/skills/annuli-memory
+cp skills/annuli-memory/SKILL.md .cursor/skills/annuli-memory/
 ```
 
 Only the sdist carries `skills/` (`graft skills` in `MANIFEST.in`); a wheel does not

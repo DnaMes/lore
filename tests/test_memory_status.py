@@ -8,10 +8,10 @@ from argparse import Namespace
 
 import pytest
 
-import lore.storage.embeddings as emb
-import lore_cli
-from lore.interfaces import mcp, web, web_data
-from lore.storage import (
+import annuli.storage.embeddings as emb
+import annuli_cli
+from annuli.interfaces import mcp, web, web_data
+from annuli.storage import (
     add_memory,
     feedback_weight,
     get_memory,
@@ -19,9 +19,9 @@ from lore.storage import (
     recall_memory,
     record_feedback,
 )
-from lore.storage.memory import set_memory_status
-from lore.storage.schema import MIGRATIONS, current_version, initialise, open_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage.memory import set_memory_status
+from annuli.storage.schema import MIGRATIONS, current_version, initialise, open_connection
+from annuli.storage.writer import v2_db_path
 
 
 @pytest.fixture(autouse=True)
@@ -134,7 +134,7 @@ def test_semantic_and_hybrid_paths_hide_candidates(tmp_path, monkeypatch):
 
     monkeypatch.setattr(emb, "embed_text", fake)
     monkeypatch.setattr(emb, "embeddings_available", lambda: True)
-    monkeypatch.delenv("LORE_MEMORY_RECALL_MIN_SIMILARITY", raising=False)
+    monkeypatch.delenv("ANNULI_MEMORY_RECALL_MIN_SIMILARITY", raising=False)
     confirmed = add_memory(tmp_path, "fact", "Postgres notes", "relational")
     add_memory(tmp_path, "fact", "Postgres draft", "relational", status="candidate")
     assert _ids(recall_memory(tmp_path, "postgres")) == [confirmed]  # hybrid
@@ -231,7 +231,7 @@ def test_cli_list_and_search_hide_candidates(tmp_path, capsys, action):
         limit=10,
         semantic=False,
     )
-    lore_cli.cmd_memory(args)
+    annuli_cli.cmd_memory(args)
     out = capsys.readouterr().out
     assert "Confirmed zebra" in out
     assert "Candidate zebra" not in out

@@ -1,6 +1,6 @@
 # Web UI
 
-The Lore web interface provides a local dashboard, session inspector, full-text search, and REST API for exploring recorded AI coding sessions across supported tools.
+The Annuli web interface provides a local dashboard, session inspector, full-text search, and REST API for exploring recorded AI coding sessions across supported tools.
 
 ## Start
 
@@ -8,10 +8,10 @@ The web UI can be started using the installed console script or directly via Pyt
 
 ```bash
 # Using installed entry point
-lore-web
+annuli-web
 
 # Or directly from a clone
-python3 lore/cli/web.py
+python3 annuli/cli/web.py
 ```
 
 By default, the server binds to `127.0.0.1:5000`.
@@ -22,20 +22,20 @@ The CLI flags and corresponding environment variables are:
 
 | Flag | Default | Environment Variable | Purpose |
 | --- | --- | --- | --- |
-| `--host HOST` | `127.0.0.1` | `LORE_WEB_HOST` | Bind host address. |
-| `--port PORT` | `5000` | `LORE_WEB_PORT` | Bind port number. |
-| `--debug` | `false` | `LORE_WEB_DEBUG` | Runs Flask in debug mode when set to `true`. |
+| `--host HOST` | `127.0.0.1` | `ANNULI_WEB_HOST` | Bind host address. |
+| `--port PORT` | `5000` | `ANNULI_WEB_PORT` | Bind port number. |
+| `--debug` | `false` | `ANNULI_WEB_DEBUG` | Runs Flask in debug mode when set to `true`. |
 
 For complete variable descriptions, see [Configuration](./CONFIGURATION.md).
 
 ### Production Deployment
 
-The `lore-web` script runs the built-in Flask development server. As noted in the command help text (`lore-web --help`), production environments should run behind a WSGI server such as gunicorn.
+The `annuli-web` script runs the built-in Flask development server. As noted in the command help text (`annuli-web --help`), production environments should run behind a WSGI server such as gunicorn.
 
 The official Docker image (`Dockerfile`) uses the following command:
 
 ```bash
-gunicorn --workers 1 --threads 8 --bind 0.0.0.0:5000 --access-logfile - --error-logfile - lore.interfaces.web:app
+gunicorn --workers 1 --threads 8 --bind 0.0.0.0:5000 --access-logfile - --error-logfile - annuli.interfaces.web:app
 ```
 
 ## Pages
@@ -45,7 +45,7 @@ status, structure — are written down in [`READING-CONTRACT.md`](./READING-CONT
 and checked over every page by `tests/test_a11y_reading_contract.py`.
 
 
-User-facing interface routes defined in `lore/interfaces/web.py` are grouped into functional views:
+User-facing interface routes defined in `annuli/interfaces/web.py` are grouped into functional views:
 
 ### Dashboard and Discovery
 
@@ -65,7 +65,7 @@ User-facing interface routes defined in `lore/interfaces/web.py` are grouped int
   (its last microsecond), so a session recorded at 18:00 on the chosen final day is
   included; a timestamp carrying an offset (`+02:00`, `Z`) is converted to the local
   wall clock instead of being compared naively. The CLI and MCP surfaces use the same
-  helper (`lore.utils.datetime.parse_date_bound`, `datetime_in_range`).
+  helper (`annuli.utils.datetime.parse_date_bound`, `datetime_in_range`).
 
   The `tag` filter matches the user's saved tags/bookmarks (the `session_tags`
   table behind `/api/sessions/<id>/tags`) as well as the LLM-generated index
@@ -145,7 +145,7 @@ The sidebar navigation is grouped into the main list (`Dashboard`, `Sessions`, `
 
 | Route | Purpose |
 | --- | --- |
-| `/help` | In-app guide covering what Lore does, glossary terms, search syntax, keyboard shortcuts, sync, privacy, and credits. |
+| `/help` | In-app guide covering what Annuli does, glossary terms, search syntax, keyboard shortcuts, sync, privacy, and credits. |
 | `/settings` | Read-only overview of the local instance (version and revision, Light/Dark theme picker, search mode and message index status, data directory, AI summary provider/key presence without exposing values, and links to Threads, Rules, and Noise rules). |
 
 ### Mutating Actions and Exports
@@ -160,7 +160,7 @@ The sidebar navigation is grouped into the main list (`Dashboard`, `Sessions`, `
 
 ## API
 
-The application exposes JSON endpoints under `/api/`. Mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`) that carry an `Origin` header must be same-origin or match `LORE_PUBLIC_ORIGINS` with `TRUSTED_PROXY` enabled. Rejected origins receive HTTP 403.
+The application exposes JSON endpoints under `/api/`. Mutating requests (`POST`, `PUT`, `PATCH`, `DELETE`) that carry an `Origin` header must be same-origin or match `ANNULI_PUBLIC_ORIGINS` with `TRUSTED_PROXY` enabled. Rejected origins receive HTTP 403.
 
 | Purpose | Method | Route | Description |
 | --- | --- | --- | --- |
@@ -201,7 +201,7 @@ The search endpoints read the v2 store's full-text index, so a request does not
 scan the session corpus:
 
 - The query is an FTS5 `MATCH` against the shared `search_index` table joined to
-  `sessions` (`lore/storage/search.py`). The tool, project, tag and date
+  `sessions` (`annuli/storage/search.py`). The tool, project, tag and date
   filters are part of the SQL statement, so they constrain the candidates inside
   the indexed query instead of filtering a scanned result set afterwards.
 - Snippets and evidence are built only for the hits of the returned page
@@ -218,7 +218,7 @@ The web UI sends one request per debounced keystroke (350 ms), and every request
 carries a sequence number, so only the newest query paints its results.
 
 When the v2 store is missing or stale, the search falls back to the legacy
-`SearchEngine` (`lore/search/engine.py`) over `index.sqlite`.
+`SearchEngine` (`annuli/search/engine.py`) over `index.sqlite`.
 
 ## Health
 
@@ -241,7 +241,7 @@ The web application exposes two dedicated endpoints for operational checks:
   ```
 
 - `/api/ready`: Deep readiness probe checking that:
-  - The storage output directory (`OUTPUT_DIR`, default `~/.lore`) exists and is writable (`os.access(OUTPUT_DIR, os.W_OK)`).
+  - The storage output directory (`OUTPUT_DIR`, default `~/.annuli`) exists and is writable (`os.access(OUTPUT_DIR, os.W_OK)`).
   - The parent directory of the session index file exists.
   - The index file itself is checked (`index_exists`).
   Returns HTTP 200 with `"status": "ready"` if writable and accessible, or HTTP 503 with `"status": "degraded"` along with reported errors if checks fail.
@@ -252,26 +252,26 @@ Both endpoints bypass rate limiting.
 
 The security model is based directly on the application implementation:
 
-- **No built-in login**: A search across interface modules (`grep -rn -i "login\|basic_auth\|authenticate\|password" lore/interfaces/web*.py`) yields only one match:
-  `lore/interfaces/web_utils.py:152: if parsed.username is not None or parsed.password is not None:`
+- **No built-in login**: A search across interface modules (`grep -rn -i "login\|basic_auth\|authenticate\|password" annuli/interfaces/web*.py`) yields only one match:
+  `annuli/interfaces/web_utils.py:152: if parsed.username is not None or parsed.password is not None:`
   This check ensures that configured origins reject embedded credentials. The web interface has no user authentication, login screens, or basic auth checks. See the [Security Policy](../SECURITY.md).
 - **Loopback binding by default**: The application binds strictly to `127.0.0.1` out of the box. Exposing the web UI outside the local machine requires placing it behind a reverse proxy (e.g. Caddy, Nginx, or Traefik) that enforces authentication (such as Basic Auth, OAuth2/OIDC, or mTLS) and handles TLS.
 - **Origin checks**: Every mutating request (`POST`, `PUT`, `PATCH`, `DELETE`) that carries an `Origin` header is validated before it reaches a route.
   - The origin must match the request's own `scheme://host[:port]`. Scheme, host, and port are compared.
   - Ports in Host and Origin values must be ASCII digits in 1..65535; a value with no port or outside that range (`0`, `65536`, a non-ASCII digit string) is malformed.
-  - Origins listed in `LORE_PUBLIC_ORIGINS` (comma-separated `scheme://host[:port]` entries) are also accepted when `TRUSTED_PROXY` is enabled.
+  - Origins listed in `ANNULI_PUBLIC_ORIGINS` (comma-separated `scheme://host[:port]` entries) are also accepted when `TRUSTED_PROXY` is enabled.
   - A malformed or disallowed origin receives HTTP 403. A request without an `Origin` header is not rejected by this check.
   - Without `TRUSTED_PROXY`, forwarded headers are not processed. This prevents forwarded-header spoofing.
-- **Host header check**: Every request is validated against a `Host` allowlist before it reaches a route. A disallowed or malformed `Host` receives HTTP 400 (`Bad Host header`). The allowlist contains `localhost`, `127.0.0.1`, `[::1]`, the bind host (`--host` or `LORE_WEB_HOST`), and the host of every `LORE_PUBLIC_ORIGINS` entry. Add extra hosts with `LORE_ALLOWED_HOSTS` (comma-separated `host[:port]` entries). An entry without a port matches any port. The literal `*` disables Host validation and logs a warning.
-- **Non-loopback bind warning**: `lore-web` prints a warning to stderr when bound to a non-loopback host without `LORE_ALLOWED_HOSTS` or `LORE_PUBLIC_ORIGINS`.
-- **Rate limiting**: Enforced in `prepare_request_context_and_limit()` in `lore/interfaces/web.py` using logic from `lore/interfaces/web_utils.py`.
+- **Host header check**: Every request is validated against a `Host` allowlist before it reaches a route. A disallowed or malformed `Host` receives HTTP 400 (`Bad Host header`). The allowlist contains `localhost`, `127.0.0.1`, `[::1]`, the bind host (`--host` or `ANNULI_WEB_HOST`), and the host of every `ANNULI_PUBLIC_ORIGINS` entry. Add extra hosts with `ANNULI_ALLOWED_HOSTS` (comma-separated `host[:port]` entries). An entry without a port matches any port. The literal `*` disables Host validation and logs a warning.
+- **Non-loopback bind warning**: `annuli-web` prints a warning to stderr when bound to a non-loopback host without `ANNULI_ALLOWED_HOSTS` or `ANNULI_PUBLIC_ORIGINS`.
+- **Rate limiting**: Enforced in `prepare_request_context_and_limit()` in `annuli/interfaces/web.py` using logic from `annuli/interfaces/web_utils.py`.
   - All `/api/*` endpoints are rate limited, except `/api/build-info`, `/api/health`, `/api/ready`, and `/api/live`.
-  - Rate limit thresholds per 60-second window (`LORE_RATE_LIMIT_WINDOW_SECONDS`):
-    - `/api/reload-sessions`: `LORE_RATE_LIMIT_RELOAD_PER_WINDOW` (default 12)
-    - `/api/audit`: `LORE_RATE_LIMIT_AUDIT_PER_WINDOW` (default 20)
-    - `/api/search`: `LORE_RATE_LIMIT_SEARCH_PER_WINDOW` (default 180)
-    - Other API routes: `LORE_RATE_LIMIT_MAX_API_REQUESTS` (default 240)
-  - Rate limiting can be disabled globally via `LORE_RATE_LIMIT_ENABLED=false` (see [Configuration](./CONFIGURATION.md)).
+  - Rate limit thresholds per 60-second window (`ANNULI_RATE_LIMIT_WINDOW_SECONDS`):
+    - `/api/reload-sessions`: `ANNULI_RATE_LIMIT_RELOAD_PER_WINDOW` (default 12)
+    - `/api/audit`: `ANNULI_RATE_LIMIT_AUDIT_PER_WINDOW` (default 20)
+    - `/api/search`: `ANNULI_RATE_LIMIT_SEARCH_PER_WINDOW` (default 180)
+    - Other API routes: `ANNULI_RATE_LIMIT_MAX_API_REQUESTS` (default 240)
+  - Rate limiting can be disabled globally via `ANNULI_RATE_LIMIT_ENABLED=false` (see [Configuration](./CONFIGURATION.md)).
 - **Content Security Policy (CSP)**: The server sets a strict `Content-Security-Policy` header:
   `default-src 'self'; script-src 'self' 'nonce-...'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;`
   Inline JavaScript event handlers (such as `onclick` attributes) were replaced with event delegation (`addEventListener` on container elements), ensuring execution complies with script nonces and eliminating inline script injection vectors.
@@ -280,25 +280,25 @@ The security model is based directly on the application implementation:
 
 The web UI includes an optional filesystem watcher to keep session data synchronized:
 
-- Setting `LORE_WATCH=1` (or `true`) activates `_maybe_start_session_watcher()` during startup.
+- Setting `ANNULI_WATCH=1` (or `true`) activates `_maybe_start_session_watcher()` during startup.
 - A background `SessionWatcher` thread monitors extraction source directories across configured tools.
 - When file changes occur, the watcher triggers `clear_index_cache()`, allowing subsequent requests to rebuild the index cache lazily.
-- The polling frequency defaults to 30 seconds and can be adjusted with `LORE_WATCH_INTERVAL` (in seconds).
+- The polling frequency defaults to 30 seconds and can be adjusted with `ANNULI_WATCH_INTERVAL` (in seconds).
 
 ## Probe
 
 The repository includes a security and validation test tool for web deployments:
 
 ```bash
-lore-web-probe --base-url http://127.0.0.1:5000
+annuli-web-probe --base-url http://127.0.0.1:5000
 ```
 
-CLI options from `lore/interfaces/live_probe.py`:
+CLI options from `annuli/interfaces/live_probe.py`:
 
 - `--base-url BASE_URL`: Target base URL to probe (required).
 - `--user USER`: Basic auth username for authenticating through a reverse proxy.
 - `--password PASSWORD`: Basic auth password (direct CLI argument; avoid using in script files or shell history).
-- `--password-env PASSWORD_ENV`: Environment variable name holding the basic auth password (default: `LORE_WEB_PROBE_PASSWORD`). To prevent credential leaks, pass passwords exclusively via `--password-env` rather than hardcoding credentials.
+- `--password-env PASSWORD_ENV`: Environment variable name holding the basic auth password (default: `ANNULI_WEB_PROBE_PASSWORD`). To prevent credential leaks, pass passwords exclusively via `--password-env` rather than hardcoding credentials.
 - `--timeout-seconds TIMEOUT_SECONDS`: Per-request timeout in seconds (default: 20).
 - `--timeout-retries TIMEOUT_RETRIES`: Number of retry attempts upon request timeout (default: 1).
 - `--json`: Outputs results as structured JSON instead of line-by-line terminal text.
@@ -326,10 +326,10 @@ result in the release checklist for every release.
 
 ## Web module layout
 
-`lore/interfaces/web.py` is the app factory: it builds `app`, installs the
+`annuli/interfaces/web.py` is the app factory: it builds `app`, installs the
 request hooks (CSP nonce, host allowlist, rate limit, security headers, metrics)
 and exposes `create_app()`. Every route handler lives in
-`lore/interfaces/routes/`, one Flask `Blueprint` per group:
+`annuli/interfaces/routes/`, one Flask `Blueprint` per group:
 
 | Module | Owns |
 | --- | --- |
@@ -347,12 +347,12 @@ calls it at import time and again from `create_app()` (idempotent).
 
 ### Patch-target compatibility rule
 
-The test suite patches `lore.interfaces.web.<name>` (~55 call sites), including
+The test suite patches `annuli.interfaces.web.<name>` (~55 call sites), including
 helpers such as `load_index`, `load_sessions_for_tool`, `OUTPUT_DIR`,
 `sessions_list_now` and `resolve_export_path`. A route module must therefore
 **never bind a shared seam at import time**. Instead it imports the module
-(`from lore.interfaces import web as _web`) and calls `_web.<name>` at request
-time, so a patch on `lore.interfaces.web` is observed by the handler. `web.py`
+(`from annuli.interfaces import web as _web`) and calls `_web.<name>` at request
+time, so a patch on `annuli.interfaces.web` is observed by the handler. `web.py`
 re-exports every moved view and every moved seam under its old module-level
 name, so both `web.<name>` and `_web.<name>` keep resolving.
 

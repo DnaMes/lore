@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="max-w-4xl mx-auto px-8 py-10">
+    <div class="mb-8">
+        <div class="text-[10px] font-semibold uppercase tracking-[0.24em] text-slate-500">Configuration</div>
+        <h1 class="title-font page-headline text-slate-900 mt-2">Settings</h1>
+        <p class="text-sm text-slate-500 mt-2">Read-only overview of your local Annuli instance.</p>
+    </div>
+
+    <div class="space-y-6">
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">Version &amp; revision</h2>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-xs text-slate-500">Version</dt>
+                    <dd class="font-mono text-slate-900 mt-1">{{ version }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-slate-500">Revision</dt>
+                    <dd class="font-mono text-slate-900 mt-1">{{ revision }}</dd>
+                </div>
+            </dl>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">Theme</h2>
+            <p class="text-sm text-slate-600 mb-4">Choose Light or Dark appearance. Stored locally in your browser.</p>
+            <div class="flex flex-wrap items-center gap-2">
+                <button type="button" class="theme-option border border-slate-200 rounded-xl px-3 py-2" data-theme="light" data-action="select-theme">
+                    <span class="theme-swatch" style="background:#f6f7fb"></span>
+                    <span class="theme-option-label">Light</span>
+                    <svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7"/></svg>
+                </button>
+                <button type="button" class="theme-option border border-slate-200 rounded-xl px-3 py-2" data-theme="dark" data-action="select-theme">
+                    <span class="theme-swatch" style="background:#0c0c10"></span>
+                    <span class="theme-option-label">Dark</span>
+                    <svg class="theme-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="m5 13 4 4L19 7"/></svg>
+                </button>
+            </div>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">Search</h2>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                    <dt class="text-xs text-slate-500">Mode</dt>
+                    <dd class="mt-1"><span class="tag-chip font-mono">{{ search_state.mode }}</span></dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-slate-500">Message index</dt>
+                    <dd class="mt-1"><span class="tag-chip font-mono">{{ search_state.message_index }}</span></dd>
+                </div>
+            </dl>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-3">Data directory</h2>
+            <p class="font-mono text-sm text-slate-900">{{ data_dir }}</p>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">AI summaries</h2>
+            <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-4">
+                <div>
+                    <dt class="text-xs text-slate-500">Provider</dt>
+                    <dd class="font-mono text-slate-900 mt-1">{{ ai_summaries.provider }}</dd>
+                </div>
+                <div>
+                    <dt class="text-xs text-slate-500">Locality</dt>
+                    <dd class="mt-1">
+                        {% if ai_summaries.locality %}
+                        <span class="tag-chip font-mono">{{ ai_summaries.locality }}</span>
+                        {% else %}
+                        <span class="text-xs text-slate-500">—</span>
+                        {% endif %}
+                    </dd>
+                </div>
+            </dl>
+            <table class="shortcuts-help-table w-full text-sm">
+                <tbody>
+                    {% for item in ai_summaries.api_keys %}
+                    <tr>
+                        <td class="font-mono text-slate-900">{{ item.name }}</td>
+                        <td><span class="tag-chip font-mono">{{ 'set' if item.is_set else 'not set' }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            <p class="text-xs text-slate-500 mt-4">Annuli never stores API keys; set them as environment variables for the server (docs/LLM_INTEGRATION.md).</p>
+        </article>
+
+        <article class="surface-card p-6">
+            <h2 class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 mb-4">Pages</h2>
+            <div class="flex flex-wrap gap-3 text-sm">
+                <a href="/threads" class="link-accent">Threads</a>
+                <a href="/rules" class="link-accent">Rules</a>
+                <a href="/noise-rules" class="link-accent">Noise rules</a>
+            </div>
+        </article>
+    </div>
+</section>
+{% endblock %}

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from lore.utils.text_processing import decode_hex_or_str
+from annuli.utils.text_processing import decode_hex_or_str
 
 
 def test_plain_string_passes_through():

@@ -8,9 +8,9 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.storage import search_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.storage import search_sessions
 
 
 def _session(sid, tool=Tool.CLAUDE_CODE, title="T", project="/p", body="hello world"):
@@ -129,7 +129,7 @@ def test_fts_many_ignored_ids_use_temp_table_path(tmp_path):
     """More ignored ids than the bound-parameter chunk still exclude correctly."""
     import json
 
-    from lore.storage import search as search_mod
+    from annuli.storage import search as search_mod
 
     count = search_mod._IGNORED_SQL_CHUNK + 100
     sessions = [_session(f"drop-{i}", body="token token token") for i in range(count)] + [
@@ -148,10 +148,10 @@ def test_fts_many_ignored_ids_use_temp_table_path(tmp_path):
 
 
 def test_web_search_index_uses_v2_when_enabled(tmp_path, monkeypatch):
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     web_data.clear_index_cache()
 
     IndexBuilder(tmp_path).build_index(
@@ -162,10 +162,10 @@ def test_web_search_index_uses_v2_when_enabled(tmp_path, monkeypatch):
 
 
 def test_web_search_index_falls_back_to_legacy(tmp_path, monkeypatch):
-    from lore.interfaces import web_data
+    from annuli.interfaces import web_data
 
     monkeypatch.setattr(web_data, "INDEX_PATH", tmp_path / "index.json")
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     web_data.clear_index_cache()
 
     IndexBuilder(tmp_path).build_index(
@@ -253,9 +253,9 @@ def test_scope_still_filters_by_role(tmp_path):
 
 def test_scope_tokenizer_matches_the_session_index(tmp_path):
     """The throwaway scope index must use the very tokenizer `search_index` uses."""
-    from lore.storage.schema import open_connection
-    from lore.storage.search import SCOPE_FTS_TOKENIZER
-    from lore.storage.writer import v2_db_path
+    from annuli.storage.schema import open_connection
+    from annuli.storage.search import SCOPE_FTS_TOKENIZER
+    from annuli.storage.writer import v2_db_path
 
     IndexBuilder(tmp_path).build_index(
         [_rich_session("tok1", [(Role.USER, "tokenizer drift")])], {}

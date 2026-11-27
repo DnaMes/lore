@@ -4,7 +4,7 @@ The fixtures are the versioned evaluation set in
 ``tools/calibration/message-retrieval-eval.json``: German, English,
 mixed-language and code-heavy sessions plus topically unrelated decoys, and
 hand-labelled queries whose relevant passage sits late in its session. The same
-labels calibrate ``LORE_MESSAGE_SEMANTIC_MAX_DISTANCE``
+labels calibrate ``ANNULI_MESSAGE_SEMANTIC_MAX_DISTANCE``
 (``tools/calibration/calibrate_message_cutoff.py``), so retrieval and threshold
 are measured against one hand-checked set.
 
@@ -25,17 +25,17 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.storage import v2_db_path, write_sessions
-from lore.storage.embeddings import EMBEDDING_DIM, sqlite_vec_available
-from lore.storage.message_search import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.storage import v2_db_path, write_sessions
+from annuli.storage.embeddings import EMBEDDING_DIM, sqlite_vec_available
+from annuli.storage.message_search import (
     DEFAULT_MESSAGE_SEMANTIC_MAX_DISTANCE,
     EXCERPT_CHARS,
     message_max_distance,
     search_messages,
 )
-from lore.storage.message_vectors import embed_messages
-from lore.storage.schema import initialise
+from annuli.storage.message_vectors import embed_messages
+from annuli.storage.schema import initialise
 
 EVAL_PATH = (
     Path(__file__).resolve().parents[1] / "tools" / "calibration" / "message-retrieval-eval.json"
@@ -93,7 +93,7 @@ def _ids(case: dict) -> str:
 @pytest.fixture(autouse=True)
 def _no_session_vectors(monkeypatch):
     """This module is about message vectors; keep the session pass out of it."""
-    monkeypatch.setattr("lore.storage.writer.embed_sessions", lambda conn, items: 0)
+    monkeypatch.setattr("annuli.storage.writer.embed_sessions", lambda conn, items: 0)
 
 
 @pytest.fixture
@@ -251,7 +251,7 @@ def _fake_vector(text: str, overrides: dict) -> list[float]:
 
 
 def _seed_message_vectors(tmp_path, monkeypatch, overrides: dict) -> int:
-    from lore.storage import message_vectors
+    from annuli.storage import message_vectors
 
     monkeypatch.setattr(message_vectors, "embeddings_available", lambda: True)
     monkeypatch.setattr(message_vectors, "embed_text", lambda text: _fake_vector(text, overrides))
@@ -263,7 +263,7 @@ def _seed_message_vectors(tmp_path, monkeypatch, overrides: dict) -> int:
 
 
 def _patch_query_embedder(monkeypatch, overrides: dict) -> None:
-    from lore.storage import message_search
+    from annuli.storage import message_search
 
     monkeypatch.setattr(message_search, "embeddings_available", lambda: True)
     monkeypatch.setattr(message_search, "embed_text", lambda text: _fake_vector(text, overrides))
@@ -282,7 +282,7 @@ def test_vector_path_finds_a_paraphrase(store, monkeypatch):
 
     # The same query on the FTS fallback finds nothing: the vector path added
     # the hit, it did not just re-rank one.
-    from lore.storage import message_search
+    from annuli.storage import message_search
 
     monkeypatch.setattr(message_search, "embeddings_available", lambda: False)
     assert search_messages(store, paraphrase, limit=5).hits == []
@@ -326,7 +326,7 @@ def test_vector_excerpt_is_bounded(store, monkeypatch):
 
 def test_fts_path_runs_when_the_vector_extra_is_missing(store, monkeypatch):
     """Without sqlite-vec/fastembed the FTS fallback still answers — and says so."""
-    from lore.storage import message_search
+    from annuli.storage import message_search
 
     monkeypatch.setattr(message_search, "sqlite_vec_available", lambda: False)
     monkeypatch.setattr(message_search, "embeddings_available", lambda: False)
@@ -353,7 +353,7 @@ def test_fts_path_runs_when_the_vector_extra_is_missing(store, monkeypatch):
     ],
 )
 def test_message_max_distance_env_parsing(monkeypatch, raw, expected):
-    monkeypatch.setenv("LORE_MESSAGE_SEMANTIC_MAX_DISTANCE", raw)
+    monkeypatch.setenv("ANNULI_MESSAGE_SEMANTIC_MAX_DISTANCE", raw)
     assert message_max_distance() == expected
 
 

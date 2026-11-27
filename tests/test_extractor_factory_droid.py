@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.factory_droid import PARSER_VERSION, FactoryDroidExtractor
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.factory_droid import PARSER_VERSION, FactoryDroidExtractor
+from annuli.utils.tooling import normalize_tool_name
 
 SESSION_ID = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
 SLUG = "demo-proj-slug"
@@ -23,7 +23,7 @@ TOKEN_SENTINEL = "TOKEN_COUNTER_SENTINEL"
 @pytest.fixture
 def home(monkeypatch, tmp_path) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     return tmp_path
 
 
@@ -185,7 +185,7 @@ def test_factory_settings_model_and_extra_keys_ignored(home):
 
 
 def test_factory_hostile_input(home, monkeypatch):
-    import lore.extractors.factory_droid as fd_mod
+    import annuli.extractors.factory_droid as fd_mod
 
     lines = _basic_lines()
     lines.append(

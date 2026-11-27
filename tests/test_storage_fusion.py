@@ -5,7 +5,7 @@ Pure functions — no backend needed, always run.
 
 from __future__ import annotations
 
-from lore.storage.fusion import DEFAULT_K, rrf_merge
+from annuli.storage.fusion import DEFAULT_K, rrf_merge
 
 
 def _r(sid: str, score: float = 0.0) -> dict:

@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import pytest
 
-from lore.interfaces import web, web_data
-from lore.storage import add_memory
+from annuli.interfaces import web, web_data
+from annuli.storage import add_memory
 
 
 @pytest.fixture()
@@ -55,7 +55,7 @@ def test_memory_page_kind_filter(client):
 
 
 def test_memory_page_keyword_search(client, monkeypatch):
-    import lore.storage.embeddings as emb
+    import annuli.storage.embeddings as emb
 
     # Keyword behaviour only: with the real model installed, hybrid recall would
     # also add semantically near memories (see test_memory_hybrid.py).
@@ -75,7 +75,7 @@ def test_memory_page_semantic_checkbox_is_true_or_auto(client, monkeypatch):
         seen.append(kwargs["semantic"])
         return []
 
-    monkeypatch.setattr("lore.storage.recall_memory", fake_recall)
+    monkeypatch.setattr("annuli.storage.recall_memory", fake_recall)
     c, _tmp = client
     c.get("/memory?q=x")
     c.get("/memory?q=x&semantic=1")
@@ -178,7 +178,7 @@ def test_memory_page_no_source_section_when_unlinked(client):
 
 
 def test_memory_page_feedback_chip_only_when_rated(client):
-    from lore.storage import record_feedback
+    from annuli.storage import record_feedback
 
     c, tmp_path = client
     rated = add_memory(tmp_path, "fact", "Rated entry", "body")

@@ -14,13 +14,13 @@ import struct
 
 import pytest
 
-from lore.storage import embeddings
-from lore.storage.embeddings import (
+from annuli.storage import embeddings
+from annuli.storage.embeddings import (
     EMBEDDING_DIM,
     load_vec_extension,
     sqlite_vec_available,
 )
-from lore.storage.schema import ensure_session_vec_table, initialise, open_connection
+from annuli.storage.schema import ensure_session_vec_table, initialise, open_connection
 
 requires_vec = pytest.mark.skipif(
     not sqlite_vec_available(),
@@ -128,7 +128,7 @@ def test_load_vec_extension_returns_false_when_package_missing(monkeypatch):
 
 def test_ensure_table_returns_false_without_extension(tmp_path, monkeypatch):
     """When the extension can't load, ensure_* is a no-op returning False."""
-    monkeypatch.setattr("lore.storage.schema.load_vec_extension", lambda conn: False)
+    monkeypatch.setattr("annuli.storage.schema.load_vec_extension", lambda conn: False)
     conn = open_connection(tmp_path / "index_v2.sqlite")
     assert ensure_session_vec_table(conn) is False
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -137,7 +137,7 @@ def test_ensure_table_returns_false_without_extension(tmp_path, monkeypatch):
 
 def test_initialise_succeeds_without_extension(tmp_path, monkeypatch):
     """A DB still initialises cleanly (base schema + migrations) with no vec."""
-    monkeypatch.setattr("lore.storage.schema.load_vec_extension", lambda conn: False)
+    monkeypatch.setattr("annuli.storage.schema.load_vec_extension", lambda conn: False)
     conn = initialise(tmp_path / "index_v2.sqlite")
     # Base tables from the migration runner are present regardless of vec.
     tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}

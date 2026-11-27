@@ -9,12 +9,12 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.interfaces import mcp, web
-from lore.storage import add_memory, recall_memory, search_sessions
-from lore.storage.fts import build_fts_query, phrase_of
-from lore.utils.security import validate_search_param, validate_search_query
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.interfaces import mcp, web
+from annuli.storage import add_memory, recall_memory, search_sessions
+from annuli.storage.fts import build_fts_query, phrase_of
+from annuli.utils.security import validate_search_param, validate_search_query
 
 # ---------------------------------------------------------------------------
 # build_fts_query

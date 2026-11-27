@@ -1,4 +1,4 @@
-"""B7.1: Claude Code retention warning in ``lore check`` (read-only)."""
+"""B7.1: Claude Code retention warning in ``annuli check`` (read-only)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ import time
 from argparse import Namespace
 from pathlib import Path
 
-import lore_cli
-from lore.utils.claude_retention import (
+import annuli_cli
+from annuli.utils.claude_retention import (
     SNIPPET_CLEANUP_365,
     claude_projects_dir,
     read_cleanup_period_days,
@@ -75,7 +75,7 @@ def _run_check(home: Path, monkeypatch) -> str:
     old = sys.stdout
     sys.stdout = buf
     try:
-        lore_cli.cmd_check(Namespace(deep=False, output_dir=None))
+        annuli_cli.cmd_check(Namespace(deep=False, output_dir=None))
     finally:
         sys.stdout = old
     return buf.getvalue()
@@ -204,5 +204,5 @@ def test_retention_lines_swallow_filesystem_errors(monkeypatch):
     def boom() -> bool:
         raise PermissionError("denied")
 
-    monkeypatch.setattr("lore.utils.claude_retention.has_claude_transcripts", boom)
+    monkeypatch.setattr("annuli.utils.claude_retention.has_claude_transcripts", boom)
     assert retention_check_lines() == []

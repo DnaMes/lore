@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from lore.services.analysis_jobs import (
+from annuli.services.analysis_jobs import (
     CHUNK_STATES,
     JOB_STATES,
     AnalysisJobError,
@@ -23,7 +23,7 @@ from lore.services.analysis_jobs import (
     resume_job,
     update_job,
 )
-from lore.storage.schema import apply_migrations, current_version, open_connection
+from annuli.storage.schema import apply_migrations, current_version, open_connection
 
 
 @pytest.fixture()

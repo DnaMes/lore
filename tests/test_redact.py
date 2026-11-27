@@ -1,11 +1,11 @@
-"""Tests for lore.utils.redact."""
+"""Tests for annuli.utils.redact."""
 
 from __future__ import annotations
 
 import random
 import time
 
-from lore.utils.redact import RedactionResult, redact, redact_many
+from annuli.utils.redact import RedactionResult, redact, redact_many
 
 MARKER = "[REDACTED:"
 
@@ -409,7 +409,7 @@ def test_non_string_inputs_never_raise():
 
 
 def test_redact_value_uses_the_field_name_as_context():
-    from lore.utils.redact import redact_value
+    from annuli.utils.redact import redact_value
 
     assert redact_value("password", "hunter2!x").text == "[REDACTED:secret_assignment]"
     assert redact_value("DB_PASSWORD", "x1y2z3w4").count == 1

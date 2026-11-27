@@ -10,9 +10,9 @@ from typing import List, Optional
 
 import pytest
 
-import lore.storage.embeddings as emb
-from lore.storage import add_memory, recall_memory, supersede_memory
-from lore.storage.memory import (
+import annuli.storage.embeddings as emb
+from annuli.storage import add_memory, recall_memory, supersede_memory
+from annuli.storage.memory import (
     DEFAULT_RECALL_MIN_SIMILARITY,
     DEFAULT_VECTOR_SCAN_LIMIT,
     recall_min_similarity,
@@ -40,7 +40,7 @@ def fake(monkeypatch) -> FakeEmbedder:
     embedder = FakeEmbedder()
     monkeypatch.setattr(emb, "embed_text", embedder)
     monkeypatch.setattr(emb, "embeddings_available", lambda: True)
-    monkeypatch.delenv("LORE_MEMORY_RECALL_MIN_SIMILARITY", raising=False)
+    monkeypatch.delenv("ANNULI_MEMORY_RECALL_MIN_SIMILARITY", raising=False)
     return embedder
 
 
@@ -79,7 +79,7 @@ def test_auto_floor_drops_unrelated_but_explicit_true_keeps_it(tmp_path, fake):
 def test_floor_is_configurable_by_env(tmp_path, fake, monkeypatch):
     add_memory(tmp_path, "fact", "Postgres notes", "relational store")
     add_memory(tmp_path, "fact", "Sourdough starter", "bread baking schedule")
-    monkeypatch.setenv("LORE_MEMORY_RECALL_MIN_SIMILARITY", "0")
+    monkeypatch.setenv("ANNULI_MEMORY_RECALL_MIN_SIMILARITY", "0")
     assert len(recall_memory(tmp_path, "database")) == 2
 
 
@@ -150,9 +150,9 @@ def test_memory_without_source_has_empty_sources(tmp_path, fake):
 )
 def test_floor_env_parsing(monkeypatch, raw, expected):
     if raw is None:
-        monkeypatch.delenv("LORE_MEMORY_RECALL_MIN_SIMILARITY", raising=False)
+        monkeypatch.delenv("ANNULI_MEMORY_RECALL_MIN_SIMILARITY", raising=False)
     else:
-        monkeypatch.setenv("LORE_MEMORY_RECALL_MIN_SIMILARITY", raw)
+        monkeypatch.setenv("ANNULI_MEMORY_RECALL_MIN_SIMILARITY", raw)
     assert recall_min_similarity() == expected
     # Calibrated 2026-10-14 on 61 labelled pairs — see
     # tools/calibration/recall-floor-calibration.md
@@ -173,7 +173,7 @@ def test_auto_skips_embedder_when_no_vector_matches_the_query_filters(tmp_path, 
 
 def test_vector_scan_is_capped(tmp_path, fake, monkeypatch):
     """The Python cosine scan has a bound; beyond it memories are keyword-ranked (#199)."""
-    monkeypatch.setenv("LORE_MEMORY_VECTOR_SCAN_LIMIT", "4")
+    monkeypatch.setenv("ANNULI_MEMORY_VECTOR_SCAN_LIMIT", "4")
     for i in range(6):
         add_memory(tmp_path, "fact", f"Postgres fact {i}", "relational store")
 
@@ -194,7 +194,7 @@ def test_vector_scan_is_capped(tmp_path, fake, monkeypatch):
 
 def test_vector_filters_apply_before_the_scan_cap(tmp_path, fake, monkeypatch):
     """kind/scope/status filter in SQL, so the bound never wastes itself on excluded rows (#199)."""
-    monkeypatch.setenv("LORE_MEMORY_VECTOR_SCAN_LIMIT", "4")
+    monkeypatch.setenv("ANNULI_MEMORY_VECTOR_SCAN_LIMIT", "4")
     for i in range(3):  # older ids — pushed out by the bound first
         add_memory(tmp_path, "fact", f"Postgres fact {i}", "relational store")
     for i in range(3):  # newest rows: without an SQL filter they fill the bound
@@ -219,7 +219,7 @@ def test_vector_filters_apply_before_the_scan_cap(tmp_path, fake, monkeypatch):
 )
 def test_vector_scan_limit_env_parsing(monkeypatch, raw, expected):
     if raw is None:
-        monkeypatch.delenv("LORE_MEMORY_VECTOR_SCAN_LIMIT", raising=False)
+        monkeypatch.delenv("ANNULI_MEMORY_VECTOR_SCAN_LIMIT", raising=False)
     else:
-        monkeypatch.setenv("LORE_MEMORY_VECTOR_SCAN_LIMIT", raw)
+        monkeypatch.setenv("ANNULI_MEMORY_VECTOR_SCAN_LIMIT", raw)
     assert vector_scan_limit() == expected

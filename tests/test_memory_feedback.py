@@ -6,9 +6,9 @@ from argparse import Namespace
 
 import pytest
 
-import lore.storage.memory as memory_mod
-import lore_cli
-from lore.storage import (
+import annuli.storage.memory as memory_mod
+import annuli_cli
+from annuli.storage import (
     add_memory,
     delete_memory,
     feedback_influence,
@@ -19,8 +19,8 @@ from lore.storage import (
     recall_memory,
     record_feedback,
 )
-from lore.storage.schema import MIGRATIONS, current_version, initialise, open_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage.schema import MIGRATIONS, current_version, initialise, open_connection
+from annuli.storage.writer import v2_db_path
 
 
 def _mem(tmp_path, title: str, body: str = "alpha beta") -> int:
@@ -194,9 +194,9 @@ def test_hundred_sybil_raters_cannot_exceed_the_bound(tmp_path):
 )
 def test_feedback_influence_env(monkeypatch, raw, expected):
     if raw is None:
-        monkeypatch.delenv("LORE_FEEDBACK_INFLUENCE", raising=False)
+        monkeypatch.delenv("ANNULI_FEEDBACK_INFLUENCE", raising=False)
     else:
-        monkeypatch.setenv("LORE_FEEDBACK_INFLUENCE", raw)
+        monkeypatch.setenv("ANNULI_FEEDBACK_INFLUENCE", raw)
     assert feedback_influence() == expected
 
 
@@ -235,7 +235,7 @@ def test_entries_carry_weight_and_count_on_every_path(tmp_path):
 
 def test_influence_unset_keeps_order(tmp_path, monkeypatch):
     first, second, third = _three(tmp_path)
-    monkeypatch.delenv("LORE_FEEDBACK_INFLUENCE", raising=False)
+    monkeypatch.delenv("ANNULI_FEEDBACK_INFLUENCE", raising=False)
     baseline = _ids(recall_memory(tmp_path, "alpha", semantic=False))
     assert sorted(baseline) == sorted([first, second, third])
 
@@ -244,13 +244,13 @@ def test_influence_unset_keeps_order(tmp_path, monkeypatch):
         record_feedback(tmp_path, baseline[0], rater, 1)
 
     assert _ids(recall_memory(tmp_path, "alpha", semantic=False)) == baseline
-    monkeypatch.setenv("LORE_FEEDBACK_INFLUENCE", "0")
+    monkeypatch.setenv("ANNULI_FEEDBACK_INFLUENCE", "0")
     assert _ids(recall_memory(tmp_path, "alpha", semantic=False)) == baseline
 
 
 def test_unset_influence_never_reorders(tmp_path, monkeypatch):
     _three(tmp_path)
-    monkeypatch.delenv("LORE_FEEDBACK_INFLUENCE", raising=False)
+    monkeypatch.delenv("ANNULI_FEEDBACK_INFLUENCE", raising=False)
 
     def boom(*args, **kwargs):
         raise AssertionError("ranking_factor must not run with influence 0")
@@ -261,13 +261,13 @@ def test_unset_influence_never_reorders(tmp_path, monkeypatch):
 
 def test_influence_lifts_rated_up_and_sinks_rated_down(tmp_path, monkeypatch):
     _three(tmp_path)
-    monkeypatch.delenv("LORE_FEEDBACK_INFLUENCE", raising=False)
+    monkeypatch.delenv("ANNULI_FEEDBACK_INFLUENCE", raising=False)
     baseline = _ids(recall_memory(tmp_path, "alpha", semantic=False))
     top, middle, bottom = baseline
 
     for rater in ("a", "b", "c", "d", "e"):
         record_feedback(tmp_path, bottom, rater, 5)
-    monkeypatch.setenv("LORE_FEEDBACK_INFLUENCE", "1")
+    monkeypatch.setenv("ANNULI_FEEDBACK_INFLUENCE", "1")
     lifted = _ids(recall_memory(tmp_path, "alpha", semantic=False))
     assert lifted.index(bottom) < baseline.index(bottom)
 
@@ -281,9 +281,9 @@ def test_influence_lifts_rated_up_and_sinks_rated_down(tmp_path, monkeypatch):
 
 def test_ranking_is_stable_on_ties(tmp_path, monkeypatch):
     _three(tmp_path)
-    monkeypatch.delenv("LORE_FEEDBACK_INFLUENCE", raising=False)
+    monkeypatch.delenv("ANNULI_FEEDBACK_INFLUENCE", raising=False)
     baseline = _ids(recall_memory(tmp_path, "alpha", semantic=False))
-    monkeypatch.setenv("LORE_FEEDBACK_INFLUENCE", "1")
+    monkeypatch.setenv("ANNULI_FEEDBACK_INFLUENCE", "1")
     assert _ids(recall_memory(tmp_path, "alpha", semantic=False)) == baseline
 
 
@@ -369,7 +369,7 @@ def test_fts_overfetch_only_loads_kept_rows(tmp_path, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# CLI: lore memory rate
+# CLI: annuli memory rate
 # ---------------------------------------------------------------------------
 
 
@@ -386,8 +386,8 @@ def _rate_args(tmp_path, memory_id, score, rater="alice"):
 def test_cli_rate_records_and_prints_the_weight(tmp_path, capsys):
     mid = add_memory(tmp_path, "fact", "T", "body")
 
-    lore_cli.cmd_memory(_rate_args(tmp_path, mid, 5))
-    lore_cli.cmd_memory(_rate_args(tmp_path, mid, 2, rater="bob"))
+    annuli_cli.cmd_memory(_rate_args(tmp_path, mid, 5))
+    annuli_cli.cmd_memory(_rate_args(tmp_path, mid, 2, rater="bob"))
 
     out = capsys.readouterr().out
     assert "Rated memory #1 5/5 (weight 0.62, n=1)." in out
@@ -399,7 +399,7 @@ def test_cli_rate_rejects_bad_score_with_exit_one(tmp_path, capsys, score):
     mid = add_memory(tmp_path, "fact", "T", "body")
 
     with pytest.raises(SystemExit) as exc:
-        lore_cli.cmd_memory(_rate_args(tmp_path, mid, score))
+        annuli_cli.cmd_memory(_rate_args(tmp_path, mid, score))
 
     assert exc.value.code == 1
     assert "score must be an integer from 1 to 5" in capsys.readouterr().err
@@ -407,7 +407,7 @@ def test_cli_rate_rejects_bad_score_with_exit_one(tmp_path, capsys, score):
 
 def test_cli_rate_unknown_memory_exits_one(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
-        lore_cli.cmd_memory(_rate_args(tmp_path, 999, 3))
+        annuli_cli.cmd_memory(_rate_args(tmp_path, 999, 3))
 
     assert exc.value.code == 1
     assert "does not exist" in capsys.readouterr().err

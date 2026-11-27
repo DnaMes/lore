@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Smoke-test an installed Lore the way a first-time user would meet it.
+"""Smoke-test an installed Annuli the way a first-time user would meet it.
 
 Usage::
 
-    python scripts/smoke_install.py --wheel dist/lore-X.Y.Z-py3-none-any.whl
-    python scripts/smoke_install.py --pip-spec "lore==X.Y.Z" --extra semantic
-    python scripts/smoke_install.py --installed    # lore* entry points on PATH (pipx)
+    python scripts/smoke_install.py --wheel dist/annuli-X.Y.Z-py3-none-any.whl
+    python scripts/smoke_install.py --pip-spec "annuli==X.Y.Z" --extra semantic
+    python scripts/smoke_install.py --installed    # annuli* entry points on PATH (pipx)
 
-Every lore subprocess gets HOME and the XDG/APPDATA roots inside a temp dir and runs
+Every annuli subprocess gets HOME and the XDG/APPDATA roots inside a temp dir and runs
 from a temp cwd, so neither the real home nor the source tree is touched. Output is one
 line per check (PASS / FAIL / SKIP). The exit code is the number of FAIL checks, capped
 at 255 (the OS limit).
@@ -67,11 +67,11 @@ CLOUD_CREDENTIAL_PREFIXES = (
     "COHERE_",
 )
 # Credential variables that do not share a cloud provider prefix.
-CLOUD_CREDENTIAL_NAMES = frozenset({"LORE_ALLOW_CLOUD", "HF_TOKEN", "AWS_SECRET_ACCESS_KEY"})
-WEB_WAIT = 90  # seconds for lore-web to answer /api/health (a cold macOS runner is slow)
+CLOUD_CREDENTIAL_NAMES = frozenset({"ANNULI_ALLOW_CLOUD", "HF_TOKEN", "AWS_SECRET_ACCESS_KEY"})
+WEB_WAIT = 90  # seconds for annuli-web to answer /api/health (a cold macOS runner is slow)
 PROXY_URL = "http://127.0.0.1:9"  # nothing listens here: a send would fail loudly
 PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")
-LORE_SCRIPTS = ("lore", "lore-web", "lore-mcp", "lore-session")
+ANNULI_SCRIPTS = ("annuli", "annuli-web", "annuli-mcp", "annuli-session")
 IS_WINDOWS = os.name == "nt"
 SESSION_ID = "smoke-long-02"
 ZEBRA = "zebra"
@@ -90,8 +90,8 @@ MCP_PAYLOAD = "".join(
 EMPTY_HOME_CMDS: list[tuple[list[str], tuple[str, ...]]] = [
     (["check"], ()),
     (["list"], ()),
-    (["stats"], ("lore export --all",)),
-    (["search", "foo"], ("lore export --all",)),
+    (["stats"], ("annuli export --all",)),
+    (["search", "foo"], ("annuli export --all",)),
     (["export", "--all"], ()),
     (["reindex"], ()),
     (["sync", "claude-code"], ()),
@@ -137,14 +137,14 @@ def is_cloud_credential(name: str) -> bool:
 def isolated_env(home: Path, base: Mapping[str, str] | None = None) -> dict[str, str]:
     """Environment that points every user-level root into ``home``.
 
-    LORE_*, cloud credentials, and PYTHONPATH are dropped so developer overrides cannot
-    reach the real ~/.lore, pay for a cloud call, or import the source tree.
+    ANNULI_*, cloud credentials, and PYTHONPATH are dropped so developer overrides cannot
+    reach the real ~/.annuli, pay for a cloud call, or import the source tree.
     """
     source = os.environ if base is None else base
     env = {
         k: v
         for k, v in source.items()
-        if not k.startswith("LORE_")
+        if not k.startswith(("ANNULI_", "LORE_"))
         and k != "PYTHONPATH"
         and k not in FOREIGN_ENV
         and not is_cloud_credential(k)
@@ -172,7 +172,7 @@ def pick_free_port() -> int:
 
 def build_headers(host: str, origin: str | None = None) -> dict[str, str]:
     """Request headers with an explicit Host and an optional Origin."""
-    headers = {"Host": host, "Accept": "*/*", "User-Agent": "lore-smoke-install"}
+    headers = {"Host": host, "Accept": "*/*", "User-Agent": "annuli-smoke-install"}
     if origin is not None:
         headers["Origin"] = origin
     return headers
@@ -211,7 +211,7 @@ def mcp_tool_names(stdout: str) -> list[str]:
 
 
 def with_extra(target: str, extra: str) -> str:
-    """``lore==1.0`` -> ``lore[extra]==1.0``; wheel paths get ``[extra]`` appended."""
+    """``annuli==1.0`` -> ``annuli[extra]==1.0``; wheel paths get ``[extra]`` appended."""
     match = re.match(r"^([A-Za-z0-9][A-Za-z0-9._-]*)(.*)$", target)
     if target.endswith(".whl") or os.path.exists(target) or match is None:
         return f"{target}[{extra}]"
@@ -314,22 +314,22 @@ def http_request(
 
 
 def step_version(ctx: Ctx) -> list[Result]:
-    proc = ctx.run("lore", "--version")
-    shape = re.fullmatch(r"lore \d+\.\d+\.\d+\S*", proc.stdout.strip())
+    proc = ctx.run("annuli", "--version")
+    shape = re.fullmatch(r"annuli \d+\.\d+\.\d+\S*", proc.stdout.strip())
     return [verdict("version", proc.returncode == 0 and shape is not None, describe(proc))]
 
 
 def step_empty_home(ctx: Ctx) -> list[Result]:
     results = []
     for args, needles in EMPTY_HOME_CMDS:
-        proc = ctx.run("lore", *args)
-        results.append(expect(f"empty-home: lore {' '.join(args)}", proc, needles=needles))
+        proc = ctx.run("annuli", *args)
+        results.append(expect(f"empty-home: annuli {' '.join(args)}", proc, needles=needles))
     return results
 
 
 def step_memory(ctx: Ctx) -> list[Result]:
     add_args = ["memory", "add", "--kind", "fact", "--title", "smoke", "--body", "probe"]
-    add = ctx.run("lore", *add_args)
+    add = ctx.run("annuli", *add_args)
     found = re.search(r"#(\d+)", add.stdout)
     memory_id = found.group(1) if found else "1"
     results = [expect("memory: add", add, needles=("Stored memory",))]
@@ -341,7 +341,7 @@ def step_memory(ctx: Ctx) -> list[Result]:
         "dedupe": (["memory", "dedupe"], ()),
     }
     for label, (args, needles) in cmds.items():
-        proc = ctx.run("lore", *args)
+        proc = ctx.run("annuli", *args)
         results.append(expect(f"memory: {label}", proc, needles=needles))
     return results
 
@@ -350,10 +350,10 @@ def step_privacy(ctx: Ctx) -> list[Result]:
     proxy_env = {k: PROXY_URL for k in PROXY_KEYS} | {"NO_PROXY": "", "no_proxy": ""}
     results = []
     for name in ("knowledge", "analyze"):
-        proc = ctx.run("lore", name, env=proxy_env)
-        results.append(expect(f"privacy: lore {name} without opt-in", proc, 2, ("allow-cloud",)))
-    proc = ctx.run("lore", "improve", "--dry-run", env=proxy_env)
-    results.append(expect("privacy: lore improve --dry-run", proc))
+        proc = ctx.run("annuli", name, env=proxy_env)
+        results.append(expect(f"privacy: annuli {name} without opt-in", proc, 2, ("allow-cloud",)))
+    proc = ctx.run("annuli", "improve", "--dry-run", env=proxy_env)
+    results.append(expect("privacy: annuli improve --dry-run", proc))
     return results
 
 
@@ -417,7 +417,7 @@ def step_sessions(ctx: Ctx) -> list[Result]:
     codex = ctx.home / ".codex" / "sessions" / "2025" / "06" / "15" / "rollout-smoke.jsonl"
     _write_jsonl(codex, _codex_records("smoke-codex-03", ["codex one", "codex two", "codex three"]))
 
-    export = ctx.run("lore", "export", "--all")
+    export = ctx.run("annuli", "export", "--all")
     skipped = re.search(r"Skipped (\d+) sessions? with fewer than", export.stdout + export.stderr)
     results = [
         verdict(
@@ -425,19 +425,19 @@ def step_sessions(ctx: Ctx) -> list[Result]:
             export.returncode == 0 and skipped is not None,
             f"skipped {skipped.group(1)} short sessions" if skipped else describe(export),
         ),
-        expect("sessions: list", ctx.run("lore", "list"), needles=(ZEBRA,)),
+        expect("sessions: list", ctx.run("annuli", "list"), needles=(ZEBRA,)),
         expect(
             "sessions: search zebra",
-            ctx.run("lore", "search", ZEBRA),
+            ctx.run("annuli", "search", ZEBRA),
             needles=(ZEBRA,),
         ),
         expect(
             "sessions: stats",
-            ctx.run("lore", "stats"),
+            ctx.run("annuli", "stats"),
             needles=("Total Sessions:",),
         ),
     ]
-    rows_proc = ctx.run("lore", "list", "--format", "json")
+    rows_proc = ctx.run("annuli", "list", "--format", "json")
     try:
         rows = json.loads(rows_proc.stdout)
     except ValueError as exc:
@@ -451,9 +451,9 @@ def step_sessions(ctx: Ctx) -> list[Result]:
         )
 
     long_file.unlink()  # archive preservation: the source is gone, the archive must remain
-    rerun = ctx.run("lore", "export", "--all")
+    rerun = ctx.run("annuli", "export", "--all")
     results.append(expect("sessions: export after source deleted", rerun))
-    again = ctx.run("lore", "search", ZEBRA)
+    again = ctx.run("annuli", "search", ZEBRA)
     results.append(expect("sessions: search survives source deletion", again, needles=(ZEBRA,)))
     return results
 
@@ -471,8 +471,8 @@ def step_prune(ctx: Ctx) -> list[Result]:
     index["sessions"].append(entry)
     index_file.write_text(json.dumps(index), encoding="utf-8")
 
-    dry = ctx.run("lore", "prune", "--dry-run", "--max-prompts", "1")
-    real = ctx.run("lore", "prune", "--max-prompts", "1")
+    dry = ctx.run("annuli", "prune", "--dry-run", "--max-prompts", "1")
+    real = ctx.run("annuli", "prune", "--max-prompts", "1")
     kept = decoy.exists() and decoy.read_text(encoding="utf-8") == "keep me"
     return [
         expect("prune: --dry-run", dry),
@@ -486,7 +486,7 @@ def _wait_health(port: int, proc: subprocess.Popen[bytes]) -> str:
     deadline = time.monotonic() + WEB_WAIT
     while time.monotonic() < deadline:
         if proc.poll() is not None:
-            return f"lore-web exited early with code {proc.returncode}"
+            return f"annuli-web exited early with code {proc.returncode}"
         if http_request(port, "GET", "/api/health")[0] == 200:
             return ""
         time.sleep(0.25)
@@ -523,7 +523,7 @@ def _web_checks(port: int, proc: subprocess.Popen[bytes]) -> list[Result]:
         status, _ = http_request(port, "GET", "/api/health", host=host)
         shown = host if len(host) <= 40 else f"{host[:20]}...({len(host)} chars)"
         results.append(verdict(f"web: Host {shown}", status == 400, f"HTTP {status}"))
-    # /api/cache/clear is a mutating route guarded by _check_local_origin in lore/interfaces/web.py.
+    # /api/cache/clear is a mutating route guarded by _check_local_origin in annuli/interfaces/web.py.
     status, _ = http_request(port, "POST", "/api/cache/clear", origin="http://localhost:9999")
     results.append(
         verdict("web: POST /api/cache/clear foreign Origin", status == 403, f"HTTP {status}")
@@ -533,9 +533,9 @@ def _web_checks(port: int, proc: subprocess.Popen[bytes]) -> list[Result]:
 
 def step_web(ctx: Ctx) -> list[Result]:
     port = pick_free_port()
-    with (ctx.work / "lore-web.log").open("w", encoding="utf-8") as log:
+    with (ctx.work / "annuli-web.log").open("w", encoding="utf-8") as log:
         proc = subprocess.Popen(
-            [ctx.exe("lore-web"), "--host", "127.0.0.1", "--port", str(port)],
+            [ctx.exe("annuli-web"), "--host", "127.0.0.1", "--port", str(port)],
             cwd=ctx.cwd,
             env=isolated_env(ctx.home) | {"PYTHONFAULTHANDLER": "1"},
             stdin=subprocess.DEVNULL,
@@ -551,7 +551,7 @@ def step_web(ctx: Ctx) -> list[Result]:
         finally:
             if proc.poll() is None:  # the server child never outlives this step
                 if os.name == "nt":
-                    # lore-web.exe is a launcher that runs python as a child: end the whole tree
+                    # annuli-web.exe is a launcher that runs python as a child: end the whole tree
                     subprocess.run(
                         ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
                         capture_output=True,
@@ -566,7 +566,7 @@ def step_web(ctx: Ctx) -> list[Result]:
     # A server that never answered is undebuggable from CI without its own output.
     for result in results:
         if result.status == "FAIL" and result.step == "web: /api/health":
-            tail = (ctx.work / "lore-web.log").read_text(encoding="utf-8", errors="replace")
+            tail = (ctx.work / "annuli-web.log").read_text(encoding="utf-8", errors="replace")
             result.detail += " | server log tail: " + " / ".join(tail.strip().splitlines()[-60:])
     try:
         with socket.create_connection(("127.0.0.1", port), timeout=2):
@@ -578,7 +578,7 @@ def step_web(ctx: Ctx) -> list[Result]:
 
 
 def step_mcp(ctx: Ctx) -> list[Result]:
-    proc = ctx.run("lore-mcp", stdin=MCP_PAYLOAD)
+    proc = ctx.run("annuli-mcp", stdin=MCP_PAYLOAD)
     init = mcp_responses(proc.stdout).get(1, {}).get("result")
     names = mcp_tool_names(proc.stdout)
     missing = [n for n in MCP_REQUIRED if n not in names]
@@ -608,7 +608,7 @@ def step_packaging(ctx: Ctx) -> list[Result]:
         # importlib.metadata instead of `pip show`: pip 25+ prints License-Expression, older
         # pips print License, and both come from the same core metadata.
         probe = (
-            "import importlib.metadata as m; d = m.metadata('lore'); "
+            "import importlib.metadata as m; d = m.metadata('annuli'); "
             "print(d.get('License-Expression') or d.get('License') or '')"
         )
         proc = execute([ctx.python, "-c", probe], ctx.home, ctx.cwd)
@@ -623,8 +623,8 @@ def step_packaging(ctx: Ctx) -> list[Result]:
         results.append(
             Result("packaging: license metadata", "SKIP", "--installed: no venv pip to query")
         )
-    proc = ctx.run("lore-session", "--help")
-    results.append(expect("packaging: lore-session --help", proc))
+    proc = ctx.run("annuli-session", "--help")
+    results.append(expect("packaging: annuli-session --help", proc))
     return results
 
 
@@ -656,11 +656,11 @@ def run_step(name: str, fn: Callable[[Ctx], list[Result]], ctx: Ctx) -> list[Res
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Smoke-test an installed Lore.")
+    parser = argparse.ArgumentParser(description="Smoke-test an installed Annuli.")
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--wheel", metavar="PATH", help="install this wheel into a fresh venv")
     mode.add_argument("--pip-spec", metavar="SPEC", help="install this spec into a fresh venv")
-    mode.add_argument("--installed", action="store_true", help="use lore* entry points on PATH")
+    mode.add_argument("--installed", action="store_true", help="use annuli* entry points on PATH")
     parser.add_argument("--extra", choices=["semantic"], help="also install this extra")
     parser.add_argument("--python", default=sys.executable, help="interpreter for the venv")
     parser.add_argument("--keep", action="store_true", help="keep the temp dir")
@@ -687,14 +687,14 @@ def _create_venv(
     if args.extra:
         target = with_extra(target, args.extra)
     install = execute([python, "-m", "pip", "install", target], home, cwd, timeout=INSTALL_TIMEOUT)
-    exes = {n: script(n) for n in LORE_SCRIPTS if Path(script(n)).exists()}
+    exes = {n: script(n) for n in ANNULI_SCRIPTS if Path(script(n)).exists()}
     ctx = Ctx(exes, python, True, args.extra, work, home, cwd)
     return ctx, [verdict("install: pip install", install.returncode == 0, describe(install))]
 
 
 def _installed_ctx(args: argparse.Namespace, work: Path, home: Path, cwd: Path) -> Ctx:
-    found = {n: p for n in LORE_SCRIPTS if (p := shutil.which(n))}
-    return Ctx(found, shebang_python(found.get("lore")), False, args.extra, work, home, cwd)
+    found = {n: p for n in ANNULI_SCRIPTS if (p := shutil.which(n))}
+    return Ctx(found, shebang_python(found.get("annuli")), False, args.extra, work, home, cwd)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -702,7 +702,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(errors="replace")
     args = parse_args(argv)
-    work = Path(tempfile.mkdtemp(prefix="lore-smoke-"))
+    work = Path(tempfile.mkdtemp(prefix="annuli-smoke-"))
     home, cwd = work / "home", work / "cwd"  # cwd is outside the source tree
     home.mkdir()
     cwd.mkdir()

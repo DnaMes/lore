@@ -15,13 +15,13 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-import lore.llm
-import lore_cli
-from lore.core.models import Role, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse
-from lore.llm.tasks.format import SUMMARY_OK, SessionFormatter
-from lore.services.hydration import (
+import annuli.llm
+import annuli_cli
+from annuli.core.models import Role, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse
+from annuli.llm.tasks.format import SUMMARY_OK, SessionFormatter
+from annuli.services.hydration import (
     REASON_EMPTY,
     REASON_NO_STORE,
     REASON_NOT_SYNCED,
@@ -30,9 +30,9 @@ from lore.services.hydration import (
     hydrate_body,
     hydrate_session,
 )
-from lore.storage.reader import load_session_messages_v2
-from lore.storage.schema import open_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage.reader import load_session_messages_v2
+from annuli.storage.schema import open_connection
+from annuli.storage.writer import v2_db_path
 from tests.test_summarize_pipeline import T0, _build_store, _msg, _session
 
 LATE_DECISION = "FINAL DECISION: ship the SQLite reader, not the JSON cache"
@@ -73,7 +73,7 @@ class RecordingProvider(LLMProvider):
 
 
 def _metadata_only(session: UnifiedSession) -> UnifiedSession:
-    """How ``lore format`` / ``lore knowledge`` receive a session from the index."""
+    """How ``annuli format`` / ``annuli knowledge`` receive a session from the index."""
     from dataclasses import replace
 
     return replace(session, messages=[])
@@ -245,7 +245,7 @@ def test_cli_format_hydrates_before_prompting(tmp_path, monkeypatch, capsys):
     out = _store(tmp_path, session)
     IndexBuilder(out).build_index([session], {})
     provider = RecordingProvider()
-    monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
+    monkeypatch.setattr(annuli.llm, "get_provider", lambda **kwargs: provider)
     args = Namespace(
         output_dir=str(out),
         session_id="cli",
@@ -257,7 +257,7 @@ def test_cli_format_hydrates_before_prompting(tmp_path, monkeypatch, capsys):
         include_automated=False,
     )
 
-    assert lore_cli.cmd_format(args) in (None, 0)
+    assert annuli_cli.cmd_format(args) in (None, 0)
 
     assert len(provider.prompts) == 1
     assert LATE_DECISION in provider.prompts[0]
@@ -274,7 +274,7 @@ def test_cli_format_skips_an_unhydratable_session_with_its_reason(tmp_path, monk
     finally:
         conn.close()
     provider = RecordingProvider()
-    monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
+    monkeypatch.setattr(annuli.llm, "get_provider", lambda **kwargs: provider)
     args = Namespace(
         output_dir=str(out),
         session_id="cli",
@@ -286,7 +286,7 @@ def test_cli_format_skips_an_unhydratable_session_with_its_reason(tmp_path, monk
         include_automated=False,
     )
 
-    assert lore_cli.cmd_format(args) == 1
+    assert annuli_cli.cmd_format(args) == 1
 
     assert provider.prompts == []
     err = capsys.readouterr().err

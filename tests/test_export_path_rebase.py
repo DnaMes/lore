@@ -2,13 +2,13 @@
 
 The host `lore-sync` unit writes absolute host paths (``/home/<user>/.lore/projects/...``)
 into the index; the web container mounts the same directory elsewhere
-(``/home/ai/.lore``). Before the fix no export resolved there, so every session
+(``/home/ai/.annuli``). Before the fix no export resolved there, so every session
 page fell back to live extraction or a metadata-only card.
 """
 
 from pathlib import Path
 
-from lore.interfaces import web_data
+from annuli.interfaces import web_data
 
 
 def _container_output(monkeypatch, tmp_path) -> Path:

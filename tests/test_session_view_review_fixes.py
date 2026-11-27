@@ -17,13 +17,13 @@ import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
-from lore.interfaces.routes import sessions as sessions_routes
-from lore.interfaces.web_formatting import _tool_group_row_html
-from lore.interfaces.web_services import _attach_result
-from lore.storage.schema import initialise
-from lore.storage.writer import v2_db_path, write_sessions
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
+from annuli.interfaces.routes import sessions as sessions_routes
+from annuli.interfaces.web_formatting import _tool_group_row_html
+from annuli.interfaces.web_services import _attach_result
+from annuli.storage.schema import initialise
+from annuli.storage.writer import v2_db_path, write_sessions
 
 SID = "sess-review-fixes"
 T0 = datetime(2026, 11, 7, 19, 58, 0, tzinfo=timezone.utc)
@@ -136,7 +136,7 @@ def _store_client(monkeypatch, tmp_path):
 
 def test_noise_rule_change_invalidates_the_v2_cache(monkeypatch, tmp_path):
     """A noise-rules change must re-render the session, not serve the cached build."""
-    from lore.interfaces import web_utils
+    from annuli.interfaces import web_utils
 
     rules_v1 = {"default": {"strip_ansi_sequences": True}}
     rules_v2 = {"default": {"strip_ansi_sequences": True}, "claude-code": {"strip_thinking": True}}
@@ -166,7 +166,7 @@ def test_noise_rule_change_invalidates_the_v2_cache(monkeypatch, tmp_path):
 
 def test_store_stamp_memo_does_not_reopen_the_db(monkeypatch, tmp_path):
     """The store stamp is memoised on the DB/WAL file signatures."""
-    from lore.storage import schema
+    from annuli.storage import schema
 
     session = _session()
     initialise(v2_db_path(tmp_path))

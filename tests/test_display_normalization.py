@@ -12,8 +12,8 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces.web_services import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces.web_services import (
     normalize_session_messages_for_display,
     preview_normalize_message,
 )
@@ -27,7 +27,7 @@ def _session(tool: Tool, content: str, role: Role = Role.ASSISTANT, rules=None) 
         session_id="ses_norm",
         created_at=TS,
         last_updated=TS,
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         messages=[UnifiedMessage(role=role, content=content, timestamp=TS)],
     )
 
@@ -38,7 +38,7 @@ def _normalize(session, rules=None) -> UnifiedMessage:
 
 
 # The summariser fires on its documented line shapes, three or more of them.
-FILE_OPS = "\n".join(f"The file /repo/lore/f{index}.py has been updated." for index in range(6))
+FILE_OPS = "\n".join(f"The file /repo/annuli/f{index}.py has been updated." for index in range(6))
 
 
 def _file_op_rules() -> dict:
@@ -54,7 +54,7 @@ def _file_op_rules() -> dict:
 
 
 def test_original_content_is_kept_on_the_message():
-    original = "The file /repo/lore/a.py has been updated.\n" * 5
+    original = "The file /repo/annuli/a.py has been updated.\n" * 5
     message = _normalize(_session(Tool.CLAUDE_CODE, original, rules=_file_op_rules()))
     assert message.original_content == original
     assert message.content != original  # the view is folded
@@ -83,11 +83,11 @@ def test_folded_file_operations_keep_every_line():
     message = _normalize(session)
     assert "File operations summary (collapsed)" in message.content
     for index in range(6):
-        assert f"/repo/lore/f{index}.py" in message.content
+        assert f"/repo/annuli/f{index}.py" in message.content
 
 
 def test_unset_env_vars_keep_every_key():
-    keys = [f"LORE_VARIABLE_{index}" for index in range(6)]
+    keys = [f"ANNULI_VARIABLE_{index}" for index in range(6)]
     text = "\n".join(f"{key}: not set" for key in keys)
     message = _normalize(
         _session(
@@ -129,12 +129,12 @@ def test_code_indentation_survives_in_the_view():
 
 
 def test_preview_path_does_not_mutate_anything():
-    content = "The file /repo/lore/a.py has been updated.\n" * 5
+    content = "The file /repo/annuli/a.py has been updated.\n" * 5
     preview = preview_normalize_message(
         "claude-code", "assistant", content, noise_rules=_file_op_rules()
     )
     assert "File operations summary (collapsed)" in preview
-    assert "/repo/lore/a.py" in preview
+    assert "/repo/annuli/a.py" in preview
 
 
 def test_message_without_noise_is_left_alone():
@@ -148,7 +148,7 @@ def test_the_export_uses_the_canonical_content():
     """The Markdown export must not see the folded view."""
     from pathlib import Path
 
-    from lore.exporters.markdown import MarkdownExporter
+    from annuli.exporters.markdown import MarkdownExporter
 
     session = _session(Tool.CLAUDE_CODE, FILE_OPS, rules=_file_op_rules())
     _normalize(session)
@@ -156,4 +156,4 @@ def test_the_export_uses_the_canonical_content():
     # The exporter renders whatever the session carries, so the folded lines are
     # present in full inside the collapsed block rather than being dropped.
     for index in range(6):
-        assert f"/repo/lore/f{index}.py" in markdown
+        assert f"/repo/annuli/f{index}.py" in markdown

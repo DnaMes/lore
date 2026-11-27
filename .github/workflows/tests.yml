@@ -25,4 +25,4 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - run: pip install -e ".[dev]" || pip install -e .
       - run: pip install pytest pytest-cov
-      - run: python -m pytest tests/ -x -q --cov=lore --cov-fail-under=80
+      - run: python -m pytest tests/ -x -q --cov=annuli --cov-fail-under=80

@@ -1,7 +1,7 @@
 """The CLI must import where Unix-only modules are missing (Windows).
 
 The first Windows run of the install matrix showed `ModuleNotFoundError: No module named
-'termios'` on every command because `lore_cli` imported `pty` at module level.
+'termios'` on every command because `annuli_cli` imported `pty` at module level.
 """
 
 from __future__ import annotations
@@ -16,9 +16,9 @@ BLOCKER = """
 import sys
 for name in ("pty", "termios", "tty", "fcntl", "pwd", "grp", "resource"):
     sys.modules[name] = None  # `import name` now raises ImportError, like on Windows
-import lore_cli
-import lore.cli.web  # noqa: F401
-import lore.cli.mcp  # noqa: F401
+import annuli_cli
+import annuli.cli.web  # noqa: F401
+import annuli.cli.mcp  # noqa: F401
 print("imported")
 """
 

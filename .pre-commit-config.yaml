@@ -1,4 +1,4 @@
-# Pre-commit hooks for lore
+# Pre-commit hooks for annuli
 # Install: pip install pre-commit && pre-commit install
 # Run manually: pre-commit run --all-files
 
@@ -20,14 +20,14 @@ repos:
           - types-Flask
           - types-Markdown
         args: ["--ignore-missing-imports"]
-        exclude: ^(tests/|lore\.py$)
+        exclude: ^(tests/|annuli\.py$)
 
   # Security checks
   - repo: https://github.com/pycqa/bandit
     rev: 1.9.4
     hooks:
       - id: bandit
-        args: ["-r", "lore/"]
+        args: ["-r", "annuli/"]
         exclude: ^tests/
 
   # Check for secrets

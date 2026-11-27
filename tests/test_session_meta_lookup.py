@@ -15,12 +15,12 @@ import json
 
 import pytest
 
-from lore.interfaces import web, web_data
-from lore.interfaces.web_services import (
+from annuli.interfaces import web, web_data
+from annuli.interfaces.web_services import (
     build_threads_overview,
     thread_overview_by_id,
 )
-from lore.services import index as services_index
+from annuli.services import index as services_index
 
 
 def _write_index(index_path, sessions):
@@ -49,7 +49,7 @@ def _meta(session_id: str, title: str = "Session", thread_id=None) -> dict:
 @pytest.fixture(autouse=True)
 def _json_index_only(monkeypatch):
     """Force the legacy JSON reader and reset caches/memos around each test."""
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     monkeypatch.setattr(services_index, "_SESSION_BY_ID_MEMO", None)
     web_data.clear_index_cache()
     yield
@@ -214,7 +214,7 @@ def test_mcp_session_and_thread_lookups_via_shared_memo(monkeypatch):
     import asyncio
     import json as json_module
 
-    from lore.interfaces import mcp
+    from annuli.interfaces import mcp
 
     idx = {
         "sessions": [_meta("ses-mcp-0001", title="Memo", thread_id="thr-mcp-0001")],

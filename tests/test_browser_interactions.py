@@ -1,4 +1,4 @@
-"""Real headless-browser interaction checks for the Lore web UI (#194).
+"""Real headless-browser interaction checks for the Annuli web UI (#194).
 
 The static template/CSP tests cannot see a dead control: a button can render
 with the right attributes and still do nothing. This module drives a real
@@ -32,8 +32,8 @@ from pathlib import Path
 
 import pytest
 
-from lore.interfaces import web, web_data
-from lore.storage import add_session_tag
+from annuli.interfaces import web, web_data
+from annuli.storage import add_session_tag
 
 
 def _playwright():
@@ -98,7 +98,7 @@ def _session_records(session_id: str, index: int) -> list[dict]:
 
 
 def _write_archive(home: Path) -> Path:
-    """Write synthetic Claude Code transcripts and return the Lore data dir."""
+    """Write synthetic Claude Code transcripts and return the Annuli data dir."""
     project_dir = home / ".claude" / "projects" / "-repo-browser-fixture"
     project_dir.mkdir(parents=True)
     for index in range(1, SEEDED_SESSIONS + 1):
@@ -115,10 +115,10 @@ def _write_archive(home: Path) -> Path:
 
 @pytest.fixture(scope="module")
 def archive(tmp_path_factory):
-    """A seeded, indexed Lore archive that the tests can serve repeatedly."""
-    from lore.extractors.base import BaseExtractor
-    from lore.services.extraction import build_search_index
-    from lore.storage import embeddings
+    """A seeded, indexed Annuli archive that the tests can serve repeatedly."""
+    from annuli.extractors.base import BaseExtractor
+    from annuli.services.extraction import build_search_index
+    from annuli.storage import embeddings
 
     home = tmp_path_factory.mktemp("browser-home")
     previous_home = os.environ.get("HOME")
@@ -148,7 +148,7 @@ def archive(tmp_path_factory):
 
 
 @pytest.fixture
-def lore_site(archive):
+def annuli_site(archive):
     """Serve the real Flask app on 127.0.0.1 with the seeded archive."""
     from werkzeug.serving import make_server
 
@@ -214,12 +214,12 @@ def chromium():
 
 
 @pytest.fixture
-def page(chromium, lore_site):
+def page(chromium, annuli_site):
     """A fresh page with clipboard access, closed after each test."""
     context = chromium.new_context(viewport={"width": 1280, "height": 800})
     context.grant_permissions(
         ["clipboard-read", "clipboard-write"],
-        origin=lore_site,
+        origin=annuli_site,
     )
     page = context.new_page()
     try:
@@ -228,9 +228,9 @@ def page(chromium, lore_site):
         context.close()
 
 
-def test_search_modal_navigates_to_session(page, lore_site):
+def test_search_modal_navigates_to_session(page, annuli_site):
     sync_api = _playwright()
-    page.goto(lore_site + "/", wait_until="networkidle")
+    page.goto(annuli_site + "/", wait_until="networkidle")
     page.keyboard.press("Control+k")
     search_input = page.locator("#searchInput")
     sync_api.expect(search_input).to_be_visible()
@@ -243,7 +243,7 @@ def test_search_modal_navigates_to_session(page, lore_site):
     sync_api.expect(page.locator("h1")).to_be_visible()
 
 
-def test_search_modal_ignores_a_late_answer_for_an_older_query(page, lore_site):
+def test_search_modal_ignores_a_late_answer_for_an_older_query(page, annuli_site):
     """A slow answer for an earlier prefix must not replace the newest query's hits."""
     sync_api = _playwright()
     held = []
@@ -255,7 +255,7 @@ def test_search_modal_ignores_a_late_answer_for_an_older_query(page, lore_site):
             route.continue_()
 
     page.route("**/api/search?*", hold_short_prefix)
-    page.goto(lore_site + "/", wait_until="networkidle")
+    page.goto(annuli_site + "/", wait_until="networkidle")
     page.keyboard.press("Control+k")
     search_input = page.locator("#searchInput")
     search_input.fill("br")
@@ -271,9 +271,9 @@ def test_search_modal_ignores_a_late_answer_for_an_older_query(page, lore_site):
     assert results.count() == painted
 
 
-def test_copy_code_button_writes_clipboard(page, lore_site):
+def test_copy_code_button_writes_clipboard(page, annuli_site):
     sync_api = _playwright()
-    page.goto(f"{lore_site}/session/browser-session-01", wait_until="networkidle")
+    page.goto(f"{annuli_site}/session/browser-session-01", wait_until="networkidle")
     copy_button = page.locator(".code-card-copy").first
     sync_api.expect(copy_button).to_be_visible(timeout=10_000)
     copy_button.click()
@@ -282,18 +282,18 @@ def test_copy_code_button_writes_clipboard(page, lore_site):
     assert CODE_MARKER in clipboard
 
 
-def test_tag_filter_narrows_session_list(page, lore_site):
+def test_tag_filter_narrows_session_list(page, annuli_site):
     sync_api = _playwright()
-    page.goto(f"{lore_site}/sessions", wait_until="networkidle")
+    page.goto(f"{annuli_site}/sessions", wait_until="networkidle")
     page.locator('select[name="tag"]').select_option(TAG_NAME)
     sync_api.expect(page).to_have_url(re.compile(r"tag=release"))
     sync_api.expect(page.locator(".session-row")).to_have_count(len(TAGGED_SESSION_IDS))
     sync_api.expect(page.locator("select[name='tag']")).to_have_value(TAG_NAME)
 
 
-def test_message_permalink_navigation(page, lore_site):
+def test_message_permalink_navigation(page, annuli_site):
     sync_api = _playwright()
-    page.goto(f"{lore_site}/session/browser-session-01/m/1", wait_until="networkidle")
+    page.goto(f"{annuli_site}/session/browser-session-01/m/1", wait_until="networkidle")
     sync_api.expect(page.get_by_text(re.compile(r"Message 1 of"))).to_be_visible()
 
     page.locator("a[href$='/m/3']").first.click()
@@ -305,9 +305,9 @@ def test_message_permalink_navigation(page, lore_site):
     sync_api.expect(page.locator(".message-cluster").first).to_be_visible()
 
 
-def test_session_list_load_more_pagination(page, lore_site):
+def test_session_list_load_more_pagination(page, annuli_site):
     sync_api = _playwright()
-    page.goto(f"{lore_site}/sessions", wait_until="networkidle")
+    page.goto(f"{annuli_site}/sessions", wait_until="networkidle")
     rows = page.locator(".session-row")
     sync_api.expect(rows).to_have_count(50)
     # Keyboard activation: the filters sheet is absolutely positioned at the

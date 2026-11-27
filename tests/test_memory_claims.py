@@ -13,7 +13,7 @@ import json
 
 import pytest
 
-from lore.storage import (
+from annuli.storage import (
     CLAIM_STATES,
     CLAIM_TYPES,
     claim_state,
@@ -39,7 +39,7 @@ def _claim(store, **overrides):
         confidence=0.6,
         evidence={"session_id": "ses-a", "message_id": 4, "revision": "sha256:abc"},
         request={"provider": "ollama", "model": "llama3", "prompt_version": "v2"},
-        scope_project="/repo/lore",
+        scope_project="/repo/annuli",
         source_session="ses-a",
         source_message_id=4,
     )
@@ -173,11 +173,11 @@ def test_states_stay_distinguishable(store):
 
 
 def test_json_export_contains_the_evidence(store, capsys):
-    import lore_cli
+    import annuli_cli
 
     memory_id = _claim(store)
     set_memory_status(store, memory_id, "confirmed", from_status="candidate")
-    lore_cli.cmd_memory(
+    annuli_cli.cmd_memory(
         argparse.Namespace(
             memory_action="list",
             output_dir=str(store),
@@ -200,10 +200,10 @@ def test_json_export_contains_the_evidence(store, capsys):
 
 
 def test_text_listing_shows_claim_and_evidence(store, capsys):
-    import lore_cli
+    import annuli_cli
 
     _claim(store, claim_type="hypothesis", confidence=0.8)
-    lore_cli.cmd_memory(
+    annuli_cli.cmd_memory(
         argparse.Namespace(
             memory_action="list",
             output_dir=str(store),

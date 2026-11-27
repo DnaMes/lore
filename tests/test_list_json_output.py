@@ -1,4 +1,4 @@
-"""``lore list --format json`` writes only the JSON array to stdout."""
+"""``annuli list --format json`` writes only the JSON array to stdout."""
 
 from __future__ import annotations
 
@@ -6,9 +6,9 @@ import json
 from argparse import Namespace
 from datetime import datetime
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.extractors.base import BaseExtractor
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.extractors.base import BaseExtractor
 
 
 class _OneSessionExtractor(BaseExtractor):
@@ -50,9 +50,9 @@ def _args(**extra) -> Namespace:
 
 
 def test_list_json_stdout_is_valid_json(monkeypatch, capsys):
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_OneSessionExtractor()])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_OneSessionExtractor()])
 
-    lore_cli.cmd_list(_args())
+    annuli_cli.cmd_list(_args())
     captured = capsys.readouterr()
 
     rows = json.loads(captured.out)
@@ -62,9 +62,9 @@ def test_list_json_stdout_is_valid_json(monkeypatch, capsys):
 
 
 def test_list_json_with_limit_stdout_is_valid_json(monkeypatch, capsys):
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_OneSessionExtractor()])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_OneSessionExtractor()])
 
-    lore_cli.cmd_list(_args(limit=1, offset=0))
+    annuli_cli.cmd_list(_args(limit=1, offset=0))
     captured = capsys.readouterr()
 
     assert len(json.loads(captured.out)) == 1
@@ -72,8 +72,8 @@ def test_list_json_with_limit_stdout_is_valid_json(monkeypatch, capsys):
 
 
 def test_list_table_still_reports_total_on_stdout(monkeypatch, capsys):
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_OneSessionExtractor()])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_OneSessionExtractor()])
 
-    lore_cli.cmd_list(_args(format="table"))
+    annuli_cli.cmd_list(_args(format="table"))
 
     assert "Total: 1 sessions" in capsys.readouterr().out

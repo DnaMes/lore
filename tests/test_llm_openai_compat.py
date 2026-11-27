@@ -12,9 +12,9 @@ from typing import Any, Dict, List
 
 import pytest
 
-from lore.llm.base import LLMConfig
-from lore.llm.openai_compat import OpenAICompatError, OpenAICompatProvider
-from lore.services.summarize_cli import (
+from annuli.llm.base import LLMConfig
+from annuli.llm.openai_compat import OpenAICompatError, OpenAICompatProvider
+from annuli.services.summarize_cli import (
     PROVIDER_CHOICES,
     provider_locality,
     web_summarize_enabled,
@@ -63,12 +63,12 @@ def _start_server(
 def _clean_llm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in (
-        "LORE_LLM_BASE_URL",
-        "LORE_LLM_MODEL",
-        "LORE_LLM_API_KEY",
-        "LORE_LLM_API_KEY_ENV",
-        "LORE_SUMMARY_PROVIDER",
-        "LORE_ALLOW_CLOUD",
+        "ANNULI_LLM_BASE_URL",
+        "ANNULI_LLM_MODEL",
+        "ANNULI_LLM_API_KEY",
+        "ANNULI_LLM_API_KEY_ENV",
+        "ANNULI_SUMMARY_PROVIDER",
+        "ANNULI_ALLOW_CLOUD",
     ):
         monkeypatch.delenv(var, raising=False)
 
@@ -77,9 +77,9 @@ def test_request_uses_direct_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     server, thread, recorded = _start_server()
     try:
         host, port = server.server_address
-        monkeypatch.setenv("LORE_LLM_BASE_URL", f"http://{host}:{port}/v1")
-        monkeypatch.setenv("LORE_LLM_MODEL", "local-test-model")
-        monkeypatch.setenv("LORE_LLM_API_KEY", "secret-direct-key")
+        monkeypatch.setenv("ANNULI_LLM_BASE_URL", f"http://{host}:{port}/v1")
+        monkeypatch.setenv("ANNULI_LLM_MODEL", "local-test-model")
+        monkeypatch.setenv("ANNULI_LLM_API_KEY", "secret-direct-key")
 
         provider = OpenAICompatProvider(
             LLMConfig(provider="openai-compatible", model="", cache_enabled=False)
@@ -101,9 +101,9 @@ def test_request_uses_named_api_key_env(monkeypatch: pytest.MonkeyPatch) -> None
     server, thread, recorded = _start_server()
     try:
         host, port = server.server_address
-        monkeypatch.setenv("LORE_LLM_BASE_URL", f"http://{host}:{port}/v1")
-        monkeypatch.setenv("LORE_LLM_MODEL", "local-test-model")
-        monkeypatch.setenv("LORE_LLM_API_KEY_ENV", "CUSTOM_PROVIDER_TOKEN")
+        monkeypatch.setenv("ANNULI_LLM_BASE_URL", f"http://{host}:{port}/v1")
+        monkeypatch.setenv("ANNULI_LLM_MODEL", "local-test-model")
+        monkeypatch.setenv("ANNULI_LLM_API_KEY_ENV", "CUSTOM_PROVIDER_TOKEN")
         monkeypatch.setenv("CUSTOM_PROVIDER_TOKEN", "secret-named-key")
 
         provider = OpenAICompatProvider(
@@ -126,8 +126,8 @@ def test_request_omits_authorization_header_without_key(
     server, thread, recorded = _start_server()
     try:
         host, port = server.server_address
-        monkeypatch.setenv("LORE_LLM_BASE_URL", f"http://{host}:{port}/v1")
-        monkeypatch.setenv("LORE_LLM_MODEL", "local-test-model")
+        monkeypatch.setenv("ANNULI_LLM_BASE_URL", f"http://{host}:{port}/v1")
+        monkeypatch.setenv("ANNULI_LLM_MODEL", "local-test-model")
 
         provider = OpenAICompatProvider(
             LLMConfig(provider="openai-compatible", model="", cache_enabled=False)
@@ -143,8 +143,8 @@ def test_request_omits_authorization_header_without_key(
 
 
 def test_http_non_loopback_host_is_refused(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LORE_LLM_BASE_URL", "http://example.com/v1")
-    monkeypatch.setenv("LORE_LLM_MODEL", "m")
+    monkeypatch.setenv("ANNULI_LLM_BASE_URL", "http://example.com/v1")
+    monkeypatch.setenv("ANNULI_LLM_MODEL", "m")
     provider = OpenAICompatProvider(
         LLMConfig(provider="openai-compatible", model="", cache_enabled=False),
         allow_cloud=True,
@@ -156,41 +156,41 @@ def test_http_non_loopback_host_is_refused(monkeypatch: pytest.MonkeyPatch) -> N
 def test_missing_base_url_or_model_gives_clear_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("LORE_LLM_MODEL", "m")
+    monkeypatch.setenv("ANNULI_LLM_MODEL", "m")
     provider_no_url = OpenAICompatProvider(
         LLMConfig(provider="openai-compatible", model="", cache_enabled=False),
         allow_cloud=True,
     )
-    with pytest.raises(OpenAICompatError, match="LORE_LLM_BASE_URL"):
+    with pytest.raises(OpenAICompatError, match="ANNULI_LLM_BASE_URL"):
         provider_no_url.generate("hello")
 
-    monkeypatch.setenv("LORE_LLM_BASE_URL", "http://127.0.0.1:11434/v1")
-    monkeypatch.delenv("LORE_LLM_MODEL", raising=False)
+    monkeypatch.setenv("ANNULI_LLM_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.delenv("ANNULI_LLM_MODEL", raising=False)
     provider_no_model = OpenAICompatProvider(
         LLMConfig(provider="openai-compatible", model="", cache_enabled=False),
         allow_cloud=True,
     )
-    with pytest.raises(OpenAICompatError, match="LORE_LLM_MODEL"):
+    with pytest.raises(OpenAICompatError, match="ANNULI_LLM_MODEL"):
         provider_no_model.generate("hello")
 
 
 def test_provider_locality_openai_compatible(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LORE_LLM_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setenv("ANNULI_LLM_BASE_URL", "http://127.0.0.1:11434/v1")
     assert provider_locality("openai-compatible") == "local"
 
-    monkeypatch.setenv("LORE_LLM_BASE_URL", "http://localhost:11434/v1")
+    monkeypatch.setenv("ANNULI_LLM_BASE_URL", "http://localhost:11434/v1")
     assert provider_locality("openai-compatible") == "local"
 
-    monkeypatch.setenv("LORE_LLM_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setenv("ANNULI_LLM_BASE_URL", "https://api.example.com/v1")
     assert provider_locality("openai-compatible") == "cloud"
 
 
 def test_web_summarize_enabled_openai_compatible(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LORE_SUMMARY_PROVIDER", "openai-compatible")
-    monkeypatch.setenv("LORE_LLM_BASE_URL", "http://127.0.0.1:11434/v1")
+    monkeypatch.setenv("ANNULI_SUMMARY_PROVIDER", "openai-compatible")
+    monkeypatch.setenv("ANNULI_LLM_BASE_URL", "http://127.0.0.1:11434/v1")
     assert web_summarize_enabled() is True
 
-    monkeypatch.setenv("LORE_LLM_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setenv("ANNULI_LLM_BASE_URL", "https://api.example.com/v1")
     assert web_summarize_enabled() is False
 
 
@@ -201,9 +201,9 @@ def test_api_key_never_leaks_on_401(
     server, thread, _recorded = _start_server(status_code=401, response_body={"error": "bad"})
     try:
         host, port = server.server_address
-        monkeypatch.setenv("LORE_LLM_BASE_URL", f"http://{host}:{port}/v1")
-        monkeypatch.setenv("LORE_LLM_MODEL", "local-test-model")
-        monkeypatch.setenv("LORE_LLM_API_KEY", secret_key)
+        monkeypatch.setenv("ANNULI_LLM_BASE_URL", f"http://{host}:{port}/v1")
+        monkeypatch.setenv("ANNULI_LLM_MODEL", "local-test-model")
+        monkeypatch.setenv("ANNULI_LLM_API_KEY", secret_key)
 
         provider = OpenAICompatProvider(
             LLMConfig(provider="openai-compatible", model="", cache_enabled=False)
@@ -231,7 +231,7 @@ def test_gemini_lazy_import_error_message(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setitem(sys.modules, "google.generativeai", None)
     import importlib
 
-    gemini_mod = importlib.import_module("lore.llm.gemini")
+    gemini_mod = importlib.import_module("annuli.llm.gemini")
     provider = gemini_mod.GeminiProvider(
         LLMConfig(provider="gemini", model="gemini-2.0-flash", cache_enabled=False),
         allow_cloud=True,

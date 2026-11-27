@@ -4,9 +4,9 @@ requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "lore"
+name = "annuli"
 dynamic = ["version"]
-description = "Lore — local-first archive and shared agent memory for your AI coding sessions across Claude, Cursor, Gemini, Codex, Aider, and more"
+description = "Annuli — local-first archive and shared agent memory for your AI coding sessions across Claude, Cursor, Gemini, Codex, Aider, and more"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -62,7 +62,7 @@ dev = [
     "mypy>=1.8",
     "pre-commit>=3,<5",
     "bandit[toml]>=1.7",
-    # PyYAML parses the skill frontmatter in tests/test_skill_lore_memory.py.
+    # PyYAML parses the skill frontmatter in tests/test_skill_annuli_memory.py.
     "PyYAML>=6",
     "fastembed>=0.3",
     "sqlite-vec>=0.1.9",
@@ -76,28 +76,34 @@ Repository = "https://github.com/DnaMes/lore"
 Issues = "https://github.com/DnaMes/lore/issues"
 
 [project.scripts]
-lore = "lore_cli:main"
-lore-session = "lore_session_cli:main"
-lore-web = "lore.cli.web:main"
-lore-mcp = "lore.cli.mcp:main_sync"
-lore-web-probe = "lore.interfaces.live_probe:main"
+annuli = "annuli_cli:main"
+annuli-session = "annuli_session_cli:main"
+annuli-web = "annuli.cli.web:main"
+annuli-mcp = "annuli.cli.mcp:main_sync"
+annuli-web-probe = "annuli.interfaces.live_probe:main"
+# Pre-rebrand command names, kept as aliases until usage counts say they are unused.
+lore = "annuli_cli:main"
+lore-session = "annuli_session_cli:main"
+lore-web = "annuli.cli.web:main"
+lore-mcp = "annuli.cli.mcp:main_sync"
+lore-web-probe = "annuli.interfaces.live_probe:main"
 
 [tool.setuptools]
-py-modules = ["lore_cli", "lore_session_cli"]
+py-modules = ["annuli_cli", "annuli_session_cli", "lore_cli", "lore_session_cli"]
 
 [tool.setuptools.dynamic]
-# Single source of truth — the version lives in lore/__init__.py.
-version = {attr = "lore.__version__"}
+# Single source of truth — the version lives in annuli/__init__.py.
+version = {attr = "annuli.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["lore*"]
+include = ["annuli*"]
 
 [tool.setuptools.package-data]
 # Vendored web assets (Tailwind, highlight.js, tool icons) must ship in the wheel.
-"lore.interfaces" = ["static/*.js", "static/*.css", "static/icons/*"]
+"annuli.interfaces" = ["static/*.js", "static/*.css", "static/icons/*"]
 # Jinja templates served by the web UI (FileSystemLoader resolves from the package).
-"lore" = ["templates/*.html"]
+"annuli" = ["templates/*.html"]
 
 [tool.ruff]
 line-length = 100
@@ -121,27 +127,27 @@ skips = ["B101", "B310", "B608"]
 
 [tool.ruff.lint.per-file-ignores]
 # Lazy imports gated on optional dependency availability
-"lore/interfaces/mcp.py" = ["E402"]
-"lore/titles/generator.py" = ["E402"]
+"annuli/interfaces/mcp.py" = ["E402"]
+"annuli/titles/generator.py" = ["E402"]
 # Pre-existing unused-locals slated for separate cleanup
-"lore/extractors/claude.py" = ["F841"]
-"lore_session_cli.py" = ["F841"]
+"annuli/extractors/claude.py" = ["F841"]
+"annuli_session_cli.py" = ["F841"]
 
 [tool.pytest.ini_options]
-addopts = "--cov=lore --cov-config=pyproject.toml --cov-report=term-missing -q"
+addopts = "--cov=annuli --cov-config=pyproject.toml --cov-report=term-missing -q"
 testpaths = ["tests"]
 markers = [
     "browser: real headless-browser flows; needs the `browser` extra and Chromium",
 ]
 
 [tool.coverage.run]
-source = ["lore"]
+source = ["annuli"]
 omit = [
-    "lore/llm/*",
-    "lore/titles/*",
-    "lore/watcher.py",
-    "lore/cli/mcp.py",
-    "lore/cli/web.py",
+    "annuli/llm/*",
+    "annuli/titles/*",
+    "annuli/watcher.py",
+    "annuli/cli/mcp.py",
+    "annuli/cli/web.py",
 ]
 
 [tool.coverage.report]

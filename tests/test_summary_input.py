@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 from datetime import datetime
 
-from lore.core.models import Role, UnifiedMessage
-from lore.services.summary_input import (
+from annuli.core.models import Role, UnifiedMessage
+from annuli.services.summary_input import (
     COMPRESSOR_VERSION,
     CompressedTranscript,
     SummaryMessage,
@@ -276,7 +276,7 @@ def test_estimate_tokens():
 
 
 def _transcript_with_blocks(*texts: str) -> CompressedTranscript:
-    from lore.services.summary_input import CompressedBlock
+    from annuli.services.summary_input import CompressedBlock
 
     blks = tuple(
         CompressedBlock(

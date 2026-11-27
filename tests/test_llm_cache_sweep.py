@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-from lore.llm.base import LLMConfig
-from lore.llm.cache_io import sweep_temp_files
-from lore.llm.gemini import GeminiProvider
-from lore.llm.jev import JevProvider
-from lore.llm.ollama import OllamaProvider
-from lore.llm.openrouter import OpenRouterProvider
+from annuli.llm.base import LLMConfig
+from annuli.llm.cache_io import sweep_temp_files
+from annuli.llm.gemini import GeminiProvider
+from annuli.llm.jev import JevProvider
+from annuli.llm.ollama import OllamaProvider
+from annuli.llm.openrouter import OpenRouterProvider
 
 STALE_AGE_SECONDS = 7200.0
 

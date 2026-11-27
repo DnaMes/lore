@@ -10,13 +10,13 @@ from uuid import uuid4
 import msgpack
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.visual_studio import MAX_SOURCE_BYTES, VisualStudioCopilotExtractor
-from lore.interfaces.web_helpers import get_style
-from lore.utils.home_discovery import _discover_cached
-from lore.utils.security import validate_session_id, validate_tool_name
-from lore.utils.tooling import is_supported_tool, normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.visual_studio import MAX_SOURCE_BYTES, VisualStudioCopilotExtractor
+from annuli.interfaces.web_helpers import get_style
+from annuli.utils.home_discovery import _discover_cached
+from annuli.utils.security import validate_session_id, validate_tool_name
+from annuli.utils.tooling import is_supported_tool, normalize_tool_name
 
 CREATED = datetime(2025, 1, 2, 3, 4, 5, tzinfo=timezone.utc)
 
@@ -29,9 +29,9 @@ def environment(tmp_path, monkeypatch):
     cwd.mkdir()
     monkeypatch.setattr(Path, "home", lambda: home)
     monkeypatch.chdir(cwd)
-    monkeypatch.delenv("LORE_EXTRA_HOME_PATHS", raising=False)
-    monkeypatch.delenv("LORE_VISUAL_STUDIO_PROJECT_PATHS", raising=False)
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "1")
+    monkeypatch.delenv("ANNULI_EXTRA_HOME_PATHS", raising=False)
+    monkeypatch.delenv("ANNULI_VISUAL_STUDIO_PROJECT_PATHS", raising=False)
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "1")
     _discover_cached.cache_clear()
     yield home
     _discover_cached.cache_clear()
@@ -148,9 +148,9 @@ def test_profile_roots_extra_projects_cwd_and_duplicates(environment, tmp_path, 
         _stream(external),
         _stream(Path.cwd()),
     }
-    monkeypatch.setenv("LORE_EXTRA_HOME_PATHS", os.pathsep.join([str(mounted), str(mounted)]))
+    monkeypatch.setenv("ANNULI_EXTRA_HOME_PATHS", os.pathsep.join([str(mounted), str(mounted)]))
     monkeypatch.setenv(
-        "LORE_VISUAL_STUDIO_PROJECT_PATHS", os.pathsep.join([str(project), str(external)])
+        "ANNULI_VISUAL_STUDIO_PROJECT_PATHS", os.pathsep.join([str(project), str(external)])
     )
     extractor = VisualStudioCopilotExtractor()
     assert extractor.is_available()
@@ -158,7 +158,7 @@ def test_profile_roots_extra_projects_cwd_and_duplicates(environment, tmp_path, 
     assert {s.source_path for s in sessions} == {str(p) for p in paths}
     assert len({s.session_id for s in sessions}) == len(paths)
     assert extractor.discovery["files_matched"] == len(paths)
-    from lore.watcher import collect_extractor_paths
+    from annuli.watcher import collect_extractor_paths
 
     assert set(collect_extractor_paths([extractor])) == {p.parent for p in paths}
 
@@ -204,10 +204,10 @@ def test_oversize_not_opened_and_unchanged_not_read(environment, monkeypatch, ca
 def test_policy_fallback_title_mtime_and_incremental_version(environment, monkeypatch):
     path = _stream(environment / "source" / "repos" / "Example", name=None)
     extractor = VisualStudioCopilotExtractor()
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "3")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "3")
     assert list(extractor.extract_sessions()) == []
     assert extractor.skip_counts["too_few_user_prompts"] == 1
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "1")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "1")
     extractor.known_source_mtimes = {str(path): path.stat().st_mtime_ns}
     extractor.known_source_parser_versions = {str(path): 0}
     (session,) = extractor.extract_sessions()
@@ -226,7 +226,7 @@ def test_registration_and_aliases(environment):
 
 def test_unavailable_root_and_unknown_tool_result(environment, tmp_path, monkeypatch, caplog):
     missing = tmp_path / "missing"
-    monkeypatch.setenv("LORE_VISUAL_STUDIO_PROJECT_PATHS", str(missing))
+    monkeypatch.setenv("ANNULI_VISUAL_STUDIO_PROJECT_PATHS", str(missing))
     extractor = VisualStudioCopilotExtractor()
     assert not extractor.is_available()
     assert str(missing) in caplog.text
@@ -238,13 +238,13 @@ def test_unavailable_root_and_unknown_tool_result(environment, tmp_path, monkeyp
 
 
 def test_full_cli_export(environment, tmp_path, monkeypatch):
-    import lore_cli
+    import annuli_cli
 
     source = _stream(environment / "source" / "repos" / "Example")
     before = source.read_bytes(), source.stat().st_mtime_ns
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [VisualStudioCopilotExtractor()])
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [VisualStudioCopilotExtractor()])
     output = tmp_path / "export"
-    lore_cli.cmd_export(
+    annuli_cli.cmd_export(
         Namespace(output_dir=str(output), tool="visual-studio-copilot", project=None)
     )
     entries = json.loads((output / "index.json").read_text())["sessions"]

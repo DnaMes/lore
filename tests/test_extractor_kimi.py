@@ -10,10 +10,10 @@ from typing import Any
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.kimi import PARSER_VERSION, KimiExtractor, _md5_workdir
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.kimi import PARSER_VERSION, KimiExtractor, _md5_workdir
+from annuli.utils.tooling import normalize_tool_name
 
 WORK_DIR = "/work/kimi-demo"
 SESSION_ID = "kimi-sess-001"
@@ -251,7 +251,7 @@ def test_kimi_duplicate_session_id_qualified(home):
 
 
 def test_kimi_hostile_input_does_not_abort(home, monkeypatch):
-    import lore.extractors.kimi as kimi_mod
+    import annuli.extractors.kimi as kimi_mod
 
     _setup_session(home, context=_basic_context())
     path = _session_dir(home) / "context.jsonl"
@@ -344,7 +344,7 @@ def test_kimi_parser_version():
 
 
 def test_kimi_message_cap_stops_streaming_and_late_result_marks_failure(home, monkeypatch):
-    import lore.extractors.kimi as kimi_mod
+    import annuli.extractors.kimi as kimi_mod
 
     monkeypatch.setattr(kimi_mod, "_MAX_MESSAGES", 4)
     ctx = [

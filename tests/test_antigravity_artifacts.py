@@ -10,16 +10,16 @@ from __future__ import annotations
 import json
 from datetime import datetime
 
-from lore.extractors.antigravity import AntigravityExtractor
-from lore.services.extraction import capture_source_artifacts
-from lore.storage.schema import initialise
-from lore.storage.source_health import source_health_summary
-from lore.storage.source_revisions import (
+from annuli.extractors.antigravity import AntigravityExtractor
+from annuli.services.extraction import capture_source_artifacts
+from annuli.storage.schema import initialise
+from annuli.storage.source_health import source_health_summary
+from annuli.storage.source_revisions import (
     read_source_revision,
     revisions_for_source,
     source_identity_for,
 )
-from lore.storage.writer import write_sessions
+from annuli.storage.writer import write_sessions
 
 
 def _brain(root, session_id: str = "conv-1"):

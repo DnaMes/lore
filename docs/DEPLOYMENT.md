@@ -6,23 +6,23 @@ the opt-in overlays, use [DOCKER.md](./DOCKER.md), the runtime-verified Docker g
 The stack has two services, `app` (the web UI) and `worker` (library, embeddings,
 summaries), both built from `Dockerfile` by `docker-compose.yml`.
 Compose has no `image:` key; the image is built locally and named after the checkout
-directory and service (for a checkout in `lore/`: `lore-app`). The container name
+directory and service (for a checkout in `annuli/`: `lore-app`). The container name
 `lore-app` is set in `docker-compose.yml`.
 
 ## Day-to-day operations
 
 ```bash
 docker compose build app       # build the image
-docker compose up -d           # start; recreates the container, keeps the lore-data volume
+docker compose up -d           # start; recreates the container, keeps the annuli-data volume
 docker compose stop app        # stop
-docker compose down            # stop and remove the container; lore-data volume stays
+docker compose down            # stop and remove the container; annuli-data volume stays
 docker compose ps              # status; "(healthy)" once the health check passes
 docker compose logs -f app     # follow logs
 docker exec lore-app ...       # run a command inside the container (name from compose)
 ```
 
 `docker compose start app` restarts a stopped container; `docker compose down -v` also
-deletes the `lore-data` volume and all data with it.
+deletes the `annuli-data` volume and all data with it.
 
 ## Health checks
 
@@ -31,9 +31,9 @@ deletes the `lore-data` volume and all data with it.
 
 ## Rebuilding after an update
 
-The named volume `lore-data` (mounted at `/home/ai/.lore`; holds the SQLite store,
+The named volume `annuli-data` (mounted at `/home/ai/.annuli`; holds the SQLite store,
 exports, memory and caches) survives a rebuild: `up -d` recreates the container, not
-the volume. Lore applies its own migrations when the store opens.
+the volume. Annuli applies its own migrations when the store opens.
 
 ```bash
 git pull
@@ -52,10 +52,10 @@ container via `--volumes-from lore-app`:
 # backup: writes the archive to the current directory, via a temp file
 # the archive is only put in place after the tar succeeds
 docker compose stop app
-backup="lore-data-$(date +%F).tar.gz"
+backup="annuli-data-$(date +%F).tar.gz"
 tmp="$(mktemp "${backup}.XXXXXX")"
 if docker run --rm --volumes-from lore-app alpine \
-    tar -C /home/ai/.lore -czf - . > "$tmp"; then
+    tar -C /home/ai/.annuli -czf - . > "$tmp"; then
   mv "$tmp" "$backup"
 else
   echo "backup failed; an existing backup was not touched"
@@ -67,17 +67,17 @@ docker compose start app
 # and aborts on an unreadable or truncated archive before touching the volume
 # replaces the volume contents (keep a copy of the current data first)
 docker compose stop app
-if docker run --rm -i alpine tar -tzf - > /dev/null < lore-data-YYYY-MM-DD.tar.gz; then
+if docker run --rm -i alpine tar -tzf - > /dev/null < annuli-data-YYYY-MM-DD.tar.gz; then
   docker run --rm -i --volumes-from lore-app alpine \
-    sh -c 'find /home/ai/.lore -mindepth 1 -delete && tar -C /home/ai/.lore -xzf -' \
-    < lore-data-YYYY-MM-DD.tar.gz
+    sh -c 'find /home/ai/.annuli -mindepth 1 -delete && tar -C /home/ai/.annuli -xzf -' \
+    < annuli-data-YYYY-MM-DD.tar.gz
 else
   echo "archive is broken; nothing was changed"
 fi
 docker compose start app
 ```
 
-For a bind-mounted `LORE_DATA_DIR`, tar the host directory directly instead.
+For a bind-mounted `ANNULI_DATA_DIR`, tar the host directory directly instead.
 
 ## Logs
 
@@ -89,9 +89,9 @@ Logs go to stdout/stderr only; gunicorn writes to the console and the compose
 
 | Symptom | Fix |
 | --- | --- |
-| Port busy on start (port 5000 is taken, e.g. by macOS AirPlay Receiver) | `LORE_PORT=5001 docker compose up -d`, or set `LORE_PORT` in `.env` |
-| `Permission denied` writing a bind-mounted `LORE_DATA_DIR` | The host path must be writable by container UID 10001: `sudo chown -R 10001:10001 <path>`. The container can still report `healthy`; `/api/ready` shows the failure |
-| HTTP 400 behind a reverse proxy (foreign or missing `Host`) | Set `TRUSTED_PROXY=1`, list the public origin in `LORE_PUBLIC_ORIGINS` and/or extra `Host` values in `LORE_ALLOWED_HOSTS` (see [DOCKER.md](./DOCKER.md#reverse-proxy-with-traefik-opt-in-example)) |
+| Port busy on start (port 5000 is taken, e.g. by macOS AirPlay Receiver) | `ANNULI_PORT=5001 docker compose up -d`, or set `ANNULI_PORT` in `.env` |
+| `Permission denied` writing a bind-mounted `ANNULI_DATA_DIR` | The host path must be writable by container UID 10001: `sudo chown -R 10001:10001 <path>`. The container can still report `healthy`; `/api/ready` shows the failure |
+| HTTP 400 behind a reverse proxy (foreign or missing `Host`) | Set `TRUSTED_PROXY=1`, list the public origin in `ANNULI_PUBLIC_ORIGINS` and/or extra `Host` values in `ANNULI_ALLOWED_HOSTS` (see [DOCKER.md](./DOCKER.md#reverse-proxy-with-traefik-opt-in-example)) |
 
 See [DOCKER.md](./DOCKER.md) for setup and [CONFIGURATION.md](./CONFIGURATION.md) for
 app settings and environment variable reference.

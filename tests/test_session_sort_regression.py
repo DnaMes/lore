@@ -8,7 +8,7 @@ if they were originally created weeks ago.
 
 from __future__ import annotations
 
-from lore.interfaces import web
+from annuli.interfaces import web
 
 
 def _make_session(sid: str, created: str, updated: str | None = None) -> dict:

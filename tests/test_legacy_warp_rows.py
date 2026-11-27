@@ -2,11 +2,11 @@
 
 from datetime import datetime
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web
-from lore.interfaces.web_data import _tool_from_value
-from lore.interfaces.web_helpers import get_style
-from lore.interfaces.web_services import normalize_session_messages_for_display
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web
+from annuli.interfaces.web_data import _tool_from_value
+from annuli.interfaces.web_helpers import get_style
+from annuli.interfaces.web_services import normalize_session_messages_for_display
 
 _ENTRY = {
     "id": "ses-legacy-warp-1",

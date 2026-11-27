@@ -1,10 +1,10 @@
-"""Pin docs/CLI.md against the argparse parser in lore_cli.py.
+"""Pin docs/CLI.md against the argparse parser in annuli_cli.py.
 
 Every command path registered by ``build_parser()`` (e.g. ``memory`` and
 ``memory review``) must appear in docs/CLI.md, either as a heading (``## memory``
-with ``### review`` under it) or as a literal ``lore memory review`` mention
+with ``### review`` under it) or as a literal ``annuli memory review`` mention
 (such as the ``--help`` usage block). Conversely, any heading that looks like a
-command path of the form ``lore <cmd>`` must exist in the parser, so stale
+command path of the form ``annuli <cmd>`` must exist in the parser, so stale
 documentation cannot survive a command rename.
 
 README is deliberately exempt: it is an overview, not a complete reference.
@@ -18,12 +18,12 @@ from pathlib import Path
 
 import pytest
 
-from lore_cli import build_parser
+from annuli_cli import build_parser
 
 CLI_MD = Path(__file__).resolve().parents[1] / "docs" / "CLI.md"
 
 _HEADING_RE = re.compile(r"^(#+) (.+)$", re.MULTILINE)
-_LORE_COMMAND_HEADING_RE = re.compile(r"^lore [a-z][a-z0-9-]*(?: [a-z][a-z0-9-]*)*$")
+_ANNULI_COMMAND_HEADING_RE = re.compile(r"^annuli [a-z][a-z0-9-]*(?: [a-z][a-z0-9-]*)*$")
 
 
 def _subparser_action(
@@ -72,20 +72,20 @@ def _heading_paths(text: str) -> set[str]:
 
 @pytest.mark.parametrize("command", _command_paths(build_parser()))
 def test_every_parser_command_is_documented(command: str) -> None:
-    """Each parser command path is a heading or a ``lore <cmd>`` mention in CLI.md."""
+    """Each parser command path is a heading or a ``annuli <cmd>`` mention in CLI.md."""
     text = _cli_md()
-    assert command in _heading_paths(text) or f"lore {command}" in text, (
-        f"docs/CLI.md does not document 'lore {command}': "
-        "add a heading or a 'lore " + command + "' mention"
+    assert command in _heading_paths(text) or f"annuli {command}" in text, (
+        f"docs/CLI.md does not document 'annuli {command}': "
+        "add a heading or a 'annuli " + command + "' mention"
     )
 
 
 def test_command_looking_headings_exist_in_parser() -> None:
-    """Headings of the form ``lore <cmd>`` in CLI.md must be real parser commands."""
+    """Headings of the form ``annuli <cmd>`` in CLI.md must be real parser commands."""
     parser_paths = set(_command_paths(build_parser()))
     for heading in _heading_paths(_cli_md()):
-        if _LORE_COMMAND_HEADING_RE.match(heading):
+        if _ANNULI_COMMAND_HEADING_RE.match(heading):
             assert heading in parser_paths, (
-                f"docs/CLI.md heading 'lore {heading.split(' ', 1)[1]}' "
-                "does not exist in the lore parser"
+                f"docs/CLI.md heading 'annuli {heading.split(' ', 1)[1]}' "
+                "does not exist in the annuli parser"
             )

@@ -1,4 +1,4 @@
-"""CLI tests for ``lore summarize`` (B4.4, #197)."""
+"""CLI tests for ``annuli summarize`` (B4.4, #197)."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from typing import Any, Dict, List, Optional
 
 import pytest
 
-import lore.llm
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.llm.base import LLMConfig, LLMProvider, LLMResponse
-from lore.services.summarize import SummarizeReport
-from lore.storage import initialise
-from lore.storage.writer import v2_db_path, write_sessions
+import annuli.llm
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.llm.base import LLMConfig, LLMProvider, LLMResponse
+from annuli.services.summarize import SummarizeReport
+from annuli.storage import initialise
+from annuli.storage.writer import v2_db_path, write_sessions
 
 T0 = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -135,7 +135,7 @@ def _args(output_dir: Path, **overrides: Any) -> Namespace:
 @pytest.fixture
 def use_provider(monkeypatch: pytest.MonkeyPatch):
     def install(provider: FakeProvider) -> None:
-        monkeypatch.setattr(lore.llm, "get_provider", lambda **kwargs: provider)
+        monkeypatch.setattr(annuli.llm, "get_provider", lambda **kwargs: provider)
 
     return install
 
@@ -144,12 +144,12 @@ def test_dry_run_prints_estimates_without_provider(tmp_path: Path, monkeypatch: 
     store = tmp_path / "out"
     _build_store(store, _rich_session())
     monkeypatch.setattr(
-        lore.llm,
+        annuli.llm,
         "get_provider",
         lambda **kwargs: (_ for _ in ()).throw(AssertionError("provider constructed")),
     )
 
-    rc = lore_cli.cmd_summarize(_args(store, dry_run=True))
+    rc = annuli_cli.cmd_summarize(_args(store, dry_run=True))
     assert rc == 0
 
 
@@ -159,7 +159,7 @@ def test_cloud_without_allow_cloud_exits_2(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    rc = lore_cli.cmd_summarize(_args(store, provider="gemini"))
+    rc = annuli_cli.cmd_summarize(_args(store, provider="gemini"))
 
     assert rc == 2
     assert provider.prompts == []
@@ -171,7 +171,7 @@ def test_openrouter_without_allow_cloud_exits_2(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    rc = lore_cli.cmd_summarize(_args(store, provider="openrouter"))
+    rc = annuli_cli.cmd_summarize(_args(store, provider="openrouter"))
 
     assert rc == 2
     assert provider.prompts == []
@@ -187,7 +187,7 @@ def test_cloud_with_allow_cloud_runs(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    rc = lore_cli.cmd_summarize(_args(store, provider="gemini", allow_cloud=True))
+    rc = annuli_cli.cmd_summarize(_args(store, provider="gemini", allow_cloud=True))
 
     assert rc == 0
     assert provider.prompts
@@ -208,7 +208,7 @@ def test_announcement_precedes_provider_call(tmp_path: Path, use_provider, capsy
     provider.generate = spy  # type: ignore[method-assign]
     use_provider(provider)
 
-    assert lore_cli.cmd_summarize(_args(store)) == 0
+    assert annuli_cli.cmd_summarize(_args(store)) == 0
     assert "Provider: ollama/llama3.2 (local)" in seen[0]
 
 
@@ -217,7 +217,7 @@ def test_json_stdout_contains_report_keys(tmp_path: Path, use_provider, capsys):
     _build_store(store, _rich_session())
     use_provider(FakeProvider())
 
-    assert lore_cli.cmd_summarize(_args(store, json=True)) == 0
+    assert annuli_cli.cmd_summarize(_args(store, json=True)) == 0
     out = capsys.readouterr().out.strip()
     payload = json.loads(out)
     for field in fields(SummarizeReport):
@@ -229,7 +229,7 @@ def test_level_day_exits_2(tmp_path: Path, capsys):
     store = tmp_path / "out"
     _build_store(store, _rich_session())
 
-    rc = lore_cli.cmd_summarize(_args(store, level="day"))
+    rc = annuli_cli.cmd_summarize(_args(store, level="day"))
 
     assert rc == 2
     assert "not implemented yet" in capsys.readouterr().err
@@ -239,7 +239,7 @@ def test_unknown_session_exits_2(tmp_path: Path, capsys):
     store = tmp_path / "out"
     _build_store(store, _rich_session("aaa111"))
 
-    rc = lore_cli.cmd_summarize(_args(store, session="nope"))
+    rc = annuli_cli.cmd_summarize(_args(store, session="nope"))
 
     assert rc == 2
     assert "No session found" in capsys.readouterr().err
@@ -249,7 +249,7 @@ def test_ambiguous_session_prefix_exits_2(tmp_path: Path, capsys):
     store = tmp_path / "out"
     _build_store(store, _rich_session("abc-one"), _rich_session("abc-two"))
 
-    rc = lore_cli.cmd_summarize(_args(store, session="abc"))
+    rc = annuli_cli.cmd_summarize(_args(store, session="abc"))
 
     assert rc == 2
     assert "Ambiguous" in capsys.readouterr().err
@@ -261,7 +261,7 @@ def test_prefix_session_resolves(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    rc = lore_cli.cmd_summarize(_args(store, session="unique-prefix"))
+    rc = annuli_cli.cmd_summarize(_args(store, session="unique-prefix"))
 
     assert rc == 0
     assert provider.prompts
@@ -273,7 +273,7 @@ def test_all_failed_exits_1(tmp_path: Path, use_provider, capsys):
     bad = json.dumps({**_valid_summary(), "one_liner": "x" * 200})
     use_provider(FakeProvider([bad, bad]))
 
-    rc = lore_cli.cmd_summarize(_args(store, force=True))
+    rc = annuli_cli.cmd_summarize(_args(store, force=True))
 
     assert rc == 1
     assert "failed" in capsys.readouterr().err.lower()
@@ -290,7 +290,7 @@ def test_partial_failure_exits_0(tmp_path: Path, use_provider):
     good_json = json.dumps(_valid_summary())
     use_provider(FakeProvider([good_json, bad_json, bad_json]))
 
-    assert lore_cli.cmd_summarize(_args(store, force=True)) == 0
+    assert annuli_cli.cmd_summarize(_args(store, force=True)) == 0
 
 
 def test_automated_excluded_without_include_automated(tmp_path: Path, use_provider):
@@ -301,7 +301,7 @@ def test_automated_excluded_without_include_automated(tmp_path: Path, use_provid
     provider = FakeProvider()
     use_provider(provider)
 
-    assert lore_cli.cmd_summarize(_args(store)) == 0
+    assert annuli_cli.cmd_summarize(_args(store)) == 0
     assert provider.prompts == []
 
 
@@ -313,7 +313,7 @@ def test_automated_included_with_flag(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    assert lore_cli.cmd_summarize(_args(store, include_automated=True)) == 0
+    assert annuli_cli.cmd_summarize(_args(store, include_automated=True)) == 0
     assert provider.prompts
 
 
@@ -324,7 +324,7 @@ def test_tombstoned_never_sent(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    assert lore_cli.cmd_summarize(_args(store)) == 0
+    assert annuli_cli.cmd_summarize(_args(store)) == 0
     assert provider.prompts == []
 
 
@@ -334,7 +334,7 @@ def test_max_sessions_honoured(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    lore_cli.cmd_summarize(_args(store, max_sessions=1, force=True))
+    annuli_cli.cmd_summarize(_args(store, max_sessions=1, force=True))
 
     assert len(provider.prompts) == 1
 
@@ -345,7 +345,7 @@ def test_max_input_tokens_honoured(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    lore_cli.cmd_summarize(_args(store, max_sessions=2, max_input_tokens=1, force=True))
+    annuli_cli.cmd_summarize(_args(store, max_sessions=2, max_input_tokens=1, force=True))
 
     assert len(provider.prompts) <= 1
 
@@ -358,7 +358,7 @@ def test_since_default_excludes_old_session(tmp_path: Path, use_provider):
     provider = FakeProvider()
     use_provider(provider)
 
-    assert lore_cli.cmd_summarize(_args(store)) == 0
+    assert annuli_cli.cmd_summarize(_args(store)) == 0
     assert provider.prompts == []
 
 
@@ -367,7 +367,7 @@ def test_output_contains_no_transcript_sentinel(tmp_path: Path, use_provider, ca
     _build_store(store, _rich_session())
     use_provider(FakeProvider())
 
-    lore_cli.cmd_summarize(_args(store))
+    annuli_cli.cmd_summarize(_args(store))
     captured = capsys.readouterr()
     assert SENTINEL not in captured.out
     assert SENTINEL not in captured.err
@@ -379,14 +379,14 @@ def test_empty_session_value_is_a_usage_error(tmp_path: Path, use_provider, caps
     provider = FakeProvider()
     use_provider(provider)
 
-    rc = lore_cli.cmd_summarize(_args(store, session="   "))
+    rc = annuli_cli.cmd_summarize(_args(store, session="   "))
 
     assert rc == 2
     assert provider.prompts == []
 
 
 def test_missing_store_is_not_exit_code_1(tmp_path: Path, capsys):
-    rc = lore_cli.cmd_summarize(_args(tmp_path / "does-not-exist"))
+    rc = annuli_cli.cmd_summarize(_args(tmp_path / "does-not-exist"))
 
     assert rc == 2
 
@@ -400,7 +400,7 @@ def test_ollama_with_an_off_host_endpoint_needs_allow_cloud(
     use_provider(provider)
     monkeypatch.setenv("OLLAMA_HOST", "http://203.0.113.7:11434")
 
-    rc = lore_cli.cmd_summarize(_args(store, provider="ollama", allow_cloud=False))
+    rc = annuli_cli.cmd_summarize(_args(store, provider="ollama", allow_cloud=False))
 
     assert rc == 2
     assert provider.prompts == []
@@ -413,5 +413,5 @@ def test_ollama_with_a_loopback_endpoint_stays_local(tmp_path: Path, use_provide
     use_provider(provider)
     monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:11434")
 
-    assert lore_cli.cmd_summarize(_args(store, provider="ollama", allow_cloud=False)) == 0
+    assert annuli_cli.cmd_summarize(_args(store, provider="ollama", allow_cloud=False)) == 0
     assert provider.prompts

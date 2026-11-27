@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from lore.interfaces import mcp
+from annuli.interfaces import mcp
 
 
 def _server(tmp_path):
@@ -163,7 +163,7 @@ def test_memory_recall_semantic_tristate(tmp_path, monkeypatch):
         seen.append(kwargs["semantic"])
         return []
 
-    monkeypatch.setattr("lore.storage.recall_memory", fake_recall)
+    monkeypatch.setattr("annuli.storage.recall_memory", fake_recall)
     server = _server(tmp_path)
     _call(server, "memory_recall", {"query": "x"})
     _call(server, "memory_recall", {"query": "x", "semantic": None})
@@ -173,7 +173,7 @@ def test_memory_recall_semantic_tristate(tmp_path, monkeypatch):
 
 
 def test_memory_recall_semantic_false_calls_no_embedder(tmp_path, monkeypatch):
-    import lore.storage.embeddings as emb
+    import annuli.storage.embeddings as emb
 
     server = _server(tmp_path)
     _call(server, "memory_write", {"title": "Cache decision", "body": "Use redis"})

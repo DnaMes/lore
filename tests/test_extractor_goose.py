@@ -9,10 +9,10 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool
-from lore.extractors.factory import get_all_extractors
-from lore.extractors.goose import PARSER_VERSION, GooseExtractor
-from lore.utils.tooling import normalize_tool_name
+from annuli.core.models import Role, Tool
+from annuli.extractors.factory import get_all_extractors
+from annuli.extractors.goose import PARSER_VERSION, GooseExtractor
+from annuli.utils.tooling import normalize_tool_name
 
 SESSION_ID = "goose-sess-001"
 PARENT_ID = "goose-parent-01"
@@ -22,7 +22,7 @@ SECRET_SENTINEL = "SENTINEL_NEVER_IN_OUTPUT"
 @pytest.fixture
 def home(monkeypatch, tmp_path) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("LORE_MIN_USER_PROMPTS", "0")
+    monkeypatch.setenv("ANNULI_MIN_USER_PROMPTS", "0")
     return tmp_path
 
 

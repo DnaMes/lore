@@ -18,13 +18,13 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.extractors.base import BaseExtractor
-from lore.extractors.claude import ClaudeCodeExtractor
-from lore.interfaces import web
-from lore.interfaces.mcp_tools.deps import build_deps
-from lore.interfaces.server import MCPServer
-from lore.services import extraction as services_extraction
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.extractors.base import BaseExtractor
+from annuli.extractors.claude import ClaudeCodeExtractor
+from annuli.interfaces import web
+from annuli.interfaces.mcp_tools.deps import build_deps
+from annuli.interfaces.server import MCPServer
+from annuli.services import extraction as services_extraction
 
 # ---------------------------------------------------------------------------
 # Helpers

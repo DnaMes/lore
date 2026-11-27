@@ -14,19 +14,19 @@ from datetime import datetime
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.services import index as index_service
-from lore.storage import load_index_v2, v2_is_available
-from lore.storage.freshness import (
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.services import index as index_service
+from annuli.storage import load_index_v2, v2_is_available
+from annuli.storage.freshness import (
     CONTENT_HASH_KEY,
     GENERATED_AT_KEY,
     StaleStoreError,
     assert_store_fresh,
     store_freshness,
 )
-from lore.storage.schema import open_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage.schema import open_connection
+from annuli.storage.writer import v2_db_path
 
 
 def _session(sid: str = "s1", body: str = "searchable body") -> UnifiedSession:
@@ -129,17 +129,17 @@ def test_gate_logs_a_warning_when_it_rejects_a_stale_store(tmp_path, caplog):
     future = (index_path.stat().st_mtime + 60, index_path.stat().st_mtime + 60)
     os.utime(index_path, future)
 
-    with caplog.at_level(logging.WARNING, logger="lore.storage.reader"):
+    with caplog.at_level(logging.WARNING, logger="annuli.storage.reader"):
         assert v2_is_available(tmp_path, compare_to=index_path) is False
     assert any("ignoring the v2 store" in record.message for record in caplog.records)
 
 
 def test_load_index_logs_the_legacy_fallback_when_v2_is_off(tmp_path, monkeypatch, caplog):
     IndexBuilder(tmp_path).build_index([_session()], {})
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     index_service.clear_index_cache()
 
-    with caplog.at_level(logging.INFO, logger="lore.services.index"):
+    with caplog.at_level(logging.INFO, logger="annuli.services.index"):
         payload = index_service.load_index(tmp_path / "index.json", tmp_path, set())
 
     assert [s["id"] for s in payload["sessions"]] == ["s1"]
@@ -152,10 +152,10 @@ def test_load_index_logs_the_stale_fallback(tmp_path, monkeypatch, caplog):
     _set_meta(tmp_path, GENERATED_AT_KEY, "2020-01-01T00:00:00+00:00")
     future = (index_path.stat().st_mtime + 60, index_path.stat().st_mtime + 60)
     os.utime(index_path, future)
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     index_service.clear_index_cache()
 
-    with caplog.at_level(logging.WARNING, logger="lore.services.index"):
+    with caplog.at_level(logging.WARNING, logger="annuli.services.index"):
         payload = index_service.load_index(index_path, tmp_path, set())
 
     assert [s["id"] for s in payload["sessions"]] == ["s1"]
@@ -171,8 +171,8 @@ def test_search_reads_the_v2_store_when_it_is_available(tmp_path, monkeypatch):
     IndexBuilder(tmp_path).build_index([_session(body="unique needle phrase")], {})
     # Removing the legacy FTS database proves the hit came from v2.
     (tmp_path / "index.sqlite").unlink()
-    monkeypatch.setenv("LORE_USE_V2", "1")
-    monkeypatch.setenv("LORE_HYBRID_SEARCH", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_HYBRID_SEARCH", "0")
     index_service.clear_index_cache()
 
     results = index_service.search_index(
@@ -183,10 +183,10 @@ def test_search_reads_the_v2_store_when_it_is_available(tmp_path, monkeypatch):
 
 def test_search_logs_the_legacy_fallback(tmp_path, monkeypatch, caplog):
     IndexBuilder(tmp_path).build_index([_session(body="unique needle phrase")], {})
-    monkeypatch.setenv("LORE_USE_V2", "0")
+    monkeypatch.setenv("ANNULI_USE_V2", "0")
     index_service.clear_index_cache()
 
-    with caplog.at_level(logging.INFO, logger="lore.services.index"):
+    with caplog.at_level(logging.INFO, logger="annuli.services.index"):
         results = index_service.search_index(
             tmp_path / "index.json", "needle", set(), include_automated=True
         )
@@ -197,7 +197,7 @@ def test_search_logs_the_legacy_fallback(tmp_path, monkeypatch, caplog):
 
 def test_v2_payload_is_served_by_default(tmp_path, monkeypatch):
     IndexBuilder(tmp_path).build_index([_session()], {})
-    monkeypatch.setenv("LORE_USE_V2", "1")
+    monkeypatch.setenv("ANNULI_USE_V2", "1")
     index_service.clear_index_cache()
     assert load_index_v2(tmp_path)["sessions"][0]["id"] == "s1"
     assert index_service.load_index(tmp_path / "index.json", tmp_path, set())["version"] == "2"

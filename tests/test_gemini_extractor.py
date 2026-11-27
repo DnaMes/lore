@@ -1,4 +1,4 @@
-"""Tests for lore/extractors/gemini.py."""
+"""Tests for annuli/extractors/gemini.py."""
 
 from __future__ import annotations
 
@@ -6,8 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from lore.core.models import Role, Tool
-from lore.extractors.gemini import GeminiCLIExtractor
+from annuli.core.models import Role, Tool
+from annuli.extractors.gemini import GeminiCLIExtractor
 
 
 def _project_hash(path: str) -> str:
@@ -182,7 +182,7 @@ def test_parse_session_info_type(monkeypatch, tmp_path):
     sessions = list(extractor.extract_sessions())
     # Should import: 1 user prompt qualifies
     s = sessions[0]
-    from lore.core.models import Role as R
+    from annuli.core.models import Role as R
 
     roles = [m.role for m in s.messages]
     assert R.INFO in roles

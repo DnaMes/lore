@@ -1,4 +1,4 @@
-"""Tests for context memory selection and ``lore memory show``."""
+"""Tests for context memory selection and ``annuli memory show``."""
 
 from __future__ import annotations
 
@@ -9,16 +9,16 @@ from unittest.mock import patch
 
 import pytest
 
-import lore_cli
-from lore.services.memory_context import (
+import annuli_cli
+from annuli.services.memory_context import (
     build_memory_context,
     render_context_memories,
     select_context_memories,
 )
-from lore.storage import add_memory, record_feedback, supersede_memory
-from lore.storage.memory import set_memory_status
-from lore.storage.schema import open_v2_connection
-from lore.storage.writer import v2_db_path
+from annuli.storage import add_memory, record_feedback, supersede_memory
+from annuli.storage.memory import set_memory_status
+from annuli.storage.schema import open_v2_connection
+from annuli.storage.writer import v2_db_path
 
 
 def _show_args(tmp_path, memory_id: int) -> Namespace:
@@ -171,7 +171,7 @@ def test_cli_show_known_memory(tmp_path, capsys):
         scope_project="/tmp/proj",
         scope_tool="cursor",
     )
-    lore_cli.cmd_memory(_show_args(tmp_path, mid))
+    annuli_cli.cmd_memory(_show_args(tmp_path, mid))
     out = capsys.readouterr().out
     assert "Status: confirmed" in out
     assert "Kind: lesson" in out
@@ -193,18 +193,18 @@ def test_cli_show_supersession_links(tmp_path, capsys):
         scope_project="/p",
         supersedes=old,
     )
-    lore_cli.cmd_memory(_show_args(tmp_path, old))
+    annuli_cli.cmd_memory(_show_args(tmp_path, old))
     out_old = capsys.readouterr().out
     assert f"superseded by #{new}" in out_old
 
-    lore_cli.cmd_memory(_show_args(tmp_path, new))
+    annuli_cli.cmd_memory(_show_args(tmp_path, new))
     out_new = capsys.readouterr().out
     assert f"supersedes #{old}" in out_new
 
 
 def test_cli_show_unknown_memory_exits_one(tmp_path, capsys):
     with pytest.raises(SystemExit) as exc:
-        lore_cli.cmd_memory(_show_args(tmp_path, 4242))
+        annuli_cli.cmd_memory(_show_args(tmp_path, 4242))
     assert exc.value.code == 1
     assert "does not exist" in capsys.readouterr().err
 
@@ -279,7 +279,7 @@ def test_render_applies_redaction(tmp_path):
 
 def test_build_memory_context_empty_store_prints_nothing(tmp_path, capsys):
     assert build_memory_context(tmp_path) == ""
-    lore_cli.cmd_memory(_context_args(tmp_path))
+    annuli_cli.cmd_memory(_context_args(tmp_path))
     assert capsys.readouterr().out == ""
 
 
@@ -303,7 +303,7 @@ def test_render_json_shape(tmp_path):
 def test_cli_context_end_to_end(tmp_path, capsys, monkeypatch):
     monkeypatch.chdir(tmp_path)
     _add_ranked(tmp_path, "hook memory", "visible sentence.")
-    lore_cli.cmd_memory(_context_args(tmp_path, budget=2000))
+    annuli_cli.cmd_memory(_context_args(tmp_path, budget=2000))
     out = capsys.readouterr().out
     assert "hook memory" in out
     assert "visible sentence." in out
@@ -389,9 +389,9 @@ def test_render_redacts_before_truncation(tmp_path):
 
 
 def test_build_memory_context_debug_logs_exception(tmp_path, capsys, monkeypatch):
-    monkeypatch.setenv("LORE_DEBUG", "1")
+    monkeypatch.setenv("ANNULI_DEBUG", "1")
     with patch(
-        "lore.services.memory_context.select_context_memories",
+        "annuli.services.memory_context.select_context_memories",
         side_effect=RuntimeError("boom"),
     ):
         assert build_memory_context(tmp_path) == ""
@@ -400,9 +400,9 @@ def test_build_memory_context_debug_logs_exception(tmp_path, capsys, monkeypatch
 
 
 def test_build_memory_context_silent_without_debug(tmp_path, capsys, monkeypatch):
-    monkeypatch.delenv("LORE_DEBUG", raising=False)
+    monkeypatch.delenv("ANNULI_DEBUG", raising=False)
     with patch(
-        "lore.services.memory_context.select_context_memories",
+        "annuli.services.memory_context.select_context_memories",
         side_effect=RuntimeError("boom"),
     ):
         assert build_memory_context(tmp_path) == ""
@@ -421,7 +421,7 @@ def test_render_first_entry_over_budget_still_present(tmp_path):
 
 
 def test_context_does_not_call_embed_text(tmp_path, monkeypatch):
-    import lore.storage.embeddings as emb
+    import annuli.storage.embeddings as emb
 
     _add_ranked(tmp_path, "no embed", "plain.")
 
@@ -429,11 +429,11 @@ def test_context_does_not_call_embed_text(tmp_path, monkeypatch):
         raise AssertionError("embed_text must not run for memory context")
 
     monkeypatch.setattr(emb, "embed_text", _fail)
-    lore_cli.cmd_memory(_context_args(tmp_path))
+    annuli_cli.cmd_memory(_context_args(tmp_path))
 
 
 def test_first_sentence_stops_at_paragraph_break() -> None:
-    from lore.services.memory_context import _first_sentence
+    from annuli.services.memory_context import _first_sentence
 
     body = "User chose medium risk for routing\n\nUser explicitly chose **medium** when asked."
     assert _first_sentence(body) == "User chose medium risk for routing"

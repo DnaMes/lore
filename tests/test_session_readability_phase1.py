@@ -5,11 +5,11 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces.web_data import build_session_from_export_markdown
-from lore.interfaces.web_formatting import format_message_content, format_tool_calls
-from lore.interfaces.web_services import annotate_turns, enrich_session_for_detail
-from lore.utils.text_processing import format_thinking, format_tool_result, tool_call_target
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces.web_data import build_session_from_export_markdown
+from annuli.interfaces.web_formatting import format_message_content, format_tool_calls
+from annuli.interfaces.web_services import annotate_turns, enrich_session_for_detail
+from annuli.utils.text_processing import format_thinking, format_tool_result, tool_call_target
 
 T0 = datetime(2026, 11, 7, 23, 50, tzinfo=timezone.utc)
 
@@ -40,7 +40,7 @@ def _enrich(*messages: UnifiedMessage) -> tuple[UnifiedSession, list]:
 def test_collapsed_group_has_one_row_per_call_with_target_and_status():
     html = format_tool_calls(
         [
-            {"tool": "Read", "input": {"file_path": "lore/x/web.py"}, "status": "ok"},
+            {"tool": "Read", "input": {"file_path": "annuli/x/web.py"}, "status": "ok"},
             {
                 "tool": "Bash",
                 "input": {"command": "pytest -q"},
@@ -50,7 +50,7 @@ def test_collapsed_group_has_one_row_per_call_with_target_and_status():
         ]
     )
     assert html.count('class="tool-row"') == 2
-    assert '<span class="tool-row-target">lore/x/web.py</span>' in html
+    assert '<span class="tool-row-target">annuli/x/web.py</span>' in html
     assert '<span class="tool-row-target">pytest -q</span>' in html
     assert "✗</span> exit 1" in html
     assert 'data-status="ok"' in html

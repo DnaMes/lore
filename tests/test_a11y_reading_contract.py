@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.interfaces import web, web_data
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.interfaces import web, web_data
 
 START = datetime(2026, 9, 1, 8, 0, 0)
 TEMPLATES = Path(web.__file__).parents[1] / "templates"
@@ -120,7 +120,7 @@ def _session() -> UnifiedSession:
         session_id="session-1",
         created_at=START,
         last_updated=START,
-        project_path="/repo/lore",
+        project_path="/repo/annuli",
         thread_id="thread-1",
         title="Reading contract",
         messages=[
@@ -142,7 +142,7 @@ def pages():
                 "display_title": "Reading contract",
                 "created": START.isoformat(),
                 "updated": START.isoformat(),
-                "project": "/repo/lore",
+                "project": "/repo/annuli",
                 "thread_id": "thread-1",
                 "messages": 2,
                 "prompts": 1,
@@ -153,7 +153,7 @@ def pages():
             "total_sessions": 1,
             "total_messages": 2,
             "by_tool": {"claude-code": 1},
-            "by_project": {"/repo/lore": 1},
+            "by_project": {"/repo/annuli": 1},
         },
         "generated_at": "2026-09-01T00:00:00Z",
         "version": "2",

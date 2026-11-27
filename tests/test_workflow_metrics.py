@@ -19,9 +19,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.services.workflow_metrics import (
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.services.workflow_metrics import (
     COMPUTED,
     INFERRED,
     OBSERVED,
@@ -368,15 +368,17 @@ class _FakeExtractor:
 
 
 def _run_cli(monkeypatch, argv):
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_FakeExtractor(fixture_archive())])
-    monkeypatch.setattr("sys.argv", ["lore", *argv])
-    return lore_cli.main()
+    monkeypatch.setattr(
+        annuli_cli, "get_all_extractors", lambda: [_FakeExtractor(fixture_archive())]
+    )
+    monkeypatch.setattr("sys.argv", ["annuli", *argv])
+    return annuli_cli.main()
 
 
 def test_cli_metrics_json(monkeypatch, capsys):
     _run_cli(
         monkeypatch,
-        ["--output-dir", "/nonexistent-lore", "metrics", "--json", "--include-automated"],
+        ["--output-dir", "/nonexistent-annuli", "metrics", "--json", "--include-automated"],
     )
 
     payload = json.loads(capsys.readouterr().out)
@@ -391,7 +393,7 @@ def test_cli_metrics_text_and_inferred_flag(monkeypatch, capsys):
         monkeypatch,
         [
             "--output-dir",
-            "/nonexistent-lore",
+            "/nonexistent-annuli",
             "metrics",
             "--include-inferred",
             "--include-automated",

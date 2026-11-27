@@ -9,12 +9,12 @@ from pathlib import Path
 
 import pytest
 
-import lore_cli
-from lore.core.models import Role, Tool, UnifiedMessage, UnifiedSession
-from lore.exporters.index import IndexBuilder
-from lore.exporters.markdown import MarkdownExporter
-from lore.extractors.base import BaseExtractor
-from lore.storage import load_index_v2, search_sessions
+import annuli_cli
+from annuli.core.models import Role, Tool, UnifiedMessage, UnifiedSession
+from annuli.exporters.index import IndexBuilder
+from annuli.exporters.markdown import MarkdownExporter
+from annuli.extractors.base import BaseExtractor
+from annuli.storage import load_index_v2, search_sessions
 
 
 def _session(sid: str, prompts: int = 1) -> UnifiedSession:
@@ -60,7 +60,7 @@ def _prune_args(output_dir: Path, **extra) -> Namespace:
 
 
 def test_prune_refuses_export_path_outside_archive_root(tmp_path, monkeypatch, capsys):
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     archive.mkdir()
     outside = tmp_path / "outside.md"
     outside.write_text("do not delete", encoding="utf-8")
@@ -73,8 +73,8 @@ def test_prune_refuses_export_path_outside_archive_root(tmp_path, monkeypatch, c
             entry["prompts"] = 1
     (archive / "index.json").write_text(json.dumps(index), encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     assert outside.exists()
     assert outside.read_text(encoding="utf-8") == "do not delete"
@@ -84,7 +84,7 @@ def test_prune_refuses_export_path_outside_archive_root(tmp_path, monkeypatch, c
 
 
 def test_prune_refuses_symlink_escape(tmp_path, monkeypatch, capsys):
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     projects = archive / "projects" / "p"
     projects.mkdir(parents=True)
     outside = tmp_path / "secret.md"
@@ -100,8 +100,8 @@ def test_prune_refuses_symlink_escape(tmp_path, monkeypatch, capsys):
             entry["prompts"] = 1
     (archive / "index.json").write_text(json.dumps(index), encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     assert outside.exists()
     assert outside.read_text(encoding="utf-8") == "keep me"
@@ -135,8 +135,8 @@ def test_pruned_session_absent_from_v2_list_and_search_after_rebuild(tmp_path, m
         def extract_sessions(self):
             yield keep
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_KeepExtractor()])
-    lore_cli.cmd_prune(_prune_args(tmp_path))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_KeepExtractor()])
+    annuli_cli.cmd_prune(_prune_args(tmp_path))
 
     ids = {s["id"] for s in load_index_v2(tmp_path)["sessions"]}
     assert "drop-me" not in ids
@@ -147,7 +147,7 @@ def test_pruned_session_absent_from_v2_list_and_search_after_rebuild(tmp_path, m
 
 def _archive_with_candidate(tmp_path: Path, target: Path) -> Path:
     """Index one low-prompt session whose export_path points at ``target``."""
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     archive.mkdir(exist_ok=True)
     IndexBuilder(archive).build_index([_session("out-sess")], {})
     index = json.loads((archive / "index.json").read_text(encoding="utf-8"))
@@ -174,7 +174,7 @@ def _archive_with_candidate(tmp_path: Path, target: Path) -> Path:
     ],
 )
 def test_prune_refuses_store_control_and_non_md_targets(tmp_path, monkeypatch, capsys, relative):
-    target = tmp_path / "lore" / relative
+    target = tmp_path / "annuli" / relative
     archive = _archive_with_candidate(tmp_path, target)
     if not target.exists():
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -183,8 +183,8 @@ def test_prune_refuses_store_control_and_non_md_targets(tmp_path, monkeypatch, c
         target.write_text("[]" if target.name == "ignored.json" else "keep me", encoding="utf-8")
     payload = target.read_bytes() if target.exists() else b""
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     assert target.exists()
     if target.name not in {"index.json", "ignored.json", "index_v2.sqlite"}:
@@ -194,7 +194,7 @@ def test_prune_refuses_store_control_and_non_md_targets(tmp_path, monkeypatch, c
 
 def test_prune_refuses_real_index_db_even_when_export_points_at_it(tmp_path, monkeypatch, capsys):
     """The primary store itself must survive a manipulated export_path."""
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     archive.mkdir()
     IndexBuilder(archive).build_index([_session("out-sess")], {})
     store = archive / "index_v2.sqlite"
@@ -205,15 +205,15 @@ def test_prune_refuses_real_index_db_even_when_export_points_at_it(tmp_path, mon
             entry["prompts"] = 1
     (archive / "index.json").write_text(json.dumps(index), encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     assert store.read_bytes()[:16] == b"SQLite format 3\x00"
     assert "refusing to delete" in capsys.readouterr().err
 
 
 def test_prune_refuses_symlink_to_real_file_even_inside_root(tmp_path, monkeypatch, capsys):
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     projects = archive / "projects" / "p"
     projects.mkdir(parents=True)
     real = projects / "real.md"
@@ -222,8 +222,8 @@ def test_prune_refuses_symlink_to_real_file_even_inside_root(tmp_path, monkeypat
     link.symlink_to(real)
     archive = _archive_with_candidate(tmp_path, link)
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     assert real.exists()
     assert link.is_symlink()
@@ -231,29 +231,29 @@ def test_prune_refuses_symlink_to_real_file_even_inside_root(tmp_path, monkeypat
 
 
 def test_prune_deletes_regular_md_export_under_projects(tmp_path, monkeypatch):
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     project = archive / "projects" / "p" / "tool"
     project.mkdir(parents=True)
     export = project / "2026-01-01_title_out-sess.md"
     export.write_text("# export", encoding="utf-8")
     _archive_with_candidate(tmp_path, export)
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     assert not export.exists()
 
 
 def test_prune_deletes_real_exporter_produced_export(tmp_path, monkeypatch):
     """A file actually produced by MarkdownExporter must be deletable."""
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     archive.mkdir()
     export = MarkdownExporter(archive).export_session(_session("exp-sess"))
     assert export.exists()
     _archive_with_candidate(tmp_path, export)
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     assert not export.exists()
 
@@ -271,13 +271,13 @@ def test_prune_deletes_real_exporter_produced_export(tmp_path, monkeypatch):
 )
 def test_prune_refuses_md_files_outside_exporter_layout(tmp_path, monkeypatch, capsys, relative):
     """Basename and directory layout must both match what the exporter writes."""
-    target = tmp_path / "lore" / relative
+    target = tmp_path / "annuli" / relative
     archive = _archive_with_candidate(tmp_path, target)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("keep me", encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     assert target.exists()
     assert "refusing to delete" in capsys.readouterr().err
@@ -285,7 +285,7 @@ def test_prune_refuses_md_files_outside_exporter_layout(tmp_path, monkeypatch, c
 
 def test_prune_keeps_offline_entry_and_removes_only_pruned_id(tmp_path, monkeypatch):
     """Sessions whose source is not extracted now survive; the pruned id does not."""
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     archive.mkdir()
     IndexBuilder(archive).build_index(
         [_session("keep-me", prompts=5), _session("offline-keep", prompts=5), _session("drop-me")],
@@ -300,8 +300,8 @@ def test_prune_keeps_offline_entry_and_removes_only_pruned_id(tmp_path, monkeypa
         def extract_sessions(self):
             yield _session("keep-me", prompts=5)
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_KeepExtractor()])
-    lore_cli.cmd_prune(_prune_args(archive))
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_KeepExtractor()])
+    annuli_cli.cmd_prune(_prune_args(archive))
 
     ids = {
         s["id"]
@@ -316,7 +316,7 @@ def test_prune_keeps_offline_entry_and_removes_only_pruned_id(tmp_path, monkeypa
 
 def _candidate_archive_with_export(tmp_path: Path) -> tuple[Path, Path]:
     """Archive with one prunable session whose export file exists on disk."""
-    archive = tmp_path / "lore"
+    archive = tmp_path / "annuli"
     export = archive / "projects" / "p" / "tool" / "2026-01-01_title_drop-me.md"
     export.parent.mkdir(parents=True, exist_ok=True)
     export.write_text("# export", encoding="utf-8")
@@ -328,8 +328,8 @@ def test_prune_without_ignored_file_writes_pruned_ids(tmp_path, monkeypatch):
     archive, _export = _candidate_archive_with_export(tmp_path)
     assert not (archive / "ignored.json").exists()
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    assert lore_cli.cmd_prune(_prune_args(archive)) is None
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    assert annuli_cli.cmd_prune(_prune_args(archive)) is None
 
     stored = json.loads((archive / "ignored.json").read_text(encoding="utf-8"))
     assert stored == ["out-sess"]
@@ -340,8 +340,8 @@ def test_prune_writes_union_of_previous_and_new_ids(tmp_path, monkeypatch):
     ignore = archive / "ignored.json"
     ignore.write_text(json.dumps(["old-a", "old-b"]), encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    assert lore_cli.cmd_prune(_prune_args(archive)) is None
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    assert annuli_cli.cmd_prune(_prune_args(archive)) is None
 
     stored = json.loads(ignore.read_text(encoding="utf-8"))
     assert stored == ["old-a", "old-b", "out-sess"]
@@ -352,8 +352,8 @@ def test_prune_normalizes_object_form_to_list_union(tmp_path, monkeypatch):
     ignore = archive / "ignored.json"
     ignore.write_text(json.dumps({"session_ids": ["old-x"]}), encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    assert lore_cli.cmd_prune(_prune_args(archive)) is None
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    assert annuli_cli.cmd_prune(_prune_args(archive)) is None
 
     stored = json.loads(ignore.read_text(encoding="utf-8"))
     assert stored == ["old-x", "out-sess"]
@@ -365,8 +365,8 @@ def test_prune_mixed_list_keeps_valid_previous_ids(tmp_path, monkeypatch):
     ignore = archive / "ignored.json"
     ignore.write_text(json.dumps(["old-pruned", 7]), encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    assert lore_cli.cmd_prune(_prune_args(archive)) is None
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    assert annuli_cli.cmd_prune(_prune_args(archive)) is None
 
     stored = json.loads(ignore.read_text(encoding="utf-8"))
     assert stored == ["old-pruned", "out-sess"]  # valid id kept, int skipped
@@ -390,8 +390,8 @@ def test_prune_invalid_ignored_json_exits_1_without_deleting(
     ignore = archive / "ignored.json"
     ignore.write_text(payload, encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    assert lore_cli.cmd_prune(_prune_args(archive)) == 1
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    assert annuli_cli.cmd_prune(_prune_args(archive)) == 1
 
     assert export.exists()  # nothing was deleted
     assert ignore.read_text(encoding="utf-8") == payload  # nothing was rewritten
@@ -405,8 +405,8 @@ def test_prune_wrong_object_key_never_drops_previously_stored_id(tmp_path, monke
     ignore = archive / "ignored.json"
     ignore.write_text(json.dumps({"wrong": ["previously-pruned"]}), encoding="utf-8")
 
-    monkeypatch.setattr(lore_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
-    assert lore_cli.cmd_prune(_prune_args(archive)) == 1
+    monkeypatch.setattr(annuli_cli, "get_all_extractors", lambda: [_EmptyExtractor()])
+    assert annuli_cli.cmd_prune(_prune_args(archive)) == 1
 
     stored = json.loads(ignore.read_text(encoding="utf-8"))
     assert stored == {"wrong": ["previously-pruned"]}  # untouched

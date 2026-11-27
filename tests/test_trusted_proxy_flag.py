@@ -10,14 +10,14 @@ from __future__ import annotations
 
 import pytest
 
-from lore.interfaces import web, web_utils
+from annuli.interfaces import web, web_utils
 
 
 @pytest.fixture()
 def client(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.delenv("LORE_PUBLIC_ORIGINS", raising=False)
-    monkeypatch.delenv("LORE_ALLOWED_HOSTS", raising=False)
-    monkeypatch.delenv("LORE_WEB_HOST", raising=False)
+    monkeypatch.delenv("ANNULI_PUBLIC_ORIGINS", raising=False)
+    monkeypatch.delenv("ANNULI_ALLOWED_HOSTS", raising=False)
+    monkeypatch.delenv("ANNULI_WEB_HOST", raising=False)
     monkeypatch.setattr(web, "_BIND_HOST", "")
     web.app.config["TESTING"] = True
     return web.app.test_client()
@@ -65,21 +65,21 @@ def test_true_value_validates_forwarded_headers(client, monkeypatch, value):
 
 @pytest.mark.parametrize("value", ["0", "false", "off"])
 def test_zero_does_not_trust_public_origins(client, monkeypatch, value):
-    """``TRUSTED_PROXY=0`` used to enable LORE_PUBLIC_ORIGINS trust; now it must not."""
+    """``TRUSTED_PROXY=0`` used to enable ANNULI_PUBLIC_ORIGINS trust; now it must not."""
     monkeypatch.setenv("TRUSTED_PROXY", value)
-    monkeypatch.setenv("LORE_PUBLIC_ORIGINS", "https://lore.example")
+    monkeypatch.setenv("ANNULI_PUBLIC_ORIGINS", "https://annuli.example")
     resp = client.post(
         "/api/cache/clear",
-        headers={"Host": "lore.example", "Origin": "https://lore.example"},
+        headers={"Host": "annuli.example", "Origin": "https://annuli.example"},
     )
     assert resp.status_code == 403
 
 
 def test_true_trusts_public_origins(client, monkeypatch):
     monkeypatch.setenv("TRUSTED_PROXY", "1")
-    monkeypatch.setenv("LORE_PUBLIC_ORIGINS", "https://lore.example")
+    monkeypatch.setenv("ANNULI_PUBLIC_ORIGINS", "https://annuli.example")
     resp = client.post(
         "/api/cache/clear",
-        headers={"Host": "lore.example", "Origin": "https://lore.example"},
+        headers={"Host": "annuli.example", "Origin": "https://annuli.example"},
     )
     assert resp.status_code == 200

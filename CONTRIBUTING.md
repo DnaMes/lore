@@ -1,21 +1,21 @@
-# Contributing to Lore
+# Contributing to Annuli
 
-> The product/CLI is **Lore** (`lore`), but the Python import package is
-> `lore` — the import name was deliberately not renamed. Paths like
-> `lore/...` below refer to the code package, not the product name.
+> The product/CLI is **Annuli** (`annuli`), but the Python import package is
+> `annuli` — the import name was deliberately not renamed. Paths like
+> `annuli/...` below refer to the code package, not the product name.
 
 ## Development Setup
 
 ```bash
 git clone https://github.com/DnaMes/lore.git
-cd lore
+cd annuli
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pre-commit install
 ruff check .
 ruff format --check .
 pytest tests/
-bandit -q -r lore
+bandit -q -r annuli
 ```
 
 The `dev` extra includes pytest, ruff, mypy, pre-commit, bandit, fastembed and
@@ -42,8 +42,8 @@ pytest tests/ -v --tb=short
 ```bash
 ruff check .
 ruff format --check .
-mypy lore/ --ignore-missing-imports
-bandit -q -r lore
+mypy annuli/ --ignore-missing-imports
+bandit -q -r annuli
 ```
 
 Or run all pre-commit hooks at once:
@@ -54,14 +54,14 @@ pre-commit run --all-files
 
 ## Adding a New AI Tool Extractor
 
-1. Create `lore/extractors/<toolname>.py`
-2. Inherit `BaseExtractor` from `lore.extractors.base`
+1. Create `annuli/extractors/<toolname>.py`
+2. Inherit `BaseExtractor` from `annuli.extractors.base`
 3. Implement:
    - `tool` property → return the correct `Tool` enum value
    - `extract_sessions()` → `Iterator[UnifiedSession]`
    - `is_available()` → check if the tool's data directory exists
-4. Register in `lore/extractors/factory.py` (`get_all_extractors()` list)
-5. Add the tool to `Tool` enum in `lore/core/models.py` if it's new
+4. Register in `annuli/extractors/factory.py` (`get_all_extractors()` list)
+5. Add the tool to `Tool` enum in `annuli/core/models.py` if it's new
 6. Add a contract test in `tests/test_extractors_contract.py`
 
 See existing extractors (e.g. `claude.py`, `gemini.py`) for patterns. Use `safe_copy_db()` from `BaseExtractor` when reading SQLite files.
@@ -81,14 +81,14 @@ User docs live in [README.md](README.md) and `docs/`. Start with [docs/CONFIGURA
 
 ## Checking an install
 
-Before a release, build a wheel and run the install smoke test, which installs the wheel into a clean venv with an isolated `HOME` and checks the CLI commands, `lore-web`, `lore-mcp` and archive behaviour:
+Before a release, build a wheel and run the install smoke test, which installs the wheel into a clean venv with an isolated `HOME` and checks the CLI commands, `annuli-web`, `annuli-mcp` and archive behaviour:
 
 ```bash
 python -m build
-python scripts/smoke_install.py --wheel dist/lore-<version>-py3-none-any.whl
+python scripts/smoke_install.py --wheel dist/annuli-<version>-py3-none-any.whl
 ```
 
-Then run the Docker install matrix (needs Docker; it builds the wheel once in a throwaway container, pulls the target images and cleans up its `lore-matrix-*` images; skip cleanup only with `--keep`):
+Then run the Docker install matrix (needs Docker; it builds the wheel once in a throwaway container, pulls the target images and cleans up its `annuli-matrix-*` images; skip cleanup only with `--keep`):
 
 ```bash
 bash scripts/install-matrix.sh                         # all 10 targets, incl. emulated linux/arm64
@@ -100,17 +100,17 @@ CI runs the same smoke test on three operating systems (Linux, macOS and Windows
 ## Releasing
 
 The version is defined in exactly one place: `__version__` in
-`lore/__init__.py` (`pyproject.toml` reads it dynamically). To cut a
+`annuli/__init__.py` (`pyproject.toml` reads it dynamically). To cut a
 release:
 
-1. Bump `__version__` in `lore/__init__.py` (semantic versioning).
+1. Bump `__version__` in `annuli/__init__.py` (semantic versioning).
 2. Move the [Unreleased] entries in CHANGELOG.md into a new [X.Y.Z] - YYYY-MM-DD section and leave an empty [Unreleased] above it.
 3. Commit: `docs: changelog for X.Y.Z` together with the version bump.
-4. Tag the commit: `git tag -a vX.Y.Z -m "Lore X.Y.Z — <summary>"`.
+4. Tag the commit: `git tag -a vX.Y.Z -m "Annuli X.Y.Z — <summary>"`.
 5. Push the branch and the tag: `git push <remote> main vX.Y.Z`.
 6. Optionally build + publish the wheel: `python -m build`.
 
-The web UI (sidebar footer), `lore --version`, and
+The web UI (sidebar footer), `annuli --version`, and
 `/api/build-info` all surface the version automatically.
 
 ## Architecture

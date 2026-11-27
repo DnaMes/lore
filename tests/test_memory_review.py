@@ -12,8 +12,8 @@ import json
 
 import pytest
 
-from lore.interfaces import web, web_data
-from lore.storage import add_memory, get_memory, list_memory, recall_memory, set_memory_status
+from annuli.interfaces import web, web_data
+from annuli.storage import add_memory, get_memory, list_memory, recall_memory, set_memory_status
 
 
 @pytest.fixture()
@@ -38,9 +38,9 @@ def store(tmp_path):
 
 
 def _cli(args, store):
-    import lore_cli
+    import annuli_cli
 
-    return lore_cli.cmd_memory(
+    return annuli_cli.cmd_memory(
         argparse.Namespace(memory_action="review", output_dir=str(store), **args)
     )
 
